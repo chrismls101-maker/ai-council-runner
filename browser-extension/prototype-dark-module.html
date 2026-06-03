@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>IIVO Lens — Apple Tempered Glass v7</title>
+    <link href="https://fonts.googleapis.com/css2?family=Michroma&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="prototype-dark-module.css" />
+  </head>
+  <body>
+    <div class="browser-backdrop" aria-hidden="true">
+      <div class="browser-toolbar">
+        <span class="tb-dot"></span>
+        <span class="tb-dot"></span>
+        <span class="tb-dot"></span>
+        <span class="tb-omnibox">design.com</span>
+        <span class="tb-ext-indicator" aria-hidden="true">
+          <img class="tb-ext-orb-img" src="assets/lens-ring.png" alt="" />
+        </span>
+      </div>
+    </div>
+
+    <div class="prototype-stage">
+      <div class="iivo-glass-shell" role="dialog" aria-label="IIVO Lens">
+        <span class="shell-beak" aria-hidden="true"></span>
+
+        <header class="console-header">
+          <div class="header-brand">
+            <div class="lens-orb">
+              <img class="iivo-lens-orb-img" src="assets/lens-ring.png" alt="" />
+            </div>
+            <div class="brand-copy">
+              <h1><span class="font-wordmark">IIVO</span> <span class="brand-lens">Lens</span></h1>
+              <p class="brand-tagline">Intelligence Layer Active</p>
+              <span class="ui-led-line brand-led-line" aria-hidden="true"></span>
+            </div>
+          </div>
+          <div class="header-status">
+            <span class="status-pill" id="live-pill" title="Lens is active while this popup is open">
+              <i class="dot dot-off" id="live-dot" aria-hidden="true"></i>
+              <span id="live-label">Offline</span>
+            </span>
+            <button type="button" class="icon-btn" id="header-settings" aria-label="Lens settings" title="Open Lens settings">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M4 7h8M16 7h4M4 17h4M12 17h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                <circle cx="14" cy="7" r="2.2" stroke="currentColor" stroke-width="1.5" />
+                <circle cx="10" cy="17" r="2.2" stroke="currentColor" stroke-width="1.5" />
+              </svg>
+            </button>
+          </div>
+        </header>
+
+        <main class="console-main">
+          <section class="intelligence-column" aria-label="Page intelligence">
+            <article class="iivo-glass-panel card-page">
+              <div class="card-head">
+                <div class="section-title-block">
+                  <span class="section-label">
+                    <span class="section-icon" aria-hidden="true">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 2l1.4 4.3L18 7.8l-4.3 1.4L12 13.5 10.3 9.2 6 7.8l4.6-1.5L12 2Z" fill="currentColor" opacity="0.9" />
+                        <path d="M5 14l.8 2.4L8.2 17l-2.4.8L5 20.2l-.8-2.4L1.8 17l2.4-.8L5 14Z" fill="currentColor" opacity="0.55" />
+                      </svg>
+                    </span>
+                    Page Intelligence
+                  </span>
+                  <span class="ui-led-line section-led-line" aria-hidden="true"></span>
+                </div>
+                <span class="mini-pill" id="page-context-pill" title="Page text extracted from the active tab">
+                  <i class="dot dot-amber" id="page-context-dot" aria-hidden="true"></i>
+                  <span id="page-context-label">Reading page</span>
+                </span>
+              </div>
+
+              <div class="domain-row">
+                <svg class="globe" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.35" />
+                  <ellipse cx="12" cy="12" rx="3.8" ry="9" stroke="currentColor" stroke-width="1.15" />
+                  <path d="M3 12h18" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" />
+                </svg>
+                <span class="domain">www.design.com</span>
+                <svg class="verified" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10" fill="rgba(114, 168, 255, 0.85)" />
+                  <path d="m7.5 12.2 2.4 2.4 6.6-6.8" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </div>
+              <h2 class="card-title">Logo, Graphic &amp; AI Design | Design.com</h2>
+              <p class="page-context-text">Page context — AI design platform with logo tools, website builder, and brand kit features detected on the active tab.</p>
+
+              <div class="context-preview iivo-glass-nested">
+                <span class="context-chars">8,990 characters</span>
+                <div class="context-actions">
+                  <button type="button" class="context-btn">Open existing</button>
+                  <button type="button" class="context-btn">Send again</button>
+                </div>
+              </div>
+            </article>
+
+            <article class="iivo-glass-panel card-shot">
+              <div class="card-head">
+                <div class="section-title-block">
+                  <span class="section-label">
+                    <span class="section-icon" aria-hidden="true">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                        <rect x="4" y="6" width="16" height="12" rx="2.5" stroke="currentColor" stroke-width="1.4" />
+                        <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.4" />
+                      </svg>
+                    </span>
+                    Screenshot Context
+                  </span>
+                  <span class="ui-led-line section-led-line" aria-hidden="true"></span>
+                </div>
+                <span class="mini-pill" id="shot-status-pill" title="Screenshot capture and vision analysis status">
+                  <i class="dot dot-amber" id="shot-status-dot" aria-hidden="true"></i>
+                  <span id="shot-status-label">Capturing</span>
+                </span>
+              </div>
+
+              <div class="shot-body">
+                <div class="shot-frame">
+                  <div class="shot-mock">
+                    <div class="mock-topbar">
+                      <span class="mock-brand">DESIGN.COM</span>
+                      <span class="mock-nav"></span>
+                      <span class="mock-nav"></span>
+                      <span class="mock-nav"></span>
+                    </div>
+                    <div class="mock-hero">
+                      <strong>Design anything with AI.</strong>
+                      <span>Create logos, websites, graphics, and more.</span>
+                    </div>
+                  </div>
+                  <span class="scan tl" aria-hidden="true"></span>
+                  <span class="scan tr" aria-hidden="true"></span>
+                  <span class="scan bl" aria-hidden="true"></span>
+                  <span class="scan br" aria-hidden="true"></span>
+                </div>
+
+                <div class="shot-panel">
+                  <strong class="shot-title" id="shot-title">Capturing screenshot…</strong>
+                  <span class="shot-status" id="shot-status">Waiting for visible tab</span>
+                  <button type="button" class="ghost-btn">
+                    View Screenshot
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M14 4h6v6M20 4l-9 9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+                      <path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </article>
+          </section>
+
+          <section class="command-column" aria-label="Actions">
+            <button type="button" class="iivo-primary-command">
+              <span class="pc-orb" aria-hidden="true">
+                <img class="iivo-lens-orb-img" src="assets/lens-ring.png" alt="" />
+              </span>
+              <span class="pc-copy">
+                <strong>Ask <span class="font-wordmark">IIVO</span> About Screenshot</strong>
+              </span>
+              <svg class="pc-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M5 12h13M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+
+            <div class="dual-action-row">
+              <button type="button" class="iivo-glass-tile dual-tile">
+                <span class="tile-icon" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="11" rx="2.5" fill="currentColor" opacity=".14"/><rect x="4" y="4" width="16" height="11" rx="2.5" stroke="currentColor" stroke-width="1.35"/><circle cx="8.4" cy="8.2" r="1.35" fill="currentColor"/><path d="m5.5 12.5 3.3-2.8 2.7 2.3L15.5 9l3 2.6" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 16.5v3.5m0 0 1.9-1.9M12 20l-1.9-1.9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </span>
+                <span class="tile-label">Save Screenshot</span>
+              </button>
+              <button type="button" class="iivo-glass-tile dual-tile">
+                <span class="tile-icon" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 8.5h1.9l1-1.6h6.2l1 1.6H18a1.5 1.5 0 0 1 1.5 1.5v6.9A1.5 1.5 0 0 1 18 18.4H6a1.5 1.5 0 0 1-1.5-1.5V10A1.5 1.5 0 0 1 6 8.5Z" fill="currentColor" opacity=".12"/><path d="M6 8.5h1.9l1-1.6h6.2l1 1.6H18a1.5 1.5 0 0 1 1.5 1.5v6.9A1.5 1.5 0 0 1 18 18.4H6a1.5 1.5 0 0 1-1.5-1.5V10A1.5 1.5 0 0 1 6 8.5Z" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/><path d="M14.3 12.9a2.3 2.3 0 1 1-.7-1.9" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/><path d="M14.2 10.6V12h-1.4" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </span>
+                <span class="tile-label">Send Another Screenshot</span>
+              </button>
+            </div>
+
+            <div class="action-stack">
+              <button type="button" class="iivo-glass-tile action-pill">
+                <span class="tile-icon" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 5.5V4h3M16 4h3v1.5M19 16.5V18h-3M8 18H5v-1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" opacity=".5"/><path d="M8.5 8.2h7M12 8.2v7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+                </span>
+                <span class="tile-label">Send Selected Text</span>
+              </button>
+              <button type="button" class="iivo-glass-tile action-pill">
+                <span class="tile-icon" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 4 4 8l8 4 8-4-8-4Z" fill="currentColor" opacity=".14"/><path d="M12 4 4 8l8 4 8-4-8-4Z" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round"/><path d="M4.2 12 12 16l7.8-4M4.2 15.8 12 19.8l7.8-4" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </span>
+                <span class="tile-label">Attach Context</span>
+              </button>
+              <button type="button" class="iivo-glass-tile action-pill">
+                <span class="tile-icon" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 3.5 5.5 6.3v5.4c0 3.6 2.6 6.2 6.5 7.8 3.9-1.6 6.5-4.2 6.5-7.8V6.3L12 3.5Z" fill="currentColor" opacity=".13"/><path d="M12 3.5 5.5 6.3v5.4c0 3.6 2.6 6.2 6.5 7.8 3.9-1.6 6.5-4.2 6.5-7.8V6.3L12 3.5Z" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round"/><path d="m9.1 12 2 2 3.8-3.9" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </span>
+                <span class="tile-label">Save Evidence</span>
+              </button>
+              <button type="button" class="iivo-glass-tile action-pill tile-danger">
+                <span class="tile-icon" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9.5 5.5h5" stroke="currentColor" stroke-width="1.45" stroke-linecap="round"/><path d="M6.5 7.5h11l-.85 10.6a1.4 1.4 0 0 1-1.4 1.2H8.75a1.4 1.4 0 0 1-1.4-1.2L6.5 7.5Z" fill="currentColor" opacity=".1"/><path d="M6.5 7.5h11l-.85 10.6a1.4 1.4 0 0 1-1.4 1.2H8.75a1.4 1.4 0 0 1-1.4-1.2L6.5 7.5Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M10 10.2v6.2M14 10.2v6.2" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/></svg>
+                </span>
+                <span class="tile-label">Cancel Screenshot</span>
+              </button>
+            </div>
+
+            <button type="button" class="iivo-glass-tile open-bar">
+              <span>Open <span class="font-wordmark">IIVO</span></span>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M5 12h13M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+
+            <div class="iivo-glass-panel privacy-strip">
+              <span class="pf-shield" aria-hidden="true">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 3.5 5.5 6.3v5.2c0 3.6 2.6 6.3 6.5 8 3.9-1.7 6.5-4.4 6.5-8V6.3L12 3.5Z" fill="currentColor" opacity=".13"/><path d="M12 3.5 5.5 6.3v5.2c0 3.6 2.6 6.3 6.5 8 3.9-1.7 6.5-4.4 6.5-8V6.3L12 3.5Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+              </span>
+              <p>Only sends after you click. Your context stays in your control.</p>
+            </div>
+          </section>
+        </main>
+
+        <footer class="shell-footer iivo-glass-panel" id="memory-footer" role="button" tabindex="0" title="IIVO keeps session memory locally — click for details">
+          <span class="sf-lock" aria-hidden="true">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="6" y="11" width="12" height="9" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          </span>
+          <span class="sf-text"><span class="font-wordmark">IIVO</span> remembers everything</span>
+          <button type="button" class="sf-gear icon-btn" id="footer-settings" aria-label="Lens settings" title="Open Lens settings">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.4" />
+              <path d="M12 2v2M12 20v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2 12h2M20 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+            </svg>
+          </button>
+        </footer>
+
+        <div class="proto-toast" id="proto-toast" role="status" aria-live="polite" hidden></div>
+
+        <div class="settings-sheet iivo-glass-panel" id="settings-sheet" hidden>
+          <div class="settings-head">
+            <strong>Lens Settings</strong>
+            <button type="button" class="settings-close" id="settings-close" aria-label="Close settings">×</button>
+          </div>
+          <p class="settings-copy">Prototype panel — in the real extension this opens capture, privacy, and memory preferences.</p>
+          <ul class="settings-list">
+            <li>Auto-capture screenshot on open</li>
+            <li>Remember page context locally</li>
+            <li>Require click before sending</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        var shell = document.querySelector(".iivo-glass-shell");
+        var stage = document.querySelector(".prototype-stage");
+        var toast = document.getElementById("proto-toast");
+        var settingsSheet = document.getElementById("settings-sheet");
+        var isOpen = true;
+
+        var liveDot = document.getElementById("live-dot");
+        var liveLabel = document.getElementById("live-label");
+        var pageDot = document.getElementById("page-context-dot");
+        var pageLabel = document.getElementById("page-context-label");
+        var shotDot = document.getElementById("shot-status-dot");
+        var shotLabel = document.getElementById("shot-status-label");
+        var shotTitle = document.getElementById("shot-title");
+        var shotStatus = document.getElementById("shot-status");
+
+        function setDot(el, state) {
+          el.className = "dot dot-" + state;
+        }
+
+        function setLive(open) {
+          isOpen = open;
+          shell.classList.toggle("is-open", open);
+          shell.classList.toggle("is-closed", !open);
+          shell.setAttribute("aria-hidden", open ? "false" : "true");
+          if (open) {
+            setDot(liveDot, "green");
+            liveLabel.textContent = "Live";
+            runCaptureSequence();
+          } else {
+            setDot(liveDot, "off");
+            liveLabel.textContent = "Offline";
+            setDot(pageDot, "off");
+            pageLabel.textContent = "Inactive";
+            setDot(shotDot, "off");
+            shotLabel.textContent = "Inactive";
+            shotTitle.textContent = "No screenshot";
+            shotStatus.textContent = "Open Lens to capture";
+          }
+        }
+
+        function runCaptureSequence() {
+          setDot(pageDot, "amber");
+          pageLabel.textContent = "Reading page";
+          setDot(shotDot, "amber");
+          shotLabel.textContent = "Capturing";
+          shotTitle.textContent = "Capturing screenshot…";
+          shotStatus.textContent = "Waiting for visible tab";
+
+          window.setTimeout(function () {
+            if (!isOpen) return;
+            setDot(pageDot, "green");
+            pageLabel.textContent = "Live context";
+          }, 700);
+
+          window.setTimeout(function () {
+            if (!isOpen) return;
+            setDot(shotDot, "green");
+            shotLabel.textContent = "Ready";
+            shotTitle.textContent = "Screenshot captured";
+            shotStatus.textContent = "Analysis available";
+          }, 1500);
+        }
+
+        function showToast(message) {
+          toast.textContent = message;
+          toast.hidden = false;
+          window.clearTimeout(showToast._timer);
+          showToast._timer = window.setTimeout(function () {
+            toast.hidden = true;
+          }, 3200);
+        }
+
+        function openSettings() {
+          settingsSheet.hidden = false;
+        }
+
+        function closeSettings() {
+          settingsSheet.hidden = true;
+        }
+
+        stage.addEventListener("click", function (event) {
+          if (event.target === stage) {
+            setLive(!isOpen);
+            showToast(isOpen ? "Lens opened — Live" : "Lens closed — click stage to reopen");
+          }
+        });
+
+        document.getElementById("header-settings").addEventListener("click", openSettings);
+        document.getElementById("footer-settings").addEventListener("click", function (event) {
+          event.stopPropagation();
+          openSettings();
+        });
+        document.getElementById("settings-close").addEventListener("click", closeSettings);
+
+        document.getElementById("memory-footer").addEventListener("click", function (event) {
+          if (event.target.closest("#footer-settings")) return;
+          showToast("IIVO remembers your session locally so context survives between actions. Nothing sends until you click.");
+        });
+
+        document.getElementById("memory-footer").addEventListener("keydown", function (event) {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            showToast("IIVO remembers your session locally so context survives between actions. Nothing sends until you click.");
+          }
+        });
+
+        document.addEventListener("keydown", function (event) {
+          if (event.key === "Escape") closeSettings();
+        });
+
+        setLive(true);
+      })();
+    </script>
+  </body>
+</html>
