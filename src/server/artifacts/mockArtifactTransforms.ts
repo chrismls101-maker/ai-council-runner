@@ -198,12 +198,22 @@ function defaultFixture(parent: IivoArtifact, transformType: ArtifactTransformTy
   };
 }
 
-export function isMockTransformMode(): boolean {
-  return (
+export function isMockTransformMode(req?: {
+  headers?: Record<string, string | string[] | undefined>;
+}): boolean {
+  if (
     process.env.ARTIFACT_TRANSFORM_MOCK === "1" ||
     process.env.NODE_ENV === "test" ||
     process.env.VITEST === "true"
-  );
+  ) {
+    return true;
+  }
+  const raw = req?.headers?.["x-iivo-mock-transforms"];
+  const header = Array.isArray(raw) ? raw[0] : raw;
+  if (header === "1" || header === "true") {
+    return process.env.NODE_ENV !== "production";
+  }
+  return false;
 }
 
 export function buildMockTransformArtifact(

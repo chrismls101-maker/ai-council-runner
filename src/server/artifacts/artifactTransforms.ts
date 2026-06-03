@@ -95,12 +95,14 @@ export async function transformArtifact(params: {
   sourceSectionIds?: string[];
   tokenMode?: TokenMode;
   sourceRunId?: string;
+  mockHeaders?: Record<string, string | string[] | undefined>;
 }): Promise<ArtifactTransformResult> {
-  const { artifact, transformType, userPrompt, sourceSectionIds, tokenMode = "small" } = params;
+  const { artifact, transformType, userPrompt, sourceSectionIds, tokenMode = "small", mockHeaders } =
+    params;
 
   let childArtifact: IivoArtifact;
 
-  if (isMockTransformMode()) {
+  if (isMockTransformMode({ headers: mockHeaders })) {
     childArtifact = buildMockTransformArtifact(artifact, transformType);
   } else {
     const instruction = TRANSFORM_PROMPTS[transformType];

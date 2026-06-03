@@ -10,12 +10,14 @@ export type ArtifactRestoreState =
 
 export async function fetchArtifactByReference(
   artifactId: string,
+  runId?: string | null,
 ): Promise<IivoArtifact | null> {
   try {
-    const res = await fetch(`/api/history/${encodeURIComponent(artifactId)}`);
+    const qs = runId ? `?runId=${encodeURIComponent(runId)}` : "";
+    const res = await fetch(`/api/artifacts/${encodeURIComponent(artifactId)}/content${qs}`);
     if (!res.ok) return null;
-    const entry = (await res.json()) as { artifact?: IivoArtifact };
-    return entry.artifact ?? null;
+    const data = (await res.json()) as { artifact?: IivoArtifact };
+    return data.artifact ?? null;
   } catch {
     return null;
   }

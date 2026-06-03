@@ -1,5 +1,6 @@
 import { useState } from "react";
 import IivoWordmark from "./IivoWordmark";
+import ChildArtifactEventCard from "./ChildArtifactEventCard";
 import Collapsible from "./Collapsible";
 import ArtifactRenderer from "./artifacts/ArtifactRenderer";
 import ArtifactReferenceFallback from "./artifacts/ArtifactReferenceFallback";
@@ -61,6 +62,7 @@ import {
   type IncludedMemorySummary,
   type SaveMemoryDraft,
   type WorkflowOption,
+  type ConversationArtifactEvent,
   type ConversationTurn,
   type IivoArtifact,
   type ArtifactSection,
@@ -143,8 +145,12 @@ export interface ConversationViewProps {
   onCopyFeedback?: (message: string) => void;
   onRegenerateSection?: (section: ArtifactSection) => void;
   onEditSection?: (section: ArtifactSection) => void;
-  onOpenInBuilder?: () => void;
+  onOpenInBuilder?: (artifact?: import("../types/artifacts.js").IivoArtifact) => void;
+  onOpenImageStudio?: (artifact?: import("../types/artifacts.js").IivoArtifact) => void;
   loadingSectionId?: string | null;
+  artifactEvents?: ConversationArtifactEvent[];
+  onOpenChildArtifact?: (artifact: import("../types/artifacts.js").IivoArtifact) => void;
+  onOpenChildInBuilder?: (artifact: import("../types/artifacts.js").IivoArtifact) => void;
 }
 
 function AgentCostBlock({ cost }: { cost: AgentCost | undefined }) {
@@ -331,6 +337,7 @@ function mapCompletedTurnToProps(
     onRegisterTypewriterSkip: undefined,
     artifact: turn.artifact ?? undefined,
     artifactSnapshot: turn.artifactSnapshot,
+    artifactEvents: turn.artifactEvents,
     suggestedMemories: [],
     onCopyFinalPlan: () => {
       if (answerText) {
@@ -448,7 +455,11 @@ function ConversationTurnContent(props: ConversationViewProps) {
     onRegenerateSection,
     onEditSection,
     onOpenInBuilder,
+    onOpenImageStudio,
     loadingSectionId,
+    artifactEvents = [],
+    onOpenChildArtifact,
+    onOpenChildInBuilder,
   } = props;
 
   const [showRawAnswer, setShowRawAnswer] = useState(false);
@@ -484,7 +495,7 @@ function ConversationTurnContent(props: ConversationViewProps) {
     researchAgentMeta,
   });
   const sourceCount = sourceEntries.length;
-  const hasAgentErrors = AGENT_ORDER.some((id) => agentMeta[id].status === "error");
+  const hasAgentErrors = AGENT_ORDER.some((id) => agentMeta[id]?.status === "error");
   const hasErrors = errors.length > 0 || hasAgentErrors;
   const workflowLabel =
     workflowName ??
@@ -536,7 +547,7 @@ function ConversationTurnContent(props: ConversationViewProps) {
   const showCouncilBanner =
     isCouncilRun &&
     !routerPending &&
-    (running || hasAnswer || AGENT_ORDER.some((id) => agentMeta[id].status !== "pending"));
+    (running || hasAnswer || AGENT_ORDER.some((id) => agentMeta[id]?.status !== "pending"));
   const showAssistantBlock =
     hasConversation && (hasAnswer || (!running && (runStatus || costSummary)));
   const resolvedQuality = resolveDecisionQuality(
@@ -788,7 +799,16 @@ function ConversationTurnContent(props: ConversationViewProps) {
                     compact={artifact.renderMode === "canvas" && builderCanvasDismissed}
                     onRegenerateSection={onRegenerateSection}
                     onEditSection={onEditSection}
-                    onOpenInBuilder={onOpenInBuilder}
+                    onOpenInBuilder={
+                      artifact && artifact.type !== "plain_answer" && onOpenInBuilder
+                        ? () => onOpenInBuilder(artifact)
+                        : undefined
+                    }
+                    onGenerateVisual={
+                      artifact && onOpenImageStudio
+                        ? () => onOpenImageStudio(artifact)
+                        : undefined
+                    }
                     loadingSectionId={loadingSectionId}
                   />
                 ) : (
@@ -822,6 +842,20 @@ function ConversationTurnContent(props: ConversationViewProps) {
                     sanitizeDisplay={false}
                     className="message-body assistant-body raw-answer-body"
                   />
+                </div>
+              )}
+              {artifactEvents.length > 0 && (
+                <div className="artifact-events-list" data-testid="artifact-events-list">
+                  {artifactEvents.map((event) => (
+                    <ChildArtifactEventCard
+                      key={event.id}
+                      event={event}
+                      parentTitle={artifact?.title}
+                      onOpen={onOpenChildArtifact}
+                      onOpenInBuilder={onOpenChildInBuilder}
+                      onCopy={(text) => onCopyFeedback?.(text)}
+                    />
+                  ))}
                 </div>
               )}
             </div>

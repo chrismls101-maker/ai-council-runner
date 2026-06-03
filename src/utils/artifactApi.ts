@@ -123,6 +123,135 @@ export async function saveArtifactToLibrary(params: {
   }
 }
 
+export async function restoreArtifactVersionFromServer(
+  artifactId: string,
+  versionId: string,
+  fallback?: { label?: string; kind?: import("../types/artifacts").ArtifactSection["kind"] },
+): Promise<{
+  restoredVersion: PersistedArtifactSectionVersion;
+  section: import("../types/artifacts").ArtifactSection;
+} | null> {
+  try {
+    const res = await fetch(
+      `/api/artifacts/${artifactId}/versions/${versionId}/restore`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(fallback ?? {}),
+      },
+    );
+    if (!res.ok) return null;
+    return (await res.json()) as {
+      restoredVersion: PersistedArtifactSectionVersion;
+      section: import("../types/artifacts").ArtifactSection;
+    };
+  } catch {
+    return null;
+  }
+}
+
+export type ArtifactShareRecord = {
+  shareId: string;
+  artifactId: string;
+  runId?: string;
+  title: string;
+  type: ArtifactType;
+  createdAt: string;
+  visibility: "private_link" | "public";
+  enabled: boolean;
+};
+
+export async function createArtifactShareLink(params: {
+  artifactId: string;
+  title: string;
+  type: ArtifactType;
+  runId?: string;
+  artifact?: import("../types/artifacts").IivoArtifact;
+  visibility?: ArtifactShareRecord["visibility"];
+}): Promise<ArtifactShareRecord | null> {
+  try {
+    const res = await fetch(`/api/artifacts/${params.artifactId}/share`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { share?: ArtifactShareRecord };
+    return data.share ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchActiveShareForArtifact(
+  artifactId: string,
+): Promise<ArtifactShareRecord | null> {
+  try {
+    const res = await fetch(`/api/artifacts/${artifactId}/share`);
+    if (!res.ok) return null;
+    const data = (await res.json()) as { share?: ArtifactShareRecord };
+    return data.share ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export type ArtifactSharePayload = {
+  share: ArtifactShareRecord;
+  artifact?: import("../types/artifacts").IivoArtifact | null;
+};
+
+export async function fetchArtifactSharePayload(
+  shareId: string,
+): Promise<ArtifactSharePayload | null> {
+  try {
+    const res = await fetch(`/api/artifacts/share/${shareId}`);
+    if (!res.ok) return null;
+    return (await res.json()) as ArtifactSharePayload;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchArtifactShare(shareId: string): Promise<ArtifactShareRecord | null> {
+  const payload = await fetchArtifactSharePayload(shareId);
+  return payload?.share ?? null;
+}
+
+export async function setArtifactShareEnabled(
+  shareId: string,
+  enabled: boolean,
+): Promise<boolean> {
+  try {
+    const res = await fetch(`/api/artifacts/share/${shareId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function updateArtifactShareVisibility(
+  shareId: string,
+  visibility: ArtifactShareRecord["visibility"],
+): Promise<ArtifactShareRecord | null> {
+  try {
+    const res = await fetch(`/api/artifacts/share/${shareId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ visibility }),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { share?: ArtifactShareRecord };
+    return data.share ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function persistBuilderModeAccepted(
   runId: string,
   builderModeAccepted: boolean,

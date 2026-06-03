@@ -55,8 +55,7 @@ export default function ArtifactActions({
   };
 
   const handleDownloadPdf = () => {
-    downloadArtifactPdf(artifact);
-    notify("PDF downloaded");
+    void downloadArtifactPdf(artifact).then(() => notify("PDF downloaded"));
   };
 
   const showCopy = actions.includes("copy") || actions.includes("copy_section");

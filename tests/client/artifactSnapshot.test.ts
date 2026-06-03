@@ -62,7 +62,7 @@ test("large artifact snapshot stores reference", () => {
   const snap = createArtifactSnapshot(large, "run-large");
   assert.equal(snap.mode, "reference");
   if (snap.mode === "reference") {
-    assert.equal(snap.artifactId, "run-large");
+    assert.equal(snap.artifactId, "art-large");
     assert.ok(snap.sizeBytes > INLINE_ARTIFACT_SNAPSHOT_MAX_BYTES);
   }
 });

@@ -15,7 +15,18 @@ export type ArtifactType =
   | "social_post"
   | "website_audit"
   | "campaign_plan"
-  | "canvas_project";
+  | "canvas_project"
+  | "image_asset"
+  | "image_pack"
+  | "hero_visual"
+  | "product_render"
+  | "product_render_pack"
+  | "ad_creative"
+  | "ad_creative_pack"
+  | "social_visual"
+  | "proposal_cover"
+  | "email_banner"
+  | "brand_visual_system";
 
 export type ArtifactRenderMode = "inline" | "canvas";
 
@@ -95,15 +106,17 @@ export type ArtifactBuildTrace = {
 
 export type BuilderWorkspaceTrace = {
   opened: boolean;
-  activeTab?: "compose" | "inspect" | "improve" | "package" | "execute";
+  activeTab?: "compose" | "inspect" | "improve" | "package" | "execute" | "visuals";
   buildMapCompleteness?: number;
   qualityScore?: number;
   suggestedFixCount?: number;
   versionCount?: number;
   versionPersistence?: "server" | "local" | "hybrid";
+  versionSnapshotMode?: "full" | "reference" | "metadata_only";
   transformsCreated?: number;
   saved?: boolean;
   shareActionUsed?: string;
+  shareLinkCreated?: boolean;
 };
 
 export type ArtifactTrace = {

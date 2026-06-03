@@ -248,7 +248,7 @@ app.post("/api/artifacts/transform", async (req, res) => {
   }
 
   const { isMockTransformMode } = await import("./artifacts/mockArtifactTransforms.js");
-  if (!isMockTransformMode()) {
+  if (!isMockTransformMode(req)) {
     const missing = validateApiKeys();
     if (missing.length > 0) {
       res.status(503).json({
@@ -267,6 +267,7 @@ app.post("/api/artifacts/transform", async (req, res) => {
       sourceSectionIds,
       tokenMode,
       sourceRunId,
+      mockHeaders: req.headers as Record<string, string | string[] | undefined>,
     });
     res.json(result);
   } catch (err) {
@@ -277,8 +278,8 @@ app.post("/api/artifacts/transform", async (req, res) => {
 
 app.get("/api/artifacts/:artifactId/versions", async (req, res) => {
   try {
-    const { listArtifactVersions } = await import("./artifacts/artifactVersionStore.js");
-    const versions = await listArtifactVersions(req.params.artifactId);
+    const { listArtifactVersionsHydrated } = await import("./artifacts/artifactVersionStore.js");
+    const versions = await listArtifactVersionsHydrated(req.params.artifactId);
     res.json({ versions });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -304,13 +305,408 @@ app.post("/api/artifacts/:artifactId/versions", async (req, res) => {
 
 app.patch("/api/artifacts/:artifactId/versions/:versionId/restore", async (req, res) => {
   try {
-    const { getArtifactVersion } = await import("./artifacts/artifactVersionStore.js");
-    const version = await getArtifactVersion(req.params.artifactId, req.params.versionId);
-    if (!version) {
-      res.status(404).json({ error: "Version not found" });
+    const { restoreArtifactSectionVersion } = await import("./artifacts/artifactVersionStore.js");
+    const fallback = req.body as {
+      label?: string;
+      kind?: import("./artifacts/artifactTypes.js").ArtifactSection["kind"];
+    };
+    const restoreFallback =
+      fallback?.label && fallback?.kind
+        ? { label: fallback.label, kind: fallback.kind }
+        : fallback?.label
+          ? { label: fallback.label, kind: "text" as const }
+          : undefined;
+    const result = await restoreArtifactSectionVersion(
+      req.params.artifactId,
+      req.params.versionId,
+      restoreFallback,
+    );
+    if (!result) {
+      res.status(404).json({ error: "Version not found or snapshot unavailable" });
       return;
     }
-    res.json({ version });
+    res.json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.post("/api/artifacts/:artifactId/share", async (req, res) => {
+  const { title, type, runId, visibility, artifact } = req.body as {
+    title?: string;
+    type?: import("./artifacts/artifactTypes.js").ArtifactType;
+    runId?: string;
+    visibility?: "private_link" | "public";
+    artifact?: import("./artifacts/artifactTypes.js").IivoArtifact;
+  };
+  if (!title?.trim() || !type) {
+    res.status(400).json({ error: "title and type are required" });
+    return;
+  }
+  try {
+    const { createArtifactShare } = await import("./artifacts/artifactShareStore.js");
+    const record = await createArtifactShare({
+      artifactId: req.params.artifactId,
+      title: title.trim(),
+      type,
+      runId,
+      visibility,
+      artifact,
+    });
+    res.json({ share: record });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.get("/api/artifacts/:artifactId/share", async (req, res) => {
+  try {
+    const { findShareByArtifactId } = await import("./artifacts/artifactShareStore.js");
+    const share = await findShareByArtifactId(req.params.artifactId);
+    if (!share) {
+      res.status(404).json({ error: "No active share link for this artifact" });
+      return;
+    }
+    res.json({ share });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.get("/api/artifacts/:artifactId/content", async (req, res) => {
+  const runId = typeof req.query.runId === "string" ? req.query.runId : undefined;
+  try {
+    const { resolveArtifactById } = await import("./artifacts/artifactResolver.js");
+    const artifact = await resolveArtifactById(req.params.artifactId, runId);
+    if (!artifact) {
+      res.status(404).json({ error: "Artifact not found" });
+      return;
+    }
+    res.json({ artifact });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.get("/api/artifacts/share/:shareId", async (req, res) => {
+  try {
+    const { getArtifactSharePayload } = await import("./artifacts/artifactShareStore.js");
+    const payload = await getArtifactSharePayload(req.params.shareId);
+    if (!payload) {
+      res.status(404).json({ error: "Share link not found or disabled" });
+      return;
+    }
+    res.json(payload);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.patch("/api/artifacts/share/:shareId", async (req, res) => {
+  const { enabled, visibility } = req.body as {
+    enabled?: boolean;
+    visibility?: "private_link" | "public";
+  };
+  if (enabled === undefined && visibility === undefined) {
+    res.status(400).json({ error: "enabled or visibility required" });
+    return;
+  }
+  try {
+    const {
+      setArtifactShareEnabled,
+      setArtifactShareVisibility,
+      getArtifactShare,
+    } = await import("./artifacts/artifactShareStore.js");
+    let share = await getArtifactShare(req.params.shareId);
+    if (!share) {
+      res.status(404).json({ error: "Share link not found" });
+      return;
+    }
+    if (typeof enabled === "boolean") {
+      share = (await setArtifactShareEnabled(req.params.shareId, enabled)) ?? share;
+    }
+    if (visibility) {
+      share = (await setArtifactShareVisibility(req.params.shareId, visibility)) ?? share;
+    }
+    res.json({ share });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.get("/api/images/config", async (req, res) => {
+  try {
+    const { getImageProviderStatus, providerLabel } = await import("./images/imageProvider.js");
+    const { visionQaCreditAddon } = await import("./images/imageVisionQa.js");
+    const status = getImageProviderStatus(req.headers as Record<string, string | string[] | undefined>);
+    res.json({
+      enabled: status.enabled,
+      configured: status.configured,
+      provider: status.provider,
+      activeProvider: status.activeProvider,
+      model: status.model,
+      providerLabel: providerLabel(status.activeProvider),
+      creditsPerImage: Number(process.env.IMAGE_GENERATION_CREDITS ?? "3") || 3,
+      visionQaCredits: visionQaCreditAddon(),
+      mockAvailable: true,
+      supportsTextToImage: status.supportsTextToImage,
+      supportsImageToImage: status.supportsImageToImage,
+      supportsEdit: status.supportsEdit,
+      reason: status.reason,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.post("/api/images/brief", async (req, res) => {
+  const body = req.body as {
+    userPrompt?: string;
+    visualType?: import("./images/visualNeedDetector.js").VisualNeed["type"];
+    artifact?: import("./artifacts/artifactTypes.js").IivoArtifact;
+    brandTone?: string;
+    targetAudience?: string;
+    userOwnsBrand?: boolean;
+  };
+  try {
+    const { detectVisualNeeds } = await import("./images/visualNeedDetector.js");
+    const { buildImageBrief } = await import("./images/imageBriefBuilder.js");
+    const { guardImagePrompt } = await import("./images/imageIpGuard.js");
+    const needs = detectVisualNeeds({
+      prompt: body.userPrompt,
+      artifactType: body.artifact?.type,
+      artifactTitle: body.artifact?.title,
+      sections: body.artifact?.sections,
+    });
+    const visualNeed =
+      needs.find((n) => n.type === body.visualType) ?? needs[0] ?? null;
+    if (!visualNeed) {
+      res.status(400).json({ error: "No visual need detected for this artifact" });
+      return;
+    }
+    let brief = buildImageBrief({
+      userPrompt: body.userPrompt,
+      artifact: body.artifact,
+      visualNeed,
+      brandTone: body.brandTone,
+      targetAudience: body.targetAudience,
+      userOwnsBrand: body.userOwnsBrand,
+    });
+    const ipGuard = guardImagePrompt(brief.prompt, { userOwnsBrand: body.userOwnsBrand });
+    if (ipGuard.rewrittenPrompt) brief = { ...brief, prompt: ipGuard.rewrittenPrompt };
+    res.json({ needs, visualNeed, brief, ipGuard });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.post("/api/images/generate", async (req, res) => {
+  const body = req.body as {
+    userPrompt?: string;
+    visualType?: import("./images/visualNeedDetector.js").VisualNeed["type"];
+    artifact?: import("./artifacts/artifactTypes.js").IivoArtifact;
+    brandTone?: string;
+    targetAudience?: string;
+    userOwnsBrand?: boolean;
+    count?: number;
+    briefOverride?: import("./images/imageBriefBuilder.js").ImageBrief;
+    runVisionQa?: boolean;
+    explicitAction?: boolean;
+  };
+  if (!body.explicitAction) {
+    res.status(400).json({ error: "Image generation requires explicit user action" });
+    return;
+  }
+  try {
+    const { generateStudioImage } = await import("./images/imageGenerationService.js");
+    const { readImageProviderConfig } = await import("./images/imageProvider.js");
+    const { visionQaCreditAddon } = await import("./images/imageVisionQa.js");
+    const { checkCreditsAvailable } = await import("./usage/usageGuards.js");
+    const { deductCredits } = await import("./usage/usageStore.js");
+    const config = readImageProviderConfig();
+    const count = Math.max(1, Math.min(body.count ?? 1, 4));
+    const visionAddon = body.runVisionQa ? visionQaCreditAddon() : 0;
+    const requiredCredits = config.creditsPerImage * count + visionAddon;
+    const creditCheck = await checkCreditsAvailable(requiredCredits);
+    if (!creditCheck.ok) {
+      res.status(402).json({
+        code: "INSUFFICIENT_CREDITS",
+        error: "Not enough credits for image generation.",
+        requiredCredits,
+        currentCredits: creditCheck.currentCredits,
+      });
+      return;
+    }
+    const result = await generateStudioImage({
+      ...body,
+      headers: req.headers as Record<string, string | string[] | undefined>,
+    });
+    await deductCredits({
+      credits: result.creditsUsed,
+      workflowId: "image-studio",
+      metadata: `IIVO Image Studio — ${result.visualNeed.type}`,
+    });
+    res.json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.post("/api/images/pack", async (req, res) => {
+  const body = req.body as {
+    packType?: import("./images/imagePackService.js").GenerateImagePackInput["packType"];
+    count?: number;
+    aspectRatio?: string;
+    styleConsistency?: boolean;
+    sharedBrief?: import("./images/imageBriefBuilder.js").ImageBrief;
+    variations?: Array<{
+      angle?: string;
+      background?: string;
+      lighting?: string;
+      composition?: string;
+      useCase?: string;
+      note?: string;
+    }>;
+    userPrompt?: string;
+    artifact?: import("./artifacts/artifactTypes.js").IivoArtifact;
+    userOwnsBrand?: boolean;
+    runVisionQa?: boolean;
+    explicitAction?: boolean;
+  };
+  if (!body.explicitAction) {
+    res.status(400).json({ error: "Image pack generation requires explicit user action" });
+    return;
+  }
+  if (!body.packType) {
+    res.status(400).json({ error: "packType required" });
+    return;
+  }
+  try {
+    const { generateImagePack } = await import("./images/imagePackService.js");
+    const { readImageProviderConfig } = await import("./images/imageProvider.js");
+    const { visionQaCreditAddon } = await import("./images/imageVisionQa.js");
+    const { checkCreditsAvailable } = await import("./usage/usageGuards.js");
+    const { deductCredits } = await import("./usage/usageStore.js");
+    const config = readImageProviderConfig();
+    const count = Math.max(2, Math.min(body.count ?? 2, 4));
+    const visionAddon = body.runVisionQa ? visionQaCreditAddon() : 0;
+    const requiredCredits = config.creditsPerImage * count + visionAddon;
+    const creditCheck = await checkCreditsAvailable(requiredCredits);
+    if (!creditCheck.ok) {
+      res.status(402).json({
+        code: "INSUFFICIENT_CREDITS",
+        error: "Not enough credits for image pack generation.",
+        requiredCredits,
+        currentCredits: creditCheck.currentCredits,
+      });
+      return;
+    }
+    const result = await generateImagePack({
+      ...body,
+      packType: body.packType,
+      count,
+      headers: req.headers as Record<string, string | string[] | undefined>,
+    });
+    await deductCredits({
+      credits: result.creditsUsed,
+      workflowId: "image-studio",
+      metadata: `IIVO Image Studio — pack ${body.packType}`,
+    });
+    res.json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.post("/api/images/variant", async (req, res) => {
+  const { sourceImageId, prompt, explicitAction } = req.body as {
+    sourceImageId?: string;
+    prompt?: string;
+    explicitAction?: boolean;
+  };
+  if (!sourceImageId) {
+    res.status(400).json({ error: "sourceImageId required" });
+    return;
+  }
+  if (!explicitAction) {
+    res.status(400).json({ error: "Variant generation requires explicit user action" });
+    return;
+  }
+  try {
+    const { createImageVariant } = await import("./images/imageGenerationService.js");
+    const { readImageProviderConfig } = await import("./images/imageProvider.js");
+    const { checkCreditsAvailable } = await import("./usage/usageGuards.js");
+    const { deductCredits } = await import("./usage/usageStore.js");
+    const config = readImageProviderConfig();
+    const creditCheck = await checkCreditsAvailable(config.creditsPerImage);
+    if (!creditCheck.ok) {
+      res.status(402).json({
+        code: "INSUFFICIENT_CREDITS",
+        error: "Not enough credits for image variant.",
+        requiredCredits: config.creditsPerImage,
+        currentCredits: creditCheck.currentCredits,
+      });
+      return;
+    }
+    const result = await createImageVariant({
+      sourceImageId,
+      prompt,
+      headers: req.headers as Record<string, string | string[] | undefined>,
+    });
+    await deductCredits({
+      credits: result.creditsUsed,
+      workflowId: "image-studio",
+      metadata: "IIVO Image Studio — variant",
+    });
+    res.json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.post("/api/images/attach-to-artifact", async (req, res) => {
+  const { targetArtifact, imageId, sectionId, label } = req.body as {
+    targetArtifact?: import("./artifacts/artifactTypes.js").IivoArtifact;
+    imageId?: string;
+    sectionId?: string;
+    label?: string;
+  };
+  if (!targetArtifact || !imageId) {
+    res.status(400).json({ error: "targetArtifact and imageId required" });
+    return;
+  }
+  try {
+    const { attachImageToArtifact } = await import("./images/imageAttach.js");
+    const artifact = await attachImageToArtifact({ targetArtifact, imageId, sectionId, label });
+    res.json({ artifact });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.get("/api/images/:imageId/file", async (req, res) => {
+  try {
+    const { readStoredImageBuffer, getStoredImage } = await import("./images/imageStore.js");
+    const record = await getStoredImage(req.params.imageId);
+    const buffer = await readStoredImageBuffer(req.params.imageId);
+    if (!record || !buffer) {
+      res.status(404).json({ error: "Image not found" });
+      return;
+    }
+    res.setHeader("Content-Type", record.mimeType);
+    res.send(buffer);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     res.status(500).json({ error: message });

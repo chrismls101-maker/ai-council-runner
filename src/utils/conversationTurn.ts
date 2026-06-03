@@ -110,6 +110,38 @@ export function resolveTurnArtifact(turn: ConversationTurn): import("../types/ar
   return snapshotToInlineArtifact(turn.artifactSnapshot);
 }
 
+export function resolveTurnArtifactId(turn: ConversationTurn): string | undefined {
+  if (turn.artifact?.id) return turn.artifact.id;
+  if (turn.artifactSnapshot?.mode === "inline") return turn.artifactSnapshot.artifact.id;
+  if (turn.artifactSnapshot?.mode === "reference") return turn.artifactSnapshot.artifactId;
+  return undefined;
+}
+
+export function findTurnIndexForArtifactId(
+  turns: ConversationTurn[],
+  artifactId: string,
+): number {
+  for (let i = turns.length - 1; i >= 0; i--) {
+    if (resolveTurnArtifactId(turns[i]!) === artifactId) return i;
+  }
+  return Math.max(0, turns.length - 1);
+}
+
+export function appendArtifactEventToTurn(
+  turns: ConversationTurn[],
+  parentArtifactId: string,
+  event: import("../types/index.js").ConversationArtifactEvent,
+): ConversationTurn[] {
+  if (turns.length === 0) return turns;
+  const idx = findTurnIndexForArtifactId(turns, parentArtifactId);
+  const turn = turns[idx]!;
+  return [
+    ...turns.slice(0, idx),
+    { ...turn, artifactEvents: [...(turn.artifactEvents ?? []), event] },
+    ...turns.slice(idx + 1),
+  ];
+}
+
 export function loadConversationThreadFromSession(): ConversationTurn[] {
   try {
     const raw = sessionStorage.getItem(CONVERSATION_THREAD_STORAGE_KEY);

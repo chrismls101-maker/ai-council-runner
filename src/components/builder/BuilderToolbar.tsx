@@ -70,8 +70,7 @@ export default function BuilderToolbar({
             className="btn ghost small"
             data-testid="builder-download-pdf"
             onClick={() => {
-              downloadArtifactPdf(artifact);
-              notify("PDF downloaded");
+              void downloadArtifactPdf(artifact).then(() => notify("PDF downloaded"));
             }}
           >
             PDF

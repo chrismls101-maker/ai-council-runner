@@ -1,4 +1,4 @@
-export type BuilderWorkspaceTab = "compose" | "inspect" | "improve" | "package" | "execute";
+export type BuilderWorkspaceTab = "compose" | "inspect" | "improve" | "package" | "execute" | "visuals";
 
 export type SectionVariantType =
   | "shorter"

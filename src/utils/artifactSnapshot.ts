@@ -32,13 +32,12 @@ export function shouldStoreArtifactByReference(artifact: IivoArtifact): boolean 
 
 export function createArtifactSnapshot(
   artifact: IivoArtifact,
-  runId?: string | null,
+  _runId?: string | null,
 ): ArtifactSnapshot {
-  const artifactId = runId ?? artifact.id;
   if (shouldStoreArtifactByReference(artifact)) {
     return {
       mode: "reference",
-      artifactId,
+      artifactId: artifact.id,
       title: artifact.title,
       type: artifact.type,
       renderMode: artifact.renderMode,

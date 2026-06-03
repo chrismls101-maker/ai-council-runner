@@ -27,3 +27,13 @@ await test("mockArtifactTransforms: builds follow-up fixture", async () => {
   assert.ok(child.sections.length >= 2);
   assert.equal(child.metadata?.mock, true);
 });
+
+await test("mockArtifactTransforms: header enables mock in non-production", async () => {
+  const prev = process.env.NODE_ENV;
+  process.env.NODE_ENV = "development";
+  const { isMockTransformMode } = await import("../../dist/server/artifacts/mockArtifactTransforms.js");
+  assert.equal(isMockTransformMode({ headers: { "x-iivo-mock-transforms": "1" } }), true);
+  process.env.NODE_ENV = "production";
+  assert.equal(isMockTransformMode({ headers: { "x-iivo-mock-transforms": "1" } }), false);
+  process.env.NODE_ENV = prev;
+});

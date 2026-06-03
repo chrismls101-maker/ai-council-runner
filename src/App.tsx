@@ -18,8 +18,9 @@ import type { VersionPersistenceMode } from "./utils/artifactApi";
 import {
   loadMergedVersionState,
   persistSectionVersion,
-  restoreSectionVersion,
+  restoreSectionVersionWithServer,
 } from "./utils/artifactVersioning";
+import { createArtifactSnapshot } from "./utils/artifactSnapshot";
 import { buildBuilderContextItems } from "./utils/builderContext";
 import { cacheChildArtifact, loadCachedChildArtifact } from "./utils/artifactChildCache";
 import {
@@ -118,7 +119,14 @@ import {
   clearConversationThreadSession,
   loadConversationThreadFromSession,
   saveConversationThreadToSession,
+  appendArtifactEventToTurn,
 } from "./utils/conversationTurn";
+import {
+  parseShareIdFromLocation,
+  clearShareIdFromLocation,
+  shareLinkLabel,
+} from "./utils/artifactShare";
+import { fetchArtifactSharePayload } from "./utils/artifactApi";
 import { buildConversationContextForApi } from "./utils/conversationContext";
 import {
   isChatScrollNearBottom,
@@ -156,6 +164,7 @@ import {
   type SaveMemoryDraft,
   type TokenMode,
   type WorkflowOption,
+  type ConversationArtifactEvent,
   type ConversationTurn,
   type IivoArtifact,
 } from "./types";
@@ -594,6 +603,62 @@ export default function App() {
     setTimeout(() => setCopyFeedback(null), 2000);
   };
 
+  useEffect(() => {
+    if (!workspaceBootstrapped || !backendReachable) return;
+    const shareId = parseShareIdFromLocation(window.location.search);
+    if (!shareId) return;
+
+    let cancelled = false;
+    void fetchArtifactSharePayload(shareId).then((payload) => {
+      if (cancelled) return;
+      if (!payload?.artifact) {
+        showCopyFeedback("Share link not found or disabled.");
+        clearShareIdFromLocation();
+        return;
+      }
+      const { share, artifact } = payload;
+      cacheChildArtifact(artifact);
+      setIsArchivedView(false);
+      setArchivedRunId(null);
+      setBuilderModeActive(false);
+      setBuilderCanvasDismissed(false);
+      setActiveArtifact(artifact);
+      setSubmittedPrompt(`Shared: ${artifact.title}`);
+      if (share.runId) setRunId(share.runId);
+      const turn: ConversationTurn = {
+        id: `share-${share.shareId}`,
+        submittedAt: share.createdAt,
+        userPrompt: `Opened shared artifact: ${artifact.title}`,
+        submittedAttachments: [],
+        status: "complete",
+        runId: share.runId ?? null,
+        outputs: emptyOutputs(),
+        agentMeta: initAgentMeta(),
+        agentCosts: {},
+        costSummary: null,
+        runStatus: "complete",
+        workflowName: null,
+        workflow: "",
+        tokenMode: "balanced",
+        routerDecision: null,
+        errors: [],
+        benchmarkAnswer: null,
+        benchmarkCost: null,
+        benchmarkChecks: {},
+        benchmarkNotes: "",
+        executionTrace: null,
+        artifact,
+        artifactSnapshot: createArtifactSnapshot(artifact, share.runId),
+      };
+      setConversationTurns([turn]);
+      showCopyFeedback(shareLinkLabel(share));
+      clearShareIdFromLocation();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceBootstrapped, backendReachable]);
+
   const handlePresetChange = (value: string) => {
     if (isArchivedView) return;
     const next = normalizePresetId(value);
@@ -769,9 +834,11 @@ export default function App() {
       suggestedFixCount?: number;
       versionCount?: number;
       versionPersistence?: VersionPersistenceMode;
+      versionSnapshotMode?: import("./types/artifactVersions").VersionSnapshotMode;
       transformsCreated?: number;
       saved?: boolean;
       shareActionUsed?: string;
+      shareLinkCreated?: boolean;
     }) => {
       setExecutionTrace((prev) => {
         if (!prev?.artifact) return prev;
@@ -790,11 +857,15 @@ export default function App() {
               versionCount: patch.versionCount ?? prev.artifact.builder?.versionCount,
               versionPersistence:
                 patch.versionPersistence ?? prev.artifact.builder?.versionPersistence,
+              versionSnapshotMode:
+                patch.versionSnapshotMode ?? prev.artifact.builder?.versionSnapshotMode,
               transformsCreated:
                 patch.transformsCreated ?? prev.artifact.builder?.transformsCreated,
               saved: patch.saved ?? prev.artifact.builder?.saved,
               shareActionUsed:
                 patch.shareActionUsed ?? prev.artifact.builder?.shareActionUsed,
+              shareLinkCreated:
+                patch.shareLinkCreated ?? prev.artifact.builder?.shareLinkCreated,
             },
           },
         };
@@ -831,25 +902,48 @@ export default function App() {
       return;
     }
     let cancelled = false;
-    void loadMergedVersionState(focus.id, focus.sections).then(({ state, mode }) => {
+    void loadMergedVersionState(focus.id, focus.sections).then(({ state, mode, snapshotMode }) => {
       if (cancelled) return;
       setArtifactVersionState(state);
       setVersionPersistenceMode(mode);
-      bumpBuilderTrace({ versionCount: Object.values(state.sectionVersions).flat().length, versionPersistence: mode });
+      bumpBuilderTrace({
+        versionCount: Object.values(state.sectionVersions).flat().length,
+        versionPersistence: mode,
+        versionSnapshotMode: snapshotMode,
+      });
     });
     return () => {
       cancelled = true;
     };
   }, [builderFocusArtifact?.id, builderModeActive]);
 
-  const handleOpenInBuilder = useCallback(() => {
-    if (!activeArtifact || activeArtifact.type === "plain_answer") return;
-    syncBuilderArtifacts(activeArtifact);
-    setBuilderModeActive(true);
-    setBuilderCanvasDismissed(false);
-    setBuilderTab("compose");
-    bumpBuilderTrace({ opened: true, activeTab: "compose" });
-  }, [activeArtifact, bumpBuilderTrace, syncBuilderArtifacts]);
+  const handleOpenInBuilder = useCallback(
+    (artifactOverride?: IivoArtifact | null) => {
+      const target = artifactOverride ?? activeArtifact;
+      if (!target || target.type === "plain_answer") return;
+      setActiveArtifact(target);
+      syncBuilderArtifacts(target);
+      setBuilderModeActive(true);
+      setBuilderCanvasDismissed(false);
+      setBuilderTab("compose");
+      bumpBuilderTrace({ opened: true, activeTab: "compose" });
+    },
+    [activeArtifact, bumpBuilderTrace, syncBuilderArtifacts],
+  );
+
+  const handleOpenImageStudio = useCallback(
+    (artifactOverride?: IivoArtifact | null) => {
+      const target = artifactOverride ?? activeArtifact;
+      if (!target || target.type === "plain_answer") return;
+      setActiveArtifact(target);
+      syncBuilderArtifacts(target);
+      setBuilderModeActive(true);
+      setBuilderCanvasDismissed(false);
+      setBuilderTab("visuals");
+      bumpBuilderTrace({ opened: true, activeTab: "visuals" });
+    },
+    [activeArtifact, bumpBuilderTrace, syncBuilderArtifacts],
+  );
 
   const handleRegenerateSection = useCallback(
     async (
@@ -966,14 +1060,41 @@ export default function App() {
     (versionId: string) => {
       const focus = builderFocusArtifact ?? activeArtifact;
       if (!focus || !artifactVersionState) return;
-      const result = restoreSectionVersion(focus, artifactVersionState, versionId);
-      if (!result) return;
-      setBuilderFocusArtifact(result.artifact);
-      if (activeArtifact?.id === focus.id) setActiveArtifact(result.artifact);
-      if (builderRootArtifact?.id === focus.id) setBuilderRootArtifact(result.artifact);
-      showCopyFeedback("Version restored");
+      void restoreSectionVersionWithServer(focus, artifactVersionState, versionId).then((result) => {
+        if (!result) {
+          showCopyFeedback("Could not restore version");
+          return;
+        }
+        setArtifactVersionState(result.state);
+        setBuilderFocusArtifact(result.artifact);
+        if (activeArtifact?.id === focus.id) setActiveArtifact(result.artifact);
+        if (builderRootArtifact?.id === focus.id) setBuilderRootArtifact(result.artifact);
+        bumpBuilderTrace({ versionSnapshotMode: result.mode });
+        showCopyFeedback("Version restored from server snapshot.");
+      });
     },
-    [activeArtifact, builderFocusArtifact, builderRootArtifact, artifactVersionState],
+    [activeArtifact, artifactVersionState, builderFocusArtifact, builderRootArtifact, bumpBuilderTrace],
+  );
+
+  const appendChildArtifactEvent = useCallback(
+    (
+      parent: IivoArtifact,
+      child: IivoArtifact,
+      relationship: import("./types/artifacts").ArtifactRelationship,
+    ) => {
+      const event: ConversationArtifactEvent = {
+        id: `evt-${child.id}`,
+        type: "artifact_created",
+        parentArtifactId: parent.id,
+        childArtifactId: child.id,
+        transformType: relationship.transformType,
+        title: child.title,
+        createdAt: relationship.createdAt,
+        artifactSnapshot: createArtifactSnapshot(child, archivedRunId ?? runId),
+      };
+      setConversationTurns((prev) => appendArtifactEventToTurn(prev, parent.id, event));
+    },
+    [archivedRunId, runId],
   );
 
   const openChildArtifact = useCallback(async (childId: string, inBuilder: boolean) => {
@@ -995,13 +1116,17 @@ export default function App() {
   const handleArtifactTransform = useCallback(
     async (transformType: import("./types/builderWorkspace").ArtifactTransformType) => {
       const root = builderRootArtifact ?? activeArtifact;
-      if (!root || !submittedPrompt) return;
+      const prompt =
+        submittedPrompt?.trim() ||
+        conversationTurns.at(-1)?.userPrompt?.trim() ||
+        "";
+      if (!root || !prompt) return;
       setTransformLoading(true);
       try {
         const { artifact: child, relationship } = await requestArtifactTransform({
           artifact: root,
           transformType,
-          userPrompt: submittedPrompt,
+          userPrompt: prompt,
           tokenMode,
           sourceRunId: archivedRunId ?? runId ?? undefined,
         });
@@ -1012,13 +1137,14 @@ export default function App() {
           { relationship, artifact: child },
         ]);
         setLastTransformLabel(child.title || transformTypeLabel(transformType));
+        appendChildArtifactEvent(root, child, relationship);
         setTransformsCreated((n) => {
           const next = n + 1;
           bumpBuilderTrace({ transformsCreated: next });
           return next;
         });
         setBuilderTab("execute");
-        showCopyFeedback("Transform created — original artifact unchanged");
+        showCopyFeedback("Created child artifact and added it to chat.");
       } catch (err) {
         showCopyFeedback(err instanceof Error ? err.message : "Transform failed");
       } finally {
@@ -1029,10 +1155,12 @@ export default function App() {
       activeArtifact,
       builderRootArtifact,
       submittedPrompt,
+      conversationTurns,
       tokenMode,
       bumpBuilderTrace,
       archivedRunId,
       runId,
+      appendChildArtifactEvent,
     ],
   );
 
@@ -2264,6 +2392,15 @@ export default function App() {
             traceSummary={builderTraceSummary}
             onSavedChange={(saved) => bumpBuilderTrace({ saved })}
             onShareAction={(action) => bumpBuilderTrace({ shareActionUsed: action })}
+            userPrompt={submittedPrompt ?? undefined}
+            onAttachVisual={(updated) => {
+              if (builderRootArtifact?.id === updated.id) {
+                setBuilderRootArtifact(updated);
+                if (builderFocusArtifact?.id === updated.id) setBuilderFocusArtifact(updated);
+                if (activeArtifact?.id === updated.id) setActiveArtifact(updated);
+              }
+              showCopyFeedback("Visual attached to artifact.");
+            }}
             onBuilderTraceUpdate={(patch) =>
               bumpBuilderTrace({
                 opened: true,
@@ -2363,11 +2500,16 @@ export default function App() {
                 onRegenerateSection={handleRegenerateSection}
                 onEditSection={(section: ArtifactSection) => setEditSection(section)}
                 loadingSectionId={artifactSectionLoading}
-                onOpenInBuilder={
-                  activeArtifact && activeArtifact.type !== "plain_answer"
-                    ? handleOpenInBuilder
-                    : undefined
-                }
+                onOpenInBuilder={handleOpenInBuilder}
+                onOpenImageStudio={handleOpenImageStudio}
+                onOpenChildArtifact={(art) => {
+                  cacheChildArtifact(art);
+                  setActiveArtifact(art);
+                }}
+                onOpenChildInBuilder={(art) => {
+                  cacheChildArtifact(art);
+                  handleOpenInBuilder(art);
+                }}
               />
               <div ref={threadEndRef} />
             </div>

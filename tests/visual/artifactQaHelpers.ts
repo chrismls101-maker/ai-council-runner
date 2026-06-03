@@ -2,10 +2,75 @@
  * Artifact / Builder visual QA helpers — post Execution Mode composer layout.
  */
 
-import { expect, type Page } from "@playwright/test";
+import { type Page } from "@playwright/test";
+import { expect } from "@playwright/test";
 import { qaLog } from "./qaEnv.js";
 import { pause, openComposerConfigure } from "./qaStepHelpers.js";
 import { waitForRunComplete, type RunWaitOptions } from "./runWaitHelpers.js";
+
+export {
+  assertBuilderMode,
+  assertConversationMode,
+  assertLandingMode,
+  backToChatFromBuilder,
+  bootstrapQaWorkspace,
+  navigateBuilderTab,
+  openBuilderFromTurn,
+  seedMockConversationThread,
+} from "./workspaceLayoutHelpers.js";
+
+const MOCK_AGENT_META = {
+  strategy: { status: "complete" },
+  critic: { status: "complete" },
+  research: { status: "complete" },
+  salesWriter: { status: "complete" },
+  finalJudge: { status: "complete" },
+};
+
+export const MOCK_COLD_EMAIL_TURN: Record<string, unknown> = {
+  id: "turn-mock-cold",
+  submittedAt: "2026-06-03T12:00:00.000Z",
+  userPrompt:
+    "Write a cold email to a local HVAC owner offering a 14-day paid pilot for missed-call recovery.",
+  submittedAttachments: [],
+  status: "complete",
+  outputs: {
+    strategy: "",
+    critic: "",
+    research: "",
+    salesWriter: "",
+    finalJudge: "Subject: Missed calls\n\nBody: Pilot offer for HVAC missed-call recovery.",
+  },
+  agentMeta: MOCK_AGENT_META,
+  agentCosts: {},
+  costSummary: null,
+  runStatus: "complete",
+  workflowName: null,
+  workflow: "direct_answer",
+  tokenMode: "standard",
+  routerDecision: null,
+  errors: [],
+  benchmarkAnswer: null,
+  benchmarkCost: null,
+  benchmarkChecks: {},
+  benchmarkNotes: "",
+  executionTrace: null,
+  artifact: {
+    id: "art-mock-cold",
+    type: "cold_email",
+    renderMode: "inline",
+    title: "Cold Email",
+    sections: [
+      {
+        id: "body",
+        label: "Email body",
+        kind: "email_body",
+        content: "Hi — 14-day pilot for missed-call recovery.",
+      },
+    ],
+    actions: ["copy", "download_txt"],
+  },
+};
 
 export type BuilderOrRunPhase =
   | "builder_confirm"

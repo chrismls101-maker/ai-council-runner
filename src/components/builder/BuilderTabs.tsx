@@ -5,6 +5,7 @@ const TABS: Array<{ id: BuilderWorkspaceTab; label: string }> = [
   { id: "inspect", label: "Inspect" },
   { id: "improve", label: "Improve" },
   { id: "package", label: "Package" },
+  { id: "visuals", label: "Image Studio" },
   { id: "execute", label: "Execute" },
 ];
 

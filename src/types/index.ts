@@ -284,6 +284,17 @@ export interface WorkflowOption {
 
 export type ConversationTurnStatus = "running" | "complete" | "partial" | "failed";
 
+export type ConversationArtifactEvent = {
+  id: string;
+  type: "artifact_created";
+  parentArtifactId: string;
+  childArtifactId: string;
+  transformType: string;
+  title: string;
+  createdAt: string;
+  artifactSnapshot: import("../utils/artifactSnapshot.js").ArtifactSnapshot;
+};
+
 export interface ConversationTurn {
   id: string;
   submittedAt: string;
@@ -319,6 +330,7 @@ export interface ConversationTurn {
   memoryMode?: import("./memory").MemoryMode | string;
   artifact?: import("./artifacts.js").IivoArtifact;
   artifactSnapshot?: import("../utils/artifactSnapshot.js").ArtifactSnapshot;
+  artifactEvents?: ConversationArtifactEvent[];
 }
 
 export const AGENT_ORDER: AgentId[] = [

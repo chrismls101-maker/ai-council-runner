@@ -15,7 +15,18 @@ export type ArtifactType =
   | "social_post"
   | "website_audit"
   | "campaign_plan"
-  | "canvas_project";
+  | "canvas_project"
+  | "image_asset"
+  | "image_pack"
+  | "hero_visual"
+  | "product_render"
+  | "product_render_pack"
+  | "ad_creative"
+  | "ad_creative_pack"
+  | "social_visual"
+  | "proposal_cover"
+  | "email_banner"
+  | "brand_visual_system";
 
 export type ArtifactRenderMode = "inline" | "canvas";
 
@@ -27,7 +38,12 @@ export type ArtifactAction =
   | "download_csv"
   | "download_pdf"
   | "regenerate_section"
-  | "edit_section";
+  | "edit_section"
+  | "download_png"
+  | "copy_prompt"
+  | "regenerate"
+  | "create_variants"
+  | "attach_to_artifact";
 
 export type ArtifactTable = {
   columns: string[];
@@ -86,7 +102,7 @@ export type ArtifactBuildTrace = {
 
 export type BuilderWorkspaceTrace = {
   opened: boolean;
-  activeTab?: "compose" | "inspect" | "improve" | "package" | "execute";
+  activeTab?: "compose" | "inspect" | "improve" | "package" | "execute" | "visuals";
   buildMapCompleteness?: number;
   qualityScore?: number;
   suggestedFixCount?: number;

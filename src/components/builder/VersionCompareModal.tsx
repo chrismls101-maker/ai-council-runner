@@ -1,6 +1,9 @@
 import type { ArtifactSectionVersion } from "../../types/artifactVersions";
 import type { ArtifactSection } from "../../types/artifacts";
-import { contentToCompareText, diffLines } from "../../utils/textDiff";
+import { diffArtifactSectionContent } from "../../utils/artifactDiff";
+import { contentToCompareText } from "../../utils/textDiff";
+import ChecklistDiffView from "./ChecklistDiffView";
+import TableDiffView from "./TableDiffView";
 
 export interface VersionCompareModalProps {
   open: boolean;
@@ -23,7 +26,11 @@ export default function VersionCompareModal({
 
   const beforeText = contentToCompareText(version.content);
   const afterText = contentToCompareText(currentSection.content);
-  const diff = diffLines(beforeText, afterText);
+  const diff = diffArtifactSectionContent(
+    version.content,
+    currentSection.content,
+    currentSection.kind,
+  );
 
   return (
     <div className="version-compare-overlay" data-testid="version-compare-modal" role="dialog">
@@ -38,6 +45,7 @@ export default function VersionCompareModal({
           {version.source} · {new Date(version.createdAt).toLocaleString()}
           {version.variantType && ` · ${version.variantType}`}
           {version.instruction && ` · ${version.instruction}`}
+          {diff.mode !== "text" && ` · ${diff.mode} diff`}
         </p>
         <div className="version-compare-columns">
           <div className="version-compare-col">
@@ -51,17 +59,18 @@ export default function VersionCompareModal({
         </div>
         <div className="version-compare-diff" data-testid="version-compare-diff">
           <h4>Changes</h4>
-          <pre className="version-diff-pre">
-            {diff.map((line, i) => (
-              <div
-                key={`${i}-${line.type}`}
-                className={`diff-line diff-${line.type}`}
-              >
-                {line.type === "add" ? "+ " : line.type === "remove" ? "- " : "  "}
-                {line.text}
-              </div>
-            ))}
-          </pre>
+          {diff.mode === "table" && <TableDiffView diff={diff} />}
+          {diff.mode === "checklist" && <ChecklistDiffView diff={diff} />}
+          {diff.mode === "text" && (
+            <pre className="version-diff-pre">
+              {diff.lines.map((line, i) => (
+                <div key={`${i}-${line.type}`} className={`diff-line diff-${line.type}`}>
+                  {line.type === "add" ? "+ " : line.type === "remove" ? "- " : "  "}
+                  {line.text}
+                </div>
+              ))}
+            </pre>
+          )}
         </div>
         <div className="version-compare-actions">
           <button

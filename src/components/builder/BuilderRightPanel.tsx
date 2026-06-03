@@ -16,6 +16,7 @@ import ExecutePanel from "./ExecutePanel";
 import SectionVariantMenu from "./SectionVariantMenu";
 import RelatedArtifactsPanel, { type RelatedChild } from "./RelatedArtifactsPanel";
 import VersionHistoryPanel from "./VersionHistoryPanel";
+import ImageStudioPanel from "../images/ImageStudioPanel";
 
 export interface BuilderRightPanelProps {
   artifact: IivoArtifact;
@@ -49,6 +50,8 @@ export interface BuilderRightPanelProps {
   sectionLoading?: boolean;
   transformLoading?: boolean;
   traceSummary?: string;
+  userPrompt?: string;
+  onAttachVisual?: (artifact: IivoArtifact) => void;
 }
 
 export default function BuilderRightPanel({
@@ -83,6 +86,8 @@ export default function BuilderRightPanel({
   sectionLoading = false,
   transformLoading = false,
   traceSummary,
+  userPrompt,
+  onAttachVisual,
 }: BuilderRightPanelProps) {
   const notify = (msg: string) => onFeedback?.(msg);
   const selectedSection = artifact.sections.find((s) => s.id === selectedSectionId);
@@ -140,8 +145,7 @@ export default function BuilderRightPanel({
         break;
       }
       case "download_pdf":
-        downloadArtifactPdf(artifact);
-        notify("PDF downloaded");
+        void downloadArtifactPdf(artifact).then(() => notify("PDF downloaded"));
         break;
       default:
         notify("Copied");
@@ -272,6 +276,17 @@ export default function BuilderRightPanel({
                 </li>
               ))}
             </ul>
+          </div>
+        )}
+
+        {activeTab === "visuals" && (
+          <div className="builder-visuals-panel" data-testid="builder-visuals-panel">
+            <ImageStudioPanel
+              sourceArtifact={rootArtifact}
+              userPrompt={userPrompt}
+              onAttachToSource={onAttachVisual}
+              onFeedback={notify}
+            />
           </div>
         )}
 

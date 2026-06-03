@@ -4,10 +4,12 @@ import type {
   ArtifactSectionVersionSource,
   ArtifactVersionState,
   PersistedArtifactSectionVersion,
+  VersionSnapshotMode,
 } from "../types/artifactVersions";
 import {
   fetchArtifactVersions,
   persistArtifactVersion,
+  restoreArtifactVersionFromServer,
   type VersionPersistenceMode,
 } from "./artifactApi.ts";
 
@@ -79,8 +81,48 @@ export function restoreSectionVersion(
   return null;
 }
 
+export async function restoreSectionVersionWithServer(
+  artifact: IivoArtifact,
+  state: ArtifactVersionState,
+  versionId: string,
+): Promise<{ state: ArtifactVersionState; artifact: IivoArtifact; mode: VersionSnapshotMode } | null> {
+  const section = artifact.sections.find((s) =>
+    (state.sectionVersions[s.id] ?? []).some((v) => v.id === versionId),
+  );
+  const server = await restoreArtifactVersionFromServer(artifact.id, versionId, {
+    label: section?.label,
+    kind: section?.kind,
+  });
+  if (server) {
+    const restoredSection = server.section;
+    const nextArtifact = {
+      ...artifact,
+      sections: artifact.sections.map((s) =>
+        s.id === restoredSection.id ? restoredSection : s,
+      ),
+    };
+    const nextState = recordSectionVersion(state, restoredSection, "restore");
+    return {
+      state: nextState,
+      artifact: nextArtifact,
+      mode: server.restoredVersion.snapshotMode ?? "full",
+    };
+  }
+  const local = restoreSectionVersion(artifact, state, versionId);
+  if (!local) return null;
+  return { ...local, mode: "full" };
+}
+
 export function versionCount(state: ArtifactVersionState): number {
   return Object.values(state.sectionVersions).reduce((n, arr) => n + arr.length, 0);
+}
+
+export function resolveVersionSnapshotMode(
+  versions: PersistedArtifactSectionVersion[],
+): VersionSnapshotMode {
+  if (versions.some((v) => v.snapshotMode === "full" || !v.snapshotMode)) return "full";
+  if (versions.some((v) => v.snapshotMode === "reference")) return "reference";
+  return "metadata_only";
 }
 
 export function loadVersionState(artifactId: string): ArtifactVersionState | null {
@@ -104,23 +146,32 @@ export function saveVersionState(state: ArtifactVersionState): void {
 function persistedFromSectionVersion(
   v: ArtifactSectionVersion,
   artifactId: string,
+  section?: ArtifactSection,
+  runId?: string | null,
 ): PersistedArtifactSectionVersion {
+  const content = v.content;
+  const sizeBytes = new TextEncoder().encode(JSON.stringify(content)).length;
   return {
     id: v.id,
     artifactId,
+    runId: runId ?? undefined,
     sectionId: v.sectionId,
+    sectionLabel: section?.label,
+    sectionKind: section?.kind,
     createdAt: v.createdAt,
     source: v.source,
     instruction: v.instruction,
     variantType: v.variantType,
-    content: v.content,
+    content,
+    sizeBytes,
+    snapshotMode: "full",
   };
 }
 
 function mergeVersionStates(
   local: ArtifactVersionState,
   serverVersions: PersistedArtifactSectionVersion[],
-): { state: ArtifactVersionState; mode: VersionPersistenceMode } {
+): { state: ArtifactVersionState; mode: VersionPersistenceMode; snapshotMode: VersionSnapshotMode } {
   const merged = { ...local, sectionVersions: { ...local.sectionVersions } };
   let serverCount = 0;
 
@@ -143,19 +194,26 @@ function mergeVersionStates(
   }
 
   const localOnly = versionCount(local);
-  const total = versionCount(merged);
   let mode: VersionPersistenceMode = "local";
   if (serverCount > 0 && localOnly > 0) mode = "hybrid";
   else if (serverCount > 0) mode = "server";
-  else if (total > 0) mode = "local";
+  else if (versionCount(merged) > 0) mode = "local";
 
-  return { state: merged, mode };
+  return {
+    state: merged,
+    mode,
+    snapshotMode: resolveVersionSnapshotMode(serverVersions),
+  };
 }
 
 export async function loadMergedVersionState(
   artifactId: string,
   sections: ArtifactSection[],
-): Promise<{ state: ArtifactVersionState; mode: VersionPersistenceMode }> {
+): Promise<{
+  state: ArtifactVersionState;
+  mode: VersionPersistenceMode;
+  snapshotMode: VersionSnapshotMode;
+}> {
   const local = loadVersionState(artifactId);
   const base =
     local?.artifactId === artifactId ? local : createVersionState(artifactId);
@@ -164,11 +222,11 @@ export async function loadMergedVersionState(
   try {
     const serverVersions = await fetchArtifactVersions(artifactId);
     if (serverVersions.length === 0) {
-      return { state: seeded, mode: "local" };
+      return { state: seeded, mode: "local", snapshotMode: "full" };
     }
     return mergeVersionStates(seeded, serverVersions);
   } catch {
-    return { state: seeded, mode: "local" };
+    return { state: seeded, mode: "local", snapshotMode: "full" };
   }
 }
 
@@ -177,7 +235,7 @@ export async function persistSectionVersion(
   state: ArtifactVersionState,
   section: ArtifactSection,
   source: ArtifactSectionVersionSource,
-  options?: { instruction?: string; variantType?: string },
+  options?: { instruction?: string; variantType?: string; runId?: string | null },
 ): Promise<{ state: ArtifactVersionState; mode: VersionPersistenceMode }> {
   const next = recordSectionVersion(state, section, source, options);
   saveVersionState(next);
@@ -186,7 +244,7 @@ export async function persistSectionVersion(
   if (!latest) return { state: next, mode: "local" };
 
   const serverOk = await persistArtifactVersion(
-    persistedFromSectionVersion(latest, state.artifactId),
+    persistedFromSectionVersion(latest, state.artifactId, section, options?.runId),
   );
   const mode: VersionPersistenceMode = serverOk ? "hybrid" : "local";
   return { state: next, mode };

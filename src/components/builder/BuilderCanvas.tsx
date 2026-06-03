@@ -57,6 +57,8 @@ export interface BuilderCanvasProps {
     versionCount?: number;
     versionPersistence?: VersionPersistenceMode;
   }) => void;
+  userPrompt?: string;
+  onAttachVisual?: (artifact: IivoArtifact) => void;
 }
 
 export default function BuilderCanvas({
@@ -91,6 +93,8 @@ export default function BuilderCanvas({
   onSavedChange,
   onShareAction,
   onBuilderTraceUpdate,
+  userPrompt,
+  onAttachVisual,
 }: BuilderCanvasProps) {
   const [showContent, setShowContent] = useState(!loading);
   const [internalTab, setInternalTab] = useState<BuilderWorkspaceTab>("compose");
@@ -263,6 +267,8 @@ export default function BuilderCanvas({
           sectionLoading={Boolean(loadingSectionId)}
           transformLoading={transformLoading}
           traceSummary={traceSummary}
+          userPrompt={userPrompt}
+          onAttachVisual={onAttachVisual}
         />
       </div>
       {compareVersion && compareSection && (

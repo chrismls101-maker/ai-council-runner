@@ -63,7 +63,12 @@
     "test:builder": "tsc -p tsconfig.server.json && node --experimental-strip-types tests/server/artifactQuality.test.ts && node --experimental-strip-types tests/server/buildMap.test.ts && node --experimental-strip-types tests/server/artifactTransforms.test.ts && node --experimental-strip-types tests/client/artifactVersioning.test.ts",
     "test:builder-persistence": "tsc -p tsconfig.server.json && node --experimental-strip-types tests/server/artifactVersionStore.test.ts && node --experimental-strip-types tests/server/artifactRelationships.test.ts && node --experimental-strip-types tests/server/mockArtifactTransforms.test.ts && node --experimental-strip-types tests/client/textDiff.test.ts",
     "qa:builder": "playwright test tests/visual/iivo-builder-workspace.spec.ts --headed --project=chromium",
-    "qa:builder:mock": "ARTIFACT_TRANSFORM_MOCK=1 playwright test tests/visual/iivo-builder-workspace.spec.ts --headed --project=chromium"
+    "qa:builder:mock": "ARTIFACT_QA_SKIP_LIVE=1 playwright test tests/visual/iivo-builder-workspace.spec.ts --headed --project=chromium",
+    "test:builder-polish": "tsc -p tsconfig.server.json && node --experimental-strip-types tests/server/artifactVersionStore.test.ts && node --experimental-strip-types tests/server/artifactShareStore.test.ts && node --experimental-strip-types tests/client/artifactDiff.test.ts && node --experimental-strip-types tests/client/artifactChildEvents.test.ts && node --experimental-strip-types tests/server/mockArtifactTransforms.test.ts",
+    "test:images": "tsc -p tsconfig.server.json && node --experimental-strip-types tests/server/images.test.ts && node --experimental-strip-types tests/server/imageProviders.test.ts && node --experimental-strip-types tests/server/imageVisionQa.test.ts && node --experimental-strip-types tests/server/imagePack.test.ts",
+    "qa:images": "playwright test tests/visual/iivo-image-studio.spec.ts --headed --project=chromium",
+    "qa:images:mock": "playwright test tests/visual/iivo-image-studio.spec.ts --headed --project=chromium",
+    "qa:images:live": "IMAGE_QA_LIVE=1 playwright test tests/visual/iivo-image-studio-live.spec.ts --headed --project=chromium"
   },
   "dependencies": {
     "cors": "^2.8.5",

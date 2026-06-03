@@ -1,4 +1,6 @@
-import type { ArtifactSection, IivoArtifact } from "../../types/artifacts";
+import type { ArtifactSection, ArtifactType, IivoArtifact } from "../../types/artifacts";
+import { supportsInlineVisualAction } from "../../utils/imageStudioActions";
+import ImageResultGrid from "../images/ImageResultGrid";
 import ChecklistArtifact from "./ChecklistArtifact";
 import EmailArtifact from "./EmailArtifact";
 import ReportArtifact from "./ReportArtifact";
@@ -11,8 +13,23 @@ export interface ArtifactRendererProps {
   onRegenerateSection?: (section: ArtifactSection) => void;
   onEditSection?: (section: ArtifactSection) => void;
   onOpenInBuilder?: () => void;
+  onGenerateVisual?: () => void;
   loadingSectionId?: string | null;
 }
+
+const IMAGE_ARTIFACT_TYPES = new Set<ArtifactType>([
+  "image_asset",
+  "image_pack",
+  "hero_visual",
+  "product_render",
+  "product_render_pack",
+  "ad_creative",
+  "ad_creative_pack",
+  "social_visual",
+  "proposal_cover",
+  "email_banner",
+  "brand_visual_system",
+]);
 
 function isEmailArtifact(type: IivoArtifact["type"]): boolean {
   return (
@@ -41,6 +58,10 @@ function isReportArtifact(type: IivoArtifact["type"]): boolean {
   );
 }
 
+function isImageArtifact(type: IivoArtifact["type"]): boolean {
+  return IMAGE_ARTIFACT_TYPES.has(type);
+}
+
 export default function ArtifactRenderer({
   artifact,
   onFeedback,
@@ -48,6 +69,7 @@ export default function ArtifactRenderer({
   onRegenerateSection,
   onEditSection,
   onOpenInBuilder,
+  onGenerateVisual,
   loadingSectionId,
 }: ArtifactRendererProps) {
   const sectionProps = {
@@ -66,20 +88,33 @@ export default function ArtifactRenderer({
       <div className="artifact-header">
         <div className="artifact-header-row">
           <h3 className="artifact-title">{artifact.title}</h3>
-          {onOpenInBuilder && (
-            <button
-              type="button"
-              className="btn ghost small"
-              data-testid="open-in-builder"
-              onClick={onOpenInBuilder}
-            >
-              Open in Builder
-            </button>
-          )}
+          <div className="artifact-header-actions">
+            {onGenerateVisual && supportsInlineVisualAction(artifact.type) && (
+              <button
+                type="button"
+                className="btn ghost small"
+                data-testid="generate-visual-inline"
+                onClick={onGenerateVisual}
+              >
+                Generate visual
+              </button>
+            )}
+            {onOpenInBuilder && (
+              <button
+                type="button"
+                className="btn ghost small"
+                data-testid="open-in-builder"
+                onClick={onOpenInBuilder}
+              >
+                Open in Builder
+              </button>
+            )}
+          </div>
         </div>
         {artifact.summary && <p className="artifact-summary muted">{artifact.summary}</p>}
       </div>
 
+      {isImageArtifact(artifact.type) && <ImageResultGrid artifact={artifact} />}
       {isEmailArtifact(artifact.type) && (
         <EmailArtifact artifact={artifact} onFeedback={onFeedback} {...sectionProps} />
       )}

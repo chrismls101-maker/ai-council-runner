@@ -47,7 +47,18 @@ export type FrictionKind =
   | "missing_execute_actions"
   | "missing_version_history"
   | "missing_open_in_builder"
-  | "builder_canvas_cluttered";
+  | "builder_canvas_cluttered"
+  | "server_restore_metadata_only"
+  | "table_diff_fallback"
+  | "share_link_missing"
+  | "mock_qa_requires_restart"
+  | "child_artifact_not_in_chat"
+  | "image_generation_unavailable"
+  | "missing_image_brief"
+  | "weak_visual_prompt"
+  | "no_download_action"
+  | "no_ip_warning"
+  | "image_not_attached";
 
 export type ScenarioOutcome = "pass" | "pass_with_friction" | "fail" | "skipped";
 

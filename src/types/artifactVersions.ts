@@ -5,17 +5,26 @@ export type ArtifactSectionVersionSource =
   | "edit"
   | "regenerate"
   | "variant"
-  | "transform";
+  | "transform"
+  | "restore";
+
+export type VersionSnapshotMode = "full" | "reference" | "metadata_only";
 
 export type PersistedArtifactSectionVersion = {
   id: string;
   artifactId: string;
+  runId?: string;
   sectionId: string;
+  sectionLabel?: string;
+  sectionKind?: ArtifactSection["kind"];
   createdAt: string;
   source: ArtifactSectionVersionSource;
   instruction?: string;
   variantType?: string;
   content: ArtifactSection["content"];
+  contentHash?: string;
+  sizeBytes?: number;
+  snapshotMode?: VersionSnapshotMode;
 };
 
 export type ArtifactSectionVersion = {

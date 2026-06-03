@@ -5728,3 +5728,70 @@ a.md-link:hover {
   }
 }
 
+.image-studio-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.image-studio-header h3 {
+  margin: 0 0 4px;
+}
+
+.image-studio-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.image-brief-editor,
+.image-quality-panel,
+.image-result-grid {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.image-brief-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.image-brief-field textarea,
+.image-brief-field input {
+  width: 100%;
+}
+
+.image-studio-generate-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.image-result-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.image-result-card img {
+  width: 100%;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.image-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.artifact-header-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
