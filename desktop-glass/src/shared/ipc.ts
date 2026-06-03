@@ -11,6 +11,7 @@ import type {
   SavedMoment,
 } from "./types.ts";
 import type { PrivacyState } from "./privacyState.ts";
+import type { GlassSession } from "./sessionTypes.ts";
 
 export const IPC = {
   /** Renderer -> main: a user-initiated command. */
@@ -39,7 +40,24 @@ export type GlassCommand =
   | { type: "ask-iivo" }
   | { type: "open-chat" }
   | { type: "set-tab"; tab: PanelTab }
-  | { type: "toggle-panel" };
+  | { type: "toggle-panel" }
+  // --- Session Intelligence ---
+  | { type: "session-start"; title?: string }
+  | { type: "session-pause" }
+  | { type: "session-resume" }
+  | { type: "session-end" }
+  | { type: "session-clear" }
+  | { type: "session-capture" }
+  | { type: "session-add-note"; text: string; sourceTitle?: string }
+  | { type: "session-extract-insights" }
+  | { type: "session-accept-insight"; id: string }
+  | { type: "session-dismiss-insight"; id: string }
+  | { type: "session-delete-event"; id: string }
+  | { type: "session-save-insight-moment"; id: string }
+  | { type: "session-send" }
+  | { type: "session-send-event"; id: string }
+  | { type: "session-send-insight"; id: string }
+  | { type: "session-send-summary" };
 
 export interface GlassState {
   privacy: PrivacyState;
@@ -49,5 +67,8 @@ export interface GlassState {
   panelTab: PanelTab;
   config: GlassConfig;
   lastError?: string;
+  lastNotice?: string;
   lastSentUrl?: string;
+  session: GlassSession | null;
+  sessionSummary: string;
 }

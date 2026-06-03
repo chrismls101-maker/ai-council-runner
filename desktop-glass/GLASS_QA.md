@@ -47,8 +47,74 @@ first** — it never captures or sends anything without an explicit click.
 - "Send to IIVO" on the transcript creates a `pasted_text` context item and opens
   IIVO with the context attached.
 
+## Session Intelligence (v1)
+
+A "session" is an explicit, user-started window of work. Glass observes it
+locally — building a timeline, extracting deterministic insights, and (only on
+request) sending the summarized session to IIVO Council.
+
+### Session QA checklist
+
+- [ ] Open Glass. **Confirm no session is active on launch** (dock pill reads
+      "Session idle", panel footer reads "○ No session").
+- [ ] Click **Start Session** in the dock. Pill changes to "Session active" and
+      the footer shows the warning "IIVO Glass is collecting session events
+      locally."
+- [ ] Open the **Session** tab in the panel. Confirm the session title/status
+      header and a `session started` timeline event.
+- [ ] In the Session tab **Manual note** box, type a note → **Add to Session**.
+      Confirm a `manual note` event appears in the timeline.
+- [ ] Click **Capture Screen** in the dock (with a session active). Confirm a
+      `screen capture` event with a thumbnail appears in the timeline (local
+      only — it is NOT auto-sent).
+- [ ] Click **Save Moment**. Confirm a `saved moment` event appears, and the
+      moment is also in the saved-moments list (Context tab).
+- [ ] Click **Extract Insights** (Session or Insights tab). Confirm insight
+      cards appear grouped by type (Key Ideas / Hypotheses / Risks / Actions /
+      Questions / Memory Candidates). Re-running does NOT duplicate insights.
+- [ ] On an insight card: **Keep** (marks ★), **Dismiss** (removes), **Save**
+      (adds a moment), **Send** (opens IIVO), **Copy** (clipboard).
+- [ ] Use the timeline **filters** (All / Captures / Notes / Insights / Actions /
+      Risks) and confirm filtering works.
+- [ ] **Delete** an individual event from a timeline card.
+- [ ] Click **Pause** in the dock. Pill → "Session paused". Confirm automatic
+      events stop (capture prompts you / manual saves still work).
+- [ ] Click **Resume**. Pill → "Session active".
+- [ ] Open the **Summary** tab. Confirm a deterministic summary (What happened /
+      Key ideas / Hypotheses / Risks / Action items / Memory candidates /
+      Suggested next IIVO prompt). Try **Copy Summary** and **Send Summary to
+      IIVO**.
+- [ ] Click **Send Session** in the dock (or **Send Session to IIVO** in the
+      Session tab). Confirm IIVO opens in the browser with a context chip whose
+      content is the session summary + timeline. If the session is large, confirm
+      the "truncated" note appears.
+- [ ] Click **End Session**. Pill → "Session ended". Timeline is frozen but
+      **Send Session to IIVO** still works.
+- [ ] **Clear session** empties events/insights for the current session.
+- [ ] Restart Glass: recent sessions persist (max 20). An *ended* session does
+      not auto-resume as the active session on relaunch.
+
+### Notes on detection
+
+- **Source app / window-title detection is NOT implemented in v1.** The UI never
+  claims active-app detection works; `sourceTitle` is only populated when you
+  type it manually. This avoids requesting macOS accessibility permissions.
+- Insight extraction is fully **deterministic and local** (rule-based cue words +
+  recurring-term detection). There are no hidden/continuous LLM calls. The only
+  network calls are the explicit "Send … to IIVO" actions you trigger.
+
 ## Privacy controls
 
+- Session recording starts **only** when you click **Start Session** — never on
+  launch.
+- Screen capture happens **only** when you click **Capture**.
+- Listening engine is not connected yet (manual transcript input only).
+- You can **Pause**, **End**, **Delete events**, and **Clear session** at any
+  time. A session stays **local** until you click **Send to IIVO**.
+- While a session is active the panel shows a pulsing warning: "IIVO Glass is
+  collecting session events locally."
+- Persisted sessions strip inline screenshot data URLs from disk
+  (`glass-sessions.json`) to keep the file small; the timeline event is kept.
 - Visible Listening and Screen-capture indicators.
 - Pause and Stop everything buttons.
 - Delete individual saved moments and Clear all moments.

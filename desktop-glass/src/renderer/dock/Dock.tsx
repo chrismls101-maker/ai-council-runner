@@ -1,9 +1,11 @@
 import { send, useGlassState } from "../useGlassState.ts";
 import { StatusPill } from "../components/StatusPill.tsx";
+import { SessionPill } from "../components/SessionPill.tsx";
 
 export function Dock(): JSX.Element {
   const state = useGlassState();
-  const listening = state.privacy.listening;
+  const sessionStatus = state.session?.status ?? null;
+  const sessionLive = sessionStatus === "active" || sessionStatus === "paused";
 
   return (
     <div className="dock">
@@ -12,7 +14,10 @@ export function Dock(): JSX.Element {
         <span className="dock__title">IIVO Glass</span>
       </div>
 
-      <StatusPill status={state.privacy.status} />
+      <div className="dock__pills">
+        <SessionPill status={sessionStatus} />
+        <StatusPill status={state.privacy.status} />
+      </div>
 
       <div className="dock__buttons">
         <button
@@ -22,30 +27,51 @@ export function Dock(): JSX.Element {
         >
           Ask IIVO
         </button>
+
+        {!sessionLive ? (
+          <button
+            className="gbtn gbtn--primary"
+            onClick={() => send({ type: "session-start" })}
+            title="Start a work session"
+          >
+            Start Session
+          </button>
+        ) : (
+          <>
+            {sessionStatus === "active" ? (
+              <button
+                className="gbtn"
+                onClick={() => send({ type: "session-pause" })}
+                title="Pause the session"
+              >
+                Pause
+              </button>
+            ) : (
+              <button
+                className="gbtn"
+                onClick={() => send({ type: "session-resume" })}
+                title="Resume the session"
+              >
+                Resume
+              </button>
+            )}
+            <button
+              className="gbtn gbtn--danger"
+              onClick={() => send({ type: "session-end" })}
+              title="End the session"
+            >
+              End
+            </button>
+          </>
+        )}
+
         <button
           className="gbtn"
-          onClick={() => send({ type: "send-screenshot" })}
-          title="Capture this screen and send to IIVO"
+          onClick={() => send(sessionLive ? { type: "session-capture" } : { type: "send-screenshot" })}
+          title={sessionLive ? "Capture screen into the session timeline" : "Capture this screen and send to IIVO"}
         >
           Capture Screen
         </button>
-        {listening ? (
-          <button
-            className="gbtn gbtn--danger"
-            onClick={() => send({ type: "pause" })}
-            title="Pause listening"
-          >
-            Pause
-          </button>
-        ) : (
-          <button
-            className="gbtn"
-            onClick={() => send({ type: "start-listening" })}
-            title="Start listening"
-          >
-            Start Listening
-          </button>
-        )}
         <button
           className="gbtn"
           onClick={() => send({ type: "save-moment" })}
@@ -55,10 +81,10 @@ export function Dock(): JSX.Element {
         </button>
         <button
           className="gbtn"
-          onClick={() => send({ type: "send-transcript" })}
-          title="Send transcript to IIVO"
+          onClick={() => send(state.session ? { type: "session-send" } : { type: "send-transcript" })}
+          title={state.session ? "Send the whole session to IIVO" : "Send transcript to IIVO"}
         >
-          Send to IIVO
+          {state.session ? "Send Session" : "Send to IIVO"}
         </button>
         <button
           className="gbtn gbtn--ghost gbtn--icon"

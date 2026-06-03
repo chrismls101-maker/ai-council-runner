@@ -22,6 +22,13 @@ import {
 import { createScreenshotContext, createContextItem } from "../shared/iivoClient.ts";
 import { IPC, type GlassCommand, type GlassState } from "../shared/ipc.ts";
 import type { PanelTab } from "../shared/types.ts";
+import { GlassSessionStore } from "../shared/sessionStore.ts";
+import {
+  extractSessionIntelligence,
+  selectNewInsights,
+} from "../shared/sessionIntelligence.ts";
+import { buildSessionSummary } from "../shared/sessionSummary.ts";
+import { buildSessionContextPayload } from "../shared/sessionPayload.ts";
 import { capturePrimaryScreen } from "./capture.ts";
 import {
   broadcast,
@@ -30,6 +37,7 @@ import {
   togglePanel,
 } from "./windows.ts";
 import { loadMoments, persistMoments } from "./store.ts";
+import { loadSessions, persistSessions } from "./sessionPersistence.ts";
 
 const config = resolveConfig(process.env);
 
@@ -38,6 +46,7 @@ interface AppState {
   transcript: string;
   panelTab: PanelTab;
   lastError?: string;
+  lastNotice?: string;
   lastSentUrl?: string;
   pendingCaptureDataUrl?: string;
 }
@@ -49,8 +58,15 @@ const state: AppState = {
 };
 
 let moments = new SavedMomentsStore();
+let sessions = new GlassSessionStore();
+
+function sessionIsLive(): boolean {
+  const s = sessions.current();
+  return !!s && (s.status === "active" || s.status === "paused");
+}
 
 function snapshot(): GlassState {
+  const session = sessions.current();
   return {
     privacy: state.privacy,
     transcript: state.transcript,
@@ -59,7 +75,10 @@ function snapshot(): GlassState {
     panelTab: state.panelTab,
     config,
     lastError: state.lastError,
+    lastNotice: state.lastNotice,
     lastSentUrl: state.lastSentUrl,
+    session,
+    sessionSummary: session ? buildSessionSummary(session) : "",
   };
 }
 
@@ -181,6 +200,10 @@ async function handleCommand(command: GlassCommand): Promise<void> {
           : "Saved moment");
       moments.add({ kind: command.kind ?? "note", note });
       await persistMoments(moments);
+      if (sessionIsLive()) {
+        sessions.addEvent({ kind: "saved_moment", title: note });
+        await persistSessions(sessions);
+      }
       push();
       return;
     }
@@ -240,7 +263,210 @@ async function handleCommand(command: GlassCommand): Promise<void> {
       togglePanel();
       return;
     default:
+      await handleSessionCommand(command);
       return;
+  }
+}
+
+async function handleSessionCommand(command: GlassCommand): Promise<void> {
+  state.lastNotice = undefined;
+  switch (command.type) {
+    case "session-start":
+      sessions.startSession(command.title);
+      state.lastNotice = "Session started — Glass is collecting events locally.";
+      break;
+    case "session-pause":
+      sessions.pauseSession();
+      break;
+    case "session-resume":
+      sessions.resumeSession();
+      break;
+    case "session-end":
+      sessions.endSession();
+      break;
+    case "session-clear":
+      sessions.clearSession();
+      break;
+    case "session-add-note": {
+      const text = command.text.trim();
+      if (!text) return;
+      if (sessionIsLive()) {
+        sessions.addEvent({
+          kind: "manual_note",
+          title: text.length > 70 ? `${text.slice(0, 69)}…` : text,
+          text,
+          sourceTitle: command.sourceTitle,
+        });
+      } else {
+        moments.add({ kind: "note", note: text, sourceTitle: command.sourceTitle });
+        await persistMoments(moments);
+        state.lastNotice = "Saved as a moment. Start a session to keep notes in the timeline.";
+      }
+      break;
+    }
+    case "session-capture": {
+      if (!sessionIsLive()) {
+        state.lastNotice = "Start a session first to add captures to the timeline.";
+        break;
+      }
+      state.lastError = undefined;
+      dispatchPrivacy({ type: "CAPTURE_START", at: new Date().toISOString() });
+      push();
+      try {
+        const result = await capturePrimaryScreen();
+        sessions.addEvent({
+          kind: "screen_capture",
+          title: `Screen capture (${result.width}×${result.height})`,
+          screenshotDataUrl: result.imageDataUrl,
+          importance: "medium",
+        });
+      } catch (err) {
+        state.lastError = err instanceof Error ? err.message : "Screen capture failed";
+      }
+      dispatchPrivacy({ type: "CAPTURE_DONE", at: new Date().toISOString() });
+      break;
+    }
+    case "session-extract-insights": {
+      const session = sessions.current();
+      if (!session) {
+        state.lastNotice = "No active session to analyze.";
+        break;
+      }
+      const noteTexts = session.events
+        .filter((e) => e.kind === "manual_note" || e.kind === "transcript_note")
+        .map((e) => e.text ?? e.title);
+      const candidates = extractSessionIntelligence({
+        transcript: state.transcript,
+        notes: noteTexts,
+        events: session.events,
+      });
+      const fresh = selectNewInsights(session.insights, candidates);
+      for (const c of fresh) {
+        sessions.addInsight({
+          type: c.type,
+          title: c.title,
+          text: c.text,
+          sourceEventIds: c.sourceEventIds,
+          importance: c.importance,
+        });
+      }
+      state.lastNotice =
+        fresh.length > 0
+          ? `Extracted ${fresh.length} new insight${fresh.length === 1 ? "" : "s"}.`
+          : "No new insights found.";
+      break;
+    }
+    case "session-accept-insight":
+      sessions.updateInsight(command.id, { accepted: true });
+      break;
+    case "session-dismiss-insight":
+      sessions.deleteInsight(command.id);
+      break;
+    case "session-delete-event":
+      sessions.deleteEvent(command.id);
+      break;
+    case "session-save-insight-moment": {
+      const insight = sessions.current()?.insights.find((i) => i.id === command.id);
+      if (insight) {
+        moments.add({ kind: "note", note: insight.text });
+        await persistMoments(moments);
+        if (sessionIsLive()) sessions.addEvent({ kind: "saved_moment", title: insight.text });
+      }
+      break;
+    }
+    case "session-send":
+      await sendSession();
+      break;
+    case "session-send-event":
+      await sendSessionEvent(command.id);
+      break;
+    case "session-send-insight": {
+      const insight = sessions.current()?.insights.find((i) => i.id === command.id);
+      if (insight) await sendSessionText(`IIVO Glass insight (${insight.type})`, insight.text);
+      break;
+    }
+    case "session-send-summary": {
+      const session = sessions.current();
+      if (session) await sendSessionText(`IIVO Glass Session — ${session.title}`, buildSessionSummary(session));
+      break;
+    }
+    default:
+      break;
+  }
+  await persistSessions(sessions);
+  push();
+}
+
+async function sendSession(): Promise<void> {
+  const session = sessions.current();
+  if (!session) {
+    state.lastNotice = "No session to send.";
+    return;
+  }
+  state.lastError = undefined;
+  dispatchPrivacy({ type: "SEND_START", at: new Date().toISOString() });
+  push();
+  try {
+    const { payload, truncated, eventCount, insightCount } = buildSessionContextPayload(session);
+    const item = await createContextItem(config, payload);
+    sessions.addEvent({
+      kind: "iivo_sent",
+      title: `Session sent to IIVO (${eventCount} events, ${insightCount} insights)`,
+    });
+    await openHandoff(item.id);
+    state.lastNotice = truncated
+      ? "Session sent to IIVO (timeline truncated for size)."
+      : "Session sent to IIVO.";
+    dispatchPrivacy({ type: "SEND_DONE", at: new Date().toISOString() });
+  } catch (err) {
+    state.lastError = err instanceof Error ? err.message : "Send session failed";
+    dispatchPrivacy({ type: "CAPTURE_DONE", at: new Date().toISOString() });
+  }
+}
+
+async function sendSessionEvent(id: string): Promise<void> {
+  const event = sessions.current()?.events.find((e) => e.id === id);
+  if (!event) return;
+  state.lastError = undefined;
+  dispatchPrivacy({ type: "SEND_START", at: new Date().toISOString() });
+  push();
+  try {
+    if (event.screenshotDataUrl) {
+      const payload = buildScreenshotContextPayload({
+        title: event.title,
+        sourceTitle: event.sourceTitle,
+      });
+      const item = await createScreenshotContext(config, payload, event.screenshotDataUrl);
+      await openHandoff(item.id);
+    } else {
+      const payload = buildTextContextPayload({
+        title: event.title,
+        text: event.text ?? event.title,
+        kind: "note",
+      });
+      const item = await createContextItem(config, payload);
+      await openHandoff(item.id);
+    }
+    dispatchPrivacy({ type: "SEND_DONE", at: new Date().toISOString() });
+  } catch (err) {
+    state.lastError = err instanceof Error ? err.message : "Send event failed";
+    dispatchPrivacy({ type: "CAPTURE_DONE", at: new Date().toISOString() });
+  }
+}
+
+async function sendSessionText(title: string, text: string): Promise<void> {
+  if (!text.trim()) return;
+  state.lastError = undefined;
+  dispatchPrivacy({ type: "SEND_START", at: new Date().toISOString() });
+  push();
+  try {
+    const payload = buildTextContextPayload({ title, text, kind: "note" });
+    const item = await createContextItem(config, payload);
+    await openHandoff(item.id);
+    dispatchPrivacy({ type: "SEND_DONE", at: new Date().toISOString() });
+  } catch (err) {
+    state.lastError = err instanceof Error ? err.message : "Send failed";
+    dispatchPrivacy({ type: "CAPTURE_DONE", at: new Date().toISOString() });
   }
 }
 
@@ -262,6 +488,7 @@ function registerIpc(): void {
 
 app.whenReady().then(async () => {
   moments = await loadMoments();
+  sessions = await loadSessions();
   registerIpc();
   createWindows();
   push();

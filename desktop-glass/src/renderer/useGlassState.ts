@@ -11,6 +11,8 @@ const fallbackState: GlassState = {
   moments: [],
   panelTab: "summary",
   config: DEFAULT_CONFIG,
+  session: null,
+  sessionSummary: "",
 };
 
 export function useGlassState(): GlassState {
