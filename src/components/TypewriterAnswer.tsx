@@ -57,7 +57,7 @@ export default function TypewriterAnswer({
   if (!displayContent.trim()) return null;
 
   return (
-    <div className="typewriter-answer" data-testid="final-answer">
+    <div className="typewriter-answer">
       {isComplete ? (
         <MarkdownContent content={displayContent} className={className} />
       ) : (
