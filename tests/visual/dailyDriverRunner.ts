@@ -17,6 +17,7 @@ import { runVisionMemoryGuardUnitTest } from "./masterQaVisionGuard.js";
 import { preparePublicReadinessState } from "./publicReadinessTestHelpers.js";
 import { isWatchMode, pauseMs } from "./qaEnv.js";
 import {
+  dismissRunGateModals,
   getLatestTurn,
   openComposerConfigure,
   selectPillOption,
@@ -269,6 +270,7 @@ export async function runDailyDriverScenario(
         if (scenario.liveProviderRequired && isDailyQaLive()) {
           await agent.action(scenario, "Lens handoff ready — submitting prompt for live answer.");
           await page.getByTestId("composer-send").click();
+          await dismissRunGateModals(page);
           const result = await runPromptScenario(page, { ...scenario, prompt: scenario.prompt }, agent);
           answerPreview = result.answer.slice(0, 400);
           routeText = result.routeText;
@@ -303,6 +305,7 @@ export async function runDailyDriverScenario(
         if (scenario.liveVisionRequired && isDailyQaLive()) {
           await agent.action(scenario, "Live vision enabled — submitting screenshot analysis.");
           await page.getByTestId("composer-send").click();
+          await dismissRunGateModals(page);
           const result = await runPromptScenario(page, scenario, agent);
           answerPreview = result.answer.slice(0, 400);
           routeText = result.routeText;

@@ -23,9 +23,10 @@ export default function CreditConfirmModal({
   return (
     <div className="credit-confirm-overlay" role="presentation" onClick={onCancel}>
       <div
-        className="credit-confirm-modal"
+        className="credit-confirm-modal iivo-glass-modal"
         role="dialog"
         aria-labelledby="credit-confirm-title"
+        data-testid="credit-confirm-modal"
         onClick={(e) => e.stopPropagation()}
       >
         <h3 id="credit-confirm-title">Confirm credit use</h3>
@@ -47,10 +48,20 @@ export default function CreditConfirmModal({
           ))}
         </ul>
         <div className="credit-confirm-actions">
-          <button type="button" className="btn ghost small" onClick={onCancel}>
+          <button
+            type="button"
+            className="btn ghost small"
+            onClick={onCancel}
+            data-testid="credit-confirm-cancel"
+          >
             Cancel
           </button>
-          <button type="button" className="btn primary small" onClick={onConfirm}>
+          <button
+            type="button"
+            className="btn primary small"
+            onClick={onConfirm}
+            data-testid="credit-confirm-continue"
+          >
             Continue
           </button>
         </div>

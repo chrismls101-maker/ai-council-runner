@@ -8,6 +8,7 @@
 
 import { test, expect, type Page } from "@playwright/test";
 import {
+  dismissRunGateModals,
   ensureAppRunning,
   getLatestTurn,
   logLatestTurnDebug,
@@ -90,6 +91,7 @@ async function runLiveContextTraceTest(page: Page): Promise<void> {
     .fill("How should IIVO position itself for founders?");
   qaLog("Prompt submitted");
   await page.getByTestId("composer-send").click();
+  await dismissRunGateModals(page);
 
   qaLog("Waiting for answer");
   try {
@@ -170,6 +172,7 @@ test.describe("Context Bridge v1", () => {
     await attachPastedContext(page, "Founder context", SAMPLE_CONTEXT.text);
     await page.getByTestId("composer-input").fill("What is the key takeaway from this context?");
     await page.getByTestId("composer-send").click();
+    await dismissRunGateModals(page);
     await expect(page.locator(".assistant-body, .direct-answer-body").first()).toBeVisible({
       timeout: 120_000,
     });

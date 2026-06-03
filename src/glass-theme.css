@@ -2550,45 +2550,88 @@ body::after {
   color: #4b5563;
 }
 
-.credit-confirm-overlay {
+.credit-confirm-overlay,
+.council-confirm-overlay {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: 1200;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(15, 23, 42, 0.28);
-  backdrop-filter: blur(4px);
+  background: rgba(15, 23, 42, 0.22);
+  backdrop-filter: blur(8px) saturate(120%);
+  -webkit-backdrop-filter: blur(8px) saturate(120%);
 }
 
-.credit-confirm-modal {
+.iivo-glass-modal,
+.credit-confirm-modal,
+.council-confirm-modal {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   width: min(420px, 100%);
   padding: 22px 24px;
-  border-radius: 14px;
-  border: 1px solid rgba(168, 178, 198, 0.42);
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: var(--glass-shadow-lg);
+  border-radius: 16px;
+  background:
+    linear-gradient(145deg, rgba(210, 220, 232, 0.42), rgba(155, 170, 190, 0.3));
+  backdrop-filter: var(--v7-blur-panel);
+  -webkit-backdrop-filter: var(--v7-blur-panel);
+  border: 1px solid var(--v7-glass-border);
+  box-shadow:
+    0 28px 72px rgba(120, 135, 160, 0.18),
+    0 8px 24px rgba(140, 155, 180, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    inset 0 -1px 0 rgba(190, 225, 255, 0.18);
 }
 
-.credit-confirm-modal h3 {
+.iivo-glass-modal::before,
+.credit-confirm-modal::before,
+.council-confirm-modal::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.14) 0%,
+    rgba(255, 255, 255, 0.05) 42%,
+    rgba(205, 235, 255, 0.08) 100%
+  );
+}
+
+.iivo-glass-modal > *,
+.credit-confirm-modal > *,
+.council-confirm-modal > * {
+  position: relative;
+  z-index: 1;
+}
+
+.credit-confirm-modal h3,
+.council-confirm-modal h2 {
   margin: 0 0 10px;
   font-size: 1rem;
 }
 
-.credit-confirm-modal p {
+.credit-confirm-modal p,
+.council-confirm-modal p {
   margin: 0 0 12px;
   font-size: 0.875rem;
   line-height: 1.5;
+  color: var(--text-muted, #4b5563);
 }
 
 .credit-confirm-breakdown {
   list-style: none;
   margin: 0 0 16px;
   padding: 10px 12px;
-  border-radius: 8px;
-  background: rgba(248, 250, 252, 0.9);
-  border: 1px solid rgba(168, 178, 198, 0.28);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.22);
+  border: 1px solid var(--v7-glass-border-soft);
+  backdrop-filter: var(--v7-blur-tile);
+  -webkit-backdrop-filter: var(--v7-blur-tile);
 }
 
 .credit-confirm-breakdown li {
@@ -2599,10 +2642,16 @@ body::after {
   padding: 4px 0;
 }
 
-.credit-confirm-actions {
+.credit-confirm-actions,
+.council-confirm-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.council-confirm-actions {
+  flex-direction: column;
+  margin-top: 4px;
 }
 
 .usage-credits-panel .usage-balance-grid {

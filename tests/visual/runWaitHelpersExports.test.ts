@@ -26,4 +26,12 @@ test.describe("runWaitHelpers exports", () => {
     const src = readFileSync(helpersPath, "utf8");
     expect(src).toMatch(/export async function waitForRunActivityOrComplete/);
   });
+
+  test("qaStepHelpers exports dismissRunGateModals for hands-off run gates", () => {
+    const qaPath = join(dirname(fileURLToPath(import.meta.url)), "qaStepHelpers.ts");
+    const src = readFileSync(qaPath, "utf8");
+    expect(src).toMatch(/export async function dismissRunGateModals/);
+    expect(src).toMatch(/credit-confirm-continue/);
+    expect(src).toMatch(/council-confirm-keep-quick/);
+  });
 });

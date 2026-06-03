@@ -109,6 +109,61 @@ export async function pauseQuick(page: Page, ms = 300): Promise<void> {
   await page.waitForTimeout(ms);
 }
 
+export type RunGateCouncilChoice = "keep-quick" | "use-council";
+
+export interface DismissRunGateModalsOptions {
+  /** Default keep-quick for faster automated runs. */
+  councilChoice?: RunGateCouncilChoice;
+  maxRounds?: number;
+}
+
+export interface DismissRunGateModalsResult {
+  councilDismissed: boolean;
+  creditDismissed: boolean;
+}
+
+/** Auto-accept council/credit confirmation gates so visual QA stays hands-off. */
+export async function dismissRunGateModals(
+  page: Page,
+  options: DismissRunGateModalsOptions = {},
+): Promise<DismissRunGateModalsResult> {
+  const councilChoice = options.councilChoice ?? "keep-quick";
+  const maxRounds = options.maxRounds ?? 4;
+  let councilDismissed = false;
+  let creditDismissed = false;
+
+  for (let round = 0; round < maxRounds; round += 1) {
+    await pauseQuick(page, 150);
+    let acted = false;
+
+    const councilOverlay = page.getByTestId("council-mode-confirm");
+    if (await councilOverlay.isVisible().catch(() => false)) {
+      councilDismissed = true;
+      qaLog(`[Run gate] Council confirm visible — choosing ${councilChoice}`);
+      const councilButton =
+        councilChoice === "use-council"
+          ? page.getByTestId("council-confirm-use-council")
+          : page.getByTestId("council-confirm-keep-quick");
+      await councilButton.click();
+      acted = true;
+      await pauseQuick(page, 250);
+    }
+
+    const creditModal = page.getByTestId("credit-confirm-modal");
+    if (await creditModal.isVisible().catch(() => false)) {
+      creditDismissed = true;
+      qaLog("[Run gate] Credit confirm visible — clicking Continue");
+      await page.getByTestId("credit-confirm-continue").click();
+      acted = true;
+      await pauseQuick(page, 250);
+    }
+
+    if (!acted) break;
+  }
+
+  return { councilDismissed, creditDismissed };
+}
+
 export interface SubmitPromptDiagnostics {
   turnsBefore: number;
   turnsAfter: number;
@@ -201,6 +256,7 @@ export async function submitComposerPromptRobust(
   const sendEnabled = await send.isEnabled().catch(() => false);
 
   await submitOnce(page, prompt, true);
+  await dismissRunGateModals(page);
   let ack = await waitForSubmitAcknowledged(page, turnsBefore);
   let retried = false;
 
@@ -213,6 +269,7 @@ export async function submitComposerPromptRobust(
     await pause(page, 200);
     await send.click();
     retried = true;
+    await dismissRunGateModals(page);
     ack = await waitForSubmitAcknowledged(page, turnsBefore);
   }
 

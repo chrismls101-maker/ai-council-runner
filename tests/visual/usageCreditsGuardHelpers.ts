@@ -204,11 +204,11 @@ export async function verifyInsufficientCreditsGuard(
 
   await pauseQuick(page, 800);
 
-  const confirmModal = page.locator(".credit-confirm-modal");
-  if (await confirmModal.isVisible().catch(() => false)) {
+  const creditModal = page.getByTestId("credit-confirm-modal");
+  if (await creditModal.isVisible().catch(() => false)) {
     confirmModalSeen = true;
     qaLog("[Usage guard] Credit confirm modal visible — clicking Continue");
-    await page.getByRole("button", { name: "Continue" }).click();
+    await page.getByTestId("credit-confirm-continue").click();
     await pauseQuick(page, 2000);
   }
 

@@ -38,6 +38,7 @@ import {
   verifyInsufficientCreditsGuard,
 } from "./usageCreditsGuardHelpers.js";
 import {
+  dismissRunGateModals,
   expectLatestTurnRoute,
   getLatestTurn,
   pause,
@@ -275,6 +276,7 @@ export async function sectionVisionLive(
       .toMatch(/analyze this screenshot/i);
 
     await page.getByTestId("composer-send").click();
+    await dismissRunGateModals(page);
     await waitForRunComplete(page, {
       status: "Waiting for live vision analysis…",
       logPrefix: "Master QA — vision live",
