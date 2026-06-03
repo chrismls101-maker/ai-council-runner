@@ -1,0 +1,23 @@
+# Dependencies
+node_modules
+
+# Build output (electron-vite)
+out
+dist
+.vite
+
+# Packaged release artifacts (electron-builder) — never commit these
+release
+*.dmg
+*.zip
+*.blockmap
+builder-debug.yml
+
+# Icon generator temp files (build/icon.icns and build/icon.png ARE committed)
+build/.iconset-tmp
+build/.orb-bbox.png
+build/.orb-scaled.png
+build/.icon-master.png
+
+# Logs
+*.log

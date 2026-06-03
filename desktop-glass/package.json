@@ -1,0 +1,39 @@
+{
+  "name": "iivo-glass",
+  "private": true,
+  "version": "0.1.0",
+  "description": "IIVO Glass — transparent desktop AI overlay companion for IIVO.",
+  "author": "Christopher Miles / IIVO",
+  "type": "module",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --experimental-strip-types --test src/test/config.test.ts src/test/contextPayload.test.ts src/test/noteExtraction.test.ts src/test/savedMoments.test.ts src/test/privacyState.test.ts",
+    "icon": "node scripts/make-icns.mjs",
+    "package": "npm run build && electron-builder",
+    "package:mac": "npm run build && electron-builder --mac",
+    "package:mac:arm64": "npm run build && electron-builder --mac --arm64",
+    "package:mac:x64": "npm run build && electron-builder --mac --x64",
+    "package:mac:universal": "npm run build && electron-builder --mac --universal",
+    "package:mac:signed": "npm run build && electron-builder --mac --config electron-builder.signed.yml",
+    "dist": "npm run build && electron-builder --mac dmg zip"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.21",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3",
+    "electron-vite": "^2.3.0",
+    "typescript": "^5.8.3",
+    "vite": "^5.4.11"
+  }
+}

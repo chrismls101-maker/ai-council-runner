@@ -1,0 +1,52 @@
+# Signed + notarized distribution config for IIVO Glass.
+#
+# Use ONLY for public distribution builds — requires an Apple Developer ID and
+# credentials. Local development uses the default (unsigned) electron-builder.yml.
+#
+# Run:  npm run glass:package:mac:signed
+#
+# Required environment for signing + notarization:
+#   APPLE_ID                      Apple ID email (notarization)
+#   APPLE_APP_SPECIFIC_PASSWORD   app-specific password for that Apple ID
+#   APPLE_TEAM_ID                 Apple Developer Team ID
+# Signing identity comes from EITHER:
+#   - a "Developer ID Application: <Name> (<TeamID>)" cert in your login keychain, OR
+#   - CSC_LINK (path/base64 of a .p12) + CSC_KEY_PASSWORD
+#
+# Do not run this unless those credentials exist; it will otherwise fail at the
+# signing/notarization step.
+
+appId: com.iivo.glass
+productName: IIVO Glass
+copyright: Copyright © 2026 Christopher Miles / IIVO
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - out/**
+  - package.json
+
+npmRebuild: false
+asar: true
+
+mac:
+  category: public.app-category.productivity
+  target:
+    - dmg
+    - zip
+  icon: build/icon.icns
+  # Signed distribution: hardened runtime + entitlements + auto-discovered
+  # Developer ID. Do NOT set identity: null here.
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  # Notarize using the APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID env vars.
+  notarize: true
+  artifactName: ${productName}-${version}-${arch}-${os}.${ext}
+
+dmg:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  title: ${productName} ${version}

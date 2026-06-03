@@ -1,0 +1,34 @@
+appId: com.iivo.glass
+productName: IIVO Glass
+copyright: Copyright © 2026 Christopher Miles / IIVO
+
+# Build the bundles with electron-vite first (npm run build), then electron-builder
+# only packages the compiled output — never the TS source or tests.
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - out/**
+  - package.json
+
+# No native modules in Glass, so skip the rebuild step.
+npmRebuild: false
+asar: true
+
+mac:
+  category: public.app-category.productivity
+  target:
+    - dmg
+    - zip
+  # v1 local testing: produce an UNSIGNED development build.
+  # Do not require an Apple Developer ID yet.
+  identity: null
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  artifactName: ${productName}-${version}-${arch}-${os}.${ext}
+  icon: build/icon.icns
+
+dmg:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  title: ${productName} ${version}
