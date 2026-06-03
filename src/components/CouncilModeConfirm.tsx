@@ -12,13 +12,13 @@ export default function CouncilModeConfirm({
   if (!open) return null;
 
   return (
-    <div className="modal-overlay council-confirm-overlay" data-testid="council-mode-confirm">
-      <div className="modal builder-confirm-modal" role="dialog" aria-labelledby="council-confirm-title">
+    <div className="council-confirm-overlay" data-testid="council-mode-confirm">
+      <div className="council-confirm-modal" role="dialog" aria-labelledby="council-confirm-title">
         <h2 id="council-confirm-title">Use Council Mode?</h2>
         <p>
           This may take longer because IIVO will use multiple agents to think through the answer.
         </p>
-        <div className="builder-confirm-actions">
+        <div className="council-confirm-actions">
           <button type="button" className="btn ghost" onClick={onKeepQuick}>
             Keep Quick
           </button>

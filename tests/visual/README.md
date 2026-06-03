@@ -4,7 +4,7 @@ Headed browser tests that prove the Decision Learning loop end-to-end — UI flo
 
 ## Execution Mode Gate v1
 
-Composer primary controls: **Mode** dropdown (Auto / Quick / Council / Builder), **Configure**, context **+**, **Send**. Preset, workflow override, and Auto Router details are under **Configure → Advanced routing**.
+Composer primary controls: **Mode** dropdown (Auto / Quick / Council), **Configure**, context **+**, **Send**. Preset, workflow override, and Auto Router details are under **Configure → Advanced routing**.
 
 - `npm run test:execution-mode` — server resolver unit tests  
 - `tests/visual/iivo-execution-mode.spec.ts` — composer layout and localStorage persistence  
