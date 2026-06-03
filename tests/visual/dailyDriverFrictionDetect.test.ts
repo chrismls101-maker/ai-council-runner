@@ -202,6 +202,20 @@ test.describe("Daily Driver auto friction detection", () => {
     expect(scored.frictions).not.toContain("deliverable_not_first");
   });
 
+  test("legal privacy advisory does not require email deliverable", () => {
+    const scenario = stubScenario({
+      id: "legal-privacy-promises",
+      category: "legal-policy",
+      prompt:
+        "A SaaS collects customer emails and uploaded files. What privacy promises should it avoid making?",
+      expectedRoute: /direct answer/i,
+    });
+    const answer =
+      "Avoid claiming 100% security, never being breached, or full HIPAA/GDPR compliance without review. Disclose subprocessors and retention. This is not legal advice.";
+    const scored = scoreScenarioFriction(scenario, answer, "Direct Answer");
+    expect(scored.frictions).not.toContain("deliverable_not_first");
+  });
+
   test("buildMemoryBleedMessage notes allowed terms", () => {
     const scenario = stubScenario({
       id: "hvac",

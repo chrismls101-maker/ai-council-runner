@@ -22,6 +22,13 @@ export type QaContractProfile =
   | "strategy_plan";
 
 export function inferQaContractFromPrompt(prompt: string): QaContractProfile {
+  if (
+    /\b(privacy promises?|legal risks?|what .+ should (it|we|you) avoid|avoid (making|promising|claiming)|not legal advice)\b/i.test(
+      prompt,
+    )
+  ) {
+    return "decision_first";
+  }
   if (/\b(write|draft).*(cold email|outreach email|sales email)\b/i.test(prompt)) {
     return "deliverable_first";
   }

@@ -17,6 +17,7 @@ import { runVisionMemoryGuardUnitTest } from "./masterQaVisionGuard.js";
 import { preparePublicReadinessState } from "./publicReadinessTestHelpers.js";
 import { isWatchMode, pauseMs } from "./qaEnv.js";
 import {
+  closeComposerConfigure,
   dismissRunGateModals,
   getLatestTurn,
   openComposerConfigure,
@@ -34,6 +35,37 @@ import { scoreScenarioFriction } from "./dailyDriverAutoDetect.js";
 import { ensureDailyDriverQaMonitor } from "./dailyDriverQaMonitor.js";
 import { updateQaMonitor } from "./qaMonitor.js";
 
+async function configureScenarioForRun(
+  page: Page,
+  scenario: DailyDriverScenario,
+  agent: DailyDriverAgentMind,
+): Promise<void> {
+  const wantsSalesAttack = scenario.expectedRoute?.test(/sales attack/i) ?? false;
+  const wantsProductDecision =
+    scenario.workflow === "product-decision" ||
+    (scenario.expectedRoute?.test(/product decision/i) ?? false);
+
+  if (!wantsSalesAttack && !wantsProductDecision) return;
+
+  await agent.action(
+    scenario,
+    wantsSalesAttack
+      ? "Configure — Council mode + Sales Attack for outreach writing."
+      : "Configure — Council mode + Product Decision for prioritization.",
+  );
+  await openComposerConfigure(page);
+  await selectPillOption(page, "execution-mode-select", "Council", undefined, { exact: true });
+
+  if (wantsSalesAttack) {
+    await selectPillOption(page, "workflow-select", "Sales Attack");
+  } else {
+    await selectPillOption(page, "workflow-select", "Product Decision");
+    await selectPillOption(page, "token-mode-select", "Quick");
+  }
+
+  await closeComposerConfigure(page);
+}
+
 async function runPromptScenario(
   page: Page,
   scenario: DailyDriverScenario,
@@ -43,11 +75,7 @@ async function runPromptScenario(
   routeText: string;
   skippedLive: boolean;
 }> {
-  if (scenario.workflow === "product-decision") {
-    await agent.action(scenario, "Opening Configure — Quick response depth for council run.");
-    await openComposerConfigure(page);
-    await selectPillOption(page, "token-mode-select", "Quick");
-  }
+  await configureScenarioForRun(page, scenario, agent);
 
   await agent.action(scenario, "Typing prompt into composer…");
   await agent.action(scenario, "Submitting prompt…");

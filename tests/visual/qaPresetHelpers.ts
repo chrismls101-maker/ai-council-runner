@@ -4,7 +4,7 @@
  */
 
 import { expect, type Page } from "@playwright/test";
-import { openComposerConfigure, selectPillOption } from "./qaStepHelpers.js";
+import { openComposerConfigure, selectPillOption, closeComposerConfigure } from "./qaStepHelpers.js";
 
 const SELECTED_PRESET_STORAGE_KEY = "iivo_selected_preset_v2";
 
@@ -43,6 +43,7 @@ export async function ensureNeutralPreset(page: Page, options?: { reload?: boole
 
 /** Primary composer bar ready for a run (Execution Mode layout). */
 export async function assertComposerReadyForRun(page: Page): Promise<void> {
+  await closeComposerConfigure(page);
   await expect(page.getByTestId("composer-input")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId("execution-mode-select")).toBeVisible();
   await expect(page.getByTestId("composer-configure")).toBeVisible();
@@ -57,6 +58,7 @@ export async function assertNeutralPresetConfigured(page: Page): Promise<void> {
   const presetPill = page.getByTestId("preset-select");
   await expect(presetPill).toBeVisible({ timeout: 15_000 });
   await expect(presetPill).toContainText(/No preset/i);
+  await closeComposerConfigure(page);
 }
 
 /** @deprecated Use assertNeutralPresetConfigured — kept for callers that mean Configure preset. */
@@ -70,6 +72,7 @@ export async function selectWorkspacePreset(
 ): Promise<void> {
   await openComposerConfigure(page);
   await selectPillOption(page, "preset-select", label);
+  await closeComposerConfigure(page);
 }
 
 export function detectPresetBleed(text: string, allowedTerms: string[] = []): string[] {

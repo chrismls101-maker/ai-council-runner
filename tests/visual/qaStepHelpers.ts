@@ -2,7 +2,7 @@
  * Shared Visual QA step helpers — used across Playwright proof runners.
  */
 
-import { type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import { pauseMs, qaLog } from "./qaEnv.js";
 import { failQaStep, qaClick } from "./qaMonitor.js";
 import { RunWaitTimeoutError } from "./runWaitHelpers.js";
@@ -33,16 +33,36 @@ export async function openComposerConfigure(page: Page): Promise<void> {
   }
 }
 
+/** Collapse Configure so primary composer checks (preset hidden) pass. */
+export async function closeComposerConfigure(page: Page): Promise<void> {
+  const panel = page.locator("#composer-configure-panel");
+  if (!(await panel.isVisible().catch(() => false))) return;
+
+  await page.keyboard.press("Escape");
+  await pause(page, 200);
+
+  if (await panel.isVisible().catch(() => false)) {
+    await qaClick(page, page.getByTestId("composer-configure"), "Close Configure");
+    await pause(page, 200);
+  }
+
+  await expect(panel).not.toBeVisible({ timeout: 5_000 });
+}
+
 export async function selectPillOption(
   page: Page,
   triggerTestId: string,
   optionLabel: string,
   nextLabel?: string,
+  options?: { exact?: boolean },
 ): Promise<void> {
   const trigger = page.getByTestId(triggerTestId);
   await qaClick(page, trigger, nextLabel);
   await pause(page, 300);
-  await qaClick(page, page.getByRole("option", { name: new RegExp(optionLabel, "i") }));
+  const option = options?.exact
+    ? page.getByRole("option", { name: optionLabel, exact: true })
+    : page.getByRole("option", { name: new RegExp(optionLabel, "i") });
+  await qaClick(page, option);
   await pause(page, 500);
 }
 
