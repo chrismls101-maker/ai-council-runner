@@ -13,6 +13,8 @@ const fallbackState: GlassState = {
   config: DEFAULT_CONFIG,
   session: null,
   sessionSummary: "",
+  sessionActionStatus: "idle",
+  transcriptionMode: "manual",
 };
 
 export function useGlassState(): GlassState {

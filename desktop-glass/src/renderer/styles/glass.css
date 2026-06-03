@@ -334,6 +334,18 @@ body {
   box-shadow: 0 0 14px var(--glow-cyan);
 }
 
+.source-input {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.28);
+  color: var(--glass-text);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-family: inherit;
+  user-select: text;
+}
+
 .transcript__row {
   display: flex;
   gap: 6px;

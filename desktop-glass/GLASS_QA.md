@@ -96,25 +96,53 @@ request) sending the summarized session to IIVO Council.
 
 ### Notes on detection
 
-- **Source app / window-title detection is NOT implemented in v1.** The UI never
-  claims active-app detection works; `sourceTitle` is only populated when you
-  type it manually. This avoids requesting macOS accessibility permissions.
+- **Active app/window detection is NOT implemented.** Capture events may store the
+  Electron `desktopCapturer` **display/source name** when available (e.g. "Entire
+  screen"). Manual **Source title optional** field is available on notes. The UI
+  never claims active-app detection works.
 - Insight extraction is fully **deterministic and local** (rule-based cue words +
   recurring-term detection). There are no hidden/continuous LLM calls. The only
   network calls are the explicit "Send … to IIVO" actions you trigger.
+
+## Glass v1.1 hardening
+
+### Durable screenshot thumbnails
+
+- [ ] Start Session → Capture Screen → confirm timeline thumbnail appears.
+- [ ] Quit and reopen Glass → confirm the same session event still shows a
+      thumbnail (loaded from `userData/session-screenshots/` via `glass-screenshot://`).
+- [ ] Delete the screenshot file manually → confirm UI shows **Screenshot
+      unavailable.** (no crash).
+- [ ] Delete event / Clear session removes associated screenshot files.
+
+### Analyze with IIVO Council
+
+- [ ] Summary tab → **Analyze with IIVO Council** opens IIVO with `?lensAsk=<id>`.
+- [ ] Context content includes explicit analysis instructions (what happened,
+      what matters, risks, next actions, memory).
+- [ ] Status notice shows preparing → sending → opened (or failed).
+
+### Transcription foundation
+
+- [ ] Context tab shows Mode: Manual / Microphone / Unavailable.
+- [ ] If Web Speech API unavailable: message says paste manually.
+- [ ] If available: Start Listening only on click; chunks add `transcript_note`
+      events when session active; Stop Listening works.
+- [ ] No listening on launch.
 
 ## Privacy controls
 
 - Session recording starts **only** when you click **Start Session** — never on
   launch.
 - Screen capture happens **only** when you click **Capture**.
-- Listening engine is not connected yet (manual transcript input only).
+- Microphone transcription (when available) starts **only** when you click Start
+  Listening — not system audio, not on launch.
 - You can **Pause**, **End**, **Delete events**, and **Clear session** at any
   time. A session stays **local** until you click **Send to IIVO**.
 - While a session is active the panel shows a pulsing warning: "IIVO Glass is
   collecting session events locally."
-- Persisted sessions strip inline screenshot data URLs from disk
-  (`glass-sessions.json`) to keep the file small; the timeline event is kept.
+- Persisted sessions store screenshot **file paths** (not base64) under
+  `userData/session-screenshots/`; thumbnails reload via custom protocol.
 - Visible Listening and Screen-capture indicators.
 - Pause and Stop everything buttons.
 - Delete individual saved moments and Clear all moments.

@@ -11,7 +11,7 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "node --experimental-strip-types --test src/test/config.test.ts src/test/contextPayload.test.ts src/test/noteExtraction.test.ts src/test/savedMoments.test.ts src/test/privacyState.test.ts src/test/sessionStore.test.ts src/test/sessionIntelligence.test.ts src/test/sessionSummary.test.ts src/test/sessionPayload.test.ts",
+    "test": "node --experimental-strip-types --test src/test/config.test.ts src/test/contextPayload.test.ts src/test/noteExtraction.test.ts src/test/savedMoments.test.ts src/test/privacyState.test.ts src/test/sessionStore.test.ts src/test/sessionIntelligence.test.ts src/test/sessionSummary.test.ts src/test/sessionPayload.test.ts src/test/sessionScreenshotPaths.test.ts src/test/transcriptionTypes.test.ts",
     "icon": "node scripts/make-icns.mjs",
     "package": "npm run build && electron-builder",
     "package:mac": "npm run build && electron-builder --mac",

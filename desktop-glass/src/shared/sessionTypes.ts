@@ -37,6 +37,9 @@ export type GlassSessionEvent = {
   sourceTitle?: string;
   sourceUrl?: string;
   screenshotPath?: string;
+  thumbnailPath?: string;
+  screenshotMimeType?: string;
+  screenshotSizeBytes?: number;
   screenshotDataUrl?: string;
   tags?: string[];
   importance?: GlassSessionImportance;

@@ -12,6 +12,14 @@ import type {
 } from "./types.ts";
 import type { PrivacyState } from "./privacyState.ts";
 import type { GlassSession } from "./sessionTypes.ts";
+import type { TranscriptionMode } from "./transcriptionTypes.ts";
+
+export type SessionActionStatus =
+  | "idle"
+  | "preparing"
+  | "sending"
+  | "opened"
+  | "failed";
 
 export const IPC = {
   /** Renderer -> main: a user-initiated command. */
@@ -30,7 +38,9 @@ export type GlassCommand =
   | { type: "pause" }
   | { type: "stop" }
   | { type: "append-transcript"; text: string }
+  | { type: "add-transcript-chunk"; text: string }
   | { type: "clear-transcript" }
+  | { type: "transcription-set-mode"; mode: TranscriptionMode }
   | { type: "save-moment"; note?: string; kind?: GlassMomentKind }
   | { type: "delete-moment"; id: string }
   | { type: "clear-moments" }
@@ -57,7 +67,8 @@ export type GlassCommand =
   | { type: "session-send" }
   | { type: "session-send-event"; id: string }
   | { type: "session-send-insight"; id: string }
-  | { type: "session-send-summary" };
+  | { type: "session-send-summary" }
+  | { type: "session-analyze-council" };
 
 export interface GlassState {
   privacy: PrivacyState;
@@ -71,4 +82,6 @@ export interface GlassState {
   lastSentUrl?: string;
   session: GlassSession | null;
   sessionSummary: string;
+  sessionActionStatus: SessionActionStatus;
+  transcriptionMode: TranscriptionMode;
 }

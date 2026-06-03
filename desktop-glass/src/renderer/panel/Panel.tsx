@@ -12,6 +12,8 @@ import type {
   GlassSessionInsight,
 } from "../../shared/sessionTypes.ts";
 import { INSIGHT_TYPE_LABELS } from "../../shared/sessionIntelligence.ts";
+import { buildScreenshotThumbnailUrl } from "../../shared/sessionScreenshotUrls.ts";
+import { useTranscription } from "../useTranscription.ts";
 
 const TABS: { id: PanelTab; label: string }[] = [
   { id: "summary", label: "Summary" },
@@ -70,6 +72,13 @@ function SummaryView({ state }: { state: GlassState }): JSX.Element {
           >
             Send Summary to IIVO
           </button>
+          <button
+            className="gbtn gbtn--primary"
+            onClick={() => send({ type: "session-analyze-council" })}
+            disabled={!summary || state.sessionActionStatus === "preparing" || state.sessionActionStatus === "sending"}
+          >
+            Analyze with IIVO Council
+          </button>
         </div>
       ) : (
         <>
@@ -96,6 +105,29 @@ function eventMatchesFilter(e: GlassSessionEvent, filter: EventFilter): boolean 
   }
 }
 
+function EventScreenshot({ event }: { event: GlassSessionEvent }): JSX.Element {
+  const [missing, setMissing] = useState(false);
+  const src =
+    event.screenshotDataUrl ??
+    (event.thumbnailPath ? buildScreenshotThumbnailUrl(event.sessionId, event.id) : null);
+
+  if (!src || missing) {
+    if (event.screenshotPath || event.thumbnailPath || event.screenshotDataUrl) {
+      return <p className="empty">Screenshot unavailable.</p>;
+    }
+    return <></>;
+  }
+
+  return (
+    <img
+      className="event-thumb"
+      src={src}
+      alt="capture"
+      onError={() => setMissing(true)}
+    />
+  );
+}
+
 function EventCard({ event }: { event: GlassSessionEvent }): JSX.Element {
   const time = new Date(event.timestamp).toLocaleTimeString();
   return (
@@ -109,13 +141,11 @@ function EventCard({ event }: { event: GlassSessionEvent }): JSX.Element {
       </div>
       {event.sourceTitle ? (
         <div className="moment__meta">
-          <span>{event.sourceTitle}</span>
+          <span>Source: {event.sourceTitle}</span>
         </div>
       ) : null}
       <div className="moment__note">{event.title}</div>
-      {event.screenshotDataUrl ? (
-        <img className="event-thumb" src={event.screenshotDataUrl} alt="capture" />
-      ) : null}
+      <EventScreenshot event={event} />
       <div className="moment__actions">
         <button className="gbtn" onClick={() => send({ type: "session-send-event", id: event.id })}>
           Send to IIVO
@@ -133,9 +163,16 @@ function EventCard({ event }: { event: GlassSessionEvent }): JSX.Element {
 
 function ManualNoteBox(): JSX.Element {
   const [draft, setDraft] = useState("");
+  const [sourceTitle, setSourceTitle] = useState("");
   return (
     <div className="transcript">
       <p className="section-title">Manual note</p>
+      <input
+        className="source-input"
+        value={sourceTitle}
+        placeholder="Source title optional (e.g. Cursor, YouTube)"
+        onChange={(e) => setSourceTitle(e.target.value)}
+      />
       <textarea
         value={draft}
         placeholder="Type a note for this session…"
@@ -146,7 +183,11 @@ function ManualNoteBox(): JSX.Element {
           className="gbtn gbtn--primary"
           disabled={!draft.trim()}
           onClick={() => {
-            send({ type: "session-add-note", text: draft.trim() });
+            send({
+              type: "session-add-note",
+              text: draft.trim(),
+              sourceTitle: sourceTitle.trim() || undefined,
+            });
             setDraft("");
           }}
         >
@@ -350,15 +391,24 @@ function NotesTab({ tab, notes }: { tab: PanelTab; notes: ExtractedNotes }): JSX
 
 function Transcript({ transcript }: { transcript: string }): JSX.Element {
   const [draft, setDraft] = useState("");
+  const tx = useTranscription();
+  const modeLabel =
+    tx.mode === "mic_web_speech" ? "Microphone" : tx.mode === "unavailable" ? "Unavailable" : "Manual";
+
   return (
     <div className="transcript">
-      <p className="section-title">Live transcript (manual input v1)</p>
+      <p className="section-title">Live transcript</p>
       <p className="empty">
-        Listening engine not connected yet. Paste transcript or use screen capture.
+        Mode: {modeLabel}. {tx.mode === "unavailable" ? tx.unavailableMessage : "Mic captures speech only when you click Start Listening — not system audio."}
       </p>
       {transcript ? (
         <div className="summary-box" style={{ whiteSpace: "pre-wrap" }}>
           {transcript}
+        </div>
+      ) : null}
+      {tx.interimText ? (
+        <div className="summary-box" style={{ opacity: 0.7 }}>
+          {tx.interimText}
         </div>
       ) : null}
       <textarea
@@ -367,17 +417,33 @@ function Transcript({ transcript }: { transcript: string }): JSX.Element {
         onChange={(e) => setDraft(e.target.value)}
       />
       <div className="transcript__row">
+        {tx.mode === "mic_web_speech" ? (
+          tx.status === "listening" ? (
+            <button className="gbtn gbtn--danger" onClick={tx.stopListening}>
+              Stop Listening
+            </button>
+          ) : (
+            <button className="gbtn" onClick={tx.startListening}>
+              Start Listening
+            </button>
+          )
+        ) : null}
         <button
           className="gbtn gbtn--primary"
           disabled={!draft.trim()}
           onClick={() => {
             if (!draft.trim()) return;
-            send({ type: "append-transcript", text: draft.trim() });
+            send({ type: "add-transcript-chunk", text: draft.trim() });
             setDraft("");
           }}
         >
-          Add to transcript
+          Add to Session
         </button>
+        {tx.interimText ? (
+          <button className="gbtn" onClick={tx.addChunkToSession}>
+            Add transcript chunk
+          </button>
+        ) : null}
         <button className="gbtn gbtn--ghost" disabled={!transcript} onClick={() => send({ type: "clear-transcript" })}>
           Clear
         </button>
@@ -480,6 +546,9 @@ export function Panel(): JSX.Element {
         <div className="privacy__row">
           <span className={`privacy__flag ${sessionLive ? "privacy__flag--on" : ""}`}>
             {sessionLive ? "● Session recording" : "○ No session"}
+          </span>
+          <span className={`privacy__flag ${state.privacy.listening ? "privacy__flag--on" : ""}`}>
+            {state.privacy.listening ? "● Listening" : "○ Not listening"}
           </span>
           <span className={`privacy__flag ${state.privacy.capturing ? "privacy__flag--on" : ""}`}>
             {state.privacy.capturing ? "● Capturing" : "○ Not capturing"}

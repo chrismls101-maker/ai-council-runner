@@ -74,3 +74,27 @@ test("accepted insights are prioritized in the payload", () => {
   const res = buildSessionContextPayload(session);
   assert.match(res.payload.contentText, /ACCEPTED IMPORTANT INSIGHT/);
 });
+
+test("analysis payload includes council prompt and analysis source", () => {
+  const session = makeSession(3, 2);
+  const res = buildSessionContextPayload(session, { forCouncilAnalysis: true });
+  assert.match(res.payload.contentText, /Analyze this IIVO Glass work session/);
+  assert.match(res.payload.contentText, /what happened/i);
+  assert.match(res.payload.contentText, /risks/i);
+  assert.match(res.payload.contentText, /next actions/i);
+  assert.match(res.payload.contentText, /memory/i);
+  assert.match(res.payload.contentText, /desktop_glass_session_analysis/);
+  assert.match(res.payload.title, /Session Analysis/);
+});
+
+test("persisted session shape uses paths not base64", () => {
+  const event = {
+    screenshotPath: "/tmp/user/session-screenshots/s1/e1.png",
+    thumbnailPath: "/tmp/user/session-screenshots/s1/e1.thumb.png",
+    screenshotMimeType: "image/png",
+    screenshotSizeBytes: 1234,
+  };
+  const json = JSON.stringify({ sessions: [{ events: [event] }] });
+  assert.doesNotMatch(json, /data:image/);
+  assert.match(json, /screenshotPath/);
+});

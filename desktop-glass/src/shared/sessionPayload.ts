@@ -13,10 +13,19 @@ import type { ContextCreatePayload } from "./types.ts";
 import type { GlassSession, GlassSessionEvent, GlassSessionInsight } from "./sessionTypes.ts";
 
 export const SESSION_SOURCE = "desktop_glass_session";
+export const SESSION_ANALYSIS_SOURCE = "desktop_glass_session_analysis";
+
+export const SESSION_ANALYSIS_PROMPT = [
+  "Analyze this IIVO Glass work session.",
+  "Tell me what happened, what matters, the strongest insight, risks, next actions,",
+  "and what should be saved as memory.",
+].join(" ");
 
 export interface SessionPayloadOptions {
   maxEvents?: number;
   maxInsights?: number;
+  /** When true, prepend council analysis instructions and use analysis source tag. */
+  forCouncilAnalysis?: boolean;
 }
 
 export interface SessionPayloadResult {
@@ -63,23 +72,30 @@ export function buildSessionContextPayload(
   const truncated = includedEvents.length < eventCount || includedInsights.length < insightCount;
 
   const summary = session.summary?.trim() || buildSessionSummary(session);
+  const source = options.forCouncilAnalysis ? SESSION_ANALYSIS_SOURCE : SESSION_SOURCE;
   const range = `${new Date(session.startedAt).toLocaleString()}${
     session.endedAt ? ` → ${new Date(session.endedAt).toLocaleString()}` : " → (in progress)"
   }`;
 
-  const screenshotRefs = session.events.filter((e) => e.screenshotPath || e.screenshotDataUrl).length;
+  const screenshotRefs = session.events.filter(
+    (e) => e.screenshotPath || e.thumbnailPath || e.screenshotDataUrl,
+  ).length;
 
-  const parts: string[] = [
+  const parts: string[] = [];
+  if (options.forCouncilAnalysis) {
+    parts.push(SESSION_ANALYSIS_PROMPT, "");
+  }
+  parts.push(
     `IIVO Glass Session: ${session.title}`,
     `Status: ${session.status} | Time range: ${range}`,
     `Events: ${eventCount} | Insights: ${insightCount} | Screenshots: ${screenshotRefs}`,
-    `(source: ${SESSION_SOURCE}, sessionId: ${session.id})`,
+    `(source: ${source}, sessionId: ${session.id})`,
     "",
     summary,
     "",
     `Timeline (${includedEvents.length} of ${eventCount} events${truncated ? ", truncated" : ""}):`,
     ...includedEvents.map(formatEvent),
-  ];
+  );
 
   if (includedInsights.length > 0) {
     parts.push(
@@ -95,9 +111,13 @@ export function buildSessionContextPayload(
 
   const payload: ContextCreatePayload = {
     type: "pasted_text",
-    title: `IIVO Glass Session — ${session.title}`,
+    title: options.forCouncilAnalysis
+      ? `IIVO Glass Session Analysis — ${session.title}`
+      : `IIVO Glass Session — ${session.title}`,
     contentText: parts.join("\n"),
-    tags: ["glass", "desktop", "session"],
+    tags: options.forCouncilAnalysis
+      ? ["glass", "desktop", "session", "analysis"]
+      : ["glass", "desktop", "session"],
     capturedVia: GLASS_CAPTURED_VIA,
     capturedAt: new Date().toISOString(),
     sourceConfidence: "user_pasted",
