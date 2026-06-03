@@ -13,7 +13,12 @@ import type {
 } from "../../shared/sessionTypes.ts";
 import { INSIGHT_TYPE_LABELS } from "../../shared/sessionIntelligence.ts";
 import { buildScreenshotThumbnailUrl } from "../../shared/sessionScreenshotUrls.ts";
+import {
+  WINDOW_CONTEXT_PERMISSION_MESSAGE,
+  WINDOW_CONTEXT_UNAVAILABLE_MESSAGE,
+} from "../../shared/windowContextTypes.ts";
 import { useTranscription } from "../useTranscription.ts";
+import { IivoAnalysisPanel } from "../components/IivoAnalysisPanel.tsx";
 
 const TABS: { id: PanelTab; label: string }[] = [
   { id: "summary", label: "Summary" },
@@ -47,6 +52,10 @@ function NoteList({ items, empty }: { items: string[]; empty: string }): JSX.Ele
 function SummaryView({ state }: { state: GlassState }): JSX.Element {
   const hasSession = !!state.session;
   const summary = hasSession ? state.sessionSummary : state.notes.summary;
+  const analysisRunning = state.iivoAnalysis.status === "running";
+  const sendBusy =
+    state.sessionActionStatus === "preparing" || state.sessionActionStatus === "sending";
+
   return (
     <>
       <p className="section-title">{hasSession ? "Session summary" : "Summary"}</p>
@@ -61,25 +70,41 @@ function SummaryView({ state }: { state: GlassState }): JSX.Element {
         </p>
       )}
       {hasSession ? (
-        <div className="transcript__row">
-          <button className="gbtn" onClick={() => void copyText(summary)} disabled={!summary}>
-            Copy Summary
-          </button>
-          <button
-            className="gbtn gbtn--primary"
-            onClick={() => send({ type: "session-send-summary" })}
-            disabled={!summary}
-          >
-            Send Summary to IIVO
-          </button>
-          <button
-            className="gbtn gbtn--primary"
-            onClick={() => send({ type: "session-analyze-council" })}
-            disabled={!summary || state.sessionActionStatus === "preparing" || state.sessionActionStatus === "sending"}
-          >
-            Analyze with IIVO Council
-          </button>
-        </div>
+        <>
+          <div className="transcript__row">
+            <button className="gbtn" onClick={() => void copyText(summary)} disabled={!summary}>
+              Copy Summary
+            </button>
+            <button
+              className="gbtn gbtn--primary"
+              onClick={() => send({ type: "session-send-summary" })}
+              disabled={!summary}
+            >
+              Send Summary to IIVO
+            </button>
+          </div>
+          <div className="transcript__row">
+            <button
+              className="gbtn gbtn--primary"
+              onClick={() => send({ type: "session-open-in-iivo" })}
+              disabled={!summary || sendBusy}
+            >
+              Open in IIVO
+            </button>
+            <button
+              className="gbtn gbtn--primary"
+              onClick={() => send({ type: "session-analyze-now" })}
+              disabled={!summary || sendBusy || analysisRunning}
+            >
+              {analysisRunning ? "Analyzing…" : "Analyze Now"}
+            </button>
+          </div>
+          <p className="empty">
+            Open in IIVO creates a Context Bridge item and opens the browser.
+            Analyze Now sends the session to your configured IIVO server.
+          </p>
+          <IivoAnalysisPanel analysis={state.iivoAnalysis} />
+        </>
       ) : (
         <>
           <p className="section-title">Key ideas</p>
@@ -87,6 +112,38 @@ function SummaryView({ state }: { state: GlassState }): JSX.Element {
         </>
       )}
     </>
+  );
+}
+
+function WindowContextDisplay({ state }: { state: GlassState }): JSX.Element {
+  const ctx = state.windowContext;
+  let label = "Manual source title";
+  let detail = WINDOW_CONTEXT_UNAVAILABLE_MESSAGE;
+
+  if (ctx.status === "available" && (ctx.appName || ctx.windowTitle || ctx.displayName)) {
+    label = ctx.displayName ?? ctx.windowTitle ?? ctx.appName ?? "Active window";
+    detail = [ctx.appName, ctx.windowTitle].filter(Boolean).join(" — ");
+  } else if (ctx.status === "permission_required") {
+    label = "Active app detection requires permission";
+    detail = WINDOW_CONTEXT_PERMISSION_MESSAGE;
+  } else if (ctx.sourceName) {
+    label = ctx.sourceName;
+    detail = "From last screen capture source.";
+  }
+
+  return (
+    <div className="window-context">
+      <p className="section-title">Source context</p>
+      <div className="summary-box">
+        <strong>{label}</strong>
+        {detail ? <div className="empty">{detail}</div> : null}
+      </div>
+      <div className="transcript__row">
+        <button className="gbtn gbtn--ghost" onClick={() => send({ type: "window-context-refresh" })}>
+          Refresh
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -99,7 +156,12 @@ function eventMatchesFilter(e: GlassSessionEvent, filter: EventFilter): boolean 
     case "Captures":
       return e.kind === "screen_capture";
     case "Notes":
-      return e.kind === "manual_note" || e.kind === "transcript_note" || e.kind === "saved_moment";
+      return (
+        e.kind === "manual_note" ||
+        e.kind === "transcript_note" ||
+        e.kind === "saved_moment" ||
+        e.kind === "iivo_analysis"
+      );
     default:
       return true;
   }
@@ -139,14 +201,26 @@ function EventCard({ event }: { event: GlassSessionEvent }): JSX.Element {
           {time}
         </span>
       </div>
-      {event.sourceTitle ? (
+      {event.sourceTitle || event.sourceApp ? (
         <div className="moment__meta">
-          <span>Source: {event.sourceTitle}</span>
+          <span>
+            Source: {[event.sourceApp, event.sourceTitle].filter(Boolean).join(" — ")}
+          </span>
         </div>
       ) : null}
       <div className="moment__note">{event.title}</div>
+      {event.text && event.kind === "iivo_analysis" ? (
+        <div className="summary-box" style={{ whiteSpace: "pre-wrap", marginTop: 8 }}>
+          {event.text}
+        </div>
+      ) : null}
       <EventScreenshot event={event} />
       <div className="moment__actions">
+        {event.kind === "iivo_analysis" && event.text ? (
+          <button className="gbtn" onClick={() => void copyText(event.text ?? "")}>
+            Copy Analysis
+          </button>
+        ) : null}
         <button className="gbtn" onClick={() => send({ type: "session-send-event", id: event.id })}>
           Send to IIVO
         </button>
@@ -170,7 +244,7 @@ function ManualNoteBox(): JSX.Element {
       <input
         className="source-input"
         value={sourceTitle}
-        placeholder="Source title optional (e.g. Cursor, YouTube)"
+        placeholder="Source title optional (e.g. app or window name)"
         onChange={(e) => setSourceTitle(e.target.value)}
       />
       <textarea
@@ -211,7 +285,7 @@ function ManualNoteBox(): JSX.Element {
   );
 }
 
-function SessionView({ session }: { session: GlassSession | null }): JSX.Element {
+function SessionView({ session, state }: { session: GlassSession | null; state: GlassState }): JSX.Element {
   const [filter, setFilter] = useState<EventFilter>("All");
 
   if (!session) {
@@ -242,6 +316,8 @@ function SessionView({ session }: { session: GlassSession | null }): JSX.Element
           </div>
         </div>
       </div>
+
+      <WindowContextDisplay state={state} />
 
       <div className="filter-row">
         {EVENT_FILTERS.map((f) => (
@@ -392,15 +468,25 @@ function NotesTab({ tab, notes }: { tab: PanelTab; notes: ExtractedNotes }): JSX
 function Transcript({ transcript }: { transcript: string }): JSX.Element {
   const [draft, setDraft] = useState("");
   const tx = useTranscription();
-  const modeLabel =
-    tx.mode === "mic_web_speech" ? "Microphone" : tx.mode === "unavailable" ? "Unavailable" : "Manual";
 
   return (
     <div className="transcript">
       <p className="section-title">Live transcript</p>
-      <p className="empty">
-        Mode: {modeLabel}. {tx.mode === "unavailable" ? tx.unavailableMessage : "Mic captures speech only when you click Start Listening — not system audio."}
-      </p>
+      <div className="filter-row">
+        {tx.modeOptions.map((mode) => (
+          <button
+            key={mode}
+            className={`tab ${tx.selectedMode === mode ? "tab--active" : ""}`}
+            onClick={() => tx.setMode(mode)}
+          >
+            {tx.modeLabels[mode]}
+          </button>
+        ))}
+      </div>
+      <p className="empty">{tx.statusMessage}</p>
+      {tx.status === "listening" ? (
+        <p className="privacy__warning">● Listening — microphone active</p>
+      ) : null}
       {transcript ? (
         <div className="summary-box" style={{ whiteSpace: "pre-wrap" }}>
           {transcript}
@@ -417,13 +503,13 @@ function Transcript({ transcript }: { transcript: string }): JSX.Element {
         onChange={(e) => setDraft(e.target.value)}
       />
       <div className="transcript__row">
-        {tx.mode === "mic_web_speech" ? (
+        {tx.selectedMode !== "manual" && tx.selectedMode !== "system_audio_unavailable" ? (
           tx.status === "listening" ? (
             <button className="gbtn gbtn--danger" onClick={tx.stopListening}>
               Stop Listening
             </button>
           ) : (
-            <button className="gbtn" onClick={tx.startListening}>
+            <button className="gbtn" onClick={tx.startListening} disabled={!tx.canListen}>
               Start Listening
             </button>
           )
@@ -521,7 +607,7 @@ export function Panel(): JSX.Element {
 
       <div className="panel__body">
         {tab === "summary" ? <SummaryView state={state} /> : null}
-        {tab === "session" ? <SessionView session={state.session} /> : null}
+        {tab === "session" ? <SessionView session={state.session} state={state} /> : null}
         {tab === "insights" ? <InsightsView session={state.session} /> : null}
         {tab === "context" || tab === "hypotheses" || tab === "actions" ? (
           <>
@@ -558,9 +644,9 @@ export function Panel(): JSX.Element {
           </button>
         </div>
         <div>
-          Session recording starts only when you click Start Session. Screen capture
-          happens only when you click Capture. Nothing leaves this device until you
-          click Send to IIVO.
+          Glass captures screen/audio only when you start it. Session data stays local
+          until you send or analyze. Analyze Now sends the session to your configured
+          IIVO server. Open in IIVO creates a Context Bridge item and opens the browser.
         </div>
       </div>
     </div>

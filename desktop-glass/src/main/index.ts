@@ -29,7 +29,21 @@ import {
 } from "../shared/sessionIntelligence.ts";
 import { buildSessionSummary } from "../shared/sessionSummary.ts";
 import { buildSessionContextPayload } from "../shared/sessionPayload.ts";
-import type { TranscriptionMode } from "../shared/transcriptionTypes.ts";
+import type { TranscriptionMode } from "../shared/audioCaptureTypes.ts";
+import type { IivoAnalysisState } from "../shared/ipc.ts";
+import {
+  mergeCaptureSource,
+  windowContextForEvent,
+  WINDOW_CONTEXT_UNAVAILABLE_MESSAGE,
+  type WindowContext,
+} from "../shared/windowContextTypes.ts";
+import {
+  buildAnalysisFailureNotice,
+  buildCouncilRunRequest,
+  buildSessionAnalysisPrompt,
+  estimateCouncilCredits,
+  runCouncilAnalysis,
+} from "../shared/iivoAnalysisClient.ts";
 import { capturePrimaryScreen } from "./capture.ts";
 import {
   broadcast,
@@ -46,6 +60,16 @@ import {
   resolveThumbnailFilePath,
   saveSessionScreenshot,
 } from "./sessionScreenshots.ts";
+import {
+  getCachedWindowContext,
+  getCurrentWindowContext,
+  refreshWindowContext,
+} from "./windowContext.ts";
+
+const defaultWindowContext: WindowContext = {
+  status: "unavailable",
+  reason: WINDOW_CONTEXT_UNAVAILABLE_MESSAGE,
+};
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -66,6 +90,8 @@ interface AppState {
   pendingCaptureDataUrl?: string;
   sessionActionStatus: SessionActionStatus;
   transcriptionMode: TranscriptionMode;
+  windowContext: WindowContext;
+  iivoAnalysis: IivoAnalysisState;
 }
 
 const state: AppState = {
@@ -74,6 +100,8 @@ const state: AppState = {
   panelTab: "summary",
   sessionActionStatus: "idle",
   transcriptionMode: "manual",
+  windowContext: defaultWindowContext,
+  iivoAnalysis: { status: "idle" },
 };
 
 let moments = new SavedMomentsStore();
@@ -100,6 +128,19 @@ function snapshot(): GlassState {
     sessionSummary: session ? buildSessionSummary(session) : "",
     sessionActionStatus: state.sessionActionStatus,
     transcriptionMode: state.transcriptionMode,
+    windowContext: state.windowContext,
+    iivoAnalysis: state.iivoAnalysis,
+  };
+}
+
+function eventContextFields(opts?: { sourceTitle?: string; captureSource?: string }) {
+  let ctx = getCachedWindowContext();
+  if (opts?.captureSource) ctx = mergeCaptureSource(ctx, opts.captureSource);
+  const mapped = windowContextForEvent(ctx);
+  return {
+    sourceApp: mapped.sourceApp,
+    sourceTitle: opts?.sourceTitle ?? mapped.sourceTitle,
+    metadata: mapped.metadata,
   };
 }
 
@@ -214,12 +255,16 @@ async function handleCommand(command: GlassCommand): Promise<void> {
       if (!chunk) return;
       state.transcript = `${state.transcript}${state.transcript ? " " : ""}${chunk}`.trim();
       if (sessionIsLive() && sessions.current()?.status === "active") {
+        const ctxFields = eventContextFields();
         sessions.addEvent({
           kind: "transcript_note",
           title: chunk.length > 70 ? `${chunk.slice(0, 69)}…` : chunk,
           text: chunk,
+          ...ctxFields,
         });
         await persistSessions(sessions);
+      } else if (!sessionIsLive()) {
+        state.lastNotice = "Transcript saved. Start a session to keep chunks in the timeline.";
       }
       push();
       return;
@@ -302,6 +347,10 @@ async function handleCommand(command: GlassCommand): Promise<void> {
     case "toggle-panel":
       togglePanel();
       return;
+    case "window-context-refresh":
+      state.windowContext = await refreshWindowContext();
+      push();
+      return;
     default:
       await handleSessionCommand(command);
       return;
@@ -334,11 +383,14 @@ async function handleSessionCommand(command: GlassCommand): Promise<void> {
       const text = command.text.trim();
       if (!text) return;
       if (sessionIsLive()) {
+        const ctxFields = eventContextFields({ sourceTitle: command.sourceTitle });
         sessions.addEvent({
           kind: "manual_note",
           title: text.length > 70 ? `${text.slice(0, 69)}…` : text,
           text,
-          sourceTitle: command.sourceTitle,
+          sourceApp: ctxFields.sourceApp,
+          sourceTitle: ctxFields.sourceTitle ?? command.sourceTitle,
+          metadata: ctxFields.metadata,
         });
       } else {
         moments.add({ kind: "note", note: text, sourceTitle: command.sourceTitle });
@@ -359,11 +411,14 @@ async function handleSessionCommand(command: GlassCommand): Promise<void> {
       push();
       try {
         const result = await capturePrimaryScreen();
+        const ctxFields = eventContextFields({ captureSource: result.sourceName });
         const event = sessions.addEvent({
           kind: "screen_capture",
           title: `Screen capture (${result.width}×${result.height})`,
-          sourceTitle: result.sourceName,
+          sourceApp: ctxFields.sourceApp,
+          sourceTitle: ctxFields.sourceTitle ?? result.sourceName,
           importance: "medium",
+          metadata: ctxFields.metadata,
         });
         if (event) {
           const refs = await saveSessionScreenshot(session.id, event.id, result.imageDataUrl);
@@ -435,8 +490,12 @@ async function handleSessionCommand(command: GlassCommand): Promise<void> {
     case "session-send":
       await sendSession(false);
       break;
+    case "session-open-in-iivo":
     case "session-analyze-council":
       await sendSession(true);
+      break;
+    case "session-analyze-now":
+      await analyzeSessionNow();
       break;
     case "session-send-event":
       await sendSessionEvent(command.id);
@@ -478,15 +537,16 @@ async function sendSession(forCouncilAnalysis: boolean): Promise<void> {
     sessions.addEvent({
       kind: "iivo_sent",
       title: forCouncilAnalysis
-        ? `Session analysis sent to IIVO (${eventCount} events, ${insightCount} insights)`
+        ? `Session opened in IIVO (${eventCount} events, ${insightCount} insights)`
         : `Session sent to IIVO (${eventCount} events, ${insightCount} insights)`,
     });
+    state.iivoAnalysis = { ...state.iivoAnalysis, contextId: item.id };
     await openHandoff(item.id);
     state.sessionActionStatus = "opened";
     state.lastNotice = forCouncilAnalysis
       ? truncated
-        ? "Session analysis opened in IIVO (timeline truncated)."
-        : "Session analysis opened in IIVO."
+        ? "Opened in IIVO (timeline truncated)."
+        : "Opened in IIVO with session context."
       : truncated
         ? "Session sent to IIVO (timeline truncated for size)."
         : "Session sent to IIVO.";
@@ -495,6 +555,53 @@ async function sendSession(forCouncilAnalysis: boolean): Promise<void> {
     state.lastError = err instanceof Error ? err.message : "Send session failed";
     state.sessionActionStatus = "failed";
     dispatchPrivacy({ type: "CAPTURE_DONE", at: new Date().toISOString() });
+  }
+}
+
+async function analyzeSessionNow(): Promise<void> {
+  const session = sessions.current();
+  if (!session) {
+    state.lastNotice = "No session to analyze.";
+    push();
+    return;
+  }
+  state.lastError = undefined;
+  state.iivoAnalysis = { status: "running", updatedAt: new Date().toISOString() };
+  push();
+
+  const estimate = await estimateCouncilCredits(config, buildSessionAnalysisPrompt());
+  if (estimate) {
+    state.iivoAnalysis = {
+      ...state.iivoAnalysis,
+      estimatedCredits: estimate.estimatedCredits,
+    };
+    state.lastNotice = `Analyze Now may use ~${estimate.estimatedCredits} credits (${estimate.currentCredits} remaining).`;
+    push();
+  }
+
+  try {
+    const result = await runCouncilAnalysis(config, buildCouncilRunRequest(session));
+    state.iivoAnalysis = {
+      status: "done",
+      text: result.answer,
+      runId: result.runId,
+      updatedAt: new Date().toISOString(),
+    };
+    sessions.addEvent({
+      kind: "iivo_analysis",
+      title: "IIVO Council analysis",
+      text: result.answer,
+      importance: "high",
+    });
+    state.lastNotice = "Analysis complete — see IIVO Analysis below.";
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Analysis failed";
+    state.iivoAnalysis = {
+      status: "failed",
+      error: msg,
+      updatedAt: new Date().toISOString(),
+    };
+    state.lastError = buildAnalysisFailureNotice(msg);
   }
 }
 
@@ -560,6 +667,7 @@ function registerScreenshotProtocol(): void {
 
 function registerIpc(): void {
   ipcMain.handle(IPC.getState, () => snapshot());
+  ipcMain.handle(IPC.windowContextGet, () => getCurrentWindowContext());
 
   ipcMain.on(IPC.command, (_event, command: GlassCommand) => {
     void handleCommand(command).catch((err) => {
@@ -578,6 +686,7 @@ app.whenReady().then(async () => {
   registerScreenshotProtocol();
   moments = await loadMoments();
   sessions = await loadSessions();
+  state.windowContext = await getCurrentWindowContext();
   registerIpc();
   createWindows();
   push();

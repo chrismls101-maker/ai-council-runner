@@ -12,7 +12,8 @@ import type {
 } from "./types.ts";
 import type { PrivacyState } from "./privacyState.ts";
 import type { GlassSession } from "./sessionTypes.ts";
-import type { TranscriptionMode } from "./transcriptionTypes.ts";
+import type { TranscriptionMode } from "./audioCaptureTypes.ts";
+import type { WindowContext } from "./windowContextTypes.ts";
 
 export type SessionActionStatus =
   | "idle"
@@ -21,15 +22,24 @@ export type SessionActionStatus =
   | "opened"
   | "failed";
 
+export type AnalysisStatus = "idle" | "running" | "done" | "failed";
+
+export interface IivoAnalysisState {
+  status: AnalysisStatus;
+  text?: string;
+  runId?: string;
+  contextId?: string;
+  error?: string;
+  estimatedCredits?: number;
+  updatedAt?: string;
+}
+
 export const IPC = {
-  /** Renderer -> main: a user-initiated command. */
   command: "glass:command",
-  /** Renderer -> main (invoke): get a one-shot snapshot of state. */
   getState: "glass:get-state",
-  /** Main -> renderer: full state broadcast. */
   state: "glass:state",
-  /** Renderer -> main: toggle background click-through for the calling window. */
   setIgnoreMouse: "glass:set-ignore-mouse",
+  windowContextGet: "glass:window-context-get-current",
 } as const;
 
 export type GlassCommand =
@@ -51,7 +61,7 @@ export type GlassCommand =
   | { type: "open-chat" }
   | { type: "set-tab"; tab: PanelTab }
   | { type: "toggle-panel" }
-  // --- Session Intelligence ---
+  | { type: "window-context-refresh" }
   | { type: "session-start"; title?: string }
   | { type: "session-pause" }
   | { type: "session-resume" }
@@ -68,6 +78,9 @@ export type GlassCommand =
   | { type: "session-send-event"; id: string }
   | { type: "session-send-insight"; id: string }
   | { type: "session-send-summary" }
+  | { type: "session-open-in-iivo" }
+  | { type: "session-analyze-now" }
+  /** @deprecated use session-open-in-iivo */
   | { type: "session-analyze-council" };
 
 export interface GlassState {
@@ -84,4 +97,6 @@ export interface GlassState {
   sessionSummary: string;
   sessionActionStatus: SessionActionStatus;
   transcriptionMode: TranscriptionMode;
+  windowContext: WindowContext;
+  iivoAnalysis: IivoAnalysisState;
 }

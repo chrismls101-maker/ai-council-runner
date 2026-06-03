@@ -3,6 +3,7 @@ import type { GlassState } from "../shared/ipc.ts";
 import { emptyNotes } from "../shared/noteExtraction.ts";
 import { initialPrivacyState } from "../shared/privacyState.ts";
 import { DEFAULT_CONFIG } from "../shared/config.ts";
+import { WINDOW_CONTEXT_UNAVAILABLE_MESSAGE } from "../shared/windowContextTypes.ts";
 
 const fallbackState: GlassState = {
   privacy: initialPrivacyState,
@@ -15,6 +16,8 @@ const fallbackState: GlassState = {
   sessionSummary: "",
   sessionActionStatus: "idle",
   transcriptionMode: "manual",
+  windowContext: { status: "unavailable", reason: WINDOW_CONTEXT_UNAVAILABLE_MESSAGE },
+  iivoAnalysis: { status: "idle" },
 };
 
 export function useGlassState(): GlassState {

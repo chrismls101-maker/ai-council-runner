@@ -96,10 +96,9 @@ request) sending the summarized session to IIVO Council.
 
 ### Notes on detection
 
-- **Active app/window detection is NOT implemented.** Capture events may store the
-  Electron `desktopCapturer` **display/source name** when available (e.g. "Entire
-  screen"). Manual **Source title optional** field is available on notes. The UI
-  never claims active-app detection works.
+- **Optional active app/window detection** on macOS requires Accessibility permission.
+  Without it, capture source name + manual source title are used. The UI never claims
+  active-app detection works when permission is missing.
 - Insight extraction is fully **deterministic and local** (rule-based cue words +
   recurring-term detection). There are no hidden/continuous LLM calls. The only
   network calls are the explicit "Send … to IIVO" actions you trigger.
@@ -130,6 +129,57 @@ request) sending the summarized session to IIVO Council.
       events when session active; Stop Listening works.
 - [ ] No listening on launch.
 
+## Glass v1.2 — analysis, transcription, and source context
+
+### v1.2 checklist
+
+1. Launch IIVO server: `npm run dev` (repo root).
+2. Launch Glass: `npm run glass:dev` (repo root).
+3. **Start Session** — dock pill → Session active.
+4. **Capture Screen** — confirm timeline `screen capture` event.
+5. Confirm **source title** captured (display/source name) or **Manual source title** /
+   permission message shown in Session tab **Source context**.
+6. Add **manual transcript** via Context tab (paste + Add to Session).
+7. Try **Microphone** mode if available — Start Listening only on click; chunks become
+   `transcript_note` events when session active.
+8. Select **System Audio — Not available yet** — confirm message says not implemented
+   (no fake transcript).
+9. **Extract Insights** — insight cards appear.
+10. Summary tab → **Open in IIVO** — context item created, browser opens
+    `?lensAsk=<id>` with context chip.
+11. Confirm `?lensAsk=<id>` opens with session context attached.
+12. Summary tab → **Analyze Now** — direct `/api/run-council` call; answer appears under
+    **IIVO Analysis** (not auto-run on launch).
+13. Confirm analysis appears in Session timeline as `iivo_analysis` with **Copy Analysis**.
+14. Quit and reopen Glass — session persists.
+15. Confirm screenshot thumbnail still loads from durable storage.
+16. Delete screenshot file manually under `userData/session-screenshots/`.
+17. Confirm UI shows **Screenshot unavailable.** — no crash.
+18. Optional: grant macOS Accessibility → **Refresh** source context shows active app/window.
+
+### Source context (v1.2)
+
+- **Optional** active app/window detection on macOS via AppleScript (Accessibility-gated).
+- Without permission: UI shows **Active app detection requires permission** — does not
+  claim detection works.
+- Screen capture stores `desktopCapturer` source name when available.
+- Manual **Source title optional** field on notes always works.
+
+### Direct Analyze Now vs Open in IIVO
+
+- **Open in IIVO** — Context Bridge + `?lensAsk=<id>` (existing handoff).
+- **Analyze Now** — POST `/api/run-council` from Glass; result stored locally as
+  `iivo_analysis` event and shown in Summary **IIVO Analysis** panel.
+- Credit estimate shown when `/api/usage/estimate` responds.
+- On failure: error + **Open in IIVO** fallback.
+
+### Transcription (v1.2)
+
+- Source selector: Manual Paste | Microphone | System Audio — Not available yet.
+- System audio explicitly unavailable — no fake generation.
+- Microphone uses Web Speech when available; MediaRecorder record-only fallback possible.
+- No listening on launch.
+
 ## Privacy controls
 
 - Session recording starts **only** when you click **Start Session** — never on
@@ -147,8 +197,8 @@ request) sending the summarized session to IIVO Council.
 - Pause and Stop everything buttons.
 - Delete individual saved moments and Clear all moments.
 - No recording by default, no background capture on launch, no auto-send.
-- Copy shown in panel: "IIVO Glass only captures when you press Capture or Start
-  Listening."
+- Copy shown in panel: Glass captures screen/audio only when you start it. Session data
+  stays local until you send or analyze.
 
 ## Packaging
 

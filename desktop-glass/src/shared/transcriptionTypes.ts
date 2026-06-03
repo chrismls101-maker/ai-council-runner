@@ -1,18 +1,15 @@
 /**
- * Transcription modes and state for IIVO Glass v1.1.
- *
- * Mic transcription uses Web Speech API in the renderer when available.
- * Manual paste mode always works. Nothing records on launch.
+ * Transcription state reducer for IIVO Glass (shared, testable).
  */
 
-export type TranscriptionMode = "manual" | "mic_web_speech" | "unavailable";
+import type { TranscriptionMode, TranscriptionStatus } from "./audioCaptureTypes.ts";
+import { MICROPHONE_UNAVAILABLE_MESSAGE } from "./audioCaptureTypes.ts";
 
-export type TranscriptionStatus = "idle" | "listening" | "paused";
+export type { TranscriptionMode, TranscriptionStatus } from "./audioCaptureTypes.ts";
 
 export interface TranscriptionState {
   mode: TranscriptionMode;
   status: TranscriptionStatus;
-  /** Latest interim text from mic (not yet committed). */
   interimText?: string;
   lastError?: string;
 }
@@ -30,6 +27,10 @@ export const initialTranscriptionState: TranscriptionState = {
   status: "idle",
 };
 
+function isListeningCapableMode(mode: TranscriptionMode): boolean {
+  return mode === "microphone_web_speech" || mode === "microphone_media_recorder";
+}
+
 export function transcriptionReducer(
   state: TranscriptionState,
   action: TranscriptionAction,
@@ -39,11 +40,17 @@ export function transcriptionReducer(
       return {
         ...state,
         mode: action.mode,
-        status: action.mode === "unavailable" ? "idle" : state.status,
+        status:
+          action.mode === "system_audio_unavailable" || action.mode === "manual"
+            ? "idle"
+            : state.status,
         lastError: undefined,
       };
     case "START_LISTENING":
-      if (state.mode === "unavailable") return state;
+      if (state.mode === "system_audio_unavailable" || state.mode === "manual") return state;
+      if (!isListeningCapableMode(state.mode)) {
+        return { ...state, lastError: MICROPHONE_UNAVAILABLE_MESSAGE };
+      }
       return { ...state, status: "listening", lastError: undefined };
     case "STOP_LISTENING":
       return { ...state, status: "idle", interimText: undefined };
@@ -57,19 +64,3 @@ export function transcriptionReducer(
       return state;
   }
 }
-
-/** Detect whether Web Speech API is likely available (renderer-only check). */
-export function detectWebSpeechAvailable(win?: Window): boolean {
-  if (!win) return false;
-  return !!(win.SpeechRecognition || win.webkitSpeechRecognition);
-}
-
-export function resolveTranscriptionMode(
-  webSpeechAvailable: boolean,
-): TranscriptionMode {
-  if (webSpeechAvailable) return "mic_web_speech";
-  return "unavailable";
-}
-
-export const TRANSCRIPTION_UNAVAILABLE_MESSAGE =
-  "Microphone transcription is not available in this build. Paste transcript manually.";

@@ -18,6 +18,7 @@ export type GlassSessionEventKind =
   | "saved_moment"
   | "manual_note"
   | "iivo_sent"
+  | "iivo_analysis"
   | "insight_detected"
   | "hypothesis_detected"
   | "action_detected"

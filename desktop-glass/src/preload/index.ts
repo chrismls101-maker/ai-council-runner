@@ -5,6 +5,7 @@
 
 import { contextBridge, ipcRenderer } from "electron";
 import { IPC, type GlassCommand, type GlassState } from "../shared/ipc.ts";
+import type { WindowContext } from "../shared/windowContextTypes.ts";
 
 const glassApi = {
   send(command: GlassCommand): void {
@@ -12,6 +13,9 @@ const glassApi = {
   },
   getState(): Promise<GlassState> {
     return ipcRenderer.invoke(IPC.getState) as Promise<GlassState>;
+  },
+  getWindowContext(): Promise<WindowContext> {
+    return ipcRenderer.invoke(IPC.windowContextGet) as Promise<WindowContext>;
   },
   onState(listener: (state: GlassState) => void): () => void {
     const handler = (_event: unknown, state: GlassState): void => listener(state);

@@ -1,17 +1,28 @@
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { send } from "./useGlassState.ts";
 import {
-  detectWebSpeechAvailable,
-  initialTranscriptionState,
-  resolveTranscriptionMode,
-  transcriptionReducer,
-  TRANSCRIPTION_UNAVAILABLE_MESSAGE,
+  TRANSCRIPTION_MODE_LABELS,
   type TranscriptionMode,
+} from "../shared/audioCaptureTypes.ts";
+import {
+  buildProviderSnapshot,
+  canStartListening,
+  modeStatusMessage,
+  resolveMicrophoneMode,
+} from "../shared/transcriptionProviders.ts";
+import {
+  initialTranscriptionState,
+  transcriptionReducer,
 } from "../shared/transcriptionTypes.ts";
-
 import type { GlassSpeechRecognition } from "./speech.d.ts";
 
 type SpeechRecognitionCtor = new () => GlassSpeechRecognition;
+
+const MODE_OPTIONS: TranscriptionMode[] = [
+  "manual",
+  "microphone_web_speech",
+  "system_audio_unavailable",
+];
 
 function getSpeechRecognition(): SpeechRecognitionCtor | null {
   const w = window;
@@ -19,36 +30,61 @@ function getSpeechRecognition(): SpeechRecognitionCtor | null {
 }
 
 export function useTranscription(): {
-  mode: TranscriptionMode;
+  selectedMode: TranscriptionMode;
+  effectiveMode: TranscriptionMode;
   status: "idle" | "listening" | "paused";
   interimText?: string;
-  unavailableMessage: string;
+  statusMessage: string;
+  modeLabels: Record<TranscriptionMode, string>;
+  modeOptions: TranscriptionMode[];
+  canListen: boolean;
+  setMode: (mode: TranscriptionMode) => void;
   startListening: () => void;
   stopListening: () => void;
   addChunkToSession: () => void;
 } {
   const [state, dispatch] = useReducer(transcriptionReducer, initialTranscriptionState);
+  const [selectedMode, setSelectedMode] = useState<TranscriptionMode>("manual");
   const recognitionRef = useRef<GlassSpeechRecognition | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+
+  const snapshot = useMemo(
+    () => buildProviderSnapshot(selectedMode, window),
+    [selectedMode],
+  );
+
+  const effectiveMode = useMemo(() => {
+    if (selectedMode === "microphone_web_speech") {
+      return resolveMicrophoneMode(snapshot);
+    }
+    return selectedMode;
+  }, [selectedMode, snapshot]);
 
   useEffect(() => {
-    const available = detectWebSpeechAvailable(window);
-    const mode = resolveTranscriptionMode(available);
-    dispatch({ type: "SET_MODE", mode });
-    send({ type: "transcription-set-mode", mode });
+    dispatch({ type: "SET_MODE", mode: effectiveMode });
+    send({ type: "transcription-set-mode", mode: effectiveMode });
+  }, [effectiveMode]);
+
+  const stopMediaRecorder = useCallback(() => {
+    mediaRecorderRef.current?.stop();
+    mediaRecorderRef.current = null;
+    mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
+    mediaStreamRef.current = null;
   }, []);
 
   const stopListening = useCallback(() => {
     recognitionRef.current?.stop();
     recognitionRef.current = null;
+    stopMediaRecorder();
     dispatch({ type: "STOP_LISTENING" });
     send({ type: "pause" });
-  }, []);
+  }, [stopMediaRecorder]);
 
-  const startListening = useCallback(() => {
-    if (state.mode === "unavailable") return;
+  const startWebSpeech = useCallback(() => {
     const Ctor = getSpeechRecognition();
     if (!Ctor) {
-      dispatch({ type: "SET_ERROR", message: TRANSCRIPTION_UNAVAILABLE_MESSAGE });
+      dispatch({ type: "SET_ERROR", message: modeStatusMessage("microphone_web_speech", snapshot) });
       return;
     }
     const recognition = new Ctor();
@@ -80,7 +116,42 @@ export function useTranscription(): {
     recognition.start();
     dispatch({ type: "START_LISTENING" });
     send({ type: "start-listening" });
-  }, [state.mode, stopListening]);
+  }, [snapshot, stopListening]);
+
+  const startMediaRecorder = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      const recorder = new MediaRecorder(stream);
+      recorder.onstop = () => stopMediaRecorder();
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      dispatch({ type: "START_LISTENING" });
+      send({ type: "start-listening" });
+    } catch {
+      dispatch({ type: "SET_ERROR", message: modeStatusMessage("microphone_media_recorder", snapshot) });
+    }
+  }, [snapshot, stopMediaRecorder]);
+
+  const startListening = useCallback(() => {
+    if (selectedMode === "system_audio_unavailable") return;
+    if (!canStartListening(effectiveMode, snapshot)) return;
+    if (effectiveMode === "microphone_web_speech") {
+      startWebSpeech();
+      return;
+    }
+    if (effectiveMode === "microphone_media_recorder") {
+      void startMediaRecorder();
+    }
+  }, [selectedMode, effectiveMode, snapshot, startWebSpeech, startMediaRecorder]);
+
+  const setMode = useCallback(
+    (mode: TranscriptionMode) => {
+      if (state.status === "listening") stopListening();
+      setSelectedMode(mode);
+    },
+    [state.status, stopListening],
+  );
 
   const addChunkToSession = useCallback(() => {
     const chunk = state.interimText?.trim();
@@ -90,10 +161,15 @@ export function useTranscription(): {
   }, [state.interimText]);
 
   return {
-    mode: state.mode,
+    selectedMode,
+    effectiveMode,
     status: state.status,
     interimText: state.interimText,
-    unavailableMessage: TRANSCRIPTION_UNAVAILABLE_MESSAGE,
+    statusMessage: modeStatusMessage(selectedMode, snapshot),
+    modeLabels: TRANSCRIPTION_MODE_LABELS,
+    modeOptions: MODE_OPTIONS,
+    canListen: canStartListening(effectiveMode, snapshot),
+    setMode,
     startListening,
     stopListening,
     addChunkToSession,
