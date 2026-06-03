@@ -9,6 +9,14 @@ export const SUPPORT_REWRITE_INTENT =
 export const LEGAL_POLICY_INTENT =
   /\b(privacy promises?|legal risks?|policy awareness|compliance caveats?|what (should|must) (it|we|they) avoid (saying|making|claiming)|avoid making|not legal advice|consult (a )?lawyer|data (use|retention|deletion)|uploaded files|collects customer)\b/i;
 
+/** Simple follow-up message deliverables — direct answer, not sales council. */
+export const FOLLOW_UP_MESSAGE_INTENT =
+  /\b((write|draft|rewrite|make) (a |an |this |the )?(short )?follow[- ]?up( (email|reply|message|note|text))?|rewrite (this |the )?follow[- ]?up|make (this |the )?follow[- ]?up (more |sound )?(professional|human|clearer))\b/i;
+
+/** Sales follow-up strategy / campaign planning — may stay on Sales Attack. */
+export const FOLLOW_UP_STRATEGY_INTENT =
+  /\b(follow[- ]?up (campaign|strategy|sequence|plan)|prospecting sequence|gtm follow[- ]?up|multi-touch sequence)\b/i;
+
 /** Copy polish / marketing rewrite — not outbound sales. */
 export const COPY_REWRITE_INTENT =
   /\b(rewrite (the )?(hero|headline|copy|message|sentence|paragraph|text|tagline)|rewrite this|make this (sound|clearer|less corporate|more human|human)|make this clearer|turn this into plain english|improve this copy|polish this copy|write a better version of (this |the )?sentence|remove jargon|simplify this message|so a normal (business owner|person|customer) understands|less corporate|plain english|homepage says|hero so a|jargon-heavy|understands it)\b/i;
@@ -56,7 +64,12 @@ export function isCopyRewriteIntent(prompt: string): boolean {
   const text = normalizePromptForRouting(prompt.trim());
   if (!text) return false;
   if (SALES_OUTREACH_INTENT.test(text)) return false;
-  return COPY_REWRITE_INTENT.test(text) || SUPPORT_REWRITE_INTENT.test(text);
+  if (FOLLOW_UP_STRATEGY_INTENT.test(text)) return false;
+  return (
+    COPY_REWRITE_INTENT.test(text) ||
+    SUPPORT_REWRITE_INTENT.test(text) ||
+    FOLLOW_UP_MESSAGE_INTENT.test(text)
+  );
 }
 
 export function isFastLaneDirectIntent(prompt: string): boolean {
@@ -77,10 +90,17 @@ export function forcesDirectAnswerRoute(prompt: string): boolean {
   const text = normalizePromptForRouting(prompt.trim());
   if (!text) return false;
   if (SALES_OUTREACH_INTENT.test(text)) return false;
-  if (COPY_REWRITE_INTENT.test(text) || SUPPORT_REWRITE_INTENT.test(text) || LEGAL_POLICY_INTENT.test(text)) {
+  if (FOLLOW_UP_STRATEGY_INTENT.test(text)) return false;
+  if (
+    COPY_REWRITE_INTENT.test(text) ||
+    SUPPORT_REWRITE_INTENT.test(text) ||
+    LEGAL_POLICY_INTENT.test(text) ||
+    FOLLOW_UP_MESSAGE_INTENT.test(text)
+  ) {
     return true;
   }
   if (FAST_LANE_DIRECT_INTENT.test(text)) return true;
+  if (DIRECT_PATTERNS.some((re) => re.test(text))) return true;
   return false;
 }
 

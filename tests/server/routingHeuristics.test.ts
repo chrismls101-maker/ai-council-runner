@@ -69,3 +69,27 @@ test("product priority routes product-decision", () => {
   assert.ok(route);
   assert.equal(route.selectedWorkflow, "product-decision");
 });
+
+test("Who is it for? routes direct_answer", () => {
+  const route = classifyPromptRoute("Who is it for?");
+  assert.ok(route);
+  assert.equal(route.selectedWorkflow, DIRECT_ANSWER_ID);
+});
+
+test("simple follow-up email routes direct_answer", () => {
+  const route = classifyPromptRoute("Write a follow-up email.");
+  assert.ok(route);
+  assert.equal(route.selectedWorkflow, DIRECT_ANSWER_ID);
+});
+
+test("follow-up rewrite routes direct_answer", () => {
+  const route = classifyPromptRoute("Make this follow-up more professional.");
+  assert.ok(route);
+  assert.equal(route.selectedWorkflow, DIRECT_ANSWER_ID);
+});
+
+test("sales follow-up campaign strategy routes sales-attack", () => {
+  const route = classifyPromptRoute("Design a GTM follow-up campaign with ICP, objections, and sequence.");
+  assert.ok(route);
+  assert.equal(route.selectedWorkflow, "sales-attack");
+});

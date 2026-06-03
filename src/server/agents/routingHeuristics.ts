@@ -63,6 +63,14 @@ export function classifyPromptRoute(prompt: string): HeuristicRoute | null {
     };
   }
 
+  if (detectDirectAnswer(text)) {
+    return {
+      selectedWorkflow: DIRECT_ANSWER_ID,
+      reason: "Simple question or rewrite — one model is enough.",
+      confidence: 92,
+    };
+  }
+
   if (plan.lane.preferredRoute === "sales-attack" && plan.lane.lane !== "fast_direct") {
     return {
       selectedWorkflow: "sales-attack",
@@ -98,14 +106,6 @@ export function classifyPromptRoute(prompt: string): HeuristicRoute | null {
       selectedWorkflow: DIRECT_ANSWER_ID,
       reason: "Simple utility task — fast direct answer, no council.",
       confidence: 93,
-    };
-  }
-
-  if (detectDirectAnswer(text)) {
-    return {
-      selectedWorkflow: DIRECT_ANSWER_ID,
-      reason: "Simple question or rewrite — one model is enough.",
-      confidence: 92,
     };
   }
 

@@ -29,6 +29,20 @@ type IntentRule = {
 
 const INTENT_RULES: IntentRule[] = [
   {
+    intent: "direct_answer",
+    patterns: [
+      /^who is (it|this|that) for\??\s*$/i,
+      /^who is .+ for\??\s*$/i,
+      /^what is (it|this|that) for\??\s*$/i,
+      /^what (does|do) (it|this|that) do\??\s*$/i,
+      /^how is (it|this|that) different\??\s*$/i,
+      /^what makes (it|this|that) different\??\s*$/i,
+      /^(explain more|tell me more|what do you mean)\??\s*$/i,
+    ],
+    confidence: 88,
+    signal: "identity/follow-up question",
+  },
+  {
     intent: "vision_analysis",
     patterns: [
       /\b(analyze this screenshot|what do you see (in|on)|screenshot|screen shot|visually|layout critique|UI critique|design critique|this image|attached image)\b/i,
