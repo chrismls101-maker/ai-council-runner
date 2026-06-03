@@ -4,7 +4,6 @@ import type { ExternalContextRunTrace } from "../contextBridge/types.js";
 import type { VisionAnalysisTrace } from "../agents/runVisionAnswer.js";
 import type { VisionMemoryGuardTrace } from "../memory/visionMemoryGuard.js";
 import type { ResponsePlanTrace } from "../responseContracts/resolveResponsePlan.js";
-import type { ArtifactTrace } from "../artifacts/artifactTypes.js";
 import type { ExecutionModeTrace } from "../executionMode/executionModeTrace.js";
 import {
   AGENT_ORDER,
@@ -64,7 +63,6 @@ export interface CouncilExecutionTrace {
   visionAnalysis?: VisionAnalysisTrace;
   visionMemoryGuard?: VisionMemoryGuardTrace;
   responseContract?: ResponsePlanTrace;
-  artifact?: ArtifactTrace;
   executionMode?: ExecutionModeTrace;
 }
 
@@ -129,7 +127,6 @@ export function buildCouncilExecutionTrace(options: {
   includedPastOutcomeIds?: string[];
   externalContext?: ExternalContextRunTrace;
   responseContract?: ResponsePlanTrace;
-  artifact?: ArtifactTrace;
   executionMode?: ExecutionModeTrace;
 }): CouncilExecutionTrace {
   const {
@@ -140,7 +137,6 @@ export function buildCouncilExecutionTrace(options: {
     includedPastOutcomeIds,
     externalContext,
     responseContract,
-    artifact,
     executionMode,
   } = options;
   const allComplete =
@@ -169,7 +165,6 @@ export function buildCouncilExecutionTrace(options: {
     includedPastOutcomeCount: includedPastOutcomeIds?.length ?? 0,
     externalContext,
     responseContract,
-    artifact,
     executionMode,
   };
 }
@@ -185,7 +180,6 @@ export function buildDirectAnswerExecutionTrace(options: {
   visionAnalysis?: VisionAnalysisTrace;
   visionMemoryGuard?: VisionMemoryGuardTrace;
   responseContract?: ResponsePlanTrace;
-  artifact?: ArtifactTrace;
   executionMode?: ExecutionModeTrace;
 }): CouncilExecutionTrace {
   const {
@@ -199,7 +193,6 @@ export function buildDirectAnswerExecutionTrace(options: {
     visionAnalysis,
     visionMemoryGuard,
     responseContract,
-    artifact,
     executionMode,
   } = options;
   const config = AGENT_MODEL_CONFIG.strategy;
@@ -235,7 +228,6 @@ export function buildDirectAnswerExecutionTrace(options: {
     visionAnalysis,
     visionMemoryGuard,
     responseContract,
-    artifact,
     executionMode,
   };
 }

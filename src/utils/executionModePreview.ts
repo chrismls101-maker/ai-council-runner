@@ -3,7 +3,7 @@ import type { ExecutionMode, ExecutionModeDecision } from "../types/executionMod
 export async function previewExecutionMode(
   prompt: string,
   executionMode: ExecutionMode,
-  options?: { wantsVision?: boolean; inBuilderWorkspace?: boolean },
+  options?: { wantsVision?: boolean },
 ): Promise<ExecutionModeDecision> {
   const res = await fetch("/api/execution-mode/preview", {
     method: "POST",
@@ -12,7 +12,6 @@ export async function previewExecutionMode(
       prompt,
       executionMode,
       wantsVision: options?.wantsVision ?? false,
-      inBuilderWorkspace: options?.inBuilderWorkspace ?? false,
     }),
   });
   if (!res.ok) {

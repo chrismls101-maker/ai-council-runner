@@ -10,8 +10,6 @@ import {
   detectBleedTerms,
 } from "./qaBleedScoring.js";
 import { scoreAnswerContract } from "./dailyDriverContractScoring.js";
-import { scoreArtifactCompliance } from "./dailyDriverArtifactScoring.js";
-import { scoreBuilderWorkspace, type BuilderWorkspaceSignals } from "./dailyDriverBuilderScoring.js";
 
 export type AutoIssueType =
   | "memory_bleed"
@@ -50,8 +48,6 @@ const IIVO_UNPROMPTED =
 
 export interface ScenarioScoreOptions {
   durationMs?: number;
-  artifactType?: string | null;
-  hasArtifact?: boolean;
   effectiveExecutionMode?: string;
 }
 
@@ -336,29 +332,6 @@ export function scoreScenarioFriction(
         evidence: routeText,
         agentMessage: note,
       });
-    }
-  }
-
-  const artifactScore = scoreArtifactCompliance(scenario, answer, {
-    artifactType: options?.artifactType,
-    hasArtifact: options?.hasArtifact,
-  });
-  for (const f of artifactScore.frictions) {
-    if (!frictions.includes(f)) frictions.push(f);
-  }
-  for (const note of artifactScore.notes) {
-    notes.push(note);
-    agentMessages.push(note);
-  }
-
-  if (options?.builderWorkspace) {
-    const builderScore = scoreBuilderWorkspace(scenario, options.builderWorkspace);
-    for (const f of builderScore.frictions) {
-      if (!frictions.includes(f)) frictions.push(f);
-    }
-    for (const note of builderScore.notes) {
-      notes.push(note);
-      agentMessages.push(note);
     }
   }
 

@@ -7,5 +7,5 @@ export type ExecutionModeTrace = {
   targetLatencySeconds?: number;
   confirmationShown?: boolean;
   confirmationAccepted?: boolean;
-  confirmationKind?: "council" | "builder";
+  confirmationKind?: "council";
 };

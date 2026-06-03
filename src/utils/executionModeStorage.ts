@@ -3,7 +3,7 @@ import type { ExecutionMode } from "../types/executionMode";
 const KEY = "iivo_execution_mode_v1";
 const LEGACY_WORKFLOW_KEY = "iivo_workflow_preference";
 
-const VALID: ExecutionMode[] = ["auto", "quick", "council", "builder"];
+const VALID: ExecutionMode[] = ["auto", "quick", "council"];
 
 export function loadExecutionMode(): ExecutionMode {
   try {

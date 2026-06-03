@@ -4,41 +4,12 @@ import ChatComposer, {
   type ContextBridgeMenuAction,
 } from "./components/ChatComposer";
 import ConversationView from "./components/ConversationView";
-import BuilderCanvas from "./components/builder/BuilderCanvas";
-import ArtifactEditModal from "./components/artifacts/ArtifactEditModal";
-import {
-  persistBuilderModeAccepted,
-  requestArtifactSectionUpdate,
-  requestArtifactTransform,
-} from "./utils/artifactApi";
-import type { BuilderWorkspaceTab, SectionVariantType } from "./types/builderWorkspace";
-import type { ArtifactVersionState } from "./types/artifactVersions";
-import type { RelatedChild } from "./components/builder/RelatedArtifactsPanel";
-import type { VersionPersistenceMode } from "./utils/artifactApi";
-import {
-  loadMergedVersionState,
-  persistSectionVersion,
-  restoreSectionVersionWithServer,
-} from "./utils/artifactVersioning";
-import { createArtifactSnapshot } from "./utils/artifactSnapshot";
-import { buildBuilderContextItems } from "./utils/builderContext";
-import { cacheChildArtifact, loadCachedChildArtifact } from "./utils/artifactChildCache";
-import {
-  fetchArtifactRelationships,
-  fetchChildArtifact,
-  saveLocalRelationship,
-  transformTypeLabel,
-} from "./utils/artifactRelationships";
-import { updateArtifactSection } from "./utils/artifactMutations";
-import { sectionPlainText } from "./utils/artifactClipboard";
-import type { ArtifactSection } from "./types/artifacts";
 import LandingView from "./components/landing";
 import Sidebar from "./components/Sidebar";
 import WorkspaceHeader from "./components/WorkspaceHeader";
 import { formatEstimateLabel } from "./components/UsageIndicator";
 import CreditConfirmModal from "./components/CreditConfirmModal";
 import CouncilModeConfirm from "./components/CouncilModeConfirm";
-import BuilderModeConfirm from "./components/builder/BuilderModeConfirm";
 import {
   loadExecutionMode,
   saveExecutionMode,
@@ -119,14 +90,7 @@ import {
   clearConversationThreadSession,
   loadConversationThreadFromSession,
   saveConversationThreadToSession,
-  appendArtifactEventToTurn,
 } from "./utils/conversationTurn";
-import {
-  parseShareIdFromLocation,
-  clearShareIdFromLocation,
-  shareLinkLabel,
-} from "./utils/artifactShare";
-import { fetchArtifactSharePayload } from "./utils/artifactApi";
 import { buildConversationContextForApi } from "./utils/conversationContext";
 import {
   isChatScrollNearBottom,
@@ -164,9 +128,7 @@ import {
   type SaveMemoryDraft,
   type TokenMode,
   type WorkflowOption,
-  type ConversationArtifactEvent,
   type ConversationTurn,
-  type IivoArtifact,
 } from "./types";
 
 function emptyOutputs(): AgentOutputs {
@@ -209,7 +171,6 @@ function applyResultToState(
     setDecisionRecord: (v: DecisionRecord | null) => void;
     setIncludedMemories: (v: IncludedMemorySummary[]) => void;
     setActiveMemoryMode: (v: MemoryMode | undefined) => void;
-    setArtifact: (v: IivoArtifact | null) => void;
   },
 ) {
   setters.setOutputs(result.outputs);
@@ -233,7 +194,6 @@ function applyResultToState(
   setters.setDecisionRecord(result.decisionRecord ?? null);
   setters.setIncludedMemories(result.includedMemories ?? []);
   setters.setActiveMemoryMode(result.memoryMode);
-  setters.setArtifact(result.artifact ?? null);
 }
 
 async function fetchDecisionRecordForRun(runId: string): Promise<DecisionRecord | null> {
@@ -256,7 +216,6 @@ export default function App() {
     loadExecutionMode(),
   );
   const [councilConfirmOpen, setCouncilConfirmOpen] = useState(false);
-  const [builderPreRunConfirmOpen, setBuilderPreRunConfirmOpen] = useState(false);
   const [benchmark, setBenchmark] = useState(false);
   const [workflows, setWorkflows] = useState<WorkflowOption[]>([]);
   const [running, setRunning] = useState(false);
@@ -336,26 +295,6 @@ export default function App() {
   const [conversationTurns, setConversationTurns] = useState<ConversationTurn[]>(() =>
     loadConversationThreadFromSession(),
   );
-  const [activeArtifact, setActiveArtifact] = useState<IivoArtifact | null>(null);
-  const [builderModeActive, setBuilderModeActive] = useState(false);
-  const [builderCanvasDismissed, setBuilderCanvasDismissed] = useState(false);
-  const [builderLoading, setBuilderLoading] = useState(false);
-  const [artifactSectionLoading, setArtifactSectionLoading] = useState<string | null>(null);
-  const [editSection, setEditSection] = useState<ArtifactSection | null>(null);
-  const [builderTab, setBuilderTab] = useState<BuilderWorkspaceTab>("compose");
-  const [artifactVersionState, setArtifactVersionState] = useState<ArtifactVersionState | null>(
-    null,
-  );
-  const [ignoredBuilderFixes, setIgnoredBuilderFixes] = useState<Set<string>>(() => new Set());
-  const [transformLoading, setTransformLoading] = useState(false);
-  const [, setTransformsCreated] = useState(0);
-  const [builderRootArtifact, setBuilderRootArtifact] = useState<IivoArtifact | null>(null);
-  const [builderFocusArtifact, setBuilderFocusArtifact] = useState<IivoArtifact | null>(null);
-  const [relatedChildren, setRelatedChildren] = useState<RelatedChild[]>([]);
-  const [lastTransformLabel, setLastTransformLabel] = useState<string | undefined>();
-  const [compareVersionId, setCompareVersionId] = useState<string | null>(null);
-  const [versionPersistenceMode, setVersionPersistenceMode] =
-    useState<VersionPersistenceMode>("local");
   const [usageSummary, setUsageSummary] = useState<UsageSummaryResponse | null>(null);
   const [creditEstimateLabel, setCreditEstimateLabel] = useState<string | null>(null);
   const [creditWarning, setCreditWarning] = useState<string | null>(null);
@@ -603,62 +542,6 @@ export default function App() {
     setTimeout(() => setCopyFeedback(null), 2000);
   };
 
-  useEffect(() => {
-    if (!workspaceBootstrapped || !backendReachable) return;
-    const shareId = parseShareIdFromLocation(window.location.search);
-    if (!shareId) return;
-
-    let cancelled = false;
-    void fetchArtifactSharePayload(shareId).then((payload) => {
-      if (cancelled) return;
-      if (!payload?.artifact) {
-        showCopyFeedback("Share link not found or disabled.");
-        clearShareIdFromLocation();
-        return;
-      }
-      const { share, artifact } = payload;
-      cacheChildArtifact(artifact);
-      setIsArchivedView(false);
-      setArchivedRunId(null);
-      setBuilderModeActive(false);
-      setBuilderCanvasDismissed(false);
-      setActiveArtifact(artifact);
-      setSubmittedPrompt(`Shared: ${artifact.title}`);
-      if (share.runId) setRunId(share.runId);
-      const turn: ConversationTurn = {
-        id: `share-${share.shareId}`,
-        submittedAt: share.createdAt,
-        userPrompt: `Opened shared artifact: ${artifact.title}`,
-        submittedAttachments: [],
-        status: "complete",
-        runId: share.runId ?? null,
-        outputs: emptyOutputs(),
-        agentMeta: initAgentMeta(),
-        agentCosts: {},
-        costSummary: null,
-        runStatus: "complete",
-        workflowName: null,
-        workflow: "",
-        tokenMode: "balanced",
-        routerDecision: null,
-        errors: [],
-        benchmarkAnswer: null,
-        benchmarkCost: null,
-        benchmarkChecks: {},
-        benchmarkNotes: "",
-        executionTrace: null,
-        artifact,
-        artifactSnapshot: createArtifactSnapshot(artifact, share.runId),
-      };
-      setConversationTurns([turn]);
-      showCopyFeedback(shareLinkLabel(share));
-      clearShareIdFromLocation();
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [workspaceBootstrapped, backendReachable]);
-
   const handlePresetChange = (value: string) => {
     if (isArchivedView) return;
     const next = normalizePresetId(value);
@@ -703,10 +586,6 @@ export default function App() {
     setIgnoredSuggestions([]);
     setBenchmarkChecks({});
     setBenchmarkNotes("");
-    setActiveArtifact(null);
-    setBuilderModeActive(false);
-    setBuilderCanvasDismissed(false);
-    setBuilderLoading(false);
   };
 
   const appendActiveTurnToThread = useCallback(() => {
@@ -749,7 +628,6 @@ export default function App() {
         decisionRecord,
         includedMemories,
         memoryMode: activeMemoryMode ?? memoryMode,
-        artifact: activeArtifact ?? undefined,
       }),
     ]);
   }, [
@@ -783,411 +661,12 @@ export default function App() {
     includedMemories,
     activeMemoryMode,
     memoryMode,
-    activeArtifact,
   ]);
 
   const clearConversationThread = useCallback(() => {
     setConversationTurns([]);
     clearConversationThreadSession();
   }, []);
-
-  const activeAnswerText =
-    outputs.finalJudge || outputs.strategy || "";
-
-  const applyBuilderModeChoice = useCallback(
-    async (accepted: boolean) => {
-      setExecutionTrace((prev) => {
-        if (!prev) return prev;
-        const base =
-          prev.artifact ??
-          (activeArtifact
-            ? {
-                artifactType: activeArtifact.type,
-                renderMode: activeArtifact.renderMode,
-                builderModeSuggested: activeArtifact.renderMode === "canvas",
-              }
-            : undefined);
-        if (!base) return prev;
-        return {
-          ...prev,
-          artifact: { ...base, builderModeAccepted: accepted },
-        };
-      });
-      const id = archivedRunId ?? runId;
-      if (id) {
-        try {
-          await persistBuilderModeAccepted(id, accepted);
-        } catch {
-          /* best-effort trace persistence */
-        }
-      }
-    },
-    [activeArtifact, archivedRunId, runId],
-  );
-
-  const bumpBuilderTrace = useCallback(
-    (patch: {
-      opened?: boolean;
-      activeTab?: BuilderWorkspaceTab;
-      buildMapCompleteness?: number;
-      qualityScore?: number;
-      suggestedFixCount?: number;
-      versionCount?: number;
-      versionPersistence?: VersionPersistenceMode;
-      versionSnapshotMode?: import("./types/artifactVersions").VersionSnapshotMode;
-      transformsCreated?: number;
-      saved?: boolean;
-      shareActionUsed?: string;
-      shareLinkCreated?: boolean;
-    }) => {
-      setExecutionTrace((prev) => {
-        if (!prev?.artifact) return prev;
-        return {
-          ...prev,
-          artifact: {
-            ...prev.artifact,
-            builder: {
-              opened: patch.opened ?? prev.artifact.builder?.opened ?? builderModeActive,
-              activeTab: patch.activeTab ?? prev.artifact.builder?.activeTab,
-              buildMapCompleteness:
-                patch.buildMapCompleteness ?? prev.artifact.builder?.buildMapCompleteness,
-              qualityScore: patch.qualityScore ?? prev.artifact.builder?.qualityScore,
-              suggestedFixCount:
-                patch.suggestedFixCount ?? prev.artifact.builder?.suggestedFixCount,
-              versionCount: patch.versionCount ?? prev.artifact.builder?.versionCount,
-              versionPersistence:
-                patch.versionPersistence ?? prev.artifact.builder?.versionPersistence,
-              versionSnapshotMode:
-                patch.versionSnapshotMode ?? prev.artifact.builder?.versionSnapshotMode,
-              transformsCreated:
-                patch.transformsCreated ?? prev.artifact.builder?.transformsCreated,
-              saved: patch.saved ?? prev.artifact.builder?.saved,
-              shareActionUsed:
-                patch.shareActionUsed ?? prev.artifact.builder?.shareActionUsed,
-              shareLinkCreated:
-                patch.shareLinkCreated ?? prev.artifact.builder?.shareLinkCreated,
-            },
-          },
-        };
-      });
-    },
-    [builderModeActive],
-  );
-
-  const syncBuilderArtifacts = useCallback((root: IivoArtifact) => {
-    setBuilderRootArtifact(root);
-    setBuilderFocusArtifact(root);
-    void fetchArtifactRelationships(root.id).then(async (rels) => {
-      const children: RelatedChild[] = [];
-      for (const rel of rels) {
-        const cached = loadCachedChildArtifact(rel.childArtifactId);
-        const fetched = cached ?? (await fetchChildArtifact(rel.childArtifactId));
-        if (fetched) cacheChildArtifact(fetched);
-        children.push({ relationship: rel, artifact: fetched ?? undefined });
-      }
-      setRelatedChildren(children);
-    });
-  }, []);
-
-  useEffect(() => {
-    if (builderModeActive && activeArtifact && !builderRootArtifact) {
-      syncBuilderArtifacts(activeArtifact);
-    }
-  }, [builderModeActive, activeArtifact, builderRootArtifact, syncBuilderArtifacts]);
-
-  useEffect(() => {
-    const focus = builderFocusArtifact;
-    if (!focus || !builderModeActive) {
-      if (!builderModeActive) setArtifactVersionState(null);
-      return;
-    }
-    let cancelled = false;
-    void loadMergedVersionState(focus.id, focus.sections).then(({ state, mode, snapshotMode }) => {
-      if (cancelled) return;
-      setArtifactVersionState(state);
-      setVersionPersistenceMode(mode);
-      bumpBuilderTrace({
-        versionCount: Object.values(state.sectionVersions).flat().length,
-        versionPersistence: mode,
-        versionSnapshotMode: snapshotMode,
-      });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [builderFocusArtifact?.id, builderModeActive]);
-
-  const handleOpenInBuilder = useCallback(
-    (artifactOverride?: IivoArtifact | null) => {
-      const target = artifactOverride ?? activeArtifact;
-      if (!target || target.type === "plain_answer") return;
-      setActiveArtifact(target);
-      syncBuilderArtifacts(target);
-      setBuilderModeActive(true);
-      setBuilderCanvasDismissed(false);
-      setBuilderTab("compose");
-      bumpBuilderTrace({ opened: true, activeTab: "compose" });
-    },
-    [activeArtifact, bumpBuilderTrace, syncBuilderArtifacts],
-  );
-
-  const handleOpenImageStudio = useCallback(
-    (artifactOverride?: IivoArtifact | null) => {
-      const target = artifactOverride ?? activeArtifact;
-      if (!target || target.type === "plain_answer") return;
-      setActiveArtifact(target);
-      syncBuilderArtifacts(target);
-      setBuilderModeActive(true);
-      setBuilderCanvasDismissed(false);
-      setBuilderTab("visuals");
-      bumpBuilderTrace({ opened: true, activeTab: "visuals" });
-    },
-    [activeArtifact, bumpBuilderTrace, syncBuilderArtifacts],
-  );
-
-  const handleRegenerateSection = useCallback(
-    async (
-      section: ArtifactSection,
-      options?: { variantType?: SectionVariantType; instruction?: string },
-    ) => {
-      const focus = builderFocusArtifact ?? activeArtifact;
-      if (!focus || !submittedPrompt) return;
-      setArtifactSectionLoading(section.id);
-      try {
-        const { content } = await requestArtifactSectionUpdate({
-          userPrompt: submittedPrompt,
-          artifactType: focus.type,
-          sectionLabel: section.label,
-          sectionContent: sectionPlainText(section),
-          fullAnswer: activeAnswerText,
-          action: "regenerate",
-          variantType: options?.variantType,
-          editInstruction: options?.instruction,
-          tokenMode,
-        });
-        const oldSection = focus.sections.find((s) => s.id === section.id);
-        if (oldSection && artifactVersionState) {
-          const { state, mode } = await persistSectionVersion(
-            artifactVersionState,
-            oldSection,
-            options?.variantType ? "variant" : "regenerate",
-            { instruction: options?.instruction, variantType: options?.variantType },
-          );
-          setArtifactVersionState(state);
-          setVersionPersistenceMode(mode);
-          bumpBuilderTrace({
-            versionCount: Object.values(state.sectionVersions).flat().length,
-            versionPersistence: mode,
-          });
-        }
-        const updated = updateArtifactSection(focus, section.id, content);
-        setBuilderFocusArtifact(updated);
-        if (activeArtifact?.id === focus.id) setActiveArtifact(updated);
-        if (builderRootArtifact?.id === focus.id) setBuilderRootArtifact(updated);
-        showCopyFeedback(`${section.label} regenerated`);
-      } catch (err) {
-        showCopyFeedback(err instanceof Error ? err.message : "Regenerate failed");
-      } finally {
-        setArtifactSectionLoading(null);
-      }
-    },
-    [
-      activeArtifact,
-      builderFocusArtifact,
-      builderRootArtifact,
-      artifactVersionState,
-      submittedPrompt,
-      activeAnswerText,
-      tokenMode,
-      bumpBuilderTrace,
-    ],
-  );
-
-  const handleEditSectionSave = useCallback(
-    async (instruction: string, editedContent: string) => {
-      const focus = builderFocusArtifact ?? activeArtifact;
-      if (!focus || !submittedPrompt || !editSection) return;
-      setArtifactSectionLoading(editSection.id);
-      try {
-        const { content } = await requestArtifactSectionUpdate({
-          userPrompt: submittedPrompt,
-          artifactType: focus.type,
-          sectionLabel: editSection.label,
-          sectionContent: editedContent,
-          fullAnswer: activeAnswerText,
-          action: "edit",
-          editInstruction: instruction || "Apply the user's edits.",
-          tokenMode,
-        });
-        const oldSection = focus.sections.find((s) => s.id === editSection.id);
-        if (oldSection && artifactVersionState) {
-          const { state, mode } = await persistSectionVersion(artifactVersionState, oldSection, "edit", {
-            instruction,
-          });
-          setArtifactVersionState(state);
-          setVersionPersistenceMode(mode);
-          bumpBuilderTrace({
-            versionCount: Object.values(state.sectionVersions).flat().length,
-            versionPersistence: mode,
-          });
-        }
-        const updated = updateArtifactSection(focus, editSection.id, content);
-        setBuilderFocusArtifact(updated);
-        if (activeArtifact?.id === focus.id) setActiveArtifact(updated);
-        if (builderRootArtifact?.id === focus.id) setBuilderRootArtifact(updated);
-        setEditSection(null);
-        showCopyFeedback(`${editSection.label} updated`);
-      } catch (err) {
-        showCopyFeedback(err instanceof Error ? err.message : "Edit failed");
-      } finally {
-        setArtifactSectionLoading(null);
-      }
-    },
-    [
-      activeArtifact,
-      builderFocusArtifact,
-      builderRootArtifact,
-      artifactVersionState,
-      submittedPrompt,
-      editSection,
-      activeAnswerText,
-      tokenMode,
-      bumpBuilderTrace,
-    ],
-  );
-
-  const handleRestoreVersion = useCallback(
-    (versionId: string) => {
-      const focus = builderFocusArtifact ?? activeArtifact;
-      if (!focus || !artifactVersionState) return;
-      void restoreSectionVersionWithServer(focus, artifactVersionState, versionId).then((result) => {
-        if (!result) {
-          showCopyFeedback("Could not restore version");
-          return;
-        }
-        setArtifactVersionState(result.state);
-        setBuilderFocusArtifact(result.artifact);
-        if (activeArtifact?.id === focus.id) setActiveArtifact(result.artifact);
-        if (builderRootArtifact?.id === focus.id) setBuilderRootArtifact(result.artifact);
-        bumpBuilderTrace({ versionSnapshotMode: result.mode });
-        showCopyFeedback("Version restored from server snapshot.");
-      });
-    },
-    [activeArtifact, artifactVersionState, builderFocusArtifact, builderRootArtifact, bumpBuilderTrace],
-  );
-
-  const appendChildArtifactEvent = useCallback(
-    (
-      parent: IivoArtifact,
-      child: IivoArtifact,
-      relationship: import("./types/artifacts").ArtifactRelationship,
-    ) => {
-      const event: ConversationArtifactEvent = {
-        id: `evt-${child.id}`,
-        type: "artifact_created",
-        parentArtifactId: parent.id,
-        childArtifactId: child.id,
-        transformType: relationship.transformType,
-        title: child.title,
-        createdAt: relationship.createdAt,
-        artifactSnapshot: createArtifactSnapshot(child, archivedRunId ?? runId),
-      };
-      setConversationTurns((prev) => appendArtifactEventToTurn(prev, parent.id, event));
-    },
-    [archivedRunId, runId],
-  );
-
-  const openChildArtifact = useCallback(async (childId: string, inBuilder: boolean) => {
-    const cached = loadCachedChildArtifact(childId);
-    const child = cached ?? (await fetchChildArtifact(childId));
-    if (!child) {
-      showCopyFeedback("Child artifact not found");
-      return;
-    }
-    cacheChildArtifact(child);
-    if (inBuilder) {
-      setBuilderFocusArtifact(child);
-      setBuilderTab("compose");
-    } else {
-      setBuilderFocusArtifact(child);
-    }
-  }, []);
-
-  const handleArtifactTransform = useCallback(
-    async (transformType: import("./types/builderWorkspace").ArtifactTransformType) => {
-      const root = builderRootArtifact ?? activeArtifact;
-      const prompt =
-        submittedPrompt?.trim() ||
-        conversationTurns.at(-1)?.userPrompt?.trim() ||
-        "";
-      if (!root || !prompt) return;
-      setTransformLoading(true);
-      try {
-        const { artifact: child, relationship } = await requestArtifactTransform({
-          artifact: root,
-          transformType,
-          userPrompt: prompt,
-          tokenMode,
-          sourceRunId: archivedRunId ?? runId ?? undefined,
-        });
-        cacheChildArtifact(child);
-        saveLocalRelationship(relationship);
-        setRelatedChildren((prev) => [
-          ...prev.filter((c) => c.relationship.childArtifactId !== child.id),
-          { relationship, artifact: child },
-        ]);
-        setLastTransformLabel(child.title || transformTypeLabel(transformType));
-        appendChildArtifactEvent(root, child, relationship);
-        setTransformsCreated((n) => {
-          const next = n + 1;
-          bumpBuilderTrace({ transformsCreated: next });
-          return next;
-        });
-        setBuilderTab("execute");
-        showCopyFeedback("Created child artifact and added it to chat.");
-      } catch (err) {
-        showCopyFeedback(err instanceof Error ? err.message : "Transform failed");
-      } finally {
-        setTransformLoading(false);
-      }
-    },
-    [
-      activeArtifact,
-      builderRootArtifact,
-      submittedPrompt,
-      conversationTurns,
-      tokenMode,
-      bumpBuilderTrace,
-      archivedRunId,
-      runId,
-      appendChildArtifactEvent,
-    ],
-  );
-
-  const handleKeepOriginal = useCallback(() => {
-    if (builderRootArtifact) setBuilderFocusArtifact(builderRootArtifact);
-  }, [builderRootArtifact]);
-
-  const builderContextItems = useMemo(
-    () =>
-      buildBuilderContextItems(
-        submittedAttachedContext,
-        executionTrace,
-        includedMemories?.map((m) => ({ id: m.id, title: m.title })),
-      ),
-    [submittedAttachedContext, executionTrace, includedMemories],
-  );
-
-  const builderTraceSummary = useMemo(() => {
-    const parts: string[] = [];
-    if (executionTrace?.responseContract) {
-      parts.push(`Contract: ${executionTrace.responseContract.responseContract}`);
-    }
-    if (executionTrace?.executionMode) {
-      parts.push(`Mode: ${executionTrace.executionMode.effectiveExecutionMode}`);
-    }
-    return parts.join(" · ") || undefined;
-  }, [executionTrace]);
 
   const handleNewDecision = () => {
     if (running) return;
@@ -1276,10 +755,7 @@ export default function App() {
       setDecisionRecord,
       setIncludedMemories,
       setActiveMemoryMode,
-      setArtifact: setActiveArtifact,
     });
-    setBuilderModeActive(false);
-    setBuilderCanvasDismissed(false);
     const record = await fetchDecisionRecordForRun(entry.runId);
     setDecisionRecord(record);
     setRunId(entry.runId);
@@ -1450,7 +926,6 @@ export default function App() {
           executionModeConfirmationAccepted:
             executionRunFlagsRef.current.confirmationAccepted,
           executionModeConfirmationShown: executionRunFlagsRef.current.confirmationShown,
-          inBuilderWorkspace: builderModeActive,
           benchmark,
           decisionObjective: decisionObjective.trim() || undefined,
           businessContext: hasBusinessProfileContent(businessContext)
@@ -1569,12 +1044,7 @@ export default function App() {
               setDecisionRecord,
               setIncludedMemories,
               setActiveMemoryMode,
-              setArtifact: setActiveArtifact,
             });
-            if (event.result.artifact?.renderMode === "canvas") {
-              setBuilderCanvasDismissed(false);
-              setBuilderModeActive(false);
-            }
             if (event.result.workflowId) setWorkflow(event.result.workflowId);
             refreshHistory();
             refreshDecisionRecords();
@@ -1621,7 +1091,6 @@ export default function App() {
     refreshUsage,
     attachedContext,
     selectedExecutionMode,
-    builderModeActive,
   ]);
 
   const handleExecutionModeChange = useCallback((mode: ExecutionMode) => {
@@ -1698,23 +1167,16 @@ export default function App() {
       return;
     }
 
-    const needsExecutionPreview =
-      selectedExecutionMode === "auto" ||
-      (selectedExecutionMode === "builder" && !builderModeActive);
+    const needsExecutionPreview = selectedExecutionMode === "auto";
 
     if (needsExecutionPreview && prompt.trim()) {
       try {
         const preview = await previewExecutionMode(prompt.trim(), selectedExecutionMode, {
           wantsVision: visionScreenshotAnalysis,
-          inBuilderWorkspace: builderModeActive,
         });
         if (preview.requiresConfirmation && preview.confirmationKind) {
           if (preview.confirmationKind === "council") {
             setCouncilConfirmOpen(true);
-            return;
-          }
-          if (preview.confirmationKind === "builder") {
-            setBuilderPreRunConfirmOpen(true);
             return;
           }
         }
@@ -1731,7 +1193,6 @@ export default function App() {
     running,
     isArchivedView,
     selectedExecutionMode,
-    builderModeActive,
     visionScreenshotAnalysis,
     runAfterExecutionGate,
   ]);
@@ -1757,25 +1218,6 @@ export default function App() {
     executionRunFlagsRef.current = {
       confirmationShown: true,
       confirmationAccepted: true,
-    };
-    void runAfterExecutionGate();
-  }, [runAfterExecutionGate]);
-
-  const handleBuilderPreRunOpen = useCallback(() => {
-    setBuilderPreRunConfirmOpen(false);
-    setBuilderModeActive(true);
-    executionRunFlagsRef.current = {
-      confirmationShown: true,
-      confirmationAccepted: true,
-    };
-    void runAfterExecutionGate();
-  }, [runAfterExecutionGate]);
-
-  const handleBuilderPreRunKeepChat = useCallback(() => {
-    setBuilderPreRunConfirmOpen(false);
-    executionRunFlagsRef.current = {
-      confirmationShown: true,
-      confirmationAccepted: false,
     };
     void runAfterExecutionGate();
   }, [runAfterExecutionGate]);
@@ -2351,64 +1793,6 @@ export default function App() {
               <ChatComposer ref={composerRef} {...composerProps} layout="landing" />
             </LandingView>
           </div>
-        ) : builderModeActive && activeArtifact && builderFocusArtifact && builderRootArtifact ? (
-          <BuilderCanvas
-            artifact={builderFocusArtifact}
-            rootArtifact={builderRootArtifact}
-            runId={archivedRunId ?? runId}
-            loading={builderLoading}
-            activeTab={builderTab}
-            onTabChange={(tab) => {
-              setBuilderTab(tab);
-              bumpBuilderTrace({ activeTab: tab, opened: true });
-            }}
-            onBackToChat={() => {
-              setBuilderModeActive(false);
-              setBuilderLoading(false);
-              setBuilderFocusArtifact(builderRootArtifact);
-              bumpBuilderTrace({ opened: false });
-            }}
-            onFeedback={showCopyFeedback}
-            onRegenerateSection={handleRegenerateSection}
-            onEditSection={(section: ArtifactSection) => setEditSection(section)}
-            onTransform={handleArtifactTransform}
-            onRestoreVersion={handleRestoreVersion}
-            onCompareVersion={(id) => setCompareVersionId(id)}
-            compareVersionId={compareVersionId}
-            onCloseCompare={() => setCompareVersionId(null)}
-            relatedChildren={relatedChildren}
-            lastTransformLabel={lastTransformLabel}
-            onOpenChild={(id) => void openChildArtifact(id, false)}
-            onOpenChildInBuilder={(id) => void openChildArtifact(id, true)}
-            onKeepOriginal={handleKeepOriginal}
-            loadingSectionId={artifactSectionLoading}
-            transformLoading={transformLoading}
-            contextItems={builderContextItems}
-            versionState={artifactVersionState?.sectionVersions ?? {}}
-            ignoredFixes={ignoredBuilderFixes}
-            onIgnoreFix={(id) =>
-              setIgnoredBuilderFixes((prev) => new Set([...prev, id]))
-            }
-            traceSummary={builderTraceSummary}
-            onSavedChange={(saved) => bumpBuilderTrace({ saved })}
-            onShareAction={(action) => bumpBuilderTrace({ shareActionUsed: action })}
-            userPrompt={submittedPrompt ?? undefined}
-            onAttachVisual={(updated) => {
-              if (builderRootArtifact?.id === updated.id) {
-                setBuilderRootArtifact(updated);
-                if (builderFocusArtifact?.id === updated.id) setBuilderFocusArtifact(updated);
-                if (activeArtifact?.id === updated.id) setActiveArtifact(updated);
-              }
-              showCopyFeedback("Visual attached to artifact.");
-            }}
-            onBuilderTraceUpdate={(patch) =>
-              bumpBuilderTrace({
-                opened: true,
-                versionPersistence: versionPersistenceMode,
-                ...patch,
-              })
-            }
-          />
         ) : (
           <>
             <div className="chat-thread-scroll" ref={threadScrollRef} onScroll={handleThreadScroll}>
@@ -2479,37 +1863,6 @@ export default function App() {
                 onRegisterTypewriterSkip={(skip) => {
                   skipTypewriterRef.current = skip;
                 }}
-                artifact={activeArtifact}
-                builderModeActive={builderModeActive}
-                builderCanvasDismissed={builderCanvasDismissed}
-                onBuilderModeContinue={() => {
-                  void applyBuilderModeChoice(true);
-                  if (activeArtifact) syncBuilderArtifacts(activeArtifact);
-                  setBuilderLoading(true);
-                  setBuilderModeActive(true);
-                  setBuilderCanvasDismissed(false);
-                  setBuilderTab("compose");
-                  bumpBuilderTrace({ opened: true, activeTab: "compose" });
-                  window.setTimeout(() => setBuilderLoading(false), 800);
-                }}
-                onBuilderModeKeepInChat={() => {
-                  void applyBuilderModeChoice(false);
-                  setBuilderCanvasDismissed(true);
-                }}
-                onCopyFeedback={showCopyFeedback}
-                onRegenerateSection={handleRegenerateSection}
-                onEditSection={(section: ArtifactSection) => setEditSection(section)}
-                loadingSectionId={artifactSectionLoading}
-                onOpenInBuilder={handleOpenInBuilder}
-                onOpenImageStudio={handleOpenImageStudio}
-                onOpenChildArtifact={(art) => {
-                  cacheChildArtifact(art);
-                  setActiveArtifact(art);
-                }}
-                onOpenChildInBuilder={(art) => {
-                  cacheChildArtifact(art);
-                  handleOpenInBuilder(art);
-                }}
               />
               <div ref={threadEndRef} />
             </div>
@@ -2533,12 +1886,6 @@ export default function App() {
         open={councilConfirmOpen}
         onKeepQuick={handleCouncilKeepQuick}
         onUseCouncil={handleCouncilUseCouncil}
-      />
-
-      <BuilderModeConfirm
-        open={builderPreRunConfirmOpen}
-        onContinue={handleBuilderPreRunOpen}
-        onKeepInChat={handleBuilderPreRunKeepChat}
       />
 
       <CreditConfirmModal
@@ -2573,17 +1920,6 @@ export default function App() {
         onClose={() => setImportUrlOpen(false)}
         onImported={handleUrlImported}
         onImportedAndAsk={handleUrlImportedAndAsk}
-      />
-
-      <ArtifactEditModal
-        open={editSection != null}
-        sectionLabel={editSection?.label ?? ""}
-        initialContent={editSection ? sectionPlainText(editSection) : ""}
-        loading={artifactSectionLoading === editSection?.id}
-        onClose={() => setEditSection(null)}
-        onSave={(instruction, editedContent) =>
-          void handleEditSectionSave(instruction, editedContent)
-        }
       />
     </div>
   );

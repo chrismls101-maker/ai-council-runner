@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { resolveExecutionMode } from "../../dist/server/executionMode/executionMode.js";
 import { resolveResponsePlan } from "../../dist/server/responseContracts/resolveResponsePlan.js";
-import { selectArtifactType } from "../../dist/server/artifacts/artifactSelector.js";
 
 function test(name: string, fn: () => void) {
   try {
@@ -14,23 +13,16 @@ function test(name: string, fn: () => void) {
 }
 
 function planFor(prompt: string) {
-  const responsePlan = resolveResponsePlan(prompt);
-  const artifactSelection = selectArtifactType({
-    taskIntent: responsePlan.intent,
-    responseContract: responsePlan.contract,
-    prompt,
-  });
-  return { responsePlan, artifactSelection };
+  return resolveResponsePlan(prompt);
 }
 
 test("auto: rewrite hero → quick", () => {
   const prompt = "Rewrite this hero so a normal business owner understands it.";
-  const { responsePlan, artifactSelection } = planFor(prompt);
+  const responsePlan = planFor(prompt);
   const d = resolveExecutionMode({
     userSelectedMode: "auto",
     taskIntent: responsePlan.intent,
     responseContract: responsePlan.contract,
-    artifactSelection,
     prompt,
   });
   assert.equal(d.effectiveMode, "quick");
@@ -39,12 +31,11 @@ test("auto: rewrite hero → quick", () => {
 test("auto: support billing → quick", () => {
   const prompt =
     "A customer says they were charged but cannot access their account. Write a calm support response.";
-  const { responsePlan, artifactSelection } = planFor(prompt);
+  const responsePlan = planFor(prompt);
   const d = resolveExecutionMode({
     userSelectedMode: "auto",
     taskIntent: responsePlan.intent,
     responseContract: responsePlan.contract,
-    artifactSelection,
     prompt,
   });
   assert.equal(d.effectiveMode, "quick");
@@ -53,111 +44,100 @@ test("auto: support billing → quick", () => {
 test("auto: legal/privacy → quick", () => {
   const prompt =
     "A SaaS collects emails and files. What privacy promises should it avoid making?";
-  const { responsePlan, artifactSelection } = planFor(prompt);
+  const responsePlan = planFor(prompt);
   const d = resolveExecutionMode({
     userSelectedMode: "auto",
     taskIntent: responsePlan.intent,
     responseContract: responsePlan.contract,
-    artifactSelection,
     prompt,
   });
   assert.equal(d.effectiveMode, "quick");
 });
 
-test("auto: founder decision → council", () => {
-  const prompt =
-    "I have $1,500 and 14 days. Should I build a demo, cold outreach, or a landing page?";
-  const { responsePlan, artifactSelection } = planFor(prompt);
+test("auto: cold email → quick", () => {
+  const prompt = "Write a cold email to HVAC owners about missed-call recovery.";
+  const responsePlan = planFor(prompt);
   const d = resolveExecutionMode({
     userSelectedMode: "auto",
     taskIntent: responsePlan.intent,
     responseContract: responsePlan.contract,
-    artifactSelection,
+    prompt,
+  });
+  assert.equal(d.effectiveMode, "quick");
+});
+
+test("auto: strategic decision → council confirmation", () => {
+  const prompt = "Should I build AI receptionist or missed-call SMS recovery first?";
+  const responsePlan = planFor(prompt);
+  const d = resolveExecutionMode({
+    userSelectedMode: "auto",
+    taskIntent: responsePlan.intent,
+    responseContract: responsePlan.contract,
     prompt,
   });
   assert.equal(d.effectiveMode, "council");
+  assert.equal(d.confirmationKind, "council");
 });
 
-test("auto: one cold email → quick", () => {
-  const prompt =
-    "Write a cold email to a local HVAC owner offering a 14-day paid pilot for missed-call recovery.";
-  const { responsePlan, artifactSelection } = planFor(prompt);
-  const d = resolveExecutionMode({
-    userSelectedMode: "auto",
-    taskIntent: responsePlan.intent,
-    responseContract: responsePlan.contract,
-    artifactSelection,
-    prompt,
-  });
-  assert.equal(d.effectiveMode, "quick");
-});
-
-test("auto: full GTM → council", () => {
-  const prompt = "Build a go-to-market strategy for missed-call recovery.";
-  const { responsePlan, artifactSelection } = planFor(prompt);
-  const d = resolveExecutionMode({
-    userSelectedMode: "auto",
-    taskIntent: responsePlan.intent,
-    responseContract: responsePlan.contract,
-    artifactSelection,
-    prompt,
-  });
-  assert.equal(d.effectiveMode, "council");
-});
-
-test("auto: full landing page → builder confirmation", () => {
-  const prompt = "Build me a full landing page for my B2B SaaS.";
-  const { responsePlan, artifactSelection } = planFor(prompt);
-  const d = resolveExecutionMode({
-    userSelectedMode: "auto",
-    taskIntent: responsePlan.intent,
-    responseContract: responsePlan.contract,
-    artifactSelection,
-    prompt,
-  });
-  assert.equal(d.effectiveMode, "builder");
-  assert.equal(d.requiresConfirmation, true);
-  assert.equal(d.confirmationKind, "builder");
-});
-
-test("quick mode forces quick", () => {
-  const prompt = "Should I build CSV export or SMS alerts first?";
-  const { responsePlan, artifactSelection } = planFor(prompt);
-  const d = resolveExecutionMode({
-    userSelectedMode: "quick",
-    taskIntent: responsePlan.intent,
-    responseContract: responsePlan.contract,
-    artifactSelection,
-    prompt,
-  });
-  assert.equal(d.effectiveMode, "quick");
-});
-
-test("council mode forces council", () => {
-  const prompt = "Should I build CSV export or SMS alerts first?";
-  const { responsePlan, artifactSelection } = planFor(prompt);
+test("council mode stays council", () => {
+  const prompt = "Should I prioritize enterprise or SMB for our GTM?";
+  const responsePlan = planFor(prompt);
   const d = resolveExecutionMode({
     userSelectedMode: "council",
     taskIntent: responsePlan.intent,
     responseContract: responsePlan.contract,
-    artifactSelection,
     prompt,
   });
   assert.equal(d.effectiveMode, "council");
 });
 
-test("auto council confirmation declined → quick", () => {
-  const prompt = "Help me decide between two pricing models.";
-  const { responsePlan, artifactSelection } = planFor(prompt);
+test("quick mode stays quick", () => {
+  const prompt = "Summarize this customer complaint in two sentences.";
+  const responsePlan = planFor(prompt);
+  const d = resolveExecutionMode({
+    userSelectedMode: "quick",
+    taskIntent: responsePlan.intent,
+    responseContract: responsePlan.contract,
+    prompt,
+  });
+  assert.equal(d.effectiveMode, "quick");
+});
+
+test("auto: full landing page → quick (no builder mode)", () => {
+  const prompt = "Build me a full landing page for HVAC missed-call recovery SaaS.";
+  const responsePlan = planFor(prompt);
   const d = resolveExecutionMode({
     userSelectedMode: "auto",
     taskIntent: responsePlan.intent,
     responseContract: responsePlan.contract,
-    artifactSelection,
+    prompt,
+  });
+  assert.notEqual(d.effectiveMode, "builder");
+  assert.equal(d.effectiveMode, "quick");
+});
+
+test("user declines council confirmation → quick", () => {
+  const prompt = "Help me decide whether to expand to a second city.";
+  const responsePlan = planFor(prompt);
+  const d = resolveExecutionMode({
+    userSelectedMode: "auto",
+    taskIntent: responsePlan.intent,
+    responseContract: responsePlan.contract,
     prompt,
     confirmationAccepted: false,
   });
-  if (d.requiresConfirmation) {
-    assert.equal(d.effectiveMode, "quick");
-  }
+  assert.equal(d.effectiveMode, "quick");
+});
+
+test("user accepts council confirmation → council", () => {
+  const prompt = "Help me decide whether to expand to a second city.";
+  const responsePlan = planFor(prompt);
+  const d = resolveExecutionMode({
+    userSelectedMode: "auto",
+    taskIntent: responsePlan.intent,
+    responseContract: responsePlan.contract,
+    prompt,
+    confirmationAccepted: true,
+  });
+  assert.equal(d.effectiveMode, "council");
 });

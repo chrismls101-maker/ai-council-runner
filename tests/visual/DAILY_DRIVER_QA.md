@@ -62,10 +62,9 @@ Before Auto Router picks a workflow, **Execution Mode** decides how aggressive r
 
 | Mode | Behavior |
 |------|----------|
-| **Auto** (default) | Quick-first. Asks before Council or Builder when uncertain. |
+| **Auto** (default) | Quick-first. Asks before Council when uncertain. |
 | **Quick Mode** | One AI, Direct Answer. Rewrite, support, summary, one-off email. |
 | **Council Mode** | Multi-agent Product Decision / Sales Attack for strategy and tradeoffs. |
-| **Builder Mode** | Large canvas artifacts; confirms before opening workspace. |
 
 **Daily Driver expectations (Auto selected):**
 

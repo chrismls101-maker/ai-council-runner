@@ -121,7 +121,6 @@ export interface CouncilRunResult {
   includedPastOutcomeIds?: string[];
   includedPastOutcomeCount?: number;
   usage?: import("../usage/types.js").RunUsageSummary;
-  artifact?: import("../artifacts/artifactTypes.js").IivoArtifact;
 }
 
 export interface ProgressEvent {
@@ -156,10 +155,9 @@ export interface RunCouncilRequest {
   preset: string;
   tokenMode?: "small" | "standard" | "deep";
   workflow?: string;
-  executionMode?: "auto" | "quick" | "council" | "builder";
+  executionMode?: "auto" | "quick" | "council";
   executionModeConfirmationAccepted?: boolean;
   executionModeConfirmationShown?: boolean;
-  inBuilderWorkspace?: boolean;
   benchmark?: boolean;
   decisionObjective?: string;
   businessContext?: Partial<BusinessContext>;

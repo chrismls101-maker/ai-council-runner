@@ -123,17 +123,6 @@ export interface ResponsePlanTrace {
   laneReason: string;
 }
 
-export type {
-  ArtifactAction,
-  ArtifactChecklist,
-  ArtifactRenderMode,
-  ArtifactSection,
-  ArtifactTable,
-  ArtifactTrace,
-  ArtifactType,
-  IivoArtifact,
-} from "./artifacts.js";
-
 export interface CouncilExecutionTrace {
   mode: "council" | "direct_answer";
   agentCount: number;
@@ -150,7 +139,6 @@ export interface CouncilExecutionTrace {
   visionAnalysis?: VisionAnalysisTrace;
   visionMemoryGuard?: VisionMemoryGuardTrace;
   responseContract?: ResponsePlanTrace;
-  artifact?: import("./artifacts.js").ArtifactTrace;
   executionMode?: import("./executionMode.js").ExecutionModeTrace;
 }
 
@@ -207,7 +195,6 @@ export interface CouncilRunResult {
   includedPastOutcomeIds?: string[];
   includedPastOutcomeCount?: number;
   usage?: import("./usage.js").RunUsageSummary;
-  artifact?: import("./artifacts.js").IivoArtifact;
 }
 
 export interface ProgressEvent {
@@ -284,17 +271,6 @@ export interface WorkflowOption {
 
 export type ConversationTurnStatus = "running" | "complete" | "partial" | "failed";
 
-export type ConversationArtifactEvent = {
-  id: string;
-  type: "artifact_created";
-  parentArtifactId: string;
-  childArtifactId: string;
-  transformType: string;
-  title: string;
-  createdAt: string;
-  artifactSnapshot: import("../utils/artifactSnapshot.js").ArtifactSnapshot;
-};
-
 export interface ConversationTurn {
   id: string;
   submittedAt: string;
@@ -328,9 +304,6 @@ export interface ConversationTurn {
   decisionRecord?: import("./decisionRecord.js").DecisionRecord | null;
   includedMemories?: IncludedMemorySummary[];
   memoryMode?: import("./memory").MemoryMode | string;
-  artifact?: import("./artifacts.js").IivoArtifact;
-  artifactSnapshot?: import("../utils/artifactSnapshot.js").ArtifactSnapshot;
-  artifactEvents?: ConversationArtifactEvent[];
 }
 
 export const AGENT_ORDER: AgentId[] = [

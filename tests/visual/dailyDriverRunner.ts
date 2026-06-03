@@ -80,11 +80,6 @@ async function runPromptScenario(
 
   const turn = getLatestTurn(page);
   const answer = await turn.getByTestId("final-answer").innerText().catch(() => "");
-  const artifactRenderer = turn.getByTestId("artifact-renderer");
-  const hasArtifact = await artifactRenderer.isVisible().catch(() => false);
-  const artifactType = hasArtifact
-    ? await artifactRenderer.getAttribute("data-artifact-type")
-    : null;
   const routeLocator = turn.locator('[data-testid="router-status"], [data-testid="workflow-status"]');
   const routeText =
     (await routeLocator.count()) > 0
@@ -118,8 +113,6 @@ async function runPromptScenario(
     answer,
     routeText,
     skippedLive: false,
-    hasArtifact,
-    artifactType,
     effectiveExecutionMode,
   };
 }
@@ -194,8 +187,6 @@ export async function runDailyDriverScenario(
   let fixtureIds: string[] = [];
   let contextUsed: boolean | undefined;
   let lastScore: ReturnType<typeof scoreScenarioFriction> | undefined;
-  let promptArtifactType: string | null = null;
-  let promptHasArtifact = false;
   let promptEffectiveExecutionMode: string | undefined;
 
   agent.setRunBounds(scenarioIndex, scenarioTotal);
@@ -379,8 +370,6 @@ export async function runDailyDriverScenario(
           answerFull = result.answer;
           answerPreview = result.answer.slice(0, 400);
           routeText = result.routeText;
-          promptArtifactType = result.artifactType ?? null;
-          promptHasArtifact = result.hasArtifact ?? false;
           promptEffectiveExecutionMode = result.effectiveExecutionMode;
         }
         break;
@@ -392,8 +381,6 @@ export async function runDailyDriverScenario(
     if (scenario.kind === "prompt_run" && answerFull && routeText && !frictions.includes("skipped_live")) {
       lastScore = scoreScenarioFriction(scenario, answerFull, routeText, {
         durationMs,
-        artifactType: promptArtifactType,
-        hasArtifact: promptHasArtifact,
         effectiveExecutionMode: promptEffectiveExecutionMode,
       });
       frictions.push(...lastScore.frictions);

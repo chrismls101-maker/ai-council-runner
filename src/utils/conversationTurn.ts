@@ -16,7 +16,6 @@ import type {
   RouterDecision,
   RunCostSummary,
 } from "../types";
-import { createArtifactSnapshot, snapshotToInlineArtifact } from "./artifactSnapshot.ts";
 import { safeSaveConversationThread } from "./safeSessionStorage.ts";
 
 export const CONVERSATION_THREAD_STORAGE_KEY = "iivo-conversation-thread";
@@ -51,7 +50,6 @@ export interface ConversationTurnSnapshotInput {
   decisionRecord?: DecisionRecord | null;
   includedMemories?: IncludedMemorySummary[];
   memoryMode?: string;
-  artifact?: import("../types/artifacts.js").IivoArtifact;
 }
 
 function resolveTurnStatus(runStatus: string | null): ConversationTurnStatus {
@@ -98,48 +96,7 @@ export function buildConversationTurnSnapshot(
     decisionRecord: input.decisionRecord ?? null,
     includedMemories: input.includedMemories ? [...input.includedMemories] : [],
     memoryMode: input.memoryMode,
-    artifact: input.artifact ? { ...input.artifact, sections: [...input.artifact.sections] } : undefined,
-    artifactSnapshot: input.artifact
-      ? createArtifactSnapshot(input.artifact, input.runId)
-      : undefined,
   };
-}
-
-export function resolveTurnArtifact(turn: ConversationTurn): import("../types/artifacts.js").IivoArtifact | undefined {
-  if (turn.artifact) return turn.artifact;
-  return snapshotToInlineArtifact(turn.artifactSnapshot);
-}
-
-export function resolveTurnArtifactId(turn: ConversationTurn): string | undefined {
-  if (turn.artifact?.id) return turn.artifact.id;
-  if (turn.artifactSnapshot?.mode === "inline") return turn.artifactSnapshot.artifact.id;
-  if (turn.artifactSnapshot?.mode === "reference") return turn.artifactSnapshot.artifactId;
-  return undefined;
-}
-
-export function findTurnIndexForArtifactId(
-  turns: ConversationTurn[],
-  artifactId: string,
-): number {
-  for (let i = turns.length - 1; i >= 0; i--) {
-    if (resolveTurnArtifactId(turns[i]!) === artifactId) return i;
-  }
-  return Math.max(0, turns.length - 1);
-}
-
-export function appendArtifactEventToTurn(
-  turns: ConversationTurn[],
-  parentArtifactId: string,
-  event: import("../types/index.js").ConversationArtifactEvent,
-): ConversationTurn[] {
-  if (turns.length === 0) return turns;
-  const idx = findTurnIndexForArtifactId(turns, parentArtifactId);
-  const turn = turns[idx]!;
-  return [
-    ...turns.slice(0, idx),
-    { ...turn, artifactEvents: [...(turn.artifactEvents ?? []), event] },
-    ...turns.slice(idx + 1),
-  ];
 }
 
 export function loadConversationThreadFromSession(): ConversationTurn[] {

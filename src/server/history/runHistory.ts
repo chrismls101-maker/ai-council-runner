@@ -196,34 +196,6 @@ export async function deleteAllRunHistory(): Promise<number> {
   return deleted;
 }
 
-export async function patchRunArtifactTrace(
-  runId: string,
-  patch: { builderModeAccepted: boolean },
-): Promise<RunHistoryEntry | null> {
-  const entry = await getRunHistory(runId);
-  if (!entry?.executionTrace) return null;
-
-  const trace = entry.executionTrace;
-  const artifactTrace = trace.artifact ?? {
-    artifactType: entry.artifact?.type ?? "canvas_project",
-    renderMode: entry.artifact?.renderMode ?? "canvas",
-    builderModeSuggested: entry.artifact?.renderMode === "canvas",
-  };
-
-  const updated: RunHistoryEntry = {
-    ...entry,
-    executionTrace: {
-      ...trace,
-      artifact: {
-        ...artifactTrace,
-        builderModeAccepted: patch.builderModeAccepted,
-      },
-    },
-  };
-  await saveRunHistory(updated);
-  return updated;
-}
-
 export async function updateRunOutcome(
   runId: string,
   outcome: DecisionOutcome,

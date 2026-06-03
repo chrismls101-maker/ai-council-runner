@@ -37,7 +37,7 @@ test.describe("Execution Mode composer", () => {
     await expect(page.getByTestId("execution-mode-control")).toBeVisible();
   });
 
-  test("mode dropdown lists Auto, Quick, Council, Builder with quick-by-default Auto description", async ({
+  test("mode dropdown lists Auto, Quick, and Council with quick-by-default Auto description", async ({
     page,
   }) => {
     await selectPillOption(page, "execution-mode-select", "Auto");
@@ -46,7 +46,6 @@ test.describe("Execution Mode composer", () => {
     await expect(page.getByTestId("execution-mode-description")).toContainText(/quick by default/i);
     await selectPillOption(page, "execution-mode-select", "Quick Mode");
     await selectPillOption(page, "execution-mode-select", "Council Mode");
-    await selectPillOption(page, "execution-mode-select", "Builder Mode");
   });
 
   test("preset and workflow override live inside Configure", async ({ page }) => {

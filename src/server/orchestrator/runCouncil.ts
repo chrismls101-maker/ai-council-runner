@@ -90,10 +90,7 @@ import {
   resolveResponsePlan,
   responsePlanToTrace,
 } from "../responseContracts/resolveResponsePlan.js";
-import { buildRunArtifact } from "../artifacts/buildRunArtifact.js";
-import type { ArtifactTrace, IivoArtifact } from "../artifacts/artifactTypes.js";
 import { shouldParseDecisionQuality } from "../responseContracts/councilCompression.js";
-import { selectArtifactType } from "../artifacts/artifactSelector.js";
 import {
   executionModeToTrace,
   resolveExecutionMode,
@@ -270,7 +267,6 @@ export interface RunCouncilOptions {
   executionMode?: ExecutionMode;
   executionModeConfirmationAccepted?: boolean;
   executionModeConfirmationShown?: boolean;
-  inBuilderWorkspace?: boolean;
   benchmark?: boolean;
   decisionObjective?: string;
   businessContext?: Partial<BusinessContext>;
@@ -310,7 +306,6 @@ export async function runCouncilFull(
     executionMode: executionModeInput = "auto",
     executionModeConfirmationAccepted,
     executionModeConfirmationShown,
-    inBuilderWorkspace = false,
     benchmark = false,
     decisionObjective: decisionObjectiveInput,
     businessContext: businessContextInput,
@@ -324,11 +319,6 @@ export async function runCouncilFull(
   const businessContext = normalizeBusinessContext(businessContextInput);
   const routingPrompt = resolveRoutingPrompt(prompt, conversationContext);
   const responsePlan = resolveResponsePlan(routingPrompt);
-  const artifactSelection = selectArtifactType({
-    taskIntent: responsePlan.intent,
-    responseContract: responsePlan.contract,
-    prompt: routingPrompt,
-  });
 
   const normalizedExternal = normalizeExternalContextPayload(externalContextInput);
   const preparedExternal = normalizedExternal
@@ -353,15 +343,10 @@ export async function runCouncilFull(
     userSelectedMode: executionModeInput,
     taskIntent: responsePlan.intent,
     responseContract: responsePlan.contract,
-    artifactSelection: {
-      type: artifactSelection.type,
-      renderMode: artifactSelection.renderMode,
-    },
     prompt: routingPrompt,
     wantsVision: useVisionDirectAnswer,
     wantsResearch: responsePlan.lane.lane === "research",
     confirmationAccepted: executionModeConfirmationAccepted,
-    inBuilderWorkspace,
   });
 
   let executionModeTrace: ExecutionModeTrace = executionModeToTrace(
@@ -720,19 +705,10 @@ export async function runCouncilFull(
   let decisionRecord: CouncilRunResult["decisionRecord"];
   let runUsage: RunUsageSummary | undefined;
 
-  let runArtifact: IivoArtifact | undefined;
-  let runArtifactTrace: ArtifactTrace | undefined;
   const responseContractTrace = responsePlanToTrace(responsePlan);
 
   const buildResult = async (status: RunStatus): Promise<CouncilRunResult> => {
     const costSummary = buildRunCostSummary(agentCosts);
-    const answerForArtifact =
-      outputs.finalJudge?.trim() || outputs.strategy?.trim() || "";
-    if (!runArtifact && answerForArtifact) {
-      const built = await buildRunArtifact(routingPrompt, answerForArtifact, responsePlan);
-      runArtifact = built.artifact ?? undefined;
-      runArtifactTrace = built.trace ?? undefined;
-    }
     return {
       runId,
       status,
@@ -764,17 +740,11 @@ export async function runCouncilFull(
         includedPastOutcomeIds.length > 0 ? includedPastOutcomeIds : undefined,
       includedPastOutcomeCount: includedPastOutcomeIds.length,
       usage: runUsage,
-      artifact: runArtifact,
     };
   };
 
   const emitComplete = async (status: RunStatus) => {
     let finalResult = await buildResult(status);
-
-    if (executionTrace && runArtifactTrace) {
-      executionTrace = { ...executionTrace, artifact: runArtifactTrace };
-      finalResult = { ...finalResult, executionTrace };
-    }
 
     const usageFinal = await finalizeRunCredits({
       runId,

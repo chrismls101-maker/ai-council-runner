@@ -1,12 +1,5 @@
-import { useState } from "react";
 import IivoWordmark from "./IivoWordmark";
-import ChildArtifactEventCard from "./ChildArtifactEventCard";
 import Collapsible from "./Collapsible";
-import ArtifactRenderer from "./artifacts/ArtifactRenderer";
-import ArtifactReferenceFallback from "./artifacts/ArtifactReferenceFallback";
-import { useResolvedArtifact } from "../hooks/useResolvedArtifact";
-import type { ArtifactSnapshot } from "../utils/artifactSnapshot";
-import BuilderModeConfirm from "./builder/BuilderModeConfirm";
 import { withIivoWordmark } from "../utils/brandText";
 import DecisionQualitySummary from "./DecisionQualitySummary";
 import MarkdownContent from "./MarkdownContent";
@@ -62,10 +55,7 @@ import {
   type IncludedMemorySummary,
   type SaveMemoryDraft,
   type WorkflowOption,
-  type ConversationArtifactEvent,
   type ConversationTurn,
-  type IivoArtifact,
-  type ArtifactSection,
 } from "../types";
 import { promptRequestsMarkdown } from "../utils/cleanDisplayText";
 import type { DecisionRecord } from "../types/decisionRecord";
@@ -136,21 +126,6 @@ export interface ConversationViewProps {
   onTypewriterActiveChange?: (active: boolean) => void;
   onTypewriterProgress?: () => void;
   onRegisterTypewriterSkip?: (skip: (() => void) | null) => void;
-  artifact?: IivoArtifact | null;
-  artifactSnapshot?: ArtifactSnapshot;
-  builderModeActive?: boolean;
-  builderCanvasDismissed?: boolean;
-  onBuilderModeContinue?: () => void;
-  onBuilderModeKeepInChat?: () => void;
-  onCopyFeedback?: (message: string) => void;
-  onRegenerateSection?: (section: ArtifactSection) => void;
-  onEditSection?: (section: ArtifactSection) => void;
-  onOpenInBuilder?: (artifact?: import("../types/artifacts.js").IivoArtifact) => void;
-  onOpenImageStudio?: (artifact?: import("../types/artifacts.js").IivoArtifact) => void;
-  loadingSectionId?: string | null;
-  artifactEvents?: ConversationArtifactEvent[];
-  onOpenChildArtifact?: (artifact: import("../types/artifacts.js").IivoArtifact) => void;
-  onOpenChildInBuilder?: (artifact: import("../types/artifacts.js").IivoArtifact) => void;
 }
 
 function AgentCostBlock({ cost }: { cost: AgentCost | undefined }) {
@@ -335,9 +310,6 @@ function mapCompletedTurnToProps(
     onTypewriterActiveChange: undefined,
     onTypewriterProgress: undefined,
     onRegisterTypewriterSkip: undefined,
-    artifact: turn.artifact ?? undefined,
-    artifactSnapshot: turn.artifactSnapshot,
-    artifactEvents: turn.artifactEvents,
     suggestedMemories: [],
     onCopyFinalPlan: () => {
       if (answerText) {
@@ -445,26 +417,8 @@ function ConversationTurnContent(props: ConversationViewProps) {
     onTypewriterActiveChange,
     onTypewriterProgress,
     onRegisterTypewriterSkip,
-    artifact: artifactProp,
-    artifactSnapshot,
-    builderModeActive = false,
-    builderCanvasDismissed = false,
-    onBuilderModeContinue,
-    onBuilderModeKeepInChat,
-    onCopyFeedback,
-    onRegenerateSection,
-    onEditSection,
-    onOpenInBuilder,
-    onOpenImageStudio,
-    loadingSectionId,
-    artifactEvents = [],
-    onOpenChildArtifact,
-    onOpenChildInBuilder,
   } = props;
 
-  const [showRawAnswer, setShowRawAnswer] = useState(false);
-  const { artifact, loading: artifactLoading, missing: artifactMissing } =
-    useResolvedArtifact(artifactProp, artifactSnapshot);
   const preserveMarkdown = promptRequestsMarkdown(submittedPrompt);
 
   const isDirectAnswer = isDirectAnswerRoute(workflow, workflowName, routerDecision);
@@ -507,21 +461,7 @@ function ConversationTurnContent(props: ConversationViewProps) {
   const entitySearchLikely =
     researchAgentMeta?.mode === "entity_search" ||
     (Boolean(submittedPrompt) && isEntitySearchIntent(submittedPrompt ?? ""));
-  const showArtifact =
-    artifactLoading ||
-    artifactMissing ||
-    (Boolean(artifact) &&
-      artifact!.type !== "plain_answer" &&
-      artifact!.sections.length > 0);
-  const showCanvasConfirm =
-    showArtifact &&
-    artifact!.renderMode === "canvas" &&
-    !builderModeActive &&
-    !builderCanvasDismissed &&
-    !running &&
-    !isPastTurn;
   const showActionPlanTitle =
-    !showArtifact &&
     !isDirectAnswer &&
     COUNCIL_WORKFLOWS.has(routerDecision?.selectedWorkflow ?? workflow) &&
     hasAnswer;
@@ -694,12 +634,6 @@ function ConversationTurnContent(props: ConversationViewProps) {
         </div>
       )}
 
-      <BuilderModeConfirm
-        open={showCanvasConfirm}
-        onContinue={() => onBuilderModeContinue?.()}
-        onKeepInChat={() => onBuilderModeKeepInChat?.()}
-      />
-
       {showAssistantBlock && (
         <div
           className={`message message-assistant${isDirectAnswer ? " direct-answer-turn" : " council-turn"}`}
@@ -782,82 +716,20 @@ function ConversationTurnContent(props: ConversationViewProps) {
           )}
           {hasAnswer ? (
             <div
-              className={`assistant-answer-card${isDirectAnswer ? " direct-answer-card" : " council-answer-card"}${showArtifact ? " artifact-answer-card" : ""}`}
+              className={`assistant-answer-card${isDirectAnswer ? " direct-answer-card" : " council-answer-card"}`}
             >
               <div data-testid="final-answer" className="final-answer-display">
-                {artifactLoading ? (
-                  <ArtifactReferenceFallback state="loading" />
-                ) : artifactMissing ? (
-                  <ArtifactReferenceFallback
-                    state="missing"
-                    onShowRawAnswer={() => setShowRawAnswer(true)}
-                  />
-                ) : showArtifact && artifact ? (
-                  <ArtifactRenderer
-                    artifact={artifact}
-                    onFeedback={onCopyFeedback}
-                    compact={artifact.renderMode === "canvas" && builderCanvasDismissed}
-                    onRegenerateSection={onRegenerateSection}
-                    onEditSection={onEditSection}
-                    onOpenInBuilder={
-                      artifact && artifact.type !== "plain_answer" && onOpenInBuilder
-                        ? () => onOpenInBuilder(artifact)
-                        : undefined
-                    }
-                    onGenerateVisual={
-                      artifact && onOpenImageStudio
-                        ? () => onOpenImageStudio(artifact)
-                        : undefined
-                    }
-                    loadingSectionId={loadingSectionId}
-                  />
-                ) : (
-                  <TypewriterAnswer
-                    content={answerText}
-                    animate={typewriterAnimate && !isPastTurn}
-                    resetKey={typewriterResetKey}
-                    sanitizeDisplay={!preserveMarkdown}
-                    className={`message-body assistant-body${isDirectAnswer ? " direct-answer-body" : ""}`}
-                    onTypingChange={onTypewriterActiveChange}
-                    onRevealProgress={onTypewriterProgress}
-                    onRegisterSkip={onRegisterTypewriterSkip}
-                  />
-                )}
+                <TypewriterAnswer
+                  content={answerText}
+                  animate={typewriterAnimate && !isPastTurn}
+                  resetKey={typewriterResetKey}
+                  sanitizeDisplay={!preserveMarkdown}
+                  className={`message-body assistant-body${isDirectAnswer ? " direct-answer-body" : ""}`}
+                  onTypingChange={onTypewriterActiveChange}
+                  onRevealProgress={onTypewriterProgress}
+                  onRegisterSkip={onRegisterTypewriterSkip}
+                />
               </div>
-              {showArtifact && (
-                <button
-                  type="button"
-                  className="btn ghost small show-raw-answer-btn"
-                  onClick={() => setShowRawAnswer((v) => !v)}
-                >
-                  {showRawAnswer ? "Hide raw answer" : "Show raw answer"}
-                </button>
-              )}
-              {showArtifact && showRawAnswer && (
-                <div className="raw-answer-fallback muted">
-                  <TypewriterAnswer
-                    content={answerText}
-                    animate={false}
-                    resetKey={`${typewriterResetKey}-raw`}
-                    sanitizeDisplay={false}
-                    className="message-body assistant-body raw-answer-body"
-                  />
-                </div>
-              )}
-              {artifactEvents.length > 0 && (
-                <div className="artifact-events-list" data-testid="artifact-events-list">
-                  {artifactEvents.map((event) => (
-                    <ChildArtifactEventCard
-                      key={event.id}
-                      event={event}
-                      parentTitle={artifact?.title}
-                      onOpen={onOpenChildArtifact}
-                      onOpenInBuilder={onOpenChildInBuilder}
-                      onCopy={(text) => onCopyFeedback?.(text)}
-                    />
-                  ))}
-                </div>
-              )}
             </div>
           ) : (
             <div className="message-body assistant-body muted">

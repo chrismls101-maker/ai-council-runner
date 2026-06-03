@@ -3,9 +3,9 @@ import type { ResponseContract } from "../responseContracts/responseContract.js"
 import type { TaskIntentResult } from "../responseContracts/taskIntent.js";
 import type { ExecutionModeTrace } from "./executionModeTrace.js";
 
-export type ExecutionMode = "auto" | "quick" | "council" | "builder";
+export type ExecutionMode = "auto" | "quick" | "council";
 
-export type EffectiveExecutionMode = "quick" | "council" | "builder" | "vision" | "research";
+export type EffectiveExecutionMode = "quick" | "council" | "vision" | "research";
 
 export type ExecutionModeDecision = {
   mode: ExecutionMode;
@@ -13,7 +13,7 @@ export type ExecutionModeDecision = {
   confidence: number;
   reason: string;
   requiresConfirmation?: boolean;
-  confirmationKind?: "council" | "builder";
+  confirmationKind?: "council";
   confirmationReason?: string;
   targetLatencySeconds?: number;
 };
@@ -31,9 +31,6 @@ const STRATEGY_SIGNALS =
 
 const ONE_COLD_EMAIL =
   /\b(write|draft).{0,40}(cold email|outreach email|sales email)\b/i;
-
-const LARGE_BUILD =
-  /\b(build (me )?(a )?full|create a (full )?|complete (business plan|proposal|campaign|landing page|financial model|website audit)|multi-?section document|full project plan)\b/i;
 
 const EXPLICIT_RESEARCH =
   /\b(market research|industry research|source-backed research|competitive intelligence report|research the market)\b/i;
@@ -69,7 +66,6 @@ function isCouncilIntent(intent: TaskIntentResult, text: string): boolean {
 function resolveAutoMode(
   intent: TaskIntentResult,
   contract: ResponseContract,
-  artifactSelection: { type: string; renderMode: "inline" | "canvas" } | undefined,
   prompt: string,
   options?: { wantsVision?: boolean; wantsResearch?: boolean },
 ): ExecutionModeDecision {
@@ -82,20 +78,6 @@ function resolveAutoMode(
       confidence: 92,
       reason: "Screenshot or visual context attached — vision analysis.",
       targetLatencySeconds: 25,
-    };
-  }
-
-  if (artifactSelection?.renderMode === "canvas" || (LARGE_BUILD.test(text) && artifactSelection?.type === "canvas_project")) {
-    return {
-      mode: "auto",
-      effectiveMode: "builder",
-      confidence: 88,
-      reason: "Large multi-section build — Builder workspace recommended.",
-      requiresConfirmation: true,
-      confirmationKind: "builder",
-      confirmationReason:
-        "This looks like a larger build. IIVO can create it in a dedicated workspace with editing, copy, and export tools.",
-      targetLatencySeconds: 120,
     };
   }
 
@@ -152,22 +134,18 @@ export function resolveExecutionMode({
   userSelectedMode,
   taskIntent,
   responseContract,
-  artifactSelection,
   prompt,
   wantsVision = false,
   wantsResearch = false,
   confirmationAccepted,
-  inBuilderWorkspace = false,
 }: {
   userSelectedMode: ExecutionMode;
   taskIntent: TaskIntentResult;
   responseContract: ResponseContract;
-  artifactSelection?: { type: string; renderMode: "inline" | "canvas" };
   prompt: string;
   wantsVision?: boolean;
   wantsResearch?: boolean;
   confirmationAccepted?: boolean;
-  inBuilderWorkspace?: boolean;
 }): ExecutionModeDecision {
   const text = normalizePromptForRouting(prompt.trim());
 
@@ -207,23 +185,8 @@ export function resolveExecutionMode({
       reason: "Council Mode — multi-agent reasoning for decisions and strategy.",
       targetLatencySeconds: 120,
     };
-  } else if (userSelectedMode === "builder") {
-    decision = {
-      mode: "builder",
-      effectiveMode: "builder",
-      confidence: 95,
-      reason: inBuilderWorkspace
-        ? "Builder Mode — workspace active."
-        : "Builder Mode — large artifact workspace.",
-      requiresConfirmation: !inBuilderWorkspace,
-      confirmationKind: inBuilderWorkspace ? undefined : "builder",
-      confirmationReason: inBuilderWorkspace
-        ? undefined
-        : "Open a dedicated Builder workspace for this larger build.",
-      targetLatencySeconds: 120,
-    };
   } else {
-    decision = resolveAutoMode(taskIntent, responseContract, artifactSelection, prompt, {
+    decision = resolveAutoMode(taskIntent, responseContract, prompt, {
       wantsVision,
       wantsResearch,
     });

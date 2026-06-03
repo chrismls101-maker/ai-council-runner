@@ -2,13 +2,13 @@
 
 ## Layers
 
-1. **Execution Mode** (user-facing) — Auto / Quick / Council / Builder. Gate runs **before** routing.
+1. **Execution Mode** (user-facing) — Auto / Quick / Council. Gate runs **before** routing.
 2. **Task Intent** — What the user wants done (asset, rewrite, decision, strategy, …).
 3. **Route Lane** — How IIVO runs (`fast_direct`, `council_hidden`, `council_report`, `vision`, `research`).
 4. **Response Contract** — Shape of the user-facing answer (`deliverable_first`, `rewrite_only`, …).
 5. **Council Compression** — When council runs internally but the visible answer stays deliverable-first.
 
-**Product law:** Quick is the default. Council is intentional escalation. Builder requires confirmation. Auto never silently sends simple prompts to Council.
+**Product law:** Quick is the default. Council is intentional escalation. Auto never silently sends simple prompts to Council.
 
 ## Examples
 

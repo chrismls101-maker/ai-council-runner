@@ -249,7 +249,7 @@ export function ExecutionTraceSection({
                   ? "Quick Mode"
                   : executionTrace.executionMode.selectedExecutionMode === "council"
                     ? "Council Mode"
-                    : "Builder Mode"}
+                    : executionTrace.executionMode.selectedExecutionMode}
             </span>
             <span>
               Effective:{" "}
@@ -257,11 +257,9 @@ export function ExecutionTraceSection({
                 ? "Quick"
                 : executionTrace.executionMode.effectiveExecutionMode === "council"
                   ? "Council"
-                  : executionTrace.executionMode.effectiveExecutionMode === "builder"
-                    ? "Builder"
-                    : executionTrace.executionMode.effectiveExecutionMode === "vision"
-                      ? "Vision"
-                      : "Research"}
+                  : executionTrace.executionMode.effectiveExecutionMode === "vision"
+                    ? "Vision"
+                    : "Research"}
             </span>
             {executionTrace.executionMode.confirmationShown != null && (
               <span>
@@ -291,86 +289,6 @@ export function ExecutionTraceSection({
             )}
           </div>
           <p className="muted">{executionTrace.responseContract.laneReason}</p>
-        </div>
-      )}
-
-      {executionTrace.artifact && (
-        <div className="execution-trace-router" data-testid="artifact-trace">
-          <strong>Artifact</strong>
-          <div className="execution-trace-router-meta">
-            <span>Artifact type: {executionTrace.artifact.artifactType}</span>
-            <span>Render mode: {executionTrace.artifact.renderMode}</span>
-            {executionTrace.artifact.artifactBuild && (
-              <>
-                <span>Build mode: {executionTrace.artifact.artifactBuild.buildMode}</span>
-                <span>
-                  Validation:{" "}
-                  {executionTrace.artifact.artifactBuild.schemaValidationPassed
-                    ? "passed"
-                    : "fallback"}
-                </span>
-                <span>
-                  Fallback used: {executionTrace.artifact.artifactBuild.fallbackUsed ? "yes" : "no"}
-                </span>
-                <span>
-                  Size: {executionTrace.artifact.artifactBuild.artifactSizeBytes.toLocaleString()}{" "}
-                  bytes
-                </span>
-                <span>
-                  Stored by reference:{" "}
-                  {executionTrace.artifact.artifactBuild.storedByReference ? "yes" : "no"}
-                </span>
-              </>
-            )}
-            {executionTrace.artifact.builderModeSuggested && (
-              <span>Builder mode suggested</span>
-            )}
-            {executionTrace.artifact.builderModeAccepted != null && (
-              <span>
-                Builder accepted: {executionTrace.artifact.builderModeAccepted ? "yes" : "no"}
-              </span>
-            )}
-            {executionTrace.artifact.builder && (
-              <>
-                <span>Builder open: {executionTrace.artifact.builder.opened ? "yes" : "no"}</span>
-                {executionTrace.artifact.builder.activeTab && (
-                  <span>Builder tab: {executionTrace.artifact.builder.activeTab}</span>
-                )}
-                {executionTrace.artifact.builder.buildMapCompleteness != null && (
-                  <span>Build map: {executionTrace.artifact.builder.buildMapCompleteness}%</span>
-                )}
-                {executionTrace.artifact.builder.qualityScore != null && (
-                  <span>Quality: {executionTrace.artifact.builder.qualityScore}</span>
-                )}
-                {executionTrace.artifact.builder.versionCount != null && (
-                  <span>Versions: {executionTrace.artifact.builder.versionCount}</span>
-                )}
-                {executionTrace.artifact.builder.transformsCreated != null && (
-                  <span>Transforms: {executionTrace.artifact.builder.transformsCreated}</span>
-                )}
-                {executionTrace.artifact.builder.versionPersistence && (
-                  <span>Versions: {executionTrace.artifact.builder.versionPersistence}</span>
-                )}
-                {executionTrace.artifact.builder.saved != null && (
-                  <span>Saved: {executionTrace.artifact.builder.saved ? "yes" : "no"}</span>
-                )}
-                {executionTrace.artifact.builder.shareActionUsed && (
-                  <span>Share: {executionTrace.artifact.builder.shareActionUsed}</span>
-                )}
-              </>
-            )}
-          </div>
-          {executionTrace.artifact.artifactBuild?.validationIssues &&
-            executionTrace.artifact.artifactBuild.validationIssues.length > 0 && (
-              <p className="muted">
-                {executionTrace.artifact.artifactBuild.validationIssues.join("; ")}
-              </p>
-            )}
-          {executionTrace.artifact.artifactBuild?.warnings?.map((w, i) => (
-            <p key={i} className="muted">
-              {w}
-            </p>
-          ))}
         </div>
       )}
 
