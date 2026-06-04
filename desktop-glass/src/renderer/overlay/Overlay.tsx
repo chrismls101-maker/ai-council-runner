@@ -301,6 +301,7 @@ function FeedCard({
   leaveInteractive: () => void;
 }): JSX.Element {
   const [expanded, setExpanded] = useState(false);
+  const isLooking = item.kind === "looking";
   const isThinking = item.kind === "thinking";
   const isResponse = item.kind === "response";
   const isError = item.kind === "error";
@@ -328,7 +329,7 @@ function FeedCard({
       <div className="overlay-feed-card__body-wrap">
         <p className="overlay-feed-card__body">{displayBody}</p>
       </div>
-      {!isThinking ? (
+      {!isThinking && !isLooking ? (
         <div className="overlay-feed-card__actions">
           {(isResponse || isError) && item.body ? (
             <button type="button" className="gbtn gbtn--ghost" onClick={() => void copyFeedText(item.fullBody ?? item.body)}>

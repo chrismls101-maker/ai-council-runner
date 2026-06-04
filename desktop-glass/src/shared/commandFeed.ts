@@ -5,6 +5,7 @@
 
 export type GlassCommandFeedKind =
   | "command"
+  | "looking"
   | "thinking"
   | "response"
   | "capture"
@@ -29,6 +30,7 @@ export const MAX_COMMAND_FEED_ITEMS = 12;
 
 export const COMMAND_FEED_TITLES: Record<GlassCommandFeedKind, string> = {
   command: "You asked",
+  looking: "IIVO is looking",
   thinking: "IIVO is thinking",
   response: "IIVO",
   capture: "Capture",

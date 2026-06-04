@@ -9,6 +9,10 @@
 
 import { desktopCapturer, screen } from "electron";
 
+/** 1×1 PNG for Electron E2E (no Screen Recording permission required). */
+const E2E_STUB_IMAGE_DATA_URL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
 export interface CaptureResult {
   imageDataUrl: string;
   width: number;
@@ -22,6 +26,17 @@ export async function captureDisplayById(
   displayId: number,
   displayLabel: string,
 ): Promise<CaptureResult> {
+  if (process.env.IIVO_GLASS_E2E === "1") {
+    return {
+      imageDataUrl: E2E_STUB_IMAGE_DATA_URL,
+      width: 1,
+      height: 1,
+      sourceName: "E2E Test Display",
+      displayId,
+      displayLabel,
+    };
+  }
+
   const display =
     screen.getAllDisplays().find((d) => d.id === displayId) ?? screen.getPrimaryDisplay();
   const scale = display.scaleFactor || 1;

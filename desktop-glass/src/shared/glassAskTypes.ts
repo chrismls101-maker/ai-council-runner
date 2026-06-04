@@ -10,20 +10,6 @@ export interface GlassAskSessionEvent {
   sourceTitle?: string;
 }
 
-export interface GlassAskLatestScreenshot {
-  eventId?: string;
-  sessionId?: string;
-  contextId?: string;
-  screenshotPath?: string;
-  thumbnailPath?: string;
-  mimeType?: string;
-  imageDataUrl?: string;
-  capturedAt?: string;
-  sourceTitle?: string;
-  displayId?: number;
-  label?: string;
-}
-
 export interface GlassAskSessionPayload {
   sessionId?: string;
   title?: string;
@@ -38,10 +24,26 @@ export interface GlassAskSessionPayload {
   };
 }
 
+export interface GlassAskLatestScreenshot {
+  eventId?: string;
+  sessionId?: string;
+  contextId?: string;
+  screenshotPath?: string;
+  thumbnailPath?: string;
+  mimeType?: string;
+  imageDataUrl?: string;
+  imageBase64?: string;
+  capturedAt?: string;
+  sourceTitle?: string;
+  displayId?: number;
+  label?: string;
+}
+
 export interface GlassAskRequest {
   prompt: string;
   session?: GlassAskSessionPayload;
   latestScreenshot?: GlassAskLatestScreenshot;
+  visualIntent?: boolean;
   responseStyle?: "overlay";
 }
 
@@ -50,6 +52,7 @@ export interface GlassAskResponse {
   shortAnswer?: string;
   model?: string;
   routeUsed: "glass_direct" | "glass_visual_direct";
+  usedVision?: boolean;
   runId?: string;
   contextId?: string;
   title?: string;

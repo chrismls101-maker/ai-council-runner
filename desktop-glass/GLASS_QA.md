@@ -124,18 +124,22 @@ Expected UX:
 - Session stores `iivo_command` + `iivo_response` events when a session is active.
 - **Analyze Now** remains separate (Council/deep analysis) — not used by command bar asks.
 
-### Visual Ask manual QA
+### Visual Ask live test (capture on ask)
 
 1. Start IIVO server (`npm run dev`) with `OPENAI_API_KEY` and `IMAGE_VISION_ENABLED=true`.
 2. Start Glass (`npm run glass:dev`).
 3. Select target display (e.g. HDMI) in panel settings.
-4. **Start Session**.
-5. Click **Capture Screen** (session capture).
-6. Confirm command bar / panel shows **Screen context: captured … ago** (or **visual analysis ready** after upload).
-7. Ask: **“What’s on my screen?”**
-8. Confirm inline answer references the capture (e.g. “Based on your latest capture…”) and describes visible content — not “I can’t see your screen.”
-9. **End/clear session** or wait past recency, ask again without capturing — confirm answer says to **capture first**.
-10. With vision disabled (`IMAGE_VISION_ENABLED=false`), capture then ask — confirm honest **visual analysis is not configured** message.
+4. Put something obvious on that display (error dialog, headline, app name).
+5. **Start Session** (optional but saves timeline events).
+6. Ask: **“What’s on my screen?”** — do **not** click Capture first.
+7. Confirm command bar shows **Looking…** and overlay shows **IIVO is looking at your screen…**
+8. Confirm inline answer describes what is on screen (not “I can’t see your screen”).
+9. Ask: **“What does this error mean?”** over an error on screen — confirm answer references visible text.
+10. Deny Screen Recording or block capture — confirm answer says **capture permission** needed (no fake vision).
+11. With vision disabled (`IMAGE_VISION_ENABLED=false`), ask a visual question — confirm honest **visual analysis not configured** message.
+12. Panel **Screen** status shows captured age / visual ready / looking / permission states.
+
+**Modes:** Manual Capture (Capture button), Visual Ask (screen-related command captures fresh on submit), Live Vision toggle — not implemented yet (future).
 
 ### Direct Response manual QA
 

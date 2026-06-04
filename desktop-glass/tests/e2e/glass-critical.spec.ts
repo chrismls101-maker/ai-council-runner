@@ -168,7 +168,32 @@ test.describe("IIVO Glass Electron E2E", () => {
     expect(urls.some((u) => u.includes("lensAsk=ctx-e2e-1"))).toBe(true);
   });
 
-  test("7 — window metadata via E2E IPC", async () => {
+  test("7 — visual ask captures on demand and answers inline", async () => {
+    const { command, overlay } = await getGlassWindows(app.browser);
+
+    const input = command.locator('[data-testid="glass-command-input"]');
+    await input.click();
+    await input.fill("What's on my screen?");
+    await input.press("Enter");
+
+    await expect(overlay.locator('[data-testid="glass-overlay-looking-card"]')).toBeVisible({
+      timeout: 8_000,
+    });
+    await expect(overlay.locator('[data-testid="glass-overlay-response-card"]')).toBeVisible({
+      timeout: 15_000,
+    });
+
+    const responseText = await overlay
+      .locator('[data-testid="glass-overlay-response-card"]')
+      .innerText();
+    expect(responseText).toMatch(/see the test screen/i);
+
+    const state = await readGlassState(command);
+    expect(state.screenContextStatus?.kind).not.toBe("none");
+    expect(await getE2eExternalUrls(command)).toHaveLength(0);
+  });
+
+  test("8 — window metadata via E2E IPC", async () => {
     const { command } = await getGlassWindows(app.browser);
     const metadata = await getE2eWindowMetadata(command);
     const state = await readGlassState(command);

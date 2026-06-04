@@ -1313,6 +1313,11 @@ html.glass-dock-window #root {
   box-shadow: none;
 }
 
+.overlay-feed-card--looking .overlay-feed-card__dot {
+  background: var(--accent);
+  animation: command-spin 1.2s linear infinite;
+}
+
 .overlay-feed-card--thinking .overlay-feed-card__dot {
   animation: command-pulse 1.2s ease-in-out infinite;
 }

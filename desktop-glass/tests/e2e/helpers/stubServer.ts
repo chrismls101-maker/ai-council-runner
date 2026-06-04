@@ -20,6 +20,14 @@ const STUB_ASK_RESPONSE = {
   model: "e2e-stub",
 };
 
+const STUB_VISUAL_ASK_RESPONSE = {
+  answer: "I can see the test screen.",
+  shortAnswer: "I can see the test screen.",
+  routeUsed: "glass_visual_direct",
+  usedVision: true,
+  model: "e2e-stub-vision",
+};
+
 export async function startStubServer(
   options: StubServerOptions = {},
 ): Promise<StubServerHandle> {
@@ -50,8 +58,9 @@ export async function startStubServer(
       if (req.method === "POST" && url === "/api/glass/ask") {
         askCallCount += 1;
         let prompt = "";
+        let parsed: Record<string, unknown> | null = null;
         try {
-          const parsed = JSON.parse(bodyText) as Record<string, unknown>;
+          parsed = JSON.parse(bodyText) as Record<string, unknown>;
           lastAskBody = parsed;
           prompt = String(parsed.prompt ?? "");
         } catch {
@@ -59,9 +68,13 @@ export async function startStubServer(
         }
         const responseDelay = prompt.includes("E2E_DELAY_ASK") ? Math.max(delayMs, 2500) : 0;
 
+        const visual =
+          parsed?.visualIntent === true ||
+          (parsed?.latestScreenshot != null && typeof parsed.latestScreenshot === "object");
+
         setTimeout(() => {
           res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify(STUB_ASK_RESPONSE));
+          res.end(JSON.stringify(visual ? STUB_VISUAL_ASK_RESPONSE : STUB_ASK_RESPONSE));
         }, responseDelay);
         return;
       }

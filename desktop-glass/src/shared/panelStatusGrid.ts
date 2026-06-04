@@ -46,18 +46,22 @@ export function buildPanelStatusCards(input: PanelStatusGridInput): PanelStatusC
 function buildScreenContextCard(input: PanelStatusGridInput): PanelStatusCard {
   const sc = input.screenContext;
   if (!sc || sc.kind === "none") {
-    return { key: "screen_context", label: "Screen", level: "idle", status: "Screen context: none" };
+    return { key: "screen_context", label: "Screen", level: "idle", status: "no capture" };
   }
   const level: PanelStatusLevel =
-    sc.kind === "ready"
-      ? "ok"
-      : sc.kind === "captured"
+    sc.kind === "looking"
+      ? "warn"
+      : sc.kind === "ready"
         ? "ok"
-        : sc.kind === "vision_not_configured"
-          ? "warn"
-          : sc.kind === "unavailable"
+        : sc.kind === "captured"
+          ? "ok"
+          : sc.kind === "permission_needed"
             ? "warn"
-            : "idle";
+            : sc.kind === "vision_not_configured"
+              ? "warn"
+              : sc.kind === "unavailable"
+                ? "warn"
+                : "idle";
   return {
     key: "screen_context",
     label: "Screen",

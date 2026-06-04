@@ -11,19 +11,16 @@ import { getMaxOutputTokens } from "../config/tokenModes.js";
 import { formatGlassDirectAnswer } from "./glassDirectAsk.js";
 import type { GlassAskLatestScreenshot, GlassAskRequestBody, GlassAskResponseBody } from "./glassAskTypes.js";
 
-const GLASS_VISUAL_SYSTEM = `You are IIVO Glass, a fast conversational AI companion. The user asked about their screen using a screenshot they explicitly captured in IIVO Glass moments ago.
+const GLASS_VISUAL_SYSTEM = `You are IIVO Glass, a live AI companion over the user's workspace. When an image is provided, answer based on the image and the user's question. Be concise, practical, and conversational. If the image is unclear, say so. Do not claim to see anything not visible in the image. Do not use council/report formatting.
 
-Answer naturally and directly. Describe what you can see in the image. Be concise unless they asked for depth. Do not invent UI or text that is not visible. Do not use council/report formatting.
-
-If helpful, start with a brief phrase like "Based on your latest capture…" then answer.
+Use natural phrasing like "I see…", "It looks like…", "You appear to be working on…", or "The error says…" when supported by the image.
 
 Style:
 - 1–5 short paragraphs or bullets
-- conversational and practical
 - no heavy markdown, no ## headers`;
 
 export const GLASS_CAPTURE_FIRST_MESSAGE =
-  "I can't see the live screen until you capture it. Click Capture, then ask again.";
+  "I couldn't capture the screen. Grant Screen Recording permission to IIVO Glass, click Capture, or try again.";
 
 export const GLASS_VISION_NOT_CONFIGURED_MESSAGE =
   "I found your latest capture, but visual analysis is not configured yet.";
@@ -128,6 +125,18 @@ async function runVisionFromDataUrl(
   }
 }
 
+function resolveImageDataUrl(shot: GlassAskLatestScreenshot | undefined): string | undefined {
+  if (!shot) return undefined;
+  if (shot.imageDataUrl) return shot.imageDataUrl;
+  if (shot.imageBase64) {
+    const mime = shot.mimeType ?? "image/png";
+    return shot.imageBase64.startsWith("data:")
+      ? shot.imageBase64
+      : `data:${mime};base64,${shot.imageBase64}`;
+  }
+  return undefined;
+}
+
 function mapVisionToGlassResponse(
   prompt: string,
   vision: VisionAnswerResult,
@@ -167,6 +176,7 @@ function mapVisionToGlassResponse(
     shortAnswer: formatted.shortAnswer,
     model: vision.visionTrace.visionModel,
     routeUsed: "glass_visual_direct",
+    usedVision: true,
     contextId,
     title: prompt.length > 60 ? `${prompt.slice(0, 59)}…` : prompt,
     warnings: formatted.warnings,
@@ -180,7 +190,8 @@ export async function runGlassVisualDirectAsk(
   const prompt = body.prompt?.trim() ?? "";
   const shot = body.latestScreenshot;
 
-  if (!shot?.contextId && !shot?.imageDataUrl) {
+  const inlineImage = resolveImageDataUrl(shot);
+  if (!shot?.contextId && !inlineImage) {
     return {
       answer: GLASS_CAPTURE_FIRST_MESSAGE,
       routeUsed: "glass_direct",
@@ -189,12 +200,13 @@ export async function runGlassVisualDirectAsk(
   }
 
   let vision: VisionAnswerResult;
+  const contextId = shot?.contextId;
 
-  if (shot.contextId) {
-    const item = await getContextItem(shot.contextId);
+  if (contextId) {
+    const item = await getContextItem(contextId);
     if (!item || item.type !== "screenshot") {
-      if (shot.imageDataUrl) {
-        vision = await runVisionFromDataUrl(prompt, shot.imageDataUrl, shot, signal);
+      if (inlineImage) {
+        vision = await runVisionFromDataUrl(prompt, inlineImage, shot, signal);
       } else {
         return {
           answer: GLASS_CAPTURE_FIRST_MESSAGE,
@@ -205,8 +217,8 @@ export async function runGlassVisualDirectAsk(
     } else {
       vision = await runVisionFromContextItem(prompt, item, signal);
     }
-  } else if (shot.imageDataUrl) {
-    vision = await runVisionFromDataUrl(prompt, shot.imageDataUrl, shot, signal);
+  } else if (inlineImage) {
+    vision = await runVisionFromDataUrl(prompt, inlineImage, shot, signal);
   } else {
     return {
       answer: GLASS_CAPTURE_FIRST_MESSAGE,
@@ -215,5 +227,5 @@ export async function runGlassVisualDirectAsk(
     };
   }
 
-  return mapVisionToGlassResponse(prompt, vision, shot.contextId);
+  return mapVisionToGlassResponse(prompt, vision, contextId);
 }

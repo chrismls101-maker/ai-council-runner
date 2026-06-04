@@ -19,6 +19,7 @@ export interface GlassAskLatestScreenshot {
   mimeType?: string;
   /** Inline capture bytes for one-shot ask when context upload is unavailable (not persisted). */
   imageDataUrl?: string;
+  imageBase64?: string;
   capturedAt?: string;
   sourceTitle?: string;
   displayId?: number;
@@ -43,6 +44,7 @@ export interface GlassAskRequestBody {
   prompt: string;
   session?: GlassAskSessionPayload;
   latestScreenshot?: GlassAskLatestScreenshot;
+  visualIntent?: boolean;
   responseStyle?: "overlay";
 }
 
@@ -51,6 +53,7 @@ export interface GlassAskResponseBody {
   shortAnswer?: string;
   model?: string;
   routeUsed: "glass_direct" | "glass_visual_direct";
+  usedVision?: boolean;
   runId?: string;
   contextId?: string;
   title?: string;

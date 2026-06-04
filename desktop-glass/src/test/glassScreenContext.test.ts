@@ -15,7 +15,7 @@ test("promptRequestsGlassScreenVisual detects screen questions", () => {
 test("buildGlassScreenContextStatus none when no capture", () => {
   const status = buildGlassScreenContextStatus(null);
   assert.equal(status.kind, "none");
-  assert.match(status.label, /none/i);
+  assert.match(status.label, /no capture/i);
 });
 
 test("buildGlassScreenContextStatus captured with age", () => {
@@ -30,6 +30,12 @@ test("buildGlassScreenContextStatus captured with age", () => {
   assert.ok(status.ageSeconds != null && status.ageSeconds >= 10);
 });
 
+test("buildGlassScreenContextStatus looking when phase is looking", () => {
+  const status = buildGlassScreenContextStatus(null, { phase: "looking" });
+  assert.equal(status.kind, "looking");
+  assert.match(status.label, /looking now/i);
+});
+
 test("buildGlassScreenContextStatus ready when context uploaded", () => {
   const status = buildGlassScreenContextStatus({
     capturedAt: new Date().toISOString(),
@@ -38,7 +44,7 @@ test("buildGlassScreenContextStatus ready when context uploaded", () => {
     displayLabel: "Primary",
   });
   assert.equal(status.kind, "ready");
-  assert.match(status.label, /visual analysis ready/i);
+  assert.match(status.label, /visual ready/i);
 });
 
 test("isRecentGlassCapture rejects stale captures", () => {

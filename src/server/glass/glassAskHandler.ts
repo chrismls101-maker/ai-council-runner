@@ -40,7 +40,9 @@ export async function handleGlassAsk(
   }
 
   try {
-    if (promptRequestsGlassScreenVisual(prompt)) {
+    const visual =
+      body.visualIntent === true || promptRequestsGlassScreenVisual(prompt);
+    if (visual) {
       return await runGlassVisualDirectAsk(body, signal);
     }
     return await runGlassDirectAsk(body, signal, caller);

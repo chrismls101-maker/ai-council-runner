@@ -48,7 +48,7 @@ const fallbackState: GlassState = {
   commandFeed: [],
   askStatus: "idle" as const,
   latestScreenshot: null,
-  screenContextStatus: { kind: "none", label: "Screen context: none" },
+  screenContextStatus: { kind: "none", label: "Screen: no capture" },
   glassSettings: { ...DEFAULT_GLASS_USER_SETTINGS },
   availableDisplayIds: [],
   connectedDisplays: [],

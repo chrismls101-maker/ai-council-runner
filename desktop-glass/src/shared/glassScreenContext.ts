@@ -2,6 +2,27 @@
  * Glass screen capture context for visual command-bar asks (shared, no Electron).
  */
 
+import {
+  formatCaptureAgeSeconds,
+  GLASS_SCREEN_CONTEXT_DISPLAY_MAX_AGE_MS,
+  GLASS_VISUAL_FALLBACK_MAX_AGE_MS,
+  isFallbackGlassCapture,
+  isRecentGlassCapture,
+  promptRequestsGlassScreenVisual,
+} from "./glassVisualIntent.ts";
+
+export {
+  formatCaptureAgeSeconds,
+  GLASS_SCREEN_CONTEXT_DISPLAY_MAX_AGE_MS,
+  GLASS_VISUAL_FALLBACK_MAX_AGE_MS,
+  isFallbackGlassCapture,
+  isRecentGlassCapture,
+  promptRequestsGlassScreenVisual,
+};
+
+/** @deprecated use GLASS_SCREEN_CONTEXT_DISPLAY_MAX_AGE_MS */
+export const GLASS_SCREEN_CONTEXT_MAX_AGE_MS = GLASS_SCREEN_CONTEXT_DISPLAY_MAX_AGE_MS;
+
 export type GlassScreenContextUploadStatus = "none" | "pending" | "ready" | "failed";
 
 export interface GlassLatestScreenshotState {
@@ -32,41 +53,15 @@ export interface GlassAskLatestScreenshot {
   label?: string;
 }
 
-const GLASS_SCREEN_VISUAL_PATTERNS = [
-  /\bwhat'?s on (?:my |the )?screen\b/i,
-  /\bwhat am i looking at\b/i,
-  /\bwhat do you see\b/i,
-  /\bread this error\b/i,
-  /\bexplain what'?s on (?:my |the )?screen\b/i,
-  /\bwhat should i do with this page\b/i,
-  /\bsummarize this screen\b/i,
-  /\bon (?:my |the )?screen\b/i,
-  /\bthis (?:page|screen|window|ui)\b/i,
-  /\bwhat'?s (?:shown|displayed|visible)\b/i,
-  /\bscreenshot\b/i,
-  /\bvisually\b/i,
-];
-
-export function promptRequestsGlassScreenVisual(prompt: string): boolean {
-  const text = prompt.trim();
-  if (!text) return false;
-  return GLASS_SCREEN_VISUAL_PATTERNS.some((pattern) => pattern.test(text));
-}
-
-/** Max age for a capture to count as “recent” for visual ask (ms). */
-export const GLASS_SCREEN_CONTEXT_MAX_AGE_MS = 30 * 60 * 1000;
-
-export function isRecentGlassCapture(capturedAt: string, nowMs = Date.now()): boolean {
-  const t = Date.parse(capturedAt);
-  if (!Number.isFinite(t)) return false;
-  return nowMs - t <= GLASS_SCREEN_CONTEXT_MAX_AGE_MS;
-}
+export type GlassScreenContextPhase = "idle" | "looking";
 
 export type GlassScreenContextStatusKind =
   | "none"
+  | "looking"
   | "captured"
   | "ready"
   | "unavailable"
+  | "permission_needed"
   | "vision_not_configured";
 
 export interface GlassScreenContextStatus {
@@ -79,14 +74,29 @@ export interface GlassScreenContextStatus {
 
 export function buildGlassScreenContextStatus(
   latest: GlassLatestScreenshotState | null | undefined,
-  options?: { visionConfigured?: boolean },
+  options?: {
+    phase?: GlassScreenContextPhase;
+    visionConfigured?: boolean;
+    lastCaptureError?: string;
+  },
 ): GlassScreenContextStatus {
-  if (!latest?.capturedAt) {
-    return { kind: "none", label: "Screen context: none" };
+  if (options?.phase === "looking") {
+    return { kind: "looking", label: "Screen: looking now…" };
   }
 
-  const ageMs = Date.now() - Date.parse(latest.capturedAt);
-  const ageSeconds = Number.isFinite(ageMs) ? Math.max(0, Math.round(ageMs / 1000)) : undefined;
+  if (options?.lastCaptureError && /permission|screen recording/i.test(options.lastCaptureError)) {
+    return {
+      kind: "permission_needed",
+      label: "Screen: capture permission needed",
+      detail: options.lastCaptureError,
+    };
+  }
+
+  if (!latest?.capturedAt) {
+    return { kind: "none", label: "Screen: no capture" };
+  }
+
+  const ageSeconds = formatCaptureAgeSeconds(latest.capturedAt);
   const ageLabel =
     ageSeconds == null
       ? ""
@@ -97,8 +107,8 @@ export function buildGlassScreenContextStatus(
   if (!isRecentGlassCapture(latest.capturedAt)) {
     return {
       kind: "unavailable",
-      label: "Screen context: capture unavailable",
-      detail: "Capture is too old — click Capture again.",
+      label: "Screen: capture unavailable",
+      detail: "Capture is too old — ask again or click Capture.",
       capturedAt: latest.capturedAt,
       ageSeconds,
     };
@@ -107,7 +117,7 @@ export function buildGlassScreenContextStatus(
   if (latest.contextUploadStatus === "ready" && latest.contextId) {
     return {
       kind: "ready",
-      label: `Screen context: visual analysis ready (${ageLabel})`.replace(" ()", ""),
+      label: `Screen: visual ready (${ageLabel})`.replace(" ()", ""),
       capturedAt: latest.capturedAt,
       ageSeconds,
     };
@@ -115,8 +125,9 @@ export function buildGlassScreenContextStatus(
 
   if (latest.contextUploadStatus === "failed") {
     return {
-      kind: "unavailable",
-      label: `Screen context: captured ${ageLabel} (upload pending retry on ask)`,
+      kind: "captured",
+      label: `Screen: captured ${ageLabel}`,
+      detail: "Vision uses inline image; Context Bridge sync optional.",
       capturedAt: latest.capturedAt,
       ageSeconds,
     };
@@ -125,7 +136,7 @@ export function buildGlassScreenContextStatus(
   if (latest.contextUploadStatus === "pending") {
     return {
       kind: "captured",
-      label: `Screen context: captured ${ageLabel} (syncing…)`,
+      label: `Screen: captured ${ageLabel} (syncing…)`,
       capturedAt: latest.capturedAt,
       ageSeconds,
     };
@@ -134,8 +145,8 @@ export function buildGlassScreenContextStatus(
   if (options?.visionConfigured === false) {
     return {
       kind: "vision_not_configured",
-      label: "Screen context: vision not configured",
-      detail: "Capture saved locally; enable IMAGE_VISION_ENABLED on the server.",
+      label: "Screen: vision unavailable",
+      detail: "Enable IMAGE_VISION_ENABLED on the IIVO server.",
       capturedAt: latest.capturedAt,
       ageSeconds,
     };
@@ -143,7 +154,7 @@ export function buildGlassScreenContextStatus(
 
   return {
     kind: "captured",
-    label: `Screen context: captured ${ageLabel}`,
+    label: `Screen: captured ${ageLabel}`,
     capturedAt: latest.capturedAt,
     ageSeconds,
   };

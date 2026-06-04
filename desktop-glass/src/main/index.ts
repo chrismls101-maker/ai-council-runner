@@ -135,17 +135,16 @@ import {
   type GlassCommandFeedItem,
 } from "../shared/commandFeed.ts";
 import { askIivoGlass, GlassAskCancelledError } from "./glassAskClient.ts";
-import {
-  buildLatestScreenshotAskPayload,
-  uploadGlassScreenshotContext,
-} from "./glassLatestScreenshot.ts";
+import { uploadGlassScreenshotContext } from "./glassLatestScreenshot.ts";
 import { createLatestScreenshotState } from "../shared/glassLatestScreenshotAsk.ts";
 import type { GlassAskSessionPayload, GlassAskStatus, GlassLastAskResponse } from "../shared/glassAskTypes.ts";
 import {
   buildGlassScreenContextStatus,
   promptRequestsGlassScreenVisual,
   type GlassLatestScreenshotState,
+  type GlassScreenContextPhase,
 } from "../shared/glassScreenContext.ts";
+import { resolveScreenshotForVisualAsk } from "./glassVisualAskCapture.ts";
 import {
   DEFAULT_GLASS_USER_SETTINGS,
   type GlassUserSettings,
@@ -186,6 +185,7 @@ interface AppState {
   lastSentUrl?: string;
   pendingCaptureDataUrl?: string;
   latestScreenshot?: GlassLatestScreenshotState | null;
+  visualAskPhase: GlassScreenContextPhase;
   sessionActionStatus: SessionActionStatus;
   transcriptionMode: TranscriptionMode;
   systemAudioStatus: SystemAudioStatus;
@@ -224,6 +224,7 @@ const state: AppState = {
   askStatus: "idle",
   askInFlight: false,
   latestScreenshot: null,
+  visualAskPhase: "idle",
   glassSettings: { ...DEFAULT_GLASS_USER_SETTINGS },
 };
 
@@ -267,7 +268,9 @@ function snapshot(): GlassState {
     askStatus: state.askStatus,
     lastAskResponse: state.lastAskResponse,
     latestScreenshot: state.latestScreenshot ?? null,
-    screenContextStatus: buildGlassScreenContextStatus(state.latestScreenshot),
+    screenContextStatus: buildGlassScreenContextStatus(state.latestScreenshot, {
+      phase: state.visualAskPhase,
+    }),
     glassSettings: state.glassSettings,
     availableDisplayIds: getAvailableDisplayIds(),
     connectedDisplays: getConnectedDisplays(),
@@ -515,7 +518,23 @@ async function openFeedInIivo(feedId: string): Promise<void> {
 }
 
 function removeThinkingFeedItems(): void {
-  state.commandFeed = state.commandFeed.filter((item) => item.kind !== "thinking");
+  state.commandFeed = state.commandFeed.filter(
+    (item) => item.kind !== "thinking" && item.kind !== "looking",
+  );
+}
+
+function beginVisualContextUpload(imageDataUrl: string, displayLabel: string): void {
+  const title = `IIVO Glass visual ask ${new Date().toLocaleString()} · ${displayLabel}`;
+  void uploadGlassScreenshotContext(config, imageDataUrl, title).then((contextId) => {
+    if (!state.latestScreenshot) return;
+    if (contextId) {
+      state.latestScreenshot.contextId = contextId;
+      state.latestScreenshot.contextUploadStatus = "ready";
+    } else {
+      state.latestScreenshot.contextUploadStatus = "failed";
+    }
+    push();
+  });
 }
 
 function cancelGlassAsk(): void {
@@ -527,6 +546,7 @@ function cancelGlassAsk(): void {
   thinkingStartedAtMs = null;
   state.askInFlight = false;
   state.askStatus = "idle";
+  state.visualAskPhase = "idle";
   removeThinkingFeedItems();
   pushFeed(createCommandFeedItem("error", "Request cancelled."));
   state.operationDiagnostics = recordOperation(state.operationDiagnostics, "ask-iivo", "error", "cancelled");
@@ -561,14 +581,12 @@ async function submitCommand(rawText: string): Promise<void> {
   askAbortController = new AbortController();
   const signal = askAbortController.signal;
 
+  const visualIntent = promptRequestsGlassScreenVisual(text);
   state.askInFlight = true;
   state.askStatus = "pending";
   state.lastError = undefined;
   pushFeed(createCommandFeedItem("command", text, { prompt: text }));
-  thinkingStartedAtMs = Date.now();
-  pushFeed(createCommandFeedItem("thinking", "IIVO is thinking…"));
   state.operationDiagnostics = recordOperation(state.operationDiagnostics, "ask-iivo", "pending");
-  push();
 
   const live = sessionIsLive();
   const session = sessions.current();
@@ -583,13 +601,74 @@ async function submitCommand(rawText: string): Promise<void> {
     await persistSessions(sessions);
   }
 
-  const latestScreenshot = promptRequestsGlassScreenVisual(text)
-    ? await buildLatestScreenshotAskPayload({
-        latest: state.latestScreenshot ?? undefined,
-        pendingDataUrl: state.pendingCaptureDataUrl,
-        session: session ?? null,
-      })
-    : undefined;
+  let latestScreenshot: import("../shared/glassScreenContext.ts").GlassAskLatestScreenshot | undefined;
+  let visualCaptureWarning: string | undefined;
+  let usedVision = false;
+
+  if (visualIntent) {
+    state.visualAskPhase = "looking";
+    pushFeed(
+      createCommandFeedItem("looking", "IIVO is looking at your screen…", {
+        title: "IIVO is looking",
+      }),
+    );
+    push();
+
+    const captureOutcome = await resolveScreenshotForVisualAsk({
+      config,
+      sessions,
+      sessionIsLive,
+      latestScreenshot: state.latestScreenshot,
+      pendingCaptureDataUrl: state.pendingCaptureDataUrl,
+      resolveCaptureTarget: () => resolveCaptureDisplay(state.glassSettings.displayTarget),
+      eventContextFields,
+    });
+
+    state.visualAskPhase = "idle";
+    removeThinkingFeedItems();
+
+    if (requestGeneration !== askRequestGeneration || signal.aborted) return;
+
+    if (!captureOutcome.ok) {
+      state.askInFlight = false;
+      state.askStatus = "error";
+      pushFeed(createCommandFeedItem("error", captureOutcome.error, { prompt: text }));
+      state.lastError = captureOutcome.error;
+      state.operationDiagnostics = recordOperation(
+        state.operationDiagnostics,
+        "ask-iivo",
+        "error",
+        "capture_failed",
+      );
+      push();
+      return;
+    }
+
+    state.latestScreenshot = captureOutcome.latestState;
+    state.pendingCaptureDataUrl = captureOutcome.imageDataUrl || state.pendingCaptureDataUrl;
+    if (captureOutcome.fresh && captureOutcome.imageDataUrl) {
+      beginVisualContextUpload(
+        captureOutcome.imageDataUrl,
+        captureOutcome.latestState.displayLabel ?? "Display",
+      );
+    }
+    latestScreenshot = captureOutcome.payload;
+    visualCaptureWarning = captureOutcome.warning;
+    usedVision = true;
+
+    if (live && sessionIsLive()) {
+      await persistSessions(sessions);
+    }
+  }
+
+  thinkingStartedAtMs = Date.now();
+  pushFeed(
+    createCommandFeedItem(
+      "thinking",
+      visualIntent ? "IIVO is thinking about your screen…" : "IIVO is thinking…",
+    ),
+  );
+  push();
 
   try {
     const result = await askIivoGlass(
@@ -598,6 +677,7 @@ async function submitCommand(rawText: string): Promise<void> {
         prompt: text,
         session: buildGlassAskSessionPayload(),
         latestScreenshot,
+        visualIntent: visualIntent || undefined,
         responseStyle: "overlay",
       },
       signal,
@@ -627,6 +707,10 @@ async function submitCommand(rawText: string): Promise<void> {
       model: result.model,
     };
 
+    const responseWarnings = [
+      ...(visualCaptureWarning ? [visualCaptureWarning] : []),
+      ...(result.warnings ?? []),
+    ];
     pushFeed(
       createCommandFeedItem("response", overlayAnswer, {
         prompt: text,
@@ -635,6 +719,9 @@ async function submitCommand(rawText: string): Promise<void> {
         contextId: result.contextId,
       }),
     );
+    if (responseWarnings.length) {
+      state.lastNotice = responseWarnings[0];
+    }
 
     if (live && session) {
       sessions.addEvent({
@@ -646,6 +733,7 @@ async function submitCommand(rawText: string): Promise<void> {
         metadata: {
           routeUsed: result.routeUsed,
           model: result.model,
+          usedVision: usedVision || result.usedVision === true,
           ...(latestScreenshot?.eventId
             ? {
                 usedScreenshotEventId: latestScreenshot.eventId,
@@ -683,6 +771,7 @@ async function submitCommand(rawText: string): Promise<void> {
   } finally {
     if (requestGeneration === askRequestGeneration) {
       state.askInFlight = false;
+      state.visualAskPhase = "idle";
       askAbortController = null;
       if (state.askStatus === "pending") state.askStatus = "idle";
       push();
@@ -730,6 +819,8 @@ async function handleCommand(
       return;
     case "stop":
     case "stop-everything": {
+      cancelGlassAsk();
+      state.visualAskPhase = "idle";
       const stopped = stopAllActiveCaptureAndListening({
         privacy: state.privacy,
         stt: state.stt,

@@ -59,7 +59,7 @@ await test("formatGlassDirectAnswer removes council markers", () => {
 });
 
 const councilPrompts = [
-  "What am I working on?",
+  "Write a short note about my project.",
   "What should I ask Cursor next?",
   "Analyze this deeply",
   "Run council on this",
@@ -99,7 +99,7 @@ await test("handleGlassAsk returns routeUsed glass_direct via mock caller", asyn
   process.env.OPENAI_API_KEY = "test-key";
   try {
     const result = await handleGlassAsk(
-      { prompt: "What am I working on?" },
+      { prompt: "Summarize my notes briefly." },
       undefined,
       async () => ({
         content: "- You are editing IIVO Glass.\n- Command bar is direct-only.",
@@ -125,6 +125,21 @@ await test("GLASS_DIRECT_SYSTEM_PROMPT forbids council formatting", () => {
 await test("promptRequestsGlassScreenVisual detects screen questions", () => {
   assert.equal(promptRequestsGlassScreenVisual("What's on my screen?"), true);
   assert.equal(promptRequestsGlassScreenVisual("Hello there"), false);
+});
+
+await test("visualIntent flag routes to visual path without screenshot", async () => {
+  const previousKey = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "test-key";
+  try {
+    const result = await handleGlassAsk({
+      prompt: "Hello",
+      visualIntent: true,
+    });
+    assert.match(result.answer, /capture/i);
+  } finally {
+    if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previousKey;
+  }
 });
 
 await test("screen question without screenshot returns capture-first message", async () => {

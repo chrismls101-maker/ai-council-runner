@@ -22,6 +22,7 @@ export function CommandBar(): JSX.Element {
 
   const listening = state.privacy.listening || tx.status === "listening";
   const askPending = state.askStatus === "pending";
+  const screenLooking = state.screenContextStatus?.kind === "looking";
 
   useEffect(() => {
     window.glass.setIgnoreMouse(true);
@@ -159,7 +160,13 @@ export function CommandBar(): JSX.Element {
             className="command-input"
             type="text"
             value={text}
-            placeholder={askPending ? "IIVO is thinking…" : "Ask IIVO while you work…"}
+            placeholder={
+              screenLooking
+                ? "Looking…"
+                : askPending
+                  ? "IIVO is thinking…"
+                  : "Ask IIVO while you work…"
+            }
             disabled={askPending}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={handleKeyDown}
