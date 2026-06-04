@@ -225,6 +225,59 @@ request) sending the summarized session to IIVO Council.
 - IIVO Glass does not capture audio on launch.
 - Audio/transcript stays local until you send/analyze.
 
+## Glass v1.4 — OpenAI speech-to-text
+
+### Enable OpenAI STT
+
+Set environment variables before launching Glass (repo root `npm run glass:dev`):
+
+```bash
+export OPENAI_API_KEY=sk-...
+export IIVO_GLASS_STT_ENABLED=true
+export IIVO_GLASS_STT_PROVIDER=openai
+# optional:
+export IIVO_GLASS_STT_MODEL=gpt-4o-mini-transcribe
+export IIVO_GLASS_STT_AUTO_STOP=true
+export IIVO_GLASS_STT_AUTO_STOP_MINUTES=30
+```
+
+Without `OPENAI_API_KEY`, UI shows **Not configured** — manual paste still works. No mock provider in UI.
+
+### Cost warning
+
+- Chunks default to **20 seconds**.
+- Warning at **10 minutes** of listening.
+- Optional auto-stop at 30 minutes when `IIVO_GLASS_STT_AUTO_STOP=true` (default OFF).
+
+### Microphone paths
+
+1. **Web Speech** when Electron/Chromium supports it (local browser STT, no OpenAI).
+2. **MediaRecorder + OpenAI STT** when Web Speech unavailable and STT configured.
+
+### System audio path
+
+- Electron loopback capture → 20s chunks → OpenAI STT when configured.
+- No YouTube-specific behavior. General system/screen audio only.
+- Virtual audio device may still be required on macOS if loopback returns no audio track.
+
+### v1.4 checklist
+
+1. Launch Glass — no listening on launch.
+2. Confirm STT Provider shows **Not configured** without env vars.
+3. Set OpenAI env vars, relaunch — STT Provider shows **OpenAI**.
+4. Start Session → Microphone → Start Listening → confirm chunks transcribe (~20s).
+5. System Audio → Start Listening → confirm honest status + transcription when stream available.
+6. Stop Listening stops all tracks.
+7. Transcripts appear as `transcript_note` events with `microphone` or `system_audio` tags.
+8. No mock provider option anywhere in UI.
+
+### Privacy (v1.4)
+
+- Audio only starts when you press **Start Listening**.
+- Audio chunks may be sent to **OpenAI** for transcription when STT is enabled.
+- Transcripts stay local until you send/analyze.
+- Stop Listening stops microphone/system audio tracks.
+
 ## Privacy controls
 
 - Session recording starts **only** when you click **Start Session** — never on

@@ -16,6 +16,17 @@ import {
 } from "../shared/audioCaptureTypes.ts";
 import { initialPrivacyState } from "../shared/privacyState.ts";
 import { SYSTEM_AUDIO_STATUS_MESSAGES } from "../shared/systemAudioTypes.ts";
+import type { GlassSttState } from "../shared/sttTypes.ts";
+
+const baseStt: GlassSttState = {
+  provider: "none",
+  status: "disabled",
+  model: "gpt-4o-mini-transcribe",
+  enabled: false,
+  chunkMs: 20_000,
+  autoStopEnabled: false,
+  autoStopMs: 30 * 60 * 1000,
+};
 
 test("not listening on launch", () => {
   assert.equal(initialPrivacyState.listening, false);
@@ -33,7 +44,9 @@ test("mode detection picks web speech when available", () => {
       webSpeechAvailable: true,
       mediaRecorderAvailable: true,
       getUserMediaAvailable: true,
+      getDisplayMediaAvailable: true,
       systemAudioStatus: "requires_permission",
+      stt: baseStt,
     }),
     "microphone_web_speech",
   );
@@ -45,7 +58,9 @@ test("unavailable fallback when no mic providers", () => {
       webSpeechAvailable: false,
       mediaRecorderAvailable: false,
       getUserMediaAvailable: false,
+      getDisplayMediaAvailable: false,
       systemAudioStatus: "requires_permission",
+      stt: baseStt,
     }),
     "manual",
   );
@@ -62,9 +77,10 @@ test("start/stop listening transitions for mic", () => {
   assert.equal(s.status, "idle");
 });
 
-test("system audio unsupported blocks start when virtual device required", () => {
+test("system audio missing-track fallback blocks start", () => {
   const snap = buildProviderSnapshot("system_audio", undefined, {
     systemAudioStatus: "requires_virtual_device",
+    stt: baseStt,
   });
   assert.equal(
     modeStatusMessage("system_audio", snap),
@@ -76,19 +92,20 @@ test("system audio unsupported blocks start when virtual device required", () =>
 test("system audio requires permission allows start attempt", () => {
   const snap = buildProviderSnapshot("system_audio", undefined, {
     systemAudioStatus: "requires_permission",
+    stt: baseStt,
   });
   assert.match(modeStatusMessage("system_audio", snap), /Screen Recording/i);
 });
 
 test("manual mode cannot start listening", () => {
-  const snap = buildProviderSnapshot("manual");
+  const snap = buildProviderSnapshot("manual", undefined, { stt: baseStt });
   assert.equal(canStartListening("manual", snap), false);
   const s = transcriptionReducer(initialTranscriptionState, { type: "START_LISTENING" });
   assert.equal(s.status, "idle");
 });
 
 test("microphone unavailable message", () => {
-  const snap = buildProviderSnapshot("microphone_web_speech", undefined);
+  const snap = buildProviderSnapshot("microphone_web_speech", undefined, { stt: baseStt });
   assert.match(modeStatusMessage("microphone_web_speech", snap), /not available/i);
   assert.match(MICROPHONE_UNAVAILABLE_MESSAGE, /not available/i);
 });

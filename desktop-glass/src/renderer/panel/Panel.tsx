@@ -483,12 +483,27 @@ function Transcript({ transcript }: { transcript: string }): JSX.Element {
           </button>
         ))}
       </div>
+      <p className="empty">
+        Source: {tx.modeLabels[tx.selectedMode] ?? tx.selectedMode} · STT Provider:{" "}
+        {tx.sttProviderLabel}
+      </p>
+      <p className="empty">{tx.sttStatusMessage}</p>
       <p className="empty">{tx.statusMessage}</p>
       {tx.status === "listening" ? (
         <p className="privacy__warning">
-          ● Listening —{" "}
-          {tx.selectedMode === "system_audio" ? "system audio active" : "microphone active"}
+          ● Listening {tx.listeningDuration} —{" "}
+          {tx.selectedMode === "system_audio" ? "system audio" : "microphone"}
+          {tx.transcribing ? " · transcribing…" : ""}
         </p>
+      ) : null}
+      {tx.lastError ? <div className="error-banner">{tx.lastError}</div> : null}
+      {tx.lastTranscript ? (
+        <>
+          <p className="section-title">Last transcript</p>
+          <div className="summary-box" style={{ whiteSpace: "pre-wrap" }}>
+            {tx.lastTranscript}
+          </div>
+        </>
       ) : null}
       {transcript ? (
         <div className="summary-box" style={{ whiteSpace: "pre-wrap" }}>
@@ -533,6 +548,13 @@ function Transcript({ transcript }: { transcript: string }): JSX.Element {
             Add transcript chunk
           </button>
         ) : null}
+        <button
+          className="gbtn"
+          disabled={!tx.canTranscribeLastChunk}
+          onClick={tx.transcribeLastChunk}
+        >
+          Transcribe Last Chunk
+        </button>
         <button className="gbtn gbtn--ghost" disabled={!transcript} onClick={() => send({ type: "clear-transcript" })}>
           Clear
         </button>
@@ -648,11 +670,11 @@ export function Panel(): JSX.Element {
         </div>
         <div>
           Glass captures screen/audio only when you start it. IIVO Glass does not capture
-          audio on launch. System audio capture only starts when you press Start Listening
-          and may require macOS Screen Recording permission or a virtual audio device.
-          Audio and transcript stay local until you send or analyze. Analyze Now sends
-          the session to your configured IIVO server. Open in IIVO creates a Context
-          Bridge item and opens the browser.
+          audio on launch. Audio chunks may be sent to OpenAI for transcription when STT is
+          enabled. System audio capture only starts when you press Start Listening and may
+          require macOS Screen Recording permission or a virtual audio device. Audio and
+          transcript stay local until you send or analyze. Stop Listening stops microphone
+          and system audio tracks.
         </div>
       </div>
     </div>

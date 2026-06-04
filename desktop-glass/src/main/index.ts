@@ -72,6 +72,10 @@ import {
 import { release } from "node:os";
 import { resolveInitialSystemAudioStatus, darwinMajorFromRelease } from "../shared/systemAudioCapture.ts";
 import type { SystemAudioStatus } from "../shared/systemAudioTypes.ts";
+import { buildGlassSttState, resolveSttConfig } from "../shared/sttTypes.ts";
+import { listeningCostWarningMessage } from "../shared/audioChunks.ts";
+import { processSttChunk, type SttProcessChunkPayload } from "./sttChunkHandler.ts";
+import type { GlassSttState } from "../shared/ipc.ts";
 
 applySystemAudioChromiumFlags();
 
@@ -88,6 +92,7 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 const config = resolveConfig(process.env);
+const sttConfig = resolveSttConfig(process.env);
 
 interface AppState {
   privacy: PrivacyState;
@@ -103,6 +108,7 @@ interface AppState {
   systemAudioDetail?: string;
   windowContext: WindowContext;
   iivoAnalysis: IivoAnalysisState;
+  stt: GlassSttState;
 }
 
 const state: AppState = {
@@ -117,6 +123,7 @@ const state: AppState = {
   ),
   windowContext: defaultWindowContext,
   iivoAnalysis: { status: "idle" },
+  stt: buildGlassSttState(sttConfig),
 };
 
 let moments = new SavedMomentsStore();
@@ -147,6 +154,7 @@ function snapshot(): GlassState {
     systemAudioDetail: state.systemAudioDetail,
     windowContext: state.windowContext,
     iivoAnalysis: state.iivoAnalysis,
+    stt: state.stt,
   };
 }
 
@@ -253,10 +261,12 @@ async function handleCommand(command: GlassCommand): Promise<void> {
       return;
     case "start-listening":
       dispatchPrivacy({ type: "START_LISTENING", at: new Date().toISOString() });
+      state.stt = { ...state.stt, listeningElapsedMs: 0, lastError: undefined };
       push();
       return;
     case "pause":
       dispatchPrivacy({ type: "PAUSE", at: new Date().toISOString() });
+      state.stt = { ...state.stt, listeningElapsedMs: 0 };
       push();
       return;
     case "stop":
@@ -294,6 +304,14 @@ async function handleCommand(command: GlassCommand): Promise<void> {
     case "system-audio-set-status":
       state.systemAudioStatus = command.status;
       state.systemAudioDetail = command.detail;
+      push();
+      return;
+    case "stt-listening-timer":
+      state.stt = { ...state.stt, listeningElapsedMs: command.elapsedMs };
+      push();
+      return;
+    case "stt-cost-warning":
+      state.lastNotice = listeningCostWarningMessage();
       push();
       return;
     case "clear-transcript":
@@ -691,6 +709,29 @@ function registerScreenshotProtocol(): void {
 function registerIpc(): void {
   ipcMain.handle(IPC.getState, () => snapshot());
   ipcMain.handle(IPC.windowContextGet, () => getCurrentWindowContext());
+  ipcMain.handle(IPC.sttProcessChunk, (_event, payload: SttProcessChunkPayload) =>
+    processSttChunk(payload, {
+      userDataPath: app.getPath("userData"),
+      sessions,
+      sessionIsLive,
+      eventContextFields,
+      persistSessions,
+      appendTranscript(text: string) {
+        state.transcript = `${state.transcript}${state.transcript ? " " : ""}${text}`.trim();
+      },
+      getSttState: () => state.stt,
+      setSttState(next: GlassSttState) {
+        state.stt = next;
+      },
+      setLastNotice(msg) {
+        state.lastNotice = msg;
+      },
+      setLastError(msg) {
+        state.lastError = msg;
+      },
+      push,
+    }),
+  );
 
   ipcMain.on(IPC.command, (_event, command: GlassCommand) => {
     void handleCommand(command).catch((err) => {

@@ -4,7 +4,7 @@
  */
 
 import { contextBridge, ipcRenderer } from "electron";
-import { IPC, type GlassCommand, type GlassState } from "../shared/ipc.ts";
+import { IPC, type GlassCommand, type GlassState, type SttProcessChunkRequest, type SttProcessChunkResponse } from "../shared/ipc.ts";
 import type { WindowContext } from "../shared/windowContextTypes.ts";
 
 const glassApi = {
@@ -16,6 +16,9 @@ const glassApi = {
   },
   getWindowContext(): Promise<WindowContext> {
     return ipcRenderer.invoke(IPC.windowContextGet) as Promise<WindowContext>;
+  },
+  processSttChunk(payload: SttProcessChunkRequest): Promise<SttProcessChunkResponse> {
+    return ipcRenderer.invoke(IPC.sttProcessChunk, payload) as Promise<SttProcessChunkResponse>;
   },
   onState(listener: (state: GlassState) => void): () => void {
     const handler = (_event: unknown, state: GlassState): void => listener(state);

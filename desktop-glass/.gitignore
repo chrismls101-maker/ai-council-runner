@@ -8,6 +8,7 @@ dist
 
 # Packaged release artifacts (electron-builder) — never commit these
 release
+session-audio
 *.dmg
 *.zip
 *.blockmap

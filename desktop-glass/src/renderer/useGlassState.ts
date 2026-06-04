@@ -5,6 +5,18 @@ import { initialPrivacyState } from "../shared/privacyState.ts";
 import { DEFAULT_CONFIG } from "../shared/config.ts";
 import { WINDOW_CONTEXT_UNAVAILABLE_MESSAGE } from "../shared/windowContextTypes.ts";
 
+import type { GlassSttState } from "../shared/sttTypes.ts";
+
+const fallbackStt: GlassSttState = {
+  provider: "none",
+  status: "disabled",
+  model: "gpt-4o-mini-transcribe",
+  enabled: false,
+  chunkMs: 20_000,
+  autoStopEnabled: false,
+  autoStopMs: 30 * 60 * 1000,
+};
+
 const fallbackState: GlassState = {
   privacy: initialPrivacyState,
   transcript: "",
@@ -19,6 +31,7 @@ const fallbackState: GlassState = {
   systemAudioStatus: "requires_permission",
   windowContext: { status: "unavailable", reason: WINDOW_CONTEXT_UNAVAILABLE_MESSAGE },
   iivoAnalysis: { status: "idle" },
+  stt: fallbackStt,
 };
 
 export function useGlassState(): GlassState {

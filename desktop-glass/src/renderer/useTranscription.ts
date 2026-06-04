@@ -10,6 +10,7 @@ import {
   canStartListening,
   modeStatusMessage,
   resolveMicrophoneMode,
+  usesSttChunkCapture,
 } from "../shared/transcriptionProviders.ts";
 import {
   mapSystemAudioCaptureError,
@@ -20,6 +21,17 @@ import {
   initialTranscriptionState,
   transcriptionReducer,
 } from "../shared/transcriptionTypes.ts";
+import {
+  STT_MIC_NOT_CONFIGURED_MESSAGE,
+  sttProviderLabel,
+  sttStatusMessage,
+} from "../shared/sttTypes.ts";
+import {
+  DEFAULT_CHUNK_MS,
+  formatListeningDuration,
+  shouldAutoStopListening,
+  shouldWarnListeningCost,
+} from "../shared/audioChunks.ts";
 import type { GlassSpeechRecognition } from "./speech.d.ts";
 
 type SpeechRecognitionCtor = new () => GlassSpeechRecognition;
@@ -39,6 +51,12 @@ function syncSystemAudioStatus(status: SystemAudioStatus, detail?: string): void
   send({ type: "system-audio-set-status", status, detail });
 }
 
+function pickRecorderMime(): string {
+  const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"];
+  if (typeof MediaRecorder === "undefined") return "audio/webm";
+  return candidates.find((t) => MediaRecorder.isTypeSupported(t)) ?? "audio/webm";
+}
+
 export function useTranscription(): {
   selectedMode: TranscriptionMode;
   effectiveMode: TranscriptionMode;
@@ -46,12 +64,20 @@ export function useTranscription(): {
   interimText?: string;
   statusMessage: string;
   systemAudioStatus: SystemAudioStatus;
+  sttProviderLabel: string;
+  sttStatusMessage: string;
+  listeningDuration: string;
+  transcribing: boolean;
+  lastTranscript?: string;
+  lastError?: string;
   modeLabels: Record<TranscriptionMode, string>;
   modeOptions: TranscriptionMode[];
   canListen: boolean;
+  canTranscribeLastChunk: boolean;
   setMode: (mode: TranscriptionMode) => void;
   startListening: () => void;
   stopListening: () => void;
+  transcribeLastChunk: () => void;
   addChunkToSession: () => void;
 } {
   const glassState = useGlassState();
@@ -63,9 +89,16 @@ export function useTranscription(): {
   const [systemAudioDetail, setSystemAudioDetail] = useState<string | undefined>(
     glassState.systemAudioDetail,
   );
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const [hasLastChunk, setHasLastChunk] = useState(false);
+  const costWarnedRef = useRef(false);
   const recognitionRef = useRef<GlassSpeechRecognition | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+  const lastBlobRef = useRef<Blob | null>(null);
+  const lastMimeRef = useRef<string>("audio/webm");
+  const timerRef = useRef<number | null>(null);
+  const chunkSourceRef = useRef<"microphone" | "system_audio">("microphone");
 
   useEffect(() => {
     setSystemAudioStatus(glassState.systemAudioStatus);
@@ -79,8 +112,9 @@ export function useTranscription(): {
         systemAudioDetail,
         systemAudioListening:
           selectedMode === "system_audio" && state.status === "listening",
+        stt: glassState.stt,
       }),
-    [selectedMode, systemAudioStatus, systemAudioDetail, state.status],
+    [selectedMode, systemAudioStatus, systemAudioDetail, state.status, glassState.stt],
   );
 
   const effectiveMode = useMemo(() => {
@@ -95,10 +129,44 @@ export function useTranscription(): {
     send({ type: "transcription-set-mode", mode: effectiveMode });
   }, [effectiveMode]);
 
+  const stopTimer = useCallback(() => {
+    if (timerRef.current != null) {
+      window.clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    setElapsedMs(0);
+    costWarnedRef.current = false;
+  }, []);
+
+  const startTimer = useCallback(() => {
+    stopTimer();
+    const started = Date.now();
+    timerRef.current = window.setInterval(() => {
+      const next = Date.now() - started;
+      setElapsedMs(next);
+      send({ type: "stt-listening-timer", elapsedMs: next });
+      if (shouldWarnListeningCost(next, costWarnedRef.current)) {
+        costWarnedRef.current = true;
+        send({ type: "stt-cost-warning" });
+      }
+      if (
+        shouldAutoStopListening(
+          next,
+          glassState.stt.autoStopEnabled,
+          glassState.stt.autoStopMs,
+        )
+      ) {
+        stopListeningRef.current?.();
+      }
+    }, 1000);
+  }, [glassState.stt.autoStopEnabled, glassState.stt.autoStopMs, stopTimer]);
+
   const stopAllStreams = useCallback(() => {
     recognitionRef.current?.stop();
     recognitionRef.current = null;
-    mediaRecorderRef.current?.stop();
+    if (mediaRecorderRef.current?.state !== "inactive") {
+      mediaRecorderRef.current?.stop();
+    }
     mediaRecorderRef.current = null;
     if (mediaStreamRef.current) {
       stopMediaStreamState(mediaStreamRef.current.getTracks());
@@ -106,11 +174,66 @@ export function useTranscription(): {
     }
   }, []);
 
+  const stopListeningRef = useRef<(() => void) | null>(null);
+
+  const processBlob = useCallback(
+    async (blob: Blob, mimeType: string, source: "microphone" | "system_audio") => {
+      lastBlobRef.current = blob;
+      lastMimeRef.current = mimeType;
+      setHasLastChunk(true);
+      if (!glassState.stt.enabled) {
+        dispatch({
+          type: "SET_ERROR",
+          message:
+            source === "microphone"
+              ? STT_MIC_NOT_CONFIGURED_MESSAGE
+              : sttStatusMessage(glassState.stt.status),
+        });
+        return;
+      }
+      const buffer = await blob.arrayBuffer();
+      const result = await window.glass.processSttChunk({
+        buffer,
+        mimeType,
+        source,
+        sessionId: glassState.session?.id,
+      });
+      if (!result.ok) {
+        dispatch({ type: "SET_ERROR", message: result.error ?? "Transcription failed." });
+      }
+    },
+    [glassState.session?.id, glassState.stt.enabled, glassState.stt.status],
+  );
+
   const stopListening = useCallback(() => {
     stopAllStreams();
+    stopTimer();
     dispatch({ type: "STOP_LISTENING" });
     send({ type: "pause" });
-  }, [stopAllStreams]);
+  }, [stopAllStreams, stopTimer]);
+
+  stopListeningRef.current = stopListening;
+
+  const startChunkRecorder = useCallback(
+    (stream: MediaStream, source: "microphone" | "system_audio") => {
+      chunkSourceRef.current = source;
+      const mimeType = pickRecorderMime();
+      const recorder = new MediaRecorder(stream, { mimeType });
+      recorder.ondataavailable = (event) => {
+        if (!event.data || event.data.size < 512) return;
+        void processBlob(event.data, mimeType, source);
+      };
+      recorder.onstop = () => {
+        mediaRecorderRef.current = null;
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start(DEFAULT_CHUNK_MS);
+      dispatch({ type: "START_LISTENING" });
+      send({ type: "start-listening" });
+      startTimer();
+    },
+    [processBlob, startTimer],
+  );
 
   const startWebSpeech = useCallback(() => {
     const Ctor = getSpeechRecognition();
@@ -135,7 +258,7 @@ export function useTranscription(): {
       }
       if (interim) dispatch({ type: "SET_INTERIM", text: interim });
       if (finalChunk.trim()) {
-        send({ type: "add-transcript-chunk", text: finalChunk.trim() });
+        send({ type: "add-transcript-chunk", text: finalChunk.trim(), tags: ["microphone"] });
         dispatch({ type: "CLEAR_INTERIM" });
       }
     };
@@ -150,27 +273,21 @@ export function useTranscription(): {
     recognition.start();
     dispatch({ type: "START_LISTENING" });
     send({ type: "start-listening" });
-  }, [snapshot, stopListening]);
+    startTimer();
+  }, [snapshot, stopListening, startTimer]);
 
   const startMediaRecorder = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStreamRef.current = stream;
-      const recorder = new MediaRecorder(stream);
-      recorder.onstop = () => {
-        mediaRecorderRef.current = null;
-      };
-      mediaRecorderRef.current = recorder;
-      recorder.start();
-      dispatch({ type: "START_LISTENING" });
-      send({ type: "start-listening" });
+      startChunkRecorder(stream, "microphone");
     } catch {
       dispatch({
         type: "SET_ERROR",
         message: modeStatusMessage("microphone_media_recorder", snapshot),
       });
     }
-  }, [snapshot]);
+  }, [snapshot, startChunkRecorder]);
 
   const startSystemAudio = useCallback(async () => {
     if (!navigator.mediaDevices?.getDisplayMedia) {
@@ -207,8 +324,7 @@ export function useTranscription(): {
       setSystemAudioStatus("available");
       setSystemAudioDetail(undefined);
       syncSystemAudioStatus("available");
-      dispatch({ type: "START_LISTENING" });
-      send({ type: "start-listening" });
+      startChunkRecorder(stream, "system_audio");
     } catch (err) {
       const mapped = mapSystemAudioCaptureError(err);
       setSystemAudioStatus(mapped.status);
@@ -223,7 +339,7 @@ export function useTranscription(): {
         }),
       });
     }
-  }, [snapshot]);
+  }, [snapshot, startChunkRecorder]);
 
   const startListening = useCallback(() => {
     if (selectedMode === "manual") return;
@@ -256,13 +372,26 @@ export function useTranscription(): {
     [state.status, stopListening],
   );
 
+  const transcribeLastChunk = useCallback(() => {
+    const blob = lastBlobRef.current;
+    if (!blob) return;
+    void processBlob(blob, lastMimeRef.current, chunkSourceRef.current);
+  }, [processBlob]);
+
   const addChunkToSession = useCallback(() => {
     const chunk = state.interimText?.trim();
     if (!chunk) return;
-    const tags = selectedMode === "system_audio" ? ["system_audio"] : undefined;
+    const tags =
+      selectedMode === "system_audio"
+        ? ["system_audio"]
+        : selectedMode === "manual"
+          ? undefined
+          : ["microphone"];
     send({ type: "add-transcript-chunk", text: chunk, tags });
     dispatch({ type: "CLEAR_INTERIM" });
   }, [state.interimText, selectedMode]);
+
+  useEffect(() => () => stopTimer(), [stopTimer]);
 
   return {
     selectedMode,
@@ -271,12 +400,20 @@ export function useTranscription(): {
     interimText: state.interimText,
     statusMessage: modeStatusMessage(selectedMode, snapshot),
     systemAudioStatus,
+    sttProviderLabel: sttProviderLabel(glassState.stt.provider, glassState.stt.status),
+    sttStatusMessage: sttStatusMessage(glassState.stt.status),
+    listeningDuration: formatListeningDuration(elapsedMs),
+    transcribing: !!glassState.stt.transcribing,
+    lastTranscript: glassState.stt.lastTranscript,
+    lastError: state.lastError ?? glassState.stt.lastError,
     modeLabels: TRANSCRIPTION_MODE_LABELS,
     modeOptions: MODE_OPTIONS,
     canListen: canStartListening(effectiveMode, snapshot),
+    canTranscribeLastChunk: hasLastChunk && usesSttChunkCapture(effectiveMode),
     setMode,
     startListening,
     stopListening,
+    transcribeLastChunk,
     addChunkToSession,
   };
 }

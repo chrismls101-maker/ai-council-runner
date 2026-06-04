@@ -11,15 +11,19 @@ import {
   canAttemptSystemAudioCapture,
   systemAudioListeningMessage,
 } from "./systemAudioCapture.ts";
+import type { GlassSttState } from "./sttTypes.ts";
+import { STT_MIC_NOT_CONFIGURED_MESSAGE, sttStatusMessage } from "./sttTypes.ts";
 
 export interface TranscriptionProviderSnapshot {
   selectedMode: TranscriptionMode;
   webSpeechAvailable: boolean;
   mediaRecorderAvailable: boolean;
   getUserMediaAvailable: boolean;
+  getDisplayMediaAvailable: boolean;
   systemAudioStatus: SystemAudioStatus;
   systemAudioDetail?: string;
   systemAudioListening?: boolean;
+  stt: GlassSttState;
 }
 
 export function detectWebSpeech(win?: Window): boolean {
@@ -39,6 +43,10 @@ export function detectGetDisplayMedia(): boolean {
   return !!(navigator.mediaDevices?.getDisplayMedia);
 }
 
+export function usesSttChunkCapture(mode: TranscriptionMode): boolean {
+  return mode === "microphone_media_recorder" || mode === "system_audio";
+}
+
 /** Pick the best mic mode when user selects Microphone. */
 export function resolveMicrophoneMode(
   snapshot: Omit<TranscriptionProviderSnapshot, "selectedMode">,
@@ -53,20 +61,36 @@ export function resolveMicrophoneMode(
 export function buildProviderSnapshot(
   selectedMode: TranscriptionMode,
   win?: Window,
-  systemAudio: Pick<
-    TranscriptionProviderSnapshot,
-    "systemAudioStatus" | "systemAudioDetail" | "systemAudioListening"
-  > = { systemAudioStatus: "requires_permission" },
+  extras: {
+    systemAudioStatus?: SystemAudioStatus;
+    systemAudioDetail?: string;
+    systemAudioListening?: boolean;
+    stt?: GlassSttState;
+  } = {},
 ): TranscriptionProviderSnapshot {
   const webSpeechAvailable = detectWebSpeech(win);
   const mediaRecorderAvailable = detectMediaRecorder();
   const getUserMediaAvailable = detectGetUserMedia();
+  const getDisplayMediaAvailable = detectGetDisplayMedia();
+  const defaultStt: GlassSttState = extras.stt ?? {
+    provider: "none",
+    status: "disabled",
+    model: "gpt-4o-mini-transcribe",
+    enabled: false,
+    chunkMs: 20_000,
+    autoStopEnabled: false,
+    autoStopMs: 30 * 60 * 1000,
+  };
   return {
     selectedMode,
     webSpeechAvailable,
     mediaRecorderAvailable,
     getUserMediaAvailable,
-    ...systemAudio,
+    getDisplayMediaAvailable,
+    systemAudioStatus: extras.systemAudioStatus ?? "requires_permission",
+    systemAudioDetail: extras.systemAudioDetail,
+    systemAudioListening: extras.systemAudioListening,
+    stt: defaultStt,
   };
 }
 
@@ -76,6 +100,12 @@ export function modeStatusMessage(
 ): string {
   switch (mode) {
     case "system_audio":
+      if (snapshot.systemAudioListening && snapshot.stt.enabled) {
+        return systemAudioListeningMessage("available", true);
+      }
+      if (snapshot.systemAudioListening && !snapshot.stt.enabled) {
+        return `${systemAudioListeningMessage("available", true)} ${sttStatusMessage(snapshot.stt.status)}`;
+      }
       return systemAudioListeningMessage(
         snapshot.systemAudioStatus,
         !!snapshot.systemAudioListening,
@@ -88,7 +118,9 @@ export function modeStatusMessage(
         ? "Microphone listening uses Web Speech (not system audio)."
         : MICROPHONE_UNAVAILABLE_MESSAGE;
     case "microphone_media_recorder":
-      return MEDIA_RECORDER_NO_TRANSCRIPT_MESSAGE;
+      return snapshot.stt.enabled
+        ? "Microphone chunks sent to OpenAI STT every ~20 seconds."
+        : STT_MIC_NOT_CONFIGURED_MESSAGE;
     default:
       return "";
   }
@@ -100,7 +132,7 @@ export function canStartListening(
 ): boolean {
   if (mode === "manual") return false;
   if (mode === "system_audio") {
-    if (!detectGetDisplayMedia()) return false;
+    if (!snapshot.getDisplayMediaAvailable) return false;
     return canAttemptSystemAudioCapture(snapshot.systemAudioStatus);
   }
   if (mode === "microphone_web_speech") return snapshot.webSpeechAvailable;

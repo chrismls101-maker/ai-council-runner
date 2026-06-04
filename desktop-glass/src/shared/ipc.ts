@@ -14,6 +14,9 @@ import type { PrivacyState } from "./privacyState.ts";
 import type { GlassSession } from "./sessionTypes.ts";
 import type { TranscriptionMode, SystemAudioStatus } from "./audioCaptureTypes.ts";
 import type { WindowContext } from "./windowContextTypes.ts";
+import type { GlassSttState } from "./sttTypes.ts";
+
+export type { GlassSttState } from "./sttTypes.ts";
 
 export type SessionActionStatus =
   | "idle"
@@ -40,6 +43,7 @@ export const IPC = {
   state: "glass:state",
   setIgnoreMouse: "glass:set-ignore-mouse",
   windowContextGet: "glass:window-context-get-current",
+  sttProcessChunk: "glass:stt-process-chunk",
 } as const;
 
 export type GlassCommand =
@@ -52,6 +56,8 @@ export type GlassCommand =
   | { type: "clear-transcript" }
   | { type: "transcription-set-mode"; mode: TranscriptionMode }
   | { type: "system-audio-set-status"; status: SystemAudioStatus; detail?: string }
+  | { type: "stt-listening-timer"; elapsedMs: number }
+  | { type: "stt-cost-warning" }
   | { type: "save-moment"; note?: string; kind?: GlassMomentKind }
   | { type: "delete-moment"; id: string }
   | { type: "clear-moments" }
@@ -102,4 +108,19 @@ export interface GlassState {
   systemAudioDetail?: string;
   windowContext: WindowContext;
   iivoAnalysis: IivoAnalysisState;
+  stt: GlassSttState;
+}
+
+export interface SttProcessChunkRequest {
+  buffer: ArrayBuffer;
+  mimeType: string;
+  source: "microphone" | "system_audio";
+  sessionId?: string;
+}
+
+export interface SttProcessChunkResponse {
+  ok: boolean;
+  text?: string;
+  error?: string;
+  eventId?: string;
 }
