@@ -22,6 +22,7 @@ export function Dock(): JSX.Element {
   const sessionStatus = state.session?.status ?? null;
   const sessionLive = sessionStatus === "active" || sessionStatus === "paused";
   const hasSession = !!state.session;
+  const listening = state.privacy.listening;
   const overlayMode = state.windows?.overlayMode ?? state.config.overlayMode ?? "passive";
   const overlayVisible = state.windows?.overlayVisible ?? state.config.overlayEnabled;
 
@@ -32,15 +33,32 @@ export function Dock(): JSX.Element {
     menuOpen,
     overlayVisible,
     overlayMode,
+    listening,
+    state.lastNotice,
+    state.lastError,
   ]);
 
-  const openPanelTab = (tab: "summary" | "session" | "insights"): void => {
+  const openPanelTab = (tab: "summary" | "session" | "context" | "insights"): void => {
     send({ type: "set-tab", tab });
     if (!state.panelVisible) send({ type: "toggle-panel" });
   };
 
+  const handleListen = (): void => {
+    if (listening) {
+      send({ type: "pause" });
+      return;
+    }
+    send({ type: "request-start-listening" });
+  };
+
   return (
     <div className="dock dock--minimal" ref={dockRef}>
+      {(state.lastError || state.lastNotice) && !menuOpen ? (
+        <div className={`dock__toast${state.lastError ? " dock__toast--error" : ""}`}>
+          {state.lastError ?? state.lastNotice}
+        </div>
+      ) : null}
+
       <div className="dock__drag" title="Drag to reposition">
         <span className="dock__logo" aria-hidden="true" />
         <span className="dock__title">Glass</span>
@@ -76,19 +94,22 @@ export function Dock(): JSX.Element {
         <button
           type="button"
           className="gbtn"
-          onClick={() => send(sessionLive ? { type: "session-capture" } : { type: "send-screenshot" })}
+          onClick={() =>
+            send(sessionLive ? { type: "session-capture" } : { type: "capture-screen-only" })
+          }
         >
           Capture
         </button>
 
-        <button
-          type="button"
-          className="gbtn"
-          onClick={() => openPanelTab("session")}
-          title="Open session controls including Start Listening"
-        >
-          Listen
-        </button>
+        {listening ? (
+          <button type="button" className="gbtn gbtn--danger" onClick={() => send({ type: "pause" })}>
+            Stop Listening
+          </button>
+        ) : (
+          <button type="button" className="gbtn" onClick={handleListen} title="Open panel and start listening">
+            Listen
+          </button>
+        )}
 
         <button type="button" className="gbtn" onClick={() => send({ type: "save-moment" })}>
           Save Moment
@@ -109,7 +130,7 @@ export function Dock(): JSX.Element {
         <button
           type="button"
           className="gbtn gbtn--danger"
-          onClick={() => send({ type: "stop" })}
+          onClick={() => send({ type: "stop-everything" })}
           title="Stop listening, capture, and sending"
         >
           Stop Everything
@@ -128,6 +149,16 @@ export function Dock(): JSX.Element {
 
       {menuOpen ? (
         <div className="dock__row dock__row--menu" role="menu">
+          <button
+            type="button"
+            className="gbtn dock-menu__item"
+            onClick={() => {
+              openPanelTab("context");
+              setMenuOpen(false);
+            }}
+          >
+            Open Listening Controls
+          </button>
           <button
             type="button"
             className="gbtn dock-menu__item"

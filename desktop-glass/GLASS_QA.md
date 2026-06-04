@@ -50,6 +50,21 @@ Dock menu extras:
 - **Hide/Show Overlay** — toggles overlay visibility without quitting Glass
 - **Overlay mode** — cycles passive (grid only) → insights (cards/toasts) → hidden
 
+### Capture & listening control verification
+
+1. Launch `npm run dev` (IIVO server).
+2. Launch `npm run glass:dev`.
+3. Confirm overlay click-through still works.
+4. Click **Capture** in the dock (no session). Confirm **“Screen captured”** toast/notice or a clear Screen Recording permission error.
+5. Click **Start Session**.
+6. Click **Capture** again. Confirm a **screen_capture** event appears in the Session tab timeline.
+7. Open the panel **Context** tab (or use dock **Listen**). Choose Microphone or System Audio, then **Start Listening**.
+8. Confirm **Stop Listening** appears immediately in the dock and panel footer.
+9. Speak for 20–30 seconds if using Microphone/Web Speech. Confirm transcript, status hint, or STT error appears.
+10. Click **Stop Listening**. Confirm listening state stops and mic indicator clears.
+11. Click **Listen** again, then **Stop Everything**. Confirm all listening/capture states stop.
+12. Confirm the app **stays open** and controls remain usable. Check **Operation diagnostics** in the panel footer for last command/status.
+
 4. **Capture captures current display** — click **Capture** in the dock; the
    status pill shows "Capturing screen", then a screenshot is created.
 5. **Send to IIVO creates a context item** — Capture / Send to IIVO calls

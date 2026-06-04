@@ -83,6 +83,21 @@ import { buildGlassSttState, resolveSttConfig } from "../shared/sttTypes.ts";
 import { listeningCostWarningMessage } from "../shared/audioChunks.ts";
 import { processSttChunk, type SttProcessChunkPayload } from "./sttChunkHandler.ts";
 import type { GlassSttState } from "../shared/ipc.ts";
+import {
+  CAPTURE_NO_SESSION_HINT,
+  CAPTURE_SESSION_SUCCESS_MESSAGE,
+  CAPTURE_SUCCESS_MESSAGE,
+  captureErrorMessage,
+  createInitialOperationDiagnostics,
+  diagnosticsForCapture,
+  diagnosticsForListening,
+  recordOperation,
+  type GlassOperationDiagnostics,
+} from "../shared/glassOperations.ts";
+import {
+  broadcastTranscriptionControl,
+  stopAllActiveCaptureAndListening,
+} from "./glassOperations.ts";
 
 loadGlassEnv();
 
@@ -118,6 +133,7 @@ interface AppState {
   windowContext: WindowContext;
   iivoAnalysis: IivoAnalysisState;
   stt: GlassSttState;
+  operationDiagnostics: GlassOperationDiagnostics;
 }
 
 const state: AppState = {
@@ -133,6 +149,7 @@ const state: AppState = {
   windowContext: defaultWindowContext,
   iivoAnalysis: { status: "idle" },
   stt: buildGlassSttState(sttConfig),
+  operationDiagnostics: createInitialOperationDiagnostics(),
 };
 
 let moments = new SavedMomentsStore();
@@ -166,6 +183,7 @@ function snapshot(): GlassState {
     stt: state.stt,
     panelVisible: isPanelVisible(),
     windows: getGlassWindowState(),
+    operationDiagnostics: state.operationDiagnostics,
   };
 }
 
@@ -196,16 +214,22 @@ async function openHandoff(contextId: string): Promise<void> {
 
 async function handleCapture(): Promise<string | undefined> {
   state.lastError = undefined;
+  state.operationDiagnostics = recordOperation(state.operationDiagnostics, "capture-screen", "pending");
   dispatchPrivacy({ type: "CAPTURE_START", at: new Date().toISOString() });
   push();
   try {
     const result = await capturePrimaryScreen();
     state.pendingCaptureDataUrl = result.imageDataUrl;
+    state.lastNotice = CAPTURE_SUCCESS_MESSAGE;
+    state.operationDiagnostics = diagnosticsForCapture(state.operationDiagnostics, true);
     dispatchPrivacy({ type: "CAPTURE_DONE", at: new Date().toISOString() });
     push();
     return result.imageDataUrl;
   } catch (err) {
-    state.lastError = err instanceof Error ? err.message : "Screen capture failed";
+    const message = captureErrorMessage(err);
+    state.lastError = message;
+    state.lastNotice = undefined;
+    state.operationDiagnostics = diagnosticsForCapture(state.operationDiagnostics, false, message);
     dispatchPrivacy({ type: "CAPTURE_DONE", at: new Date().toISOString() });
     push();
     return undefined;
@@ -268,22 +292,54 @@ async function sendTranscript(): Promise<void> {
 async function handleCommand(command: GlassCommand): Promise<void> {
   switch (command.type) {
     case "capture-screen":
+    case "capture-screen-only":
       await handleCapture();
+      if (command.type === "capture-screen-only" && !sessionIsLive()) {
+        state.lastNotice = state.lastError ? undefined : CAPTURE_NO_SESSION_HINT;
+        push();
+      }
+      return;
+    case "request-start-listening":
+      state.panelTab = "context";
+      if (!isPanelVisible()) togglePanel();
+      state.operationDiagnostics = recordOperation(state.operationDiagnostics, "request-start-listening", "pending");
+      push();
+      broadcastTranscriptionControl({ type: "start" });
       return;
     case "start-listening":
       dispatchPrivacy({ type: "START_LISTENING", at: new Date().toISOString() });
       state.stt = { ...state.stt, listeningElapsedMs: 0, lastError: undefined };
+      state.operationDiagnostics = diagnosticsForListening(
+        recordOperation(state.operationDiagnostics, "start-listening", "ok"),
+        state.transcriptionMode,
+        state.stt,
+      );
       push();
       return;
     case "pause":
+      broadcastTranscriptionControl({ type: "stop" });
       dispatchPrivacy({ type: "PAUSE", at: new Date().toISOString() });
       state.stt = { ...state.stt, listeningElapsedMs: 0 };
+      state.operationDiagnostics = recordOperation(state.operationDiagnostics, "pause", "ok");
+      state.lastNotice = "Listening stopped.";
       push();
       return;
     case "stop":
-      dispatchPrivacy({ type: "STOP", at: new Date().toISOString() });
+    case "stop-everything": {
+      const stopped = stopAllActiveCaptureAndListening({
+        privacy: state.privacy,
+        stt: state.stt,
+        diagnostics: state.operationDiagnostics,
+        transcriptionMode: state.transcriptionMode,
+      });
+      state.privacy = stopped.privacy;
+      state.stt = stopped.stt;
+      state.operationDiagnostics = stopped.diagnostics;
+      state.lastNotice = stopped.lastNotice;
+      state.lastError = stopped.lastError;
       push();
       return;
+    }
     case "append-transcript":
       state.transcript = `${state.transcript}${state.transcript ? " " : ""}${command.text}`.trim();
       push();
@@ -464,11 +520,14 @@ async function handleSessionCommand(command: GlassCommand): Promise<void> {
     case "session-capture": {
       if (!sessionIsLive()) {
         state.lastNotice = "Start a session first to add captures to the timeline.";
+        state.operationDiagnostics = recordOperation(state.operationDiagnostics, "session-capture", "error", state.lastNotice);
+        push();
         break;
       }
       const session = sessions.current();
       if (!session) break;
       state.lastError = undefined;
+      state.operationDiagnostics = recordOperation(state.operationDiagnostics, "session-capture", "pending");
       dispatchPrivacy({ type: "CAPTURE_START", at: new Date().toISOString() });
       push();
       try {
@@ -488,11 +547,14 @@ async function handleSessionCommand(command: GlassCommand): Promise<void> {
           event.thumbnailPath = refs.thumbnailPath;
           event.screenshotMimeType = refs.screenshotMimeType;
           event.screenshotSizeBytes = refs.screenshotSizeBytes;
-          // Keep in-memory data URL for live send; stripped on persist.
           event.screenshotDataUrl = result.imageDataUrl;
         }
+        state.lastNotice = CAPTURE_SESSION_SUCCESS_MESSAGE;
+        state.operationDiagnostics = diagnosticsForCapture(state.operationDiagnostics, true);
       } catch (err) {
-        state.lastError = err instanceof Error ? err.message : "Screen capture failed";
+        const message = captureErrorMessage(err);
+        state.lastError = message;
+        state.operationDiagnostics = diagnosticsForCapture(state.operationDiagnostics, false, message);
       }
       dispatchPrivacy({ type: "CAPTURE_DONE", at: new Date().toISOString() });
       break;

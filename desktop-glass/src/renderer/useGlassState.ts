@@ -3,6 +3,7 @@ import type { GlassState } from "../shared/ipc.ts";
 import { emptyNotes } from "../shared/noteExtraction.ts";
 import { initialPrivacyState } from "../shared/privacyState.ts";
 import { DEFAULT_CONFIG } from "../shared/config.ts";
+import { INITIAL_OPERATION_DIAGNOSTICS } from "../shared/glassOperations.ts";
 import { WINDOW_CONTEXT_UNAVAILABLE_MESSAGE } from "../shared/windowContextTypes.ts";
 
 import type { GlassSttState } from "../shared/sttTypes.ts";
@@ -41,6 +42,7 @@ const fallbackState: GlassState = {
     panelVisible: false,
     diagnostics: "",
   },
+  operationDiagnostics: { ...INITIAL_OPERATION_DIAGNOSTICS },
 };
 
 export function useGlassState(): GlassState {

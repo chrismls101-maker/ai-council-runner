@@ -17,8 +17,9 @@ import {
   WINDOW_CONTEXT_PERMISSION_MESSAGE,
   WINDOW_CONTEXT_UNAVAILABLE_MESSAGE,
 } from "../../shared/windowContextTypes.ts";
-import { useTranscription } from "../useTranscription.ts";
+import { useTranscriptionContext } from "../TranscriptionProvider.tsx";
 import { IivoAnalysisPanel } from "../components/IivoAnalysisPanel.tsx";
+import { ListeningControls, OperationDiagnosticsFooter } from "../components/ListeningControls.tsx";
 
 const TABS: { id: PanelTab; label: string }[] = [
   { id: "summary", label: "Summary" },
@@ -467,7 +468,7 @@ function NotesTab({ tab, notes }: { tab: PanelTab; notes: ExtractedNotes }): JSX
 
 function Transcript({ transcript }: { transcript: string }): JSX.Element {
   const [draft, setDraft] = useState("");
-  const tx = useTranscription();
+  const tx = useTranscriptionContext();
 
   return (
     <div className="transcript">
@@ -492,14 +493,6 @@ function Transcript({ transcript }: { transcript: string }): JSX.Element {
       {tx.micPathLabel ? <p className="empty">{tx.micPathLabel}</p> : null}
       <p className="empty">{tx.statusMessage}</p>
       {tx.systemAudioHint ? <p className="empty">{tx.systemAudioHint}</p> : null}
-      {tx.status === "listening" ? (
-        <p className="privacy__warning">
-          ● Listening {tx.listeningDuration} —{" "}
-          {tx.selectedMode === "system_audio" ? "system audio" : "microphone"}
-          {tx.transcribing ? " · transcribing…" : ""}
-        </p>
-      ) : null}
-      {tx.lastError ? <div className="error-banner">{tx.lastError}</div> : null}
       {tx.lastTranscript ? (
         <>
           <p className="section-title">Last transcript</p>
@@ -524,17 +517,6 @@ function Transcript({ transcript }: { transcript: string }): JSX.Element {
         onChange={(e) => setDraft(e.target.value)}
       />
       <div className="transcript__row">
-        {tx.selectedMode !== "manual" ? (
-          tx.status === "listening" ? (
-            <button className="gbtn gbtn--danger" onClick={tx.stopListening}>
-              Stop Listening
-            </button>
-          ) : (
-            <button className="gbtn" onClick={tx.startListening} disabled={!tx.canListen}>
-              Start Listening
-            </button>
-          )
-        ) : null}
         <button
           className="gbtn gbtn--primary"
           disabled={!draft.trim()}
@@ -638,7 +620,9 @@ export function Panel(): JSX.Element {
         <button
           type="button"
           className="gbtn"
-          onClick={() => send(sessionLive ? { type: "session-capture" } : { type: "send-screenshot" })}
+          onClick={() =>
+            send(sessionLive ? { type: "session-capture" } : { type: "capture-screen-only" })
+          }
         >
           Capture Screen
         </button>
@@ -693,10 +677,12 @@ export function Panel(): JSX.Element {
           <span className={`privacy__flag ${state.privacy.capturing ? "privacy__flag--on" : ""}`}>
             {state.privacy.capturing ? "● Capturing" : "○ Not capturing"}
           </span>
-          <button className="gbtn gbtn--danger" onClick={() => send({ type: "stop" })}>
+          <button className="gbtn gbtn--danger" onClick={() => send({ type: "stop-everything" })}>
             Stop everything
           </button>
         </div>
+        <ListeningControls compact />
+        <OperationDiagnosticsFooter />
         <div>
           Glass captures screen/audio only when you start it. IIVO Glass does not capture
           audio on launch. Audio chunks may be sent to OpenAI for transcription when STT is

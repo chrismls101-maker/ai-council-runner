@@ -25,6 +25,16 @@ const glassApi = {
     ipcRenderer.on(IPC.state, handler);
     return () => ipcRenderer.removeListener(IPC.state, handler);
   },
+  onTranscriptionControl(
+    listener: (command: import("../shared/ipc.ts").TranscriptionControlCommand) => void,
+  ): () => void {
+    const handler = (
+      _event: unknown,
+      command: import("../shared/ipc.ts").TranscriptionControlCommand,
+    ): void => listener(command);
+    ipcRenderer.on(IPC.transcriptionControl, handler);
+    return () => ipcRenderer.removeListener(IPC.transcriptionControl, handler);
+  },
   setIgnoreMouse(ignore: boolean): void {
     ipcRenderer.send(IPC.setIgnoreMouse, ignore);
   },

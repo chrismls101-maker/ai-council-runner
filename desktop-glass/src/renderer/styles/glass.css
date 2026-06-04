@@ -250,6 +250,53 @@ body {
   flex-shrink: 0;
 }
 
+.dock__toast {
+  flex: 1 1 100%;
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: rgba(236, 244, 255, 0.92);
+  background: rgba(10, 14, 24, 0.72);
+  border: 1px solid rgba(74, 222, 128, 0.28);
+}
+
+.dock__toast--error {
+  border-color: rgba(255, 107, 129, 0.45);
+  color: #ffd6de;
+}
+
+.listening-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.listening-controls--compact .gbtn {
+  align-self: flex-start;
+}
+
+.operation-diagnostics {
+  margin-top: 10px;
+}
+
+.operation-diagnostics__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+  font-size: 11px;
+}
+
+.operation-diagnostics__grid strong {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--glass-text-dim);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 /* ---------- Status pill ---------- */
 .pill {
   display: inline-flex;

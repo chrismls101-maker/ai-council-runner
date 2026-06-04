@@ -16,6 +16,7 @@ import type { TranscriptionMode, SystemAudioStatus } from "./audioCaptureTypes.t
 import type { WindowContext } from "./windowContextTypes.ts";
 import type { GlassSttState } from "./sttTypes.ts";
 import type { GlassWindowState, OverlayMode } from "./glassWindowTypes.ts";
+import type { GlassOperationDiagnostics } from "./glassOperations.ts";
 
 export type { GlassSttState } from "./sttTypes.ts";
 
@@ -46,13 +47,21 @@ export const IPC = {
   resizeDock: "glass:resize-dock",
   windowContextGet: "glass:window-context-get-current",
   sttProcessChunk: "glass:stt-process-chunk",
+  transcriptionControl: "glass:transcription-control",
 } as const;
+
+export type TranscriptionControlCommand =
+  | { type: "start" }
+  | { type: "stop" };
 
 export type GlassCommand =
   | { type: "capture-screen" }
+  | { type: "capture-screen-only" }
   | { type: "start-listening" }
   | { type: "pause" }
   | { type: "stop" }
+  | { type: "stop-everything" }
+  | { type: "request-start-listening" }
   | { type: "append-transcript"; text: string }
   | { type: "add-transcript-chunk"; text: string; tags?: string[] }
   | { type: "clear-transcript" }
@@ -115,6 +124,7 @@ export interface GlassState {
   stt: GlassSttState;
   panelVisible: boolean;
   windows: GlassWindowState;
+  operationDiagnostics: GlassOperationDiagnostics;
 }
 
 export interface SttProcessChunkRequest {

@@ -27,6 +27,7 @@ import {
   sttStatusMessage,
   resolveMicPathLabel,
 } from "../shared/sttTypes.ts";
+import { listeningModeHint } from "../shared/glassOperations.ts";
 import {
   systemAudioFixHint,
   sttFixHint,
@@ -62,12 +63,13 @@ function pickRecorderMime(): string {
   return candidates.find((t) => MediaRecorder.isTypeSupported(t)) ?? "audio/webm";
 }
 
-export function useTranscription(): {
+export interface TranscriptionController {
   selectedMode: TranscriptionMode;
   effectiveMode: TranscriptionMode;
   status: "idle" | "listening" | "paused";
   interimText?: string;
   statusMessage: string;
+  listeningHint: string;
   systemAudioStatus: SystemAudioStatus;
   sttProviderLabel: string;
   sttStatusMessage: string;
@@ -85,9 +87,12 @@ export function useTranscription(): {
   setMode: (mode: TranscriptionMode) => void;
   startListening: () => void;
   stopListening: () => void;
+  stopListeningLocal: () => void;
   transcribeLastChunk: () => void;
   addChunkToSession: () => void;
-} {
+}
+
+export function useTranscription(): TranscriptionController {
   const glassState = useGlassState();
   const [state, dispatch] = useReducer(transcriptionReducer, initialTranscriptionState);
   const [selectedMode, setSelectedMode] = useState<TranscriptionMode>("manual");
@@ -213,12 +218,16 @@ export function useTranscription(): {
     [glassState.session?.id, glassState.stt.enabled, glassState.stt.status],
   );
 
-  const stopListening = useCallback(() => {
+  const stopListeningLocal = useCallback(() => {
     stopAllStreams();
     stopTimer();
     dispatch({ type: "STOP_LISTENING" });
-    send({ type: "pause" });
   }, [stopAllStreams, stopTimer]);
+
+  const stopListening = useCallback(() => {
+    stopListeningLocal();
+    send({ type: "pause" });
+  }, [stopListeningLocal]);
 
   stopListeningRef.current = stopListening;
 
@@ -350,8 +359,21 @@ export function useTranscription(): {
   }, [snapshot, startChunkRecorder]);
 
   const startListening = useCallback(() => {
-    if (selectedMode === "manual") return;
-    if (!canStartListening(effectiveMode, snapshot)) return;
+    if (selectedMode === "manual") {
+      dispatch({ type: "SET_ERROR", message: "Choose Microphone or System Audio before starting." });
+      return;
+    }
+    if (!canStartListening(effectiveMode, snapshot)) {
+      dispatch({
+        type: "SET_ERROR",
+        message:
+          !glassState.stt.enabled && usesSttChunkCapture(effectiveMode)
+            ? STT_MIC_NOT_CONFIGURED_MESSAGE
+            : modeStatusMessage(effectiveMode, snapshot),
+      });
+      return;
+    }
+    dispatch({ type: "SET_ERROR", message: undefined });
     if (effectiveMode === "microphone_web_speech") {
       startWebSpeech();
       return;
@@ -367,6 +389,7 @@ export function useTranscription(): {
     selectedMode,
     effectiveMode,
     snapshot,
+    glassState.stt.enabled,
     startWebSpeech,
     startMediaRecorder,
     startSystemAudio,
@@ -399,14 +422,33 @@ export function useTranscription(): {
     dispatch({ type: "CLEAR_INTERIM" });
   }, [state.interimText, selectedMode]);
 
-  useEffect(() => () => stopTimer(), [stopTimer]);
+  useEffect(
+    () => () => {
+      stopListeningLocal();
+    },
+    [stopListeningLocal],
+  );
+
+  const listeningHint =
+    state.status === "listening"
+      ? listeningModeHint(effectiveMode, true) ||
+        (!glassState.stt.enabled && usesSttChunkCapture(effectiveMode)
+          ? "No transcription provider configured."
+          : "Listening…")
+      : !glassState.stt.enabled && selectedMode !== "manual"
+        ? "No transcription provider configured."
+        : "";
 
   return {
     selectedMode,
     effectiveMode,
     status: state.status,
     interimText: state.interimText,
-    statusMessage: modeStatusMessage(selectedMode, snapshot),
+    statusMessage:
+      state.status === "listening"
+        ? `Listening via ${TRANSCRIPTION_MODE_LABELS[selectedMode] ?? selectedMode}…`
+        : modeStatusMessage(selectedMode, snapshot),
+    listeningHint,
     systemAudioStatus,
     sttProviderLabel: sttProviderLabel(
       glassState.stt.provider,
@@ -431,6 +473,7 @@ export function useTranscription(): {
     setMode,
     startListening,
     stopListening,
+    stopListeningLocal,
     transcribeLastChunk,
     addChunkToSession,
   };
