@@ -17,6 +17,7 @@ import type { WindowContext } from "./windowContextTypes.ts";
 import type { GlassSttState } from "./sttTypes.ts";
 import type { GlassWindowState, OverlayMode } from "./glassWindowTypes.ts";
 import type { GlassOperationDiagnostics } from "./glassOperations.ts";
+import type { GlassCommandFeedItem } from "./commandFeed.ts";
 
 export type { GlassSttState } from "./sttTypes.ts";
 
@@ -48,6 +49,7 @@ export const IPC = {
   windowContextGet: "glass:window-context-get-current",
   sttProcessChunk: "glass:stt-process-chunk",
   transcriptionControl: "glass:transcription-control",
+  commandBarFocus: "glass:command-bar-focus",
 } as const;
 
 export type TranscriptionControlCommand =
@@ -76,6 +78,11 @@ export type GlassCommand =
   | { type: "send-transcript" }
   | { type: "send-moment"; id: string }
   | { type: "ask-iivo" }
+  | { type: "submit-command"; text: string }
+  | { type: "command-bar-blur" }
+  | { type: "toggle-command-bar" }
+  | { type: "clear-command-feed" }
+  | { type: "pin-command-feed-item"; id: string; pinned: boolean }
   | { type: "open-chat" }
   | { type: "set-tab"; tab: PanelTab }
   | { type: "toggle-panel" }
@@ -125,6 +132,7 @@ export interface GlassState {
   panelVisible: boolean;
   windows: GlassWindowState;
   operationDiagnostics: GlassOperationDiagnostics;
+  commandFeed: GlassCommandFeedItem[];
 }
 
 export interface SttProcessChunkRequest {

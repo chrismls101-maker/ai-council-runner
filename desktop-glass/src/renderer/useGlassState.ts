@@ -40,9 +40,11 @@ const fallbackState: GlassState = {
     overlayClickThrough: true,
     overlayMode: "passive",
     panelVisible: false,
+    commandBarVisible: true,
     diagnostics: "",
   },
   operationDiagnostics: { ...INITIAL_OPERATION_DIAGNOSTICS },
+  commandFeed: [],
 };
 
 export function useGlassState(): GlassState {

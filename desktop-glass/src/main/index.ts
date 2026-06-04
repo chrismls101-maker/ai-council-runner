@@ -7,7 +7,7 @@
  */
 
 import { loadGlassEnv } from "./loadGlassEnv.ts";
-import { app, BrowserWindow, ipcMain, protocol, shell } from "electron";
+import { app, BrowserWindow, globalShortcut, ipcMain, protocol, shell } from "electron";
 import { resolveConfig, buildIivoChatUrl, buildLensAskUrl } from "../shared/config.ts";
 import {
   privacyReducer,
@@ -47,14 +47,17 @@ import {
 } from "../shared/iivoAnalysisClient.ts";
 import { capturePrimaryScreen } from "./capture.ts";
 import {
+  blurCommandBar,
   broadcast,
   createWindows,
+  focusCommandBar,
   getGlassWindowState,
   getWindows,
   isPanelVisible,
   resizeDockWindow,
-  setOverlayClickThroughFromWindow,
+  setIgnoreMouseFromWindow,
   setOverlayMode,
+  toggleCommandBar,
   toggleOverlay,
   togglePanel,
 } from "./windows.ts";
@@ -98,6 +101,11 @@ import {
   broadcastTranscriptionControl,
   stopAllActiveCaptureAndListening,
 } from "./glassOperations.ts";
+import {
+  appendCommandFeedItem,
+  createCommandFeedItem,
+  type GlassCommandFeedItem,
+} from "../shared/commandFeed.ts";
 
 loadGlassEnv();
 
@@ -134,6 +142,7 @@ interface AppState {
   iivoAnalysis: IivoAnalysisState;
   stt: GlassSttState;
   operationDiagnostics: GlassOperationDiagnostics;
+  commandFeed: GlassCommandFeedItem[];
 }
 
 const state: AppState = {
@@ -150,6 +159,7 @@ const state: AppState = {
   iivoAnalysis: { status: "idle" },
   stt: buildGlassSttState(sttConfig),
   operationDiagnostics: createInitialOperationDiagnostics(),
+  commandFeed: [],
 };
 
 let moments = new SavedMomentsStore();
@@ -184,7 +194,12 @@ function snapshot(): GlassState {
     panelVisible: isPanelVisible(),
     windows: getGlassWindowState(),
     operationDiagnostics: state.operationDiagnostics,
+    commandFeed: state.commandFeed,
   };
+}
+
+function pushFeed(item: GlassCommandFeedItem): void {
+  state.commandFeed = appendCommandFeedItem(state.commandFeed, item);
 }
 
 function eventContextFields(opts?: { sourceTitle?: string; captureSource?: string }) {
@@ -287,6 +302,83 @@ async function sendTranscript(): Promise<void> {
     dispatchPrivacy({ type: "CAPTURE_DONE", at: new Date().toISOString() });
     push();
   }
+}
+
+/**
+ * Command-bar submit. Routes the question through the existing Context Bridge and
+ * opens it in IIVO (no new/unsafe backend flow). Surfaces progress as overlay
+ * response cards and stores it as a session event when a session is live.
+ */
+async function submitCommand(rawText: string): Promise<void> {
+  const text = rawText.trim();
+  if (!text) return;
+
+  state.lastError = undefined;
+  pushFeed(createCommandFeedItem("command", text));
+  pushFeed(createCommandFeedItem("thinking", "Routing your question to IIVO…"));
+  state.operationDiagnostics = recordOperation(state.operationDiagnostics, "submit-command", "pending");
+  push();
+
+  const live = sessionIsLive();
+  const session = sessions.current();
+
+  // Build lightweight context from whatever Glass already has locally.
+  const contextLines: string[] = [];
+  if (live && session) {
+    contextLines.push(buildSessionSummary(session));
+  }
+  if (state.transcript.trim()) {
+    contextLines.push(`Recent transcript:\n${state.transcript.trim().slice(-1200)}`);
+  }
+  const ctx = getCachedWindowContext();
+  if (ctx.status === "available" && (ctx.appName || ctx.windowTitle)) {
+    contextLines.push(`Active window: ${[ctx.appName, ctx.windowTitle].filter(Boolean).join(" — ")}`);
+  }
+
+  const body =
+    contextLines.length > 0
+      ? `${text}\n\n---\nContext from IIVO Glass:\n${contextLines.join("\n\n")}`
+      : text;
+
+  try {
+    const payload = buildTextContextPayload({
+      title: `IIVO Glass · ${text.length > 60 ? `${text.slice(0, 59)}…` : text}`,
+      text: body,
+      kind: "note",
+    });
+    const item = await createContextItem(config, payload);
+
+    if (live && session) {
+      sessions.addEvent({
+        kind: "manual_note",
+        title: text.length > 70 ? `${text.slice(0, 69)}…` : text,
+        text,
+        ...eventContextFields(),
+      });
+      await persistSessions(sessions);
+    }
+
+    await openHandoff(item.id);
+
+    pushFeed(
+      createCommandFeedItem(
+        "response",
+        live
+          ? "Opened in IIVO with your session context. The answer appears in your browser."
+          : "Opened in IIVO. Start a session to save this context.",
+      ),
+    );
+    state.lastNotice = live
+      ? "Sent to IIVO with session context."
+      : "Sent to IIVO. Start a session to save this context.";
+    state.operationDiagnostics = recordOperation(state.operationDiagnostics, "submit-command", "ok");
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Could not reach IIVO.";
+    pushFeed(createCommandFeedItem("error", message));
+    state.lastError = message;
+    state.operationDiagnostics = recordOperation(state.operationDiagnostics, "submit-command", "error", message);
+  }
+  push();
 }
 
 async function handleCommand(command: GlassCommand): Promise<void> {
@@ -444,6 +536,26 @@ async function handleCommand(command: GlassCommand): Promise<void> {
       if (state.transcript.trim()) {
         await sendTranscript();
       }
+      push();
+      return;
+    case "submit-command":
+      await submitCommand(command.text);
+      return;
+    case "command-bar-blur":
+      blurCommandBar();
+      return;
+    case "toggle-command-bar":
+      toggleCommandBar();
+      push();
+      return;
+    case "clear-command-feed":
+      state.commandFeed = [];
+      push();
+      return;
+    case "pin-command-feed-item":
+      state.commandFeed = state.commandFeed.map((item) =>
+        item.id === command.id ? { ...item, pinned: command.pinned } : item,
+      );
       push();
       return;
     case "open-chat":
@@ -827,7 +939,7 @@ function registerIpc(): void {
   ipcMain.on(IPC.setIgnoreMouse, (event, ignore: boolean) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win) return;
-    setOverlayClickThroughFromWindow(win, !!ignore);
+    setIgnoreMouseFromWindow(win, !!ignore);
   });
 
   ipcMain.on(IPC.resizeDock, (_event, width: number, height: number) => {
@@ -835,6 +947,20 @@ function registerIpc(): void {
       resizeDockWindow(width, height);
     }
   });
+}
+
+function registerGlobalHotkeys(): void {
+  // Cmd/Ctrl+Shift+Space summons & focuses the command bar. Fail-soft if the OS
+  // refuses the accelerator (e.g. already claimed by another app).
+  const accelerators = ["CommandOrControl+Shift+Space", "Alt+Space"];
+  for (const accel of accelerators) {
+    try {
+      const ok = globalShortcut.register(accel, () => focusCommandBar());
+      if (ok) return;
+    } catch {
+      // try the next accelerator
+    }
+  }
 }
 
 app.whenReady().then(async () => {
@@ -845,6 +971,7 @@ app.whenReady().then(async () => {
   state.windowContext = await getCurrentWindowContext();
   registerIpc();
   createWindows(config);
+  registerGlobalHotkeys();
   push();
 
   app.on("activate", () => {
@@ -853,6 +980,10 @@ app.whenReady().then(async () => {
       push();
     }
   });
+});
+
+app.on("will-quit", () => {
+  globalShortcut.unregisterAll();
 });
 
 app.on("window-all-closed", () => {

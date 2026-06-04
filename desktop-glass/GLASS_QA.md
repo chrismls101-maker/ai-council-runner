@@ -24,11 +24,48 @@ first** — it never captures or sends anything without an explicit click.
 
 ## Full-screen overlay architecture
 
-IIVO Glass uses **three separate windows**:
+IIVO Glass uses **four separate windows**:
 
-1. **Overlay** — full-screen transparent layer (`display.bounds`), click-through by default
-2. **Dock** — compact draggable controls (`display.workArea`)
-3. **Panel** — optional detail view, hidden until opened
+1. **Overlay** — full-screen transparent layer (`display.workArea`), click-through by default
+2. **Command bar** — bottom-centered floating input (`display.workArea`), clickable/typeable
+3. **Dock** — compact draggable controls (`display.workArea`)
+4. **Panel** — optional status/detail view, hidden until opened
+
+## Bottom command bar (primary interaction surface)
+
+The command bar is a separate `BrowserWindow` floating over the click-through
+overlay. It is the main way to talk to IIVO while you work — like Spotlight/Jarvis
+for IIVO. The side panel is now **secondary** (status + diagnostics).
+
+Expected UX:
+
+- Full-screen click-through overlay (you can click apps behind it).
+- A bottom-centered command bar near the bottom of the screen.
+- You can click/type into the command bar (voice button · input · **Ask ↑**).
+- Clicking the overlay **outside** the command bar/dock/panel reaches the app behind.
+- The voice/listening button lives **outside** the panel.
+- **Stop Listening** is always visible on the command bar while listening.
+- The side panel is status/diagnostics focused, not the main input.
+
+### Command bar manual QA
+
+1. Launch IIVO server (`npm run dev`).
+2. Launch Glass (`npm run glass:dev`).
+3. Confirm the transparent overlay is **click-through**.
+4. Confirm the **bottom command bar** appears near bottom center.
+5. Click behind the overlay **outside** the command bar — should interact with the app behind.
+6. Click the command bar input — should accept typing (window focuses).
+7. Type: **“What am I working on?”** and press **Enter** / **Ask**.
+8. Confirm an **overlay response card** appears (bottom-right) and IIVO opens in the browser.
+   - With no session: card says “Start a session to save this context.”
+9. Press the **voice button** → choose **Microphone** or **System Audio** → **Start**.
+10. Confirm **Stop Listening** + a listening timer appear on the command bar.
+11. Click **Stop Listening** — listening stops.
+12. Press **Escape** in the input — the bar blurs (clicks pass through again).
+13. Press **Cmd+Shift+Space** (or **Option+Space**) — the command bar focuses for typing.
+14. Open the panel and confirm it is **status/control focused** (System status grid,
+    Open in IIVO, Analyze Now, Capture, Stop Everything, diagnostics) — not a crowded
+    primary command surface.
 
 ### Overlay manual QA
 

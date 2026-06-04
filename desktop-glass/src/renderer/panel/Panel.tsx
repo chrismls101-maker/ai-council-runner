@@ -548,6 +548,78 @@ function Transcript({ transcript }: { transcript: string }): JSX.Element {
   );
 }
 
+// ---------- Status / health grid (primary panel surface) ----------
+function StatusGrid({ state }: { state: GlassState }): JSX.Element {
+  const sessionLive =
+    state.session?.status === "active" || state.session?.status === "paused";
+  const analysisRunning = state.iivoAnalysis.status === "running";
+  const diag = state.operationDiagnostics;
+
+  const items: { label: string; value: string }[] = [
+    { label: "Session", value: sessionLive ? state.session?.status ?? "active" : "none" },
+    { label: "STT provider", value: diag.sttProviderStatus ?? state.stt.status },
+    { label: "STT endpoint", value: diag.serverSttStatus ?? state.stt.endpoint },
+    { label: "Capture", value: diag.captureStatus ?? (state.privacy.capturing ? "capturing" : "idle") },
+    { label: "System audio", value: state.systemAudioStatus },
+    {
+      label: "App detection",
+      value:
+        state.windowContext.status === "available"
+          ? "available"
+          : state.windowContext.status === "permission_required"
+            ? "needs permission"
+            : "unavailable",
+    },
+  ];
+
+  return (
+    <div className="status-grid">
+      <p className="section-title">System status</p>
+      <div className="summary-box status-grid__cells">
+        {items.map((item) => (
+          <div key={item.label} className="status-grid__cell">
+            <strong>{item.label}</strong>
+            <div>{item.value}</div>
+          </div>
+        ))}
+      </div>
+      <div className="panel__quick-actions">
+        <button
+          type="button"
+          className="gbtn gbtn--primary"
+          onClick={() => send(state.session ? { type: "session-open-in-iivo" } : { type: "open-chat" })}
+        >
+          Open in IIVO
+        </button>
+        <button
+          type="button"
+          className="gbtn gbtn--primary"
+          onClick={() => send({ type: "session-analyze-now" })}
+          disabled={!state.session || analysisRunning}
+        >
+          {analysisRunning ? "Analyzing…" : "Analyze Now"}
+        </button>
+        <button
+          type="button"
+          className="gbtn"
+          onClick={() =>
+            send(sessionLive ? { type: "session-capture" } : { type: "capture-screen-only" })
+          }
+        >
+          Capture Screen
+        </button>
+        <button
+          type="button"
+          className="gbtn gbtn--danger"
+          onClick={() => send({ type: "stop-everything" })}
+        >
+          Stop Everything
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function MomentCard({ moment }: { moment: SavedMoment }): JSX.Element {
   const time = new Date(moment.createdAt).toLocaleTimeString();
   return (
@@ -600,33 +672,12 @@ export function Panel(): JSX.Element {
       {state.lastError ? <div className="error-banner">{state.lastError}</div> : null}
       {state.lastNotice ? <div className="notice-banner">{state.lastNotice}</div> : null}
 
-      <div className="panel__quick-actions">
-        <button type="button" className="gbtn" onClick={() => send({ type: "ask-iivo" })}>
-          Ask IIVO
-        </button>
-        <button type="button" className="gbtn" onClick={() => send({ type: "save-moment" })}>
-          Save Moment
-        </button>
-        <button
-          type="button"
-          className="gbtn"
-          onClick={() => send(state.session ? { type: "session-send" } : { type: "send-transcript" })}
-        >
-          {state.session ? "Send Session" : "Send to IIVO"}
-        </button>
-        <button type="button" className="gbtn" onClick={() => send({ type: "open-chat" })}>
-          Open IIVO
-        </button>
-        <button
-          type="button"
-          className="gbtn"
-          onClick={() =>
-            send(sessionLive ? { type: "session-capture" } : { type: "capture-screen-only" })
-          }
-        >
-          Capture Screen
-        </button>
-      </div>
+      <p className="empty panel__hint">
+        Ask IIVO from the command bar at the bottom of your screen. This panel shows
+        status, session detail, and diagnostics.
+      </p>
+
+      <StatusGrid state={state} />
 
       <div className="panel__tabs">
         {TABS.map((t) => (

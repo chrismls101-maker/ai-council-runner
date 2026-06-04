@@ -35,6 +35,11 @@ const glassApi = {
     ipcRenderer.on(IPC.transcriptionControl, handler);
     return () => ipcRenderer.removeListener(IPC.transcriptionControl, handler);
   },
+  onCommandBarFocus(listener: () => void): () => void {
+    const handler = (): void => listener();
+    ipcRenderer.on(IPC.commandBarFocus, handler);
+    return () => ipcRenderer.removeListener(IPC.commandBarFocus, handler);
+  },
   setIgnoreMouse(ignore: boolean): void {
     ipcRenderer.send(IPC.setIgnoreMouse, ignore);
   },

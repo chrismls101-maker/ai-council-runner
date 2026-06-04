@@ -20,12 +20,13 @@ import {
 const isDev = !!process.env.ELECTRON_RENDERER_URL;
 const preloadPath = join(__dirname, "../preload/index.mjs");
 
-type RendererPage = "index.html" | "panel.html" | "overlay.html";
+type RendererPage = "index.html" | "panel.html" | "overlay.html" | "command.html";
 
 export interface GlassWindows {
   dock: BrowserWindow;
   panel: BrowserWindow;
   overlay: BrowserWindow;
+  commandBar: BrowserWindow;
 }
 
 let windows: GlassWindows | null = null;
@@ -33,6 +34,7 @@ let layoutManager: GlassLayoutManager | null = null;
 let overlayVisible = true;
 let overlayClickThrough = true;
 let overlayMode: OverlayMode = "passive";
+let commandBarVisible = true;
 
 function loadRenderer(win: BrowserWindow, htmlFile: RendererPage): void {
   if (isDev && process.env.ELECTRON_RENDERER_URL) {
@@ -42,11 +44,12 @@ function loadRenderer(win: BrowserWindow, htmlFile: RendererPage): void {
   }
 }
 
-/** Overlay above desktop apps; dock/panel stack above overlay via relativeLevel. */
+/** Overlay above desktop apps; interactive windows stack above overlay via relativeLevel. */
 const OVERLAY_ALWAYS_ON_TOP_LEVEL = "screen-saver" as const;
 const OVERLAY_ALWAYS_ON_TOP_RELATIVE = 0;
 const DOCK_ALWAYS_ON_TOP_RELATIVE = 1;
-const PANEL_ALWAYS_ON_TOP_RELATIVE = 2;
+const COMMAND_BAR_ALWAYS_ON_TOP_RELATIVE = 2;
+const PANEL_ALWAYS_ON_TOP_RELATIVE = 3;
 
 function applyOverlayClickThrough(overlay: BrowserWindow, enabled: boolean): void {
   overlayClickThrough = enabled;
@@ -73,6 +76,16 @@ export function stackGlassWindows(w: GlassWindows): void {
   w.dock.show();
   w.dock.moveTop();
 
+  if (!w.commandBar.isDestroyed() && commandBarVisible) {
+    w.commandBar.setAlwaysOnTop(
+      true,
+      OVERLAY_ALWAYS_ON_TOP_LEVEL,
+      COMMAND_BAR_ALWAYS_ON_TOP_RELATIVE,
+    );
+    w.commandBar.showInactive();
+    w.commandBar.moveTop();
+  }
+
   w.panel.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, PANEL_ALWAYS_ON_TOP_RELATIVE);
   if (w.panel.isVisible()) {
     w.panel.moveTop();
@@ -89,6 +102,7 @@ function logDiagnostics(): void {
     dock: rectFromWindow(windows.dock),
     panel: rectFromWindow(windows.panel),
     panelVisible: windows.panel.isVisible(),
+    commandBar: commandBarVisible ? rectFromWindow(windows.commandBar) : null,
   });
   logGlassWindowDiagnostics(line);
 }
@@ -105,6 +119,10 @@ function relayoutAllWindows(): void {
 
   if (!windows.panel.isDestroyed()) {
     windows.panel.setBounds(layoutManager.getPanelLayout());
+  }
+
+  if (!windows.commandBar.isDestroyed()) {
+    windows.commandBar.setBounds(layoutManager.getCommandBarLayout());
   }
 
   if (!windows.dock.isDestroyed()) {
@@ -127,6 +145,7 @@ function wireWindowStacking(w: GlassWindows): void {
   w.dock.webContents.on("did-finish-load", restack);
   w.overlay.webContents.on("did-finish-load", restack);
   w.panel.webContents.on("did-finish-load", restack);
+  w.commandBar.webContents.on("did-finish-load", restack);
 }
 
 function createOverlayWindow(): BrowserWindow {
@@ -219,6 +238,36 @@ function createPanelWindow(): BrowserWindow {
   return panel;
 }
 
+function createCommandBarWindow(): BrowserWindow {
+  const layout = layoutManager!.getCommandBarLayout();
+  const commandBar = new BrowserWindow({
+    x: layout.x,
+    y: layout.y,
+    width: layout.width,
+    height: layout.height,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    hasShadow: false,
+    fullscreenable: false,
+    show: false,
+    backgroundColor: "#00000000",
+    acceptFirstMouse: true,
+    webPreferences: {
+      preload: preloadPath,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+  commandBar.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  loadRenderer(commandBar, "command.html");
+  return commandBar;
+}
+
 export function createWindows(glassConfig: GlassConfig): GlassWindows {
   layoutManager?.dispose();
   layoutManager = new GlassLayoutManager(glassConfig.layoutPreset);
@@ -227,25 +276,30 @@ export function createWindows(glassConfig: GlassConfig): GlassWindows {
   overlayVisible = glassConfig.overlayEnabled;
   overlayMode = glassConfig.overlayMode;
   overlayClickThrough = true;
+  commandBarVisible = true;
 
   const overlay = createOverlayWindow();
   const dock = createDockWindow();
   const panel = createPanelWindow();
+  const commandBar = createCommandBarWindow();
 
-  for (const win of [dock, panel, overlay]) {
+  for (const win of [dock, panel, overlay, commandBar]) {
     win.webContents.setWindowOpenHandler(({ url }) => {
       void shell.openExternal(url);
       return { action: "deny" };
     });
   }
 
-  windows = { dock, panel, overlay };
+  windows = { dock, panel, overlay, commandBar };
 
   if (overlayVisible && overlayMode !== "hidden") {
     overlay.setBounds(layoutManager.getOverlayLayout());
     overlay.showInactive();
     applyOverlayClickThrough(overlay, true);
   }
+
+  commandBar.setBounds(layoutManager.getCommandBarLayout());
+  commandBar.showInactive();
 
   wireWindowStacking(windows);
   stackGlassWindows(windows);
@@ -275,7 +329,7 @@ export function getOverlayMode(): OverlayMode {
 
 export function getGlassWindowState() {
   if (!windows || !layoutManager) {
-    return buildWindowState("Glass windows: not initialized", false, true, overlayMode, false);
+    return buildWindowState("Glass windows: not initialized", false, true, overlayMode, false, commandBarVisible);
   }
   const diagnostics = formatGlassWindowDiagnostics({
     display: layoutManager.getDisplay(),
@@ -285,6 +339,7 @@ export function getGlassWindowState() {
     dock: rectFromWindow(windows.dock),
     panel: rectFromWindow(windows.panel),
     panelVisible: windows.panel.isVisible(),
+    commandBar: commandBarVisible ? rectFromWindow(windows.commandBar) : null,
   });
   return buildWindowState(
     diagnostics,
@@ -292,6 +347,7 @@ export function getGlassWindowState() {
     overlayClickThrough,
     overlayMode,
     windows.panel.isVisible(),
+    commandBarVisible,
   );
 }
 
@@ -303,6 +359,26 @@ export function setOverlayClickThrough(enabled: boolean): void {
 export function setOverlayClickThroughFromWindow(win: BrowserWindow, enabled: boolean): void {
   if (!windows?.overlay || win.id !== windows.overlay.id) return;
   setOverlayClickThrough(enabled);
+}
+
+/**
+ * Route a renderer's ignore-mouse request to the right window. The overlay is
+ * full-screen click-through; the command bar toggles click-through so only the
+ * floating pill captures clicks while the transparent margins pass through.
+ */
+export function setIgnoreMouseFromWindow(win: BrowserWindow, enabled: boolean): void {
+  if (!windows) return;
+  if (win.id === windows.overlay.id) {
+    setOverlayClickThrough(enabled);
+    return;
+  }
+  if (win.id === windows.commandBar.id && !windows.commandBar.isDestroyed()) {
+    if (enabled) {
+      windows.commandBar.setIgnoreMouseEvents(true, { forward: true });
+    } else {
+      windows.commandBar.setIgnoreMouseEvents(false);
+    }
+  }
 }
 
 export function toggleOverlay(): boolean {
@@ -386,9 +462,49 @@ export function togglePanel(): boolean {
   return true;
 }
 
+export function isCommandBarVisible(): boolean {
+  return commandBarVisible;
+}
+
+export function focusCommandBar(): void {
+  if (!windows?.commandBar || windows.commandBar.isDestroyed()) return;
+  if (!commandBarVisible) {
+    commandBarVisible = true;
+    if (layoutManager) {
+      windows.commandBar.setBounds(layoutManager.getCommandBarLayout());
+    }
+  }
+  windows.commandBar.show();
+  windows.commandBar.focus();
+  windows.commandBar.webContents.send("glass:command-bar-focus");
+  stackGlassWindows(windows);
+  logDiagnostics();
+}
+
+export function blurCommandBar(): void {
+  if (!windows?.commandBar || windows.commandBar.isDestroyed()) return;
+  windows.commandBar.blur();
+}
+
+export function toggleCommandBar(): boolean {
+  if (!windows?.commandBar || windows.commandBar.isDestroyed()) return commandBarVisible;
+  commandBarVisible = !commandBarVisible;
+  if (commandBarVisible) {
+    if (layoutManager) {
+      windows.commandBar.setBounds(layoutManager.getCommandBarLayout());
+    }
+    windows.commandBar.showInactive();
+  } else {
+    windows.commandBar.hide();
+  }
+  stackGlassWindows(windows);
+  logDiagnostics();
+  return commandBarVisible;
+}
+
 export function broadcast(channel: string, payload: unknown): void {
   if (!windows) return;
-  for (const win of [windows.dock, windows.panel, windows.overlay]) {
+  for (const win of [windows.dock, windows.panel, windows.overlay, windows.commandBar]) {
     if (!win.isDestroyed()) {
       win.webContents.send(channel, payload);
     }

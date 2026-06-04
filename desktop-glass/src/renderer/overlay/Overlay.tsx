@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { GlassState } from "../../shared/ipc.ts";
 import type { OverlayMode } from "../../shared/glassWindowTypes.ts";
 import type { GlassSessionInsight } from "../../shared/sessionTypes.ts";
+import type { GlassCommandFeedItem } from "../../shared/commandFeed.ts";
 import {
   isOverlayCardEventKind,
   overlayCardFromEvent,
@@ -9,8 +10,10 @@ import {
 import { send, useGlassState } from "../useGlassState.ts";
 
 const CARD_TTL_MS = 8_000;
+const FEED_CARD_TTL_MS = 12_000;
 const TOAST_TTL_MS = 5_000;
 const MAX_CARDS = 4;
+const MAX_FEED_CARDS = 5;
 const MAX_TOASTS = 3;
 
 type FloatingCard = {
@@ -153,6 +156,48 @@ function useOverlayCards(state: GlassState, enabled: boolean): {
   return { cards, dismissCard };
 }
 
+/**
+ * Surfaces command-bar responses (and other feed items) as floating glass cards.
+ * Items auto-fade after a TTL unless pinned. Always active while the overlay is
+ * visible — the command bar is the primary surface, not the insights panel.
+ */
+function useCommandFeedCards(state: GlassState, enabled: boolean): GlassCommandFeedItem[] {
+  const [aged, setAged] = useState<Set<string>>(new Set());
+  const seenRef = useRef<Set<string>>(new Set());
+  const seededRef = useRef(false);
+
+  useEffect(() => {
+    if (!enabled) return;
+    const feed = state.commandFeed ?? [];
+
+    if (!seededRef.current) {
+      // Don't replay history on overlay load; age pre-existing items immediately.
+      const preexisting = new Set<string>();
+      for (const item of feed) {
+        seenRef.current.add(item.id);
+        if (!item.pinned) preexisting.add(item.id);
+      }
+      if (preexisting.size > 0) setAged((prev) => new Set([...prev, ...preexisting]));
+      seededRef.current = true;
+      return;
+    }
+
+    for (const item of feed) {
+      if (seenRef.current.has(item.id)) continue;
+      seenRef.current.add(item.id);
+      const id = item.id;
+      window.setTimeout(() => {
+        setAged((prev) => new Set(prev).add(id));
+      }, FEED_CARD_TTL_MS);
+    }
+  }, [enabled, state.commandFeed]);
+
+  if (!enabled) return [];
+  return (state.commandFeed ?? [])
+    .filter((item) => item.pinned || !aged.has(item.id))
+    .slice(-MAX_FEED_CARDS);
+}
+
 function useOverlayToasts(state: GlassState, enabled: boolean): Toast[] {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const seenNoticeRef = useRef<string | undefined>();
@@ -217,6 +262,7 @@ export function Overlay(): JSX.Element {
   const overlayVisible = state.windows?.overlayVisible ?? state.config.overlayEnabled;
   const showInsights = overlayVisible && overlayMode === "insights";
   const { cards, dismissCard } = useOverlayCards(state, showInsights);
+  const feedCards = useCommandFeedCards(state, overlayVisible);
   const toasts = useOverlayToasts(state, showInsights);
   const interactiveCountRef = useRef(0);
 
@@ -244,6 +290,36 @@ export function Overlay(): JSX.Element {
     <div className="overlay-root">
       <OverlayPassiveLayer overlayMode={overlayMode} />
       <OverlayStatus state={state} />
+
+      {feedCards.length > 0 ? (
+        <div className="overlay-feed">
+          {feedCards.map((item) => (
+            <article
+              key={item.id}
+              className={`overlay-feed-card overlay-feed-card--${item.kind}`}
+              onMouseEnter={enterInteractive}
+              onMouseLeave={leaveInteractive}
+            >
+              <div className="overlay-feed-card__eyebrow">
+                <span className="overlay-feed-card__dot" aria-hidden="true" />
+                {item.title}
+              </div>
+              <p className="overlay-feed-card__body">{item.body}</p>
+              <div className="overlay-feed-card__actions">
+                <button
+                  type="button"
+                  className="gbtn gbtn--ghost"
+                  onClick={() =>
+                    send({ type: "pin-command-feed-item", id: item.id, pinned: !item.pinned })
+                  }
+                >
+                  {item.pinned ? "Unpin" : "Pin"}
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
 
       {showInsights && toasts.length > 0 ? (
         <div className="overlay-toasts">

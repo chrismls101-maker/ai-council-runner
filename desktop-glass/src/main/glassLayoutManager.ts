@@ -8,10 +8,12 @@
 import { screen, type Display } from "electron";
 import {
   clampDockSize,
+  commandBarLayoutFromDisplay,
   dockLayoutFromDisplay,
   overlayLayoutFromDisplay,
   panelLayoutFromDisplay,
   repositionDockInWorkArea,
+  type CommandBarLayout,
   type DisplayLayoutContext,
   type DockLayout,
   type OverlayLayout,
@@ -29,6 +31,7 @@ export {
   parseLayoutPreset,
 } from "../shared/glassLayoutTypes.ts";
 export type {
+  CommandBarLayout,
   DisplayLayoutContext,
   DockLayout,
   OverlayLayout,
@@ -74,6 +77,10 @@ export class GlassLayoutManager {
 
   getPanelLayout(): PanelLayout {
     return panelLayoutFromDisplay(this.getDisplay(), this.preset);
+  }
+
+  getCommandBarLayout(): CommandBarLayout {
+    return commandBarLayoutFromDisplay(this.getDisplay());
   }
 
   getDockLayout(contentWidth?: number, contentHeight?: number): DockLayout {

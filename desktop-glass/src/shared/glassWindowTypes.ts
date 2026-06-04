@@ -26,5 +26,6 @@ export interface GlassWindowState {
   overlayClickThrough: boolean;
   overlayMode: OverlayMode;
   panelVisible: boolean;
+  commandBarVisible: boolean;
   diagnostics: string;
 }

@@ -43,14 +43,6 @@ export function Dock(): JSX.Element {
     if (!state.panelVisible) send({ type: "toggle-panel" });
   };
 
-  const handleListen = (): void => {
-    if (listening) {
-      send({ type: "pause" });
-      return;
-    }
-    send({ type: "request-start-listening" });
-  };
-
   return (
     <div className="dock dock--minimal" ref={dockRef}>
       {(state.lastError || state.lastNotice) && !menuOpen ? (
@@ -105,14 +97,15 @@ export function Dock(): JSX.Element {
           <button type="button" className="gbtn gbtn--danger" onClick={() => send({ type: "pause" })}>
             Stop Listening
           </button>
-        ) : (
-          <button type="button" className="gbtn" onClick={handleListen} title="Open panel and start listening">
-            Listen
-          </button>
-        )}
+        ) : null}
 
-        <button type="button" className="gbtn" onClick={() => send({ type: "save-moment" })}>
-          Save Moment
+        <button
+          type="button"
+          className="gbtn"
+          onClick={() => send({ type: "toggle-overlay" })}
+          title="Toggle the full-screen glass overlay"
+        >
+          {overlayVisible ? "Hide Overlay" : "Show Overlay"}
         </button>
 
         <button
@@ -121,10 +114,6 @@ export function Dock(): JSX.Element {
           onClick={() => send({ type: "toggle-panel" })}
         >
           {state.panelVisible ? "Close Panel" : "Open Panel"}
-        </button>
-
-        <button type="button" className="gbtn" onClick={() => send({ type: "ask-iivo" })}>
-          Ask IIVO
         </button>
 
         <button
@@ -149,26 +138,6 @@ export function Dock(): JSX.Element {
 
       {menuOpen ? (
         <div className="dock__row dock__row--menu" role="menu">
-          <button
-            type="button"
-            className="gbtn dock-menu__item"
-            onClick={() => {
-              openPanelTab("context");
-              setMenuOpen(false);
-            }}
-          >
-            Open Listening Controls
-          </button>
-          <button
-            type="button"
-            className="gbtn dock-menu__item"
-            onClick={() => {
-              send({ type: "toggle-overlay" });
-              setMenuOpen(false);
-            }}
-          >
-            {overlayVisible ? "Hide Overlay" : "Show Overlay"}
-          </button>
           <button
             type="button"
             className="gbtn dock-menu__item"

@@ -25,6 +25,8 @@ export interface OverlayLayout extends LayoutRect {}
 
 export interface PanelLayout extends LayoutRect {}
 
+export interface CommandBarLayout extends LayoutRect {}
+
 export interface DockLayout extends LayoutRect {
   minWidth: number;
   minHeight: number;
@@ -50,6 +52,10 @@ const DOCK_DEFAULT_HEIGHT = 84;
 const DOCK_MAX_HEIGHT_RATIO = 0.25;
 const DOCK_MAX_HEIGHT_CAP = 220;
 const DOCK_DEFAULT_MAX_WIDTH = 720;
+const COMMAND_BAR_MAX_WIDTH = 760;
+const COMMAND_BAR_HEIGHT = 96;
+const COMMAND_BAR_BOTTOM_MARGIN = 28;
+const COMMAND_BAR_SIDE_MARGIN = 48;
 
 /** Visible desktop region — avoids macOS menu bar/dock clipping the bottom border. */
 export function overlayLayoutFromDisplay(ctx: DisplayLayoutContext): OverlayLayout {
@@ -77,6 +83,19 @@ export function panelLayoutFromDisplay(
     width,
     height,
   };
+}
+
+/** Bottom-centered command bar inside the visible work area. */
+export function commandBarLayoutFromDisplay(ctx: DisplayLayoutContext): CommandBarLayout {
+  const width = Math.min(
+    COMMAND_BAR_MAX_WIDTH,
+    Math.max(320, ctx.workArea.width - COMMAND_BAR_SIDE_MARGIN),
+  );
+  const height = COMMAND_BAR_HEIGHT;
+  const x = ctx.workArea.x + Math.round((ctx.workArea.width - width) / 2);
+  const y = ctx.workArea.y + ctx.workArea.height - height - COMMAND_BAR_BOTTOM_MARGIN;
+
+  return { x, y, width, height };
 }
 
 export function dockSizeLimits(ctx: DisplayLayoutContext): DockSizeLimits {

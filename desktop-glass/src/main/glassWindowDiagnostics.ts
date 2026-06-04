@@ -20,6 +20,7 @@ export function formatGlassWindowDiagnostics(opts: {
   dock: LayoutRect | null;
   panel: LayoutRect | null;
   panelVisible: boolean;
+  commandBar?: LayoutRect | null;
 }): string {
   const overlayExtra = opts.overlayVisible
     ? opts.overlayClickThrough
@@ -34,6 +35,7 @@ export function formatGlassWindowDiagnostics(opts: {
     formatRect("overlay", opts.overlay, overlayExtra),
     formatRect("dock", opts.dock),
     formatRect("panel", opts.panelVisible ? opts.panel : null),
+    formatRect("commandBar", opts.commandBar ?? null, opts.commandBar ? "clickThrough=false" : ""),
   ].join(" ");
 }
 
@@ -53,12 +55,14 @@ export function buildWindowState(
   overlayClickThrough: boolean,
   overlayMode: GlassWindowState["overlayMode"],
   panelVisible: boolean,
+  commandBarVisible = true,
 ): GlassWindowState {
   return {
     overlayVisible,
     overlayClickThrough,
     overlayMode,
     panelVisible,
+    commandBarVisible,
     diagnostics,
   };
 }

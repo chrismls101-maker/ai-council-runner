@@ -30,6 +30,7 @@ export default defineConfig({
           dock: resolve(__dirname, "index.html"),
           panel: resolve(__dirname, "panel.html"),
           overlay: resolve(__dirname, "overlay.html"),
+          command: resolve(__dirname, "command.html"),
         },
       },
     },
