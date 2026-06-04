@@ -56,8 +56,7 @@ Expected UX:
 5. Click behind the overlay **outside** the command bar — should interact with the app behind.
 6. Click the command bar input — should accept typing (window focuses).
 7. Type: **“What am I working on?”** and press **Enter** / **Ask**.
-8. Confirm an **overlay response card** appears (bottom-right) and IIVO opens in the browser.
-   - With no session: card says “Start a session to save this context.”
+8. Confirm an **inline overlay response card** appears **without** opening the browser automatically.
 9. Press the **voice button** → choose **Microphone** or **System Audio** → **Start**.
 10. Confirm **Stop Listening** + a listening timer appear on the command bar.
 11. Click **Stop Listening** — listening stops.
@@ -68,6 +67,39 @@ Expected UX:
     primary command surface.
 
 ## Direct Response v1 (inline IIVO answers — direct-only)
+
+### Automated QA (no GUI / permissions required)
+
+Run from repo root:
+
+```bash
+npm run glass:qa:auto
+npm run test:glass-ask
+npm run glass:test
+npm run glass:qa:smoke
+```
+
+`glass:qa:auto` prints a JSON report covering:
+
+- overlay / command bar / panel layout config
+- `/api/glass/ask` direct endpoint present
+- no `runCouncilFull` in Glass ask handler
+- command bar success path does not auto-open browser
+- `?runId=` web handoff wired
+- Follow Mouse polling module present
+- unit + smoke test pass/fail summary
+- list of checks that **still require human GUI/permissions**
+
+### Human-only QA (permissions + real desktop)
+
+These cannot be automated — they require user action on macOS:
+
+- **Screen Recording** permission (System Settings)
+- **Microphone** permission
+- **System audio** loopback / virtual device setup
+- Real **click-through** feel on your desktop/apps
+- Live **OpenAI STT** with server key
+- Full visual polish and multi-monitor manual verification
 
 Expected UX:
 
@@ -100,6 +132,9 @@ Expected UX:
 16. Panel → change **Command bar hotkey** preset — confirm diagnostics update.
 17. Panel → change **Display** (Primary / Display N / Follow Mouse) — confirm layout moves or status updates.
 18. Click **Refresh display layout** after display change.
+
+19. Open IIVO with `/?runId=<valid-run-id>` — confirm saved run loads in console view.
+20. Select **Follow Mouse** display — move cursor to another monitor — confirm Glass follows within ~1s.
 
 ### Pass/Fail log template (Direct Response v1)
 

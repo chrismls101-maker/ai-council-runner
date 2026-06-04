@@ -75,6 +75,7 @@ import {
   toExternalContextPayload,
 } from "./utils/contextBridgeApi";
 import { useLensHandoff } from "./utils/useLensHandoff";
+import { useRunIdHandoff } from "./utils/useRunIdHandoff";
 import { computeAttachmentTruncationHints } from "./utils/contextBridgeClient";
 import type { RoutingTestCase } from "./constants/routingTestMatrix";
 import type { DecisionLearningStats, DecisionRecord } from "./types/decisionRecord";
@@ -722,10 +723,10 @@ export default function App() {
     requestAnimationFrame(() => composerRef.current?.focus());
   };
 
-  const loadHistoryRun = async (id: string, archived = true) => {
+  const loadHistoryRun = async (id: string, archived = true): Promise<boolean> => {
     clearConversationThread();
     const res = await fetch(`/api/history/${id}`);
-    if (!res.ok) return;
+    if (!res.ok) return false;
     const entry = (await res.json()) as CouncilRunResult & {
       prompt: string;
       preset: string;
@@ -770,6 +771,7 @@ export default function App() {
     }
     setSidebarSection("console");
     setSidePanelOpen(false);
+    return true;
   };
 
   const handleRerunFromArchive = () => {
@@ -1458,6 +1460,21 @@ export default function App() {
       showCopyFeedback(msg);
     },
     onError: setLensHandoffError,
+  });
+
+  useRunIdHandoff({
+    enabled: workspaceBootstrapped,
+    onboardingOpen: showOnboarding,
+    activeRunId: runId,
+    archivedRunId,
+    onLoadRun: loadHistoryRun,
+    onError: (msg) => {
+      setLensHandoffError(msg);
+    },
+    onFeedback: (msg) => {
+      setLensHandoffError(null);
+      showCopyFeedback(msg);
+    },
   });
 
   const attachedContextForComposer = useMemo(

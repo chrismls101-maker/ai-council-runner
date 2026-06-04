@@ -12,11 +12,18 @@ import type { OverlayMode } from "../shared/glassWindowTypes.ts";
 import {
   formatDisplayTargetLabel,
   GLASS_HOTKEY_PRESETS,
+  hotkeyRegistrationMessage,
   type GlassDisplayTarget,
   type GlassHotkeyPreset,
   type GlassUserSettings,
 } from "../shared/glassSettings.ts";
 import { GlassLayoutManager, listDisplayIds } from "./glassLayoutManager.ts";
+import {
+  getLastFollowMouseDisplayId,
+  isFollowMouseTrackingActive,
+  startFollowMouseTracking,
+  stopFollowMouseTracking,
+} from "./followMouseDisplay.ts";
 import {
   buildWindowState,
   formatGlassWindowDiagnostics,
@@ -311,6 +318,7 @@ export function createWindows(glassConfig: GlassConfig, displayTarget: GlassDisp
 
   wireWindowStacking(windows);
   stackGlassWindows(windows);
+  syncFollowMouseMode();
   logDiagnostics();
   return windows;
 }
@@ -520,6 +528,7 @@ export function broadcast(channel: string, payload: unknown): void {
 }
 
 export function disposeWindows(): void {
+  stopFollowMouseTracking();
   layoutManager?.dispose();
   layoutManager = null;
   windows = null;
@@ -552,7 +561,7 @@ export function registerCommandBarHotkeys(preset: GlassHotkeyPreset = activeHotk
 
   const spec = GLASS_HOTKEY_PRESETS[preset];
   if (!spec.accelerator) {
-    commandBarHotkeyStatus = "Hotkey disabled — command bar still clickable";
+    commandBarHotkeyStatus = hotkeyRegistrationMessage(preset, false, null);
     console.log(commandBarHotkeyStatus);
     return commandBarHotkeyStatus;
   }
@@ -571,7 +580,7 @@ export function registerCommandBarHotkeys(preset: GlassHotkeyPreset = activeHotk
       }
       const ok = globalShortcut.register(accel, () => focusCommandBar());
       if (ok) {
-        commandBarHotkeyStatus = `${GLASS_HOTKEY_PRESETS[key].label} registered`;
+        commandBarHotkeyStatus = hotkeyRegistrationMessage(key, true, accel);
         console.log(`Glass hotkey registered: ${accel}`);
         return commandBarHotkeyStatus;
       }
@@ -581,7 +590,7 @@ export function registerCommandBarHotkeys(preset: GlassHotkeyPreset = activeHotk
     }
   }
 
-  commandBarHotkeyStatus = "Hotkey unavailable — command bar still clickable";
+  commandBarHotkeyStatus = hotkeyRegistrationMessage(preset, false, spec.accelerator);
   console.warn(commandBarHotkeyStatus);
   return commandBarHotkeyStatus;
 }
@@ -597,7 +606,18 @@ export function getDisplayLayoutSummary(): string {
   const overlay = layoutManager.getOverlayLayout();
   const bar = layoutManager.getCommandBarLayout();
   const targetLabel = formatDisplayTargetLabel(activeDisplayTarget, listDisplayIds());
-  return `${targetLabel} · id${d.id} ${d.workArea.width}x${d.workArea.height} · overlay ${overlay.width}x${overlay.height} · commandBar y${bar.y}`;
+  const followInfo =
+    activeDisplayTarget === "follow_mouse" && isFollowMouseTrackingActive()
+      ? ` · cursor display id${getLastFollowMouseDisplayId() ?? "?"}`
+      : "";
+  return `${targetLabel}${followInfo} · id${d.id} ${d.workArea.width}x${d.workArea.height} · overlay ${overlay.width}x${overlay.height} · commandBar y${bar.y}`;
+}
+
+function syncFollowMouseMode(): void {
+  stopFollowMouseTracking();
+  if (activeDisplayTarget === "follow_mouse") {
+    startFollowMouseTracking("follow_mouse", () => relayoutAllWindows());
+  }
 }
 
 export function applyGlassUserSettings(settings: GlassUserSettings): void {
@@ -606,6 +626,7 @@ export function applyGlassUserSettings(settings: GlassUserSettings): void {
     layoutManager.setDisplayTarget(settings.displayTarget);
     relayoutAllWindows();
   }
+  syncFollowMouseMode();
   registerCommandBarHotkeys(settings.hotkeyPreset);
 }
 
