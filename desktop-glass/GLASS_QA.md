@@ -78,9 +78,14 @@ npm run test:glass-ask
 npm run glass:test
 npm run glass:qa:smoke
 npm run glass:e2e
+npm run glass:e2e:ci
 npm run glass:e2e:headed
 npm run glass:e2e:debug
 ```
+
+See `desktop-glass/GLASS_LIMITATIONS.md` for what E2E covers vs manual QA.
+
+`glass:e2e:ci` skips cleanly when no GUI display is available (typical CI). Use `GLASS_E2E_CI=1` with xvfb on Linux, or run `glass:e2e` locally on macOS.
 
 `glass:qa:auto` prints a JSON report covering layout/config/direct-ask guards.
 
@@ -95,7 +100,7 @@ npm run glass:e2e:debug
 - Open in IIVO only on user click (URL captured, not launched)
 - Window layout bounds (overlay = display bounds, command bar bottom-centered)
 
-Skipped automatically in CI unless `GLASS_E2E_FORCE=1`. Requires `npm run glass:build` first (the e2e script builds automatically).
+Skipped automatically in CI unless `GLASS_E2E_CI=1` (with display/xvfb) or `GLASS_E2E_FORCE=1`. Requires `npm run glass:build` first (the e2e script builds automatically).
 
 ### Human-only QA (permissions + real desktop)
 

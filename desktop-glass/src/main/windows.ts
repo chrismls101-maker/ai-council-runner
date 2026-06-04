@@ -50,6 +50,7 @@ let windows: GlassWindows | null = null;
 let layoutManager: GlassLayoutManager | null = null;
 let overlayVisible = true;
 let overlayClickThrough = true;
+let commandBarClickThrough = false;
 let overlayMode: OverlayMode = "passive";
 let commandBarVisible = true;
 
@@ -377,6 +378,14 @@ export function getGlassWindowState() {
   );
 }
 
+export function getOverlayClickThrough(): boolean {
+  return overlayClickThrough;
+}
+
+export function getCommandBarClickThrough(): boolean {
+  return commandBarClickThrough;
+}
+
 export function setOverlayClickThrough(enabled: boolean): void {
   if (!windows?.overlay || windows.overlay.isDestroyed() || !overlayVisible) return;
   applyOverlayClickThrough(windows.overlay, enabled);
@@ -399,6 +408,7 @@ export function setIgnoreMouseFromWindow(win: BrowserWindow, enabled: boolean): 
     return;
   }
   if (win.id === windows.commandBar.id && !windows.commandBar.isDestroyed()) {
+    commandBarClickThrough = enabled;
     if (enabled) {
       windows.commandBar.setIgnoreMouseEvents(true, { forward: true });
     } else {

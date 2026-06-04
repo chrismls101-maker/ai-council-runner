@@ -8,6 +8,7 @@
 
 import { loadGlassEnv } from "./loadGlassEnv.ts";
 import { installGlassE2eHooks, getE2eExternalUrls, resetE2eExternalUrls } from "./e2eMainHooks.ts";
+import { getGlassE2eWindowMetadata } from "./e2eWindowMetadata.ts";
 import { app, BrowserWindow, ipcMain, protocol, shell } from "electron";
 import { resolveConfig, buildIivoChatUrl, buildLensAskUrl, buildRunHistoryUrl } from "../shared/config.ts";
 import {
@@ -23,6 +24,7 @@ import {
 } from "../shared/contextPayload.ts";
 import { createScreenshotContext, createContextItem } from "../shared/iivoClient.ts";
 import { IPC, type GlassCommand, type GlassState, type SessionActionStatus } from "../shared/ipc.ts";
+import { waitForMinThinkingDuration } from "../shared/glassAskTiming.ts";
 import type { PanelTab } from "../shared/types.ts";
 import { GlassSessionStore } from "../shared/sessionStore.ts";
 import {
@@ -67,6 +69,7 @@ import {
   registerCommandBarHotkeys,
   resizeDockWindow,
   setIgnoreMouseFromWindow,
+  setOverlayClickThrough,
   setOverlayMode,
   toggleCommandBar,
   toggleOverlay,
@@ -175,6 +178,7 @@ interface AppState {
 
 let askAbortController: AbortController | null = null;
 let askRequestGeneration = 0;
+let thinkingStartedAtMs: number | null = null;
 let glassUserSettings: GlassUserSettings = { ...DEFAULT_GLASS_USER_SETTINGS };
 
 const state: AppState = {
@@ -451,6 +455,7 @@ function cancelGlassAsk(): void {
   askRequestGeneration += 1;
   askAbortController?.abort();
   askAbortController = null;
+  thinkingStartedAtMs = null;
   state.askInFlight = false;
   state.askStatus = "idle";
   removeThinkingFeedItems();
@@ -491,6 +496,7 @@ async function submitCommand(rawText: string): Promise<void> {
   state.askStatus = "pending";
   state.lastError = undefined;
   pushFeed(createCommandFeedItem("command", text, { prompt: text }));
+  thinkingStartedAtMs = Date.now();
   pushFeed(createCommandFeedItem("thinking", "IIVO is thinking…"));
   state.operationDiagnostics = recordOperation(state.operationDiagnostics, "ask-iivo", "pending");
   push();
@@ -519,6 +525,12 @@ async function submitCommand(rawText: string): Promise<void> {
       signal,
     );
 
+    if (requestGeneration !== askRequestGeneration) return;
+
+    if (thinkingStartedAtMs != null) {
+      await waitForMinThinkingDuration(thinkingStartedAtMs);
+      thinkingStartedAtMs = null;
+    }
     if (requestGeneration !== askRequestGeneration) return;
 
     removeThinkingFeedItems();
@@ -791,6 +803,7 @@ async function handleCommand(command: GlassCommand): Promise<void> {
       return;
     case "clear-command-feed":
       state.commandFeed = [];
+      setOverlayClickThrough(true);
       push();
       return;
     case "pin-command-feed-item":
@@ -1203,6 +1216,7 @@ function registerIpc(): void {
     ipcMain.handle(IPC.e2eResetExternalUrls, () => {
       resetE2eExternalUrls();
     });
+    ipcMain.handle(IPC.e2eGetWindowMetadata, () => getGlassE2eWindowMetadata());
   }
 }
 

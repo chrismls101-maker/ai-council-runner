@@ -20,6 +20,10 @@ import type {
 import { INSIGHT_TYPE_LABELS } from "../../shared/sessionIntelligence.ts";
 import { buildScreenshotThumbnailUrl } from "../../shared/sessionScreenshotUrls.ts";
 import {
+  buildPanelStatusCards,
+  type PanelStatusCard,
+} from "../../shared/panelStatusGrid.ts";
+import {
   WINDOW_CONTEXT_PERMISSION_MESSAGE,
   WINDOW_CONTEXT_UNAVAILABLE_MESSAGE,
 } from "../../shared/windowContextTypes.ts";
@@ -561,24 +565,17 @@ function StatusGrid({ state }: { state: GlassState }): JSX.Element {
   const analysisRunning = state.iivoAnalysis.status === "running";
   const diag = state.operationDiagnostics;
 
-  const items: { label: string; value: string }[] = [
-    { label: "Session", value: sessionLive ? state.session?.status ?? "active" : "none" },
-    { label: "STT provider", value: diag.sttProviderStatus ?? state.stt.status },
-    { label: "STT endpoint", value: diag.serverSttStatus ?? state.stt.endpoint },
-    { label: "Capture", value: diag.captureStatus ?? (state.privacy.capturing ? "capturing" : "idle") },
-    { label: "System audio", value: state.systemAudioStatus },
-    {
-      label: "App detection",
-      value:
-        state.windowContext.status === "available"
-          ? "available"
-          : state.windowContext.status === "permission_required"
-            ? "needs permission"
-            : "unavailable",
-    },
-    { label: "Hotkey", value: diag.hotkeyStatus ?? "—" },
-    { label: "Display", value: diag.displayInfo ?? "primary display" },
-  ];
+  const cards = buildPanelStatusCards({
+    sessionStatus: state.session?.status ?? null,
+    lastError: state.lastError,
+    sttStatus: state.stt.status,
+    sttEndpoint: state.stt.endpoint,
+    captureStatus: diag.captureStatus,
+    capturing: state.privacy.capturing,
+    systemAudioStatus: state.systemAudioStatus,
+    windowContextStatus: state.windowContext.status,
+    listening: state.privacy.listening,
+  });
 
   return (
     <div className="status-grid" data-testid="glass-panel-status-grid">
@@ -591,17 +588,13 @@ function StatusGrid({ state }: { state: GlassState }): JSX.Element {
         </div>
       ) : null}
       <div className="summary-box status-grid__cells">
-        {items.map((item) => (
-          <div
-            key={item.label}
-            className="status-grid__cell"
-            data-testid={`glass-panel-status-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
-          >
-            <strong>{item.label}</strong>
-            <div>{item.value}</div>
-          </div>
+        {cards.map((card) => (
+          <StatusGridCell key={card.key} card={card} />
         ))}
       </div>
+      {diag.displayInfo ? (
+        <p className="hint panel__display-diag">{diag.displayInfo}</p>
+      ) : null}
       <div className="panel__quick-actions">
         <button
           type="button"
@@ -637,6 +630,22 @@ function StatusGrid({ state }: { state: GlassState }): JSX.Element {
         </button>
       </div>
       <GlassLayoutSettings state={state} />
+    </div>
+  );
+}
+
+function StatusGridCell({ card }: { card: PanelStatusCard }): JSX.Element {
+  return (
+    <div
+      className="status-grid__cell"
+      data-testid={`glass-panel-status-${card.key}`}
+    >
+      <div className="status-grid__cell-head">
+        <span className={`status-dot status-dot--${card.level}`} aria-hidden="true" />
+        <strong>{card.label}</strong>
+      </div>
+      <div>{card.status}</div>
+      {card.detail ? <div className="status-grid__detail">{card.detail}</div> : null}
     </div>
   );
 }

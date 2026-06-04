@@ -1,54 +1,52 @@
-# IIVO Glass — Limitation Audit (final)
+# IIVO Glass — limitations classification
 
-Last updated: v1.4+ server-first STT pass.
+This document separates **fixed automated coverage** from **environment / manual QA requirements**.
 
-## Current state
+## Fixed (automated E2E + unit tests)
 
-IIVO Glass is a permission-first desktop companion: session intelligence, durable screenshots, Analyze Now / Open in IIVO, optional source context, microphone/system audio capture, and OpenAI STT (server-first).
+| Former limitation | Resolution |
+|-------------------|------------|
+| Thinking card required artificial stub delay | Command bar enforces a minimum thinking-card display duration (`THINKING_CARD_MIN_MS`) before replacing with the answer. E2E no longer depends on network delay for thinking visibility. |
+| Panel status labels mismatched spec | Status grid now shows **Server**, **STT**, **Capture**, **Audio**, **Permissions**, **Session** with level dots. |
+| Window layout checks used diagnostics strings only | E2E exposes `glass:e2e-get-window-metadata` (when `IIVO_GLASS_E2E=1`) with bounds, visibility, and tracked click-through state per window. |
+| Custom CDP launcher felt like a workaround | Formalized as `launchGlassElectronForE2E` — intentional Electron 31 + Playwright compatibility layer (fixed CDP port 19222). |
+| CI skip was vague | Skip reasons are explicit. Use `GLASS_E2E_CI=1` on runners with display/xvfb, or `GLASS_E2E_FORCE=1` locally. See `npm run glass:e2e:ci`. |
 
-## Fixed in code
+## Environment requirements (not product bugs)
 
-| Item | Status |
-|------|--------|
-| Server-first STT via `POST /api/transcribe-audio` | Fixed in code |
-| Glass reuses IIVO server `OPENAI_API_KEY` when endpoint=server | Fixed in code |
-| Direct Glass OpenAI STT fallback | Fixed in code |
-| System audio status + “How to fix” hints | Fixed in code |
-| Web Speech vs OpenAI path labels | Fixed in code |
-| Cost controls (20s chunks, 10m warning, optional auto-stop) | Fixed in code |
-| No mock provider in product UI | Fixed in code |
-| Manual QA checklist + pass/fail template | Fixed in code |
+| Requirement | Notes |
+|-------------|-------|
+| **GUI display for Electron E2E** | Headless CI runners without a virtual display cannot launch Glass windows. Run locally on macOS or use Linux + xvfb with `GLASS_E2E_CI=1`. |
+| **Electron 31 + Playwright** | `_electron.launch()` is incompatible with Electron 31’s rejection of `--remote-debugging-port=0`. CDP spawn is the supported launcher. |
 
-## External / manual requirements
+## Manual / human QA only
 
-| Item | Classification |
-|------|----------------|
-| macOS Screen Recording / audio capture permission | Requires user permission |
-| macOS virtual audio device for some loopback setups | Normal OS limitation |
-| `OPENAI_API_KEY` on IIVO server (or direct Glass env) | Requires user API key |
-| Headed manual QA (launch Glass, grant permissions, listen) | Requires headed manual QA |
-| Live OpenAI billing for real transcription | Requires user API key |
-| `npm run dev` running for server STT | Requires user action |
+These require real OS permissions, hardware, or subjective verification — **not code limitations**:
 
-## True remaining limitations
+| Area | Why manual |
+|------|------------|
+| **macOS Screen Recording** | Permission prompt and capture quality cannot be faked in E2E. |
+| **Microphone permission** | Real mic access and OS prompts. |
+| **System audio loopback** | Virtual device setup and OS-specific audio routing. |
+| **Real browser handoff** | E2E mocks `shell.openExternal`; real Safari/Chrome launch is manual. |
+| **Click-through feel** | OS-level pointer pass-through and visual polish on your desktop/TV. |
+| **Live OpenAI STT** | Requires API keys and live transcription. |
+| **Multi-monitor visual verification** | Automated tests assert bounds/metadata; human confirms TV/HDMI placement feels correct. |
 
-| Limitation | Classification |
-|------------|----------------|
-| Web Speech does not use OpenAI (browser-local when available) | Deferred by design |
-| System audio loopback OS/permission dependent | Normal OS limitation |
-| No Deepgram provider | Deferred by design |
-| No autonomous computer control | Deferred by design |
-| Live OpenAI not verified in CI | Requires user API key |
-| Headed QA not run in agent sessions | Requires headed manual QA |
+## Commands
 
-## What requires user action before manual QA
+```bash
+# Local full Electron E2E (macOS with display)
+npm run glass:e2e
 
-1. Start IIVO server: `npm run dev` (with `OPENAI_API_KEY` in root `.env`)
-2. Start Glass: `npm run glass:dev`
-3. Grant macOS Screen Recording (+ Accessibility for source context) if prompted
-4. Start Session → test Microphone and System Audio modes
-5. Run optional live STT: `npm run glass:stt:live` (requires fixture + key; may cost)
+# CI entry — skips cleanly when no display
+npm run glass:e2e:ci
 
-## Deepgram
+# Force on a runner with display access
+GLASS_E2E_FORCE=1 npm run glass:e2e
 
-Not implemented. OpenAI STT is sufficient for v1. Future optional provider only — no code or UI added.
+# Linux CI with xvfb example
+xvfb-run -a GLASS_E2E_CI=1 npm run glass:e2e:ci
+```
+
+See also `GLASS_QA.md` for the full manual checklist.

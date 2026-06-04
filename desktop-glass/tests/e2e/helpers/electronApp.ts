@@ -1,76 +1,34 @@
-import { spawn, type ChildProcess } from "node:child_process";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { chromium, type Browser, type Page } from "@playwright/test";
-import { startStubServer, type StubServerHandle } from "./stubServer.ts";
+import type { Browser, Page } from "@playwright/test";
+import {
+  closeGlassElectronForE2E,
+  GLASS_ELECTRON_BIN,
+  GLASS_MAIN,
+  launchGlassElectronForE2E,
+  type LaunchedGlassElectron,
+} from "./launchGlassElectronForE2E.ts";
+import { getElectronE2eSkipReason, shouldSkipElectronE2e } from "./e2eEnvironment.ts";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-export const GLASS_ROOT = path.resolve(__dirname, "../../..");
-export const GLASS_MAIN = path.join(GLASS_ROOT, "out/main/index.js");
-export const GLASS_ELECTRON_BIN = path.join(
+export {
+  GLASS_ELECTRON_BIN,
+  GLASS_MAIN,
+  GLASS_CDP_PORT,
   GLASS_ROOT,
-  "node_modules/electron/dist/Electron.app/Contents/MacOS/Electron",
-);
-export const GLASS_CDP_PORT = 19222;
+} from "./launchGlassElectronForE2E.ts";
+export { getElectronE2eSkipReason, shouldSkipElectronE2e } from "./e2eEnvironment.ts";
+export {
+  closeGlassElectronForE2E,
+  launchGlassElectronForE2E,
+  type LaunchedGlassElectron,
+} from "./launchGlassElectronForE2E.ts";
 
-export interface LaunchedGlass {
-  browser: Browser;
-  electronProcess: ChildProcess;
-  stub: StubServerHandle;
-}
-
-async function waitForCdp(port: number, timeoutMs = 45_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(`http://127.0.0.1:${port}/json/version`);
-      if (res.ok) return;
-    } catch {
-      /* retry */
-    }
-    await new Promise((r) => setTimeout(r, 250));
-  }
-  throw new Error(`Electron CDP not ready on port ${port} within ${timeoutMs}ms`);
-}
+export type LaunchedGlass = LaunchedGlassElectron;
 
 export async function launchGlassApp(): Promise<LaunchedGlass> {
-  const stub = await startStubServer();
-
-  const env: Record<string, string | undefined> = {
-    ...process.env,
-    IIVO_GLASS_E2E: "1",
-    IIVO_API_URL: stub.baseUrl,
-    IIVO_WEB_URL: stub.baseUrl,
-  };
-  delete env.ELECTRON_RUN_AS_NODE;
-
-  const electronProcess = spawn(GLASS_ELECTRON_BIN, [GLASS_MAIN], {
-    cwd: GLASS_ROOT,
-    env,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-
-  electronProcess.stderr?.on("data", (chunk: Buffer) => {
-    const text = chunk.toString();
-    if (text.includes("Error") || text.includes("error")) {
-      process.stderr.write(`[glass-e2e] ${text}`);
-    }
-  });
-
-  await waitForCdp(GLASS_CDP_PORT);
-  const browser = await chromium.connectOverCDP(`http://127.0.0.1:${GLASS_CDP_PORT}`);
-
-  return { browser, electronProcess, stub };
+  return launchGlassElectronForE2E();
 }
 
 export async function closeGlassApp(app: LaunchedGlass): Promise<void> {
-  await app.browser.close().catch(() => undefined);
-  app.electronProcess.kill("SIGTERM");
-  await new Promise((r) => setTimeout(r, 500));
-  if (!app.electronProcess.killed) {
-    app.electronProcess.kill("SIGKILL");
-  }
-  await app.stub.close().catch(() => undefined);
+  return closeGlassElectronForE2E(app);
 }
 
 function allPages(browser: Browser): Page[] {
@@ -115,17 +73,10 @@ export async function getE2eExternalUrls(page: Page): Promise<string[]> {
   return page.evaluate(() => window.glass.getE2eExternalUrls());
 }
 
-export async function readGlassState(page: Page) {
-  return page.evaluate(async () => window.glass.getState());
+export async function getE2eWindowMetadata(page: Page) {
+  return page.evaluate(() => window.glass.getE2eWindowMetadata());
 }
 
-export function shouldSkipElectronE2e(): string | null {
-  if (process.env.GLASS_E2E_FORCE === "1") return null;
-  if (process.env.CI === "true" || process.env.CI === "1") {
-    return "Electron E2E skipped in CI (set GLASS_E2E_FORCE=1 to override). Run locally on macOS.";
-  }
-  if (process.platform === "linux" && !process.env.DISPLAY) {
-    return "Electron E2E requires a display (set GLASS_E2E_FORCE=1 to override).";
-  }
-  return null;
+export async function readGlassState(page: Page) {
+  return page.evaluate(async () => window.glass.getState());
 }

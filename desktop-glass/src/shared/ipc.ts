@@ -55,6 +55,7 @@ export const IPC = {
   commandBarFocus: "glass:command-bar-focus",
   e2eGetExternalUrls: "glass:e2e-get-external-urls",
   e2eResetExternalUrls: "glass:e2e-reset-external-urls",
+  e2eGetWindowMetadata: "glass:e2e-get-window-metadata",
 } as const;
 
 export type TranscriptionControlCommand =

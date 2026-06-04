@@ -3,13 +3,14 @@ import fs from "node:fs";
 import {
   closeGlassApp,
   getE2eExternalUrls,
+  getE2eWindowMetadata,
   getGlassWindows,
+  getElectronE2eSkipReason,
   GLASS_ELECTRON_BIN,
   GLASS_MAIN,
   launchGlassApp,
   readGlassState,
   resetE2eExternalUrls,
-  shouldSkipElectronE2e,
   type LaunchedGlass,
 } from "./helpers/electronApp.ts";
 
@@ -21,11 +22,13 @@ const COUNCIL_MARKERS = [
   "Final Judge",
 ];
 
+const SPEC_STATUS_KEYS = ["server", "stt", "capture", "audio", "permissions", "session"];
+
 let app: LaunchedGlass;
 let commandPage: import("@playwright/test").Page;
 
 test.beforeAll(async () => {
-  const skipReason = shouldSkipElectronE2e();
+  const skipReason = getElectronE2eSkipReason();
   test.skip(!!skipReason, skipReason ?? undefined);
 
   if (!fs.existsSync(GLASS_MAIN)) {
@@ -109,18 +112,16 @@ test.describe("IIVO Glass Electron E2E", () => {
     await expect(overlay.locator('[data-testid="glass-overlay-response-card"]')).toHaveCount(0);
   });
 
-  test("4 — panel opens with status grid", async () => {
+  test("4 — panel opens with spec status grid", async () => {
     const { dock, panel } = await getGlassWindows(app.browser);
 
     await dock.locator('[data-testid="glass-dock-open-panel"]').click();
     await expect(panel.locator('[data-testid="glass-panel"]')).toBeVisible();
     await expect(panel.locator('[data-testid="glass-panel-status-grid"]')).toBeVisible();
 
-    await expect(panel.locator('[data-testid="glass-panel-status-session"]')).toBeVisible();
-    await expect(panel.locator('[data-testid="glass-panel-status-stt-provider"]')).toBeVisible();
-    await expect(panel.locator('[data-testid="glass-panel-status-capture"]')).toBeVisible();
-    await expect(panel.locator('[data-testid="glass-panel-status-system-audio"]')).toBeVisible();
-    await expect(panel.locator('[data-testid="glass-panel-status-app-detection"]')).toBeVisible();
+    for (const key of SPEC_STATUS_KEYS) {
+      await expect(panel.locator(`[data-testid="glass-panel-status-${key}"]`)).toBeVisible();
+    }
 
     await panel.locator('[data-testid="glass-panel-close"]').click();
   });
@@ -167,13 +168,39 @@ test.describe("IIVO Glass Electron E2E", () => {
     expect(urls.some((u) => u.includes("lensAsk=ctx-e2e-1"))).toBe(true);
   });
 
-  test("7 — window layout diagnostics via Glass state", async () => {
-    const { panel } = await getGlassWindows(app.browser);
-    const state = await readGlassState(panel);
+  test("7 — window metadata via E2E IPC", async () => {
+    const { command } = await getGlassWindows(app.browser);
+    const metadata = await getE2eWindowMetadata(command);
+    const state = await readGlassState(command);
 
-    expect(state.windows?.diagnostics ?? "").toMatch(/overlay=/i);
-    expect(state.operationDiagnostics.displayInfo ?? "").toMatch(/overlay/i);
+    const overlay = metadata.find((m) => m.name === "overlay");
+    const commandBar = metadata.find((m) => m.name === "commandBar");
+    const dock = metadata.find((m) => m.name === "dock");
+    const panelWin = metadata.find((m) => m.name === "panel");
+
+    expect(overlay?.exists).toBe(true);
+    expect(overlay?.visible).toBe(true);
+    expect(overlay?.ignoreMouseEvents).toBe(true);
+    expect(commandBar?.exists).toBe(true);
+    expect(commandBar?.visible).toBe(true);
+    expect(commandBar?.ignoreMouseEvents).toBe(false);
+    expect(dock?.exists).toBe(true);
+    expect(panelWin?.exists).toBe(true);
+
+    expect(overlay?.bounds).not.toBeNull();
+    expect(commandBar?.bounds).not.toBeNull();
+    expect(overlay!.bounds!.width).toBeGreaterThan(100);
+    expect(overlay!.bounds!.height).toBeGreaterThan(100);
+
+    const bar = commandBar!.bounds!;
+    const overlayBounds = overlay!.bounds!;
+    expect(bar.y + bar.height).toBeLessThanOrEqual(overlayBounds.y + overlayBounds.height + 8);
+    const barCenter = bar.x + bar.width / 2;
+    const overlayCenter = overlayBounds.x + overlayBounds.width / 2;
+    expect(Math.abs(barCenter - overlayCenter)).toBeLessThan(overlayBounds.width * 0.1);
+
     expect(state.windows?.overlayVisible).toBe(true);
+    expect(state.windows?.overlayClickThrough).toBe(true);
     expect(state.windows?.commandBarVisible).toBe(true);
   });
 });

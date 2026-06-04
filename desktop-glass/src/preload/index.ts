@@ -52,6 +52,11 @@ const glassApi = {
   resetE2eExternalUrls(): Promise<void> {
     return ipcRenderer.invoke(IPC.e2eResetExternalUrls) as Promise<void>;
   },
+  getE2eWindowMetadata(): Promise<import("../shared/glassE2eTypes.ts").GlassE2eWindowMetadata[]> {
+    return ipcRenderer.invoke(IPC.e2eGetWindowMetadata) as Promise<
+      import("../shared/glassE2eTypes.ts").GlassE2eWindowMetadata[]
+    >;
+  },
 };
 
 export type GlassApi = typeof glassApi;

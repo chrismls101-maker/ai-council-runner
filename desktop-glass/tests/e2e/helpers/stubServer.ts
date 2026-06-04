@@ -54,9 +54,7 @@ export async function startStubServer(
         } catch {
           /* ignore */
         }
-        const responseDelay = prompt.includes("E2E_DELAY_ASK")
-          ? Math.max(delayMs, 2500)
-          : 500;
+        const responseDelay = prompt.includes("E2E_DELAY_ASK") ? Math.max(delayMs, 2500) : 0;
 
         setTimeout(() => {
           res.writeHead(200, { "Content-Type": "application/json" });
