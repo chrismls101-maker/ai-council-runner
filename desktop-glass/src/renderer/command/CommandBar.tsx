@@ -5,6 +5,10 @@ import { ensureCommandBarClickable, useChromeLockToggle } from "../useChromeLock
 import { useChromeWindowDrag } from "../useChromeWindowDrag.ts";
 import { useTranscriptionContext } from "../TranscriptionProvider.tsx";
 import type { TranscriptionMode } from "../../shared/audioCaptureTypes.ts";
+import {
+  micPermissionDeniedMessage,
+  shouldShowMicPermissionDenied,
+} from "../../shared/commandBarMic.ts";
 
 /**
  * Bottom-centered Glass command bar. Direct ask renders inline on the overlay;
@@ -19,10 +23,18 @@ export function CommandBar(): JSX.Element {
   const [showSources, setShowSources] = useState(false);
   const focusedRef = useRef(false);
   const hoverCountRef = useRef(0);
+  const micInputTouchedRef = useRef(false);
+  const wasListeningRef = useRef(false);
 
   const listening = state.privacy.listening || tx.status === "listening";
+  const micListening = listening && tx.isMicrophoneCapture;
+  const systemListening = listening && tx.isSystemAudioCapture;
   const askPending = state.askStatus === "pending";
   const screenLooking = state.screenContextStatus?.kind === "looking";
+  const micDenied = shouldShowMicPermissionDenied({
+    micPermission: state.micPermission,
+    lastError: tx.lastError,
+  });
 
   useEffect(() => {
     window.glass.setIgnoreMouse(true);
@@ -52,12 +64,32 @@ export function CommandBar(): JSX.Element {
     return unsubscribe;
   }, []);
 
+  useEffect(() => {
+    if (!micListening) {
+      micInputTouchedRef.current = false;
+      return;
+    }
+    if (micInputTouchedRef.current) return;
+    setText(tx.commandBarListenText);
+  }, [micListening, tx.commandBarListenText]);
+
+  useEffect(() => {
+    if (wasListeningRef.current && !listening && tx.commandBarListenText.trim()) {
+      setText(tx.commandBarListenText);
+    }
+    wasListeningRef.current = listening;
+  }, [listening, tx.commandBarListenText]);
+
   const submit = useCallback(() => {
-    const value = text.trim();
+    const value = (micListening ? tx.commandBarListenText : text).trim();
     if (!value || askPending) return;
+    if (listening) {
+      send({ type: "pause" });
+    }
     send({ type: "submit-command", text: value });
     setText("");
-  }, [text, askPending]);
+    micInputTouchedRef.current = false;
+  }, [text, askPending, listening, micListening, tx.commandBarListenText]);
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>): void => {
     if (event.key === "Enter") {
@@ -78,12 +110,8 @@ export function CommandBar(): JSX.Element {
       send({ type: "pause" });
       return;
     }
-    if (tx.selectedMode === "manual") {
-      tx.setMode("microphone_web_speech");
-      tx.startListening();
-      return;
-    }
-    tx.startListening();
+    micInputTouchedRef.current = false;
+    void tx.startMicrophoneListening(text);
   };
 
   const handleVoiceContext = (event: React.MouseEvent<HTMLButtonElement>): void => {
@@ -93,9 +121,13 @@ export function CommandBar(): JSX.Element {
   };
 
   const pickSource = (mode: TranscriptionMode): void => {
-    tx.setMode(mode);
     setShowSources(false);
-    tx.startListening();
+    micInputTouchedRef.current = false;
+    if (mode === "system_audio") {
+      tx.startSystemAudioListening();
+      return;
+    }
+    void tx.startMicrophoneListening(text);
   };
 
   const statusTone = listening
@@ -118,6 +150,9 @@ export function CommandBar(): JSX.Element {
       };
     }
   }, [chromeLocked]);
+
+  const inputValue = micListening && !micInputTouchedRef.current ? tx.commandBarListenText : text;
+  const showSecondary = listening || showSources || micDenied;
 
   return (
     <div className="command-root">
@@ -142,9 +177,9 @@ export function CommandBar(): JSX.Element {
             title={
               listening
                 ? "Stop listening"
-                : "Start listening (Microphone). Right-click for source options."
+                : "Start microphone (right-click for system audio)"
             }
-            aria-label={listening ? "Stop listening" : "Start listening"}
+            aria-label={listening ? "Stop listening" : "Start microphone"}
           >
             <span className="command-voice__bars" aria-hidden="true">
               <i />
@@ -159,16 +194,25 @@ export function CommandBar(): JSX.Element {
             data-testid="glass-command-input"
             className="command-input"
             type="text"
-            value={text}
+            value={inputValue}
             placeholder={
-              screenLooking
-                ? "Looking…"
-                : askPending
-                  ? "IIVO is thinking…"
-                  : "Ask IIVO while you work…"
+              micListening
+                ? "Listening… speak into your microphone"
+                : screenLooking
+                  ? "Looking…"
+                  : askPending
+                    ? "IIVO is thinking…"
+                    : "Ask IIVO while you work…"
             }
             disabled={askPending}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => {
+              const next = e.target.value;
+              micInputTouchedRef.current = true;
+              setText(next);
+              if (micListening) {
+                tx.setMicInputOverride(next);
+              }
+            }}
             onKeyDown={handleKeyDown}
             onFocus={() => {
               focusedRef.current = true;
@@ -187,7 +231,7 @@ export function CommandBar(): JSX.Element {
             data-testid={askPending ? "glass-command-cancel" : "glass-command-submit"}
             className="command-ask"
             onClick={askPending ? () => send({ type: "cancel-glass-ask" }) : submit}
-            disabled={!askPending && !text.trim()}
+            disabled={!askPending && !(micListening ? tx.commandBarListenText : text).trim()}
           >
             {askPending ? (
               <>Cancel</>
@@ -223,14 +267,39 @@ export function CommandBar(): JSX.Element {
           </p>
         ) : null}
 
-        {(showSources || listening) && (
-          <div className="command-bar__secondary">
+        {showSecondary ? (
+          <div className="command-bar__secondary" data-testid="glass-command-bar-secondary">
+            {micDenied && !listening ? (
+              <>
+                <span
+                  className="command-listen-status command-listen-status--error"
+                  data-testid="glass-command-mic-denied"
+                >
+                  {micPermissionDeniedMessage(tx.lastError)}
+                </span>
+                <button
+                  type="button"
+                  data-testid="glass-command-open-mic-settings"
+                  className="command-mini"
+                  onClick={() => send({ type: "open-microphone-settings" })}
+                >
+                  Open Microphone Settings
+                </button>
+                <button
+                  type="button"
+                  className="command-mini"
+                  onClick={() => void tx.startMicrophoneListening(text)}
+                >
+                  Retry Mic
+                </button>
+              </>
+            ) : null}
             {listening ? (
               <>
                 <span className="command-listen-status">
                   <span className="command-listen-status__pulse" aria-hidden="true" />
                   Listening {tx.listeningDuration} ·{" "}
-                  {tx.selectedMode === "system_audio" ? "system audio" : "microphone"}
+                  {systemListening ? "system audio" : "microphone"}
                   {tx.transcribing ? " · transcribing…" : ""}
                 </span>
                 <button
@@ -242,9 +311,9 @@ export function CommandBar(): JSX.Element {
                   Stop Listening
                 </button>
               </>
-            ) : (
+            ) : !micDenied ? (
               <>
-                <span className="command-listen-status">Listen with</span>
+                <span className="command-listen-status">Other sources (optional)</span>
                 <button
                   type="button"
                   className={`command-mini${tx.selectedMode === "microphone_web_speech" ? " command-mini--on" : ""}`}
@@ -260,9 +329,9 @@ export function CommandBar(): JSX.Element {
                   System Audio
                 </button>
               </>
-            )}
+            ) : null}
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );

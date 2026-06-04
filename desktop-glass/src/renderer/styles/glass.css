@@ -1844,3 +1844,7 @@ html.glass-dock-window #root {
   color: var(--glass-text-dim);
   line-height: 1.35;
 }
+
+.command-listen-status--error {
+  color: #f87171;
+}

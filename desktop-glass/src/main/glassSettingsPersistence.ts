@@ -10,6 +10,7 @@ import {
   parseChromeOrigin,
   parseDisplayTarget,
   parseAutoUploadCapturesToContext,
+  parseMicAutoSendAfterSilence,
   parseBootSoundEnabled,
   parseDockOrientation,
   parseHotkeyPreset,
@@ -41,6 +42,7 @@ export async function loadGlassUserSettings(): Promise<GlassUserSettings> {
       autoUploadCapturesToContext: parseAutoUploadCapturesToContext(
         parsed.autoUploadCapturesToContext,
       ),
+      micAutoSendAfterSilence: parseMicAutoSendAfterSilence(parsed.micAutoSendAfterSilence),
     };
   } catch {
     return { ...DEFAULT_GLASS_USER_SETTINGS };

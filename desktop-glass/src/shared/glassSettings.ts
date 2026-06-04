@@ -33,6 +33,8 @@ export interface GlassUserSettings {
   saveVisualAsksToSession: boolean;
   /** Upload captures to IIVO Context Bridge without an explicit Open/Save (default off). */
   autoUploadCapturesToContext: boolean;
+  /** After mic pause, auto-send command bar text to IIVO (default off). */
+  micAutoSendAfterSilence: boolean;
 }
 
 export const DEFAULT_GLASS_USER_SETTINGS: GlassUserSettings = {
@@ -45,6 +47,7 @@ export const DEFAULT_GLASS_USER_SETTINGS: GlassUserSettings = {
   bootSoundEnabled: false,
   saveVisualAsksToSession: true,
   autoUploadCapturesToContext: false,
+  micAutoSendAfterSilence: false,
 };
 
 export function parseBootSoundEnabled(value: unknown): boolean {
@@ -56,6 +59,10 @@ export function parseSaveVisualAsksToSession(value: unknown): boolean {
 }
 
 export function parseAutoUploadCapturesToContext(value: unknown): boolean {
+  return value === true;
+}
+
+export function parseMicAutoSendAfterSilence(value: unknown): boolean {
   return value === true;
 }
 

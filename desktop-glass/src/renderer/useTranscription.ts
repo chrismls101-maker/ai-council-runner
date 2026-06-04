@@ -14,7 +14,17 @@ import {
 } from "../shared/transcriptionProviders.ts";
 import {
   mapGetUserMediaErrorToMicPermission,
+  type MicPermissionReport,
 } from "../shared/glassCapabilities.ts";
+import {
+  buildAskTextFromMicDraft,
+  composeCommandBarMicText,
+  isMicrophoneCaptureMode,
+  isSystemAudioCaptureMode,
+  MIC_PERMISSION_DENIED_DETAIL,
+  MIC_PERMISSION_DENIED_MESSAGE,
+  shouldAutoSendMicAfterSilence,
+} from "../shared/commandBarMic.ts";
 import {
   mapSystemAudioCaptureError,
   mapSystemAudioStreamResult,
@@ -71,6 +81,10 @@ export interface TranscriptionController {
   effectiveMode: TranscriptionMode;
   status: "idle" | "listening" | "paused";
   interimText?: string;
+  commandBarListenText: string;
+  isMicrophoneCapture: boolean;
+  isSystemAudioCapture: boolean;
+  micPermissionDenied: boolean;
   statusMessage: string;
   listeningHint: string;
   systemAudioStatus: SystemAudioStatus;
@@ -88,9 +102,12 @@ export interface TranscriptionController {
   canListen: boolean;
   canTranscribeLastChunk: boolean;
   setMode: (mode: TranscriptionMode) => void;
+  startMicrophoneListening: (inputPrefix?: string) => Promise<void>;
+  startSystemAudioListening: () => void;
   startListening: () => void;
   stopListening: () => void;
   stopListeningLocal: () => void;
+  setMicInputOverride: (text: string) => void;
   transcribeLastChunk: () => void;
   addChunkToSession: () => void;
   probeMicrophone: () => Promise<void>;
@@ -116,11 +133,16 @@ export function useTranscription(): TranscriptionController {
   const lastMimeRef = useRef<string>("audio/webm");
   const timerRef = useRef<number | null>(null);
   const chunkSourceRef = useRef<"microphone" | "system_audio">("microphone");
+  const isListeningRef = useRef(false);
 
   useEffect(() => {
     setSystemAudioStatus(glassState.systemAudioStatus);
     setSystemAudioDetail(glassState.systemAudioDetail);
   }, [glassState.systemAudioStatus, glassState.systemAudioDetail]);
+
+  useEffect(() => {
+    isListeningRef.current = state.status === "listening";
+  }, [state.status]);
 
   const snapshot = useMemo(
     () =>
@@ -192,6 +214,67 @@ export function useTranscription(): TranscriptionController {
   }, []);
 
   const stopListeningRef = useRef<(() => void) | null>(null);
+  const micDraftRef = useRef({ prefix: "", finalized: "", interim: "" });
+
+  useEffect(() => {
+    micDraftRef.current = {
+      prefix: state.micDraftPrefix ?? "",
+      finalized: state.micDraftText ?? "",
+      interim: state.interimText ?? "",
+    };
+  }, [state.micDraftPrefix, state.micDraftText, state.interimText]);
+
+  const appendMicDraft = useCallback((text: string) => {
+    dispatch({ type: "APPEND_MIC_DRAFT", text });
+  }, []);
+
+  const maybeAutoSendMicDraft = useCallback(() => {
+    const draft = buildAskTextFromMicDraft(
+      micDraftRef.current.prefix,
+      micDraftRef.current.finalized,
+      micDraftRef.current.interim,
+    );
+    if (
+      !shouldAutoSendMicAfterSilence(
+        glassState.glassSettings.micAutoSendAfterSilence,
+        draft,
+      )
+    ) {
+      return false;
+    }
+    send({ type: "submit-command", text: draft });
+    stopListeningRef.current?.();
+    return true;
+  }, [glassState.glassSettings.micAutoSendAfterSilence]);
+
+  const requestMicrophoneAccess = useCallback(async (): Promise<MicPermissionReport> => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      send({ type: "report-mic-permission", status: "error" });
+      dispatch({
+        type: "SET_ERROR",
+        message: "Microphone API is not available in this build.",
+      });
+      return "error";
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stopMediaStreamState(stream.getTracks());
+      send({ type: "report-mic-permission", status: "granted" });
+      dispatch({ type: "SET_ERROR", message: undefined });
+      return "granted";
+    } catch (err) {
+      const status = mapGetUserMediaErrorToMicPermission(err);
+      send({ type: "report-mic-permission", status });
+      dispatch({
+        type: "SET_ERROR",
+        message:
+          status === "denied"
+            ? `${MIC_PERMISSION_DENIED_MESSAGE}. ${MIC_PERMISSION_DENIED_DETAIL}`
+            : "Could not access microphone.",
+      });
+      return status;
+    }
+  }, []);
 
   const processBlob = useCallback(
     async (blob: Blob, mimeType: string, source: "microphone" | "system_audio") => {
@@ -217,9 +300,23 @@ export function useTranscription(): TranscriptionController {
       });
       if (!result.ok) {
         dispatch({ type: "SET_ERROR", message: result.error ?? "Transcription failed." });
+        return;
+      }
+      if (source === "microphone" && result.text?.trim()) {
+        appendMicDraft(result.text.trim());
+        send({
+          type: "add-transcript-chunk",
+          text: result.text.trim(),
+          tags: ["microphone"],
+        });
       }
     },
-    [glassState.session?.id, glassState.stt.enabled, glassState.stt.status],
+    [
+      glassState.session?.id,
+      glassState.stt.enabled,
+      glassState.stt.status,
+      appendMicDraft,
+    ],
   );
 
   const stopListeningLocal = useCallback(() => {
@@ -279,27 +376,46 @@ export function useTranscription(): TranscriptionController {
       }
       if (interim) dispatch({ type: "SET_INTERIM", text: interim });
       if (finalChunk.trim()) {
+        appendMicDraft(finalChunk.trim());
         send({ type: "add-transcript-chunk", text: finalChunk.trim(), tags: ["microphone"] });
         dispatch({ type: "CLEAR_INTERIM" });
       }
     };
-    recognition.onerror = () => {
-      dispatch({ type: "SET_ERROR", message: "Microphone transcription error." });
+    recognition.onerror = (event) => {
+      const code = (event as { error?: string }).error;
+      if (code === "not-allowed" || code === "service-not-allowed") {
+        send({ type: "report-mic-permission", status: "denied" });
+        dispatch({
+          type: "SET_ERROR",
+          message: `${MIC_PERMISSION_DENIED_MESSAGE}. ${MIC_PERMISSION_DENIED_DETAIL}`,
+        });
+      } else {
+        dispatch({ type: "SET_ERROR", message: "Microphone transcription error." });
+      }
       stopListening();
     };
     recognition.onend = () => {
-      if (recognitionRef.current === recognition) stopListening();
+      if (recognitionRef.current !== recognition) return;
+      if (maybeAutoSendMicDraft()) return;
+      if (isListeningRef.current) {
+        try {
+          recognition.start();
+        } catch {
+          stopListening();
+        }
+      }
     };
     recognitionRef.current = recognition;
     recognition.start();
     dispatch({ type: "START_LISTENING" });
     send({ type: "start-listening" });
     startTimer();
-  }, [snapshot, stopListening, startTimer]);
+  }, [snapshot, stopListening, startTimer, appendMicDraft, maybeAutoSendMicDraft]);
 
   const startMediaRecorder = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      send({ type: "report-mic-permission", status: "granted" });
       mediaStreamRef.current = stream;
       startChunkRecorder(stream, "microphone");
     } catch (err) {
@@ -308,7 +424,7 @@ export function useTranscription(): TranscriptionController {
         send({ type: "report-mic-permission", status: "denied" });
         dispatch({
           type: "SET_ERROR",
-          message: "Microphone permission denied. Open Microphone Settings, then retry.",
+          message: `${MIC_PERMISSION_DENIED_MESSAGE}. ${MIC_PERMISSION_DENIED_DETAIL}`,
         });
         return;
       }
@@ -371,9 +487,66 @@ export function useTranscription(): TranscriptionController {
     }
   }, [snapshot, startChunkRecorder]);
 
+  const startSystemAudioListening = useCallback(() => {
+    if (state.status === "listening") return;
+    setSelectedMode("system_audio");
+    dispatch({ type: "SET_ERROR", message: undefined });
+    void startSystemAudio();
+  }, [state.status, startSystemAudio]);
+
+  const startMicrophoneListening = useCallback(
+    async (inputPrefix = "") => {
+      if (state.status === "listening") return;
+      setSelectedMode("microphone_web_speech");
+      dispatch({ type: "SET_MIC_DRAFT_PREFIX", text: inputPrefix });
+      dispatch({ type: "SET_ERROR", message: undefined });
+
+      const permission = await requestMicrophoneAccess();
+      if (permission !== "granted") return;
+
+      const snap = buildProviderSnapshot("microphone_web_speech", window, {
+        systemAudioStatus,
+        systemAudioDetail,
+        stt: glassState.stt,
+      });
+      const mode = resolveMicrophoneMode(snap);
+      if (mode === "manual" || !canStartListening(mode, { ...snap, selectedMode: mode })) {
+        dispatch({
+          type: "SET_ERROR",
+          message: modeStatusMessage("microphone_web_speech", snap),
+        });
+        return;
+      }
+      dispatch({ type: "SET_MODE", mode });
+      if (mode === "microphone_web_speech") {
+        startWebSpeech();
+        return;
+      }
+      if (mode === "microphone_media_recorder") {
+        await startMediaRecorder();
+      }
+    },
+    [
+      state.status,
+      requestMicrophoneAccess,
+      systemAudioStatus,
+      systemAudioDetail,
+      glassState.stt,
+      startWebSpeech,
+      startMediaRecorder,
+    ],
+  );
+
   const startListening = useCallback(() => {
     if (selectedMode === "manual") {
       dispatch({ type: "SET_ERROR", message: "Choose Microphone or System Audio before starting." });
+      return;
+    }
+    if (
+      selectedMode === "microphone_web_speech" ||
+      selectedMode === "microphone_media_recorder"
+    ) {
+      void startMicrophoneListening();
       return;
     }
     if (!canStartListening(effectiveMode, snapshot)) {
@@ -406,7 +579,12 @@ export function useTranscription(): TranscriptionController {
     startWebSpeech,
     startMediaRecorder,
     startSystemAudio,
+    startMicrophoneListening,
   ]);
+
+  const setMicInputOverride = useCallback((text: string) => {
+    dispatch({ type: "SET_MIC_INPUT", text });
+  }, []);
 
   const setMode = useCallback(
     (mode: TranscriptionMode) => {
@@ -466,6 +644,17 @@ export function useTranscription(): TranscriptionController {
     [stopListeningLocal],
   );
 
+  const isMicrophoneCapture = isMicrophoneCaptureMode(selectedMode, effectiveMode);
+  const isSystemAudioCapture = isSystemAudioCaptureMode(selectedMode, effectiveMode);
+  const commandBarListenText = composeCommandBarMicText(
+    state.micDraftPrefix ?? "",
+    state.micDraftText ?? "",
+    state.interimText,
+  );
+  const micPermissionDenied =
+    glassState.micPermission === "denied" ||
+    !!state.lastError?.toLowerCase().includes("permission denied");
+
   const listeningHint =
     state.status === "listening"
       ? listeningModeHint(effectiveMode, true) ||
@@ -481,6 +670,10 @@ export function useTranscription(): TranscriptionController {
     effectiveMode,
     status: state.status,
     interimText: state.interimText,
+    commandBarListenText,
+    isMicrophoneCapture,
+    isSystemAudioCapture,
+    micPermissionDenied,
     statusMessage:
       state.status === "listening"
         ? `Listening via ${TRANSCRIPTION_MODE_LABELS[selectedMode] ?? selectedMode}…`
@@ -508,9 +701,12 @@ export function useTranscription(): TranscriptionController {
     canListen: canStartListening(effectiveMode, snapshot),
     canTranscribeLastChunk: hasLastChunk && usesSttChunkCapture(effectiveMode),
     setMode,
+    startMicrophoneListening,
+    startSystemAudioListening,
     startListening,
     stopListening,
     stopListeningLocal,
+    setMicInputOverride,
     transcribeLastChunk,
     addChunkToSession,
     probeMicrophone,

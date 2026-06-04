@@ -353,7 +353,20 @@ test.describe("IIVO Glass Electron E2E", () => {
     ).toBeVisible();
   });
 
-  test("13 — window metadata via E2E IPC", async () => {
+  test("13 — command bar mic denied shows settings action", async () => {
+    const { command } = await getGlassWindows(app.browser);
+    await command.evaluate(() => {
+      window.glass.send({ type: "report-mic-permission", status: "denied" });
+    });
+    await expect(command.locator('[data-testid="glass-command-mic-denied"]')).toBeVisible({
+      timeout: 5000,
+    });
+    await expect(command.locator('[data-testid="glass-command-open-mic-settings"]')).toBeVisible();
+    const state = await readGlassState(command);
+    expect(state.micPermission).toBe("denied");
+  });
+
+  test("14 — window metadata via E2E IPC", async () => {
     const { command } = await getGlassWindows(app.browser);
     const metadata = await getE2eWindowMetadata(command);
     const state = await readGlassState(command);

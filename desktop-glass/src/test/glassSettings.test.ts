@@ -4,6 +4,7 @@ import {
   DEFAULT_GLASS_USER_SETTINGS,
   formatDisplayTargetLabel,
   parseAutoUploadCapturesToContext,
+  parseMicAutoSendAfterSilence,
   parseBootSoundEnabled,
   parseSaveVisualAsksToSession,
   parseChromeOrigin,
@@ -21,6 +22,11 @@ test("default settings use cmd-shift-space and primary display", () => {
   assert.equal(DEFAULT_GLASS_USER_SETTINGS.bootSoundEnabled, false);
   assert.equal(DEFAULT_GLASS_USER_SETTINGS.saveVisualAsksToSession, true);
   assert.equal(DEFAULT_GLASS_USER_SETTINGS.autoUploadCapturesToContext, false);
+});
+
+test("parseMicAutoSendAfterSilence defaults off", () => {
+  assert.equal(parseMicAutoSendAfterSilence(undefined), false);
+  assert.equal(parseMicAutoSendAfterSilence(true), true);
 });
 
 test("parseSaveVisualAsksToSession and parseAutoUploadCapturesToContext", () => {

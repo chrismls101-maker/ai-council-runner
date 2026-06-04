@@ -1577,6 +1577,15 @@ async function handleCommand(
       await persistGlassUserSettings(glassUserSettings);
       push();
       return;
+    case "set-mic-auto-send-after-silence":
+      state.glassSettings = {
+        ...state.glassSettings,
+        micAutoSendAfterSilence: command.enabled,
+      };
+      glassUserSettings = state.glassSettings;
+      await persistGlassUserSettings(glassUserSettings);
+      push();
+      return;
     case "save-last-visual-capture": {
       if (!sessionIsLive()) {
         state.lastNotice = "Start a session to save the screen capture.";

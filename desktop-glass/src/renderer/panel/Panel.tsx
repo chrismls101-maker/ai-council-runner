@@ -782,6 +782,21 @@ function GlassLayoutSettings({ state }: { state: GlassState }): JSX.Element {
         Visual asks always send the image to IIVO for that answer only. Context Bridge upload
         happens when you Open in IIVO, Save screen, or enable auto-upload above.
       </p>
+      <p className="section-title panel__settings-privacy">Command bar microphone</p>
+      <label className="panel__settings-row panel__settings-row--check">
+        <input
+          type="checkbox"
+          checked={settings.micAutoSendAfterSilence === true}
+          onChange={(e) =>
+            send({ type: "set-mic-auto-send-after-silence", enabled: e.target.checked })
+          }
+        />
+        <span>Auto-send after silence (mic)</span>
+      </label>
+      <p className="hint">
+        Default is off: use the mic on the command bar, review transcribed text, then press Ask.
+        System audio stays separate (right-click the mic button).
+      </p>
     </div>
   );
 }

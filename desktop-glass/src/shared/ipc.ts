@@ -100,6 +100,7 @@ export type GlassCommand =
   | { type: "set-dock-orientation"; orientation: GlassUserSettings["dockOrientation"] }
   | { type: "set-save-visual-asks-to-session"; enabled: boolean }
   | { type: "set-auto-upload-captures-to-context"; enabled: boolean }
+  | { type: "set-mic-auto-send-after-silence"; enabled: boolean }
   | { type: "save-last-visual-capture" }
   | { type: "reset-chrome-layout" }
   | { type: "open-feed-in-iivo"; id: string }
