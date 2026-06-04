@@ -6,6 +6,7 @@
  * captures or sends without an explicit command from the UI.
  */
 
+import { loadGlassEnv } from "./loadGlassEnv.ts";
 import { app, BrowserWindow, ipcMain, protocol, shell } from "electron";
 import { resolveConfig, buildIivoChatUrl, buildLensAskUrl } from "../shared/config.ts";
 import {
@@ -48,7 +49,13 @@ import { capturePrimaryScreen } from "./capture.ts";
 import {
   broadcast,
   createWindows,
+  getGlassWindowState,
   getWindows,
+  isPanelVisible,
+  resizeDockWindow,
+  setOverlayClickThroughFromWindow,
+  setOverlayMode,
+  toggleOverlay,
   togglePanel,
 } from "./windows.ts";
 import { loadMoments, persistMoments } from "./store.ts";
@@ -76,6 +83,8 @@ import { buildGlassSttState, resolveSttConfig } from "../shared/sttTypes.ts";
 import { listeningCostWarningMessage } from "../shared/audioChunks.ts";
 import { processSttChunk, type SttProcessChunkPayload } from "./sttChunkHandler.ts";
 import type { GlassSttState } from "../shared/ipc.ts";
+
+loadGlassEnv();
 
 applySystemAudioChromiumFlags();
 
@@ -155,6 +164,8 @@ function snapshot(): GlassState {
     windowContext: state.windowContext,
     iivoAnalysis: state.iivoAnalysis,
     stt: state.stt,
+    panelVisible: isPanelVisible(),
+    windows: getGlassWindowState(),
   };
 }
 
@@ -372,11 +383,12 @@ async function handleCommand(command: GlassCommand): Promise<void> {
       return;
     }
     case "ask-iivo":
+      state.panelTab = "summary";
+      if (!isPanelVisible()) togglePanel();
       if (state.transcript.trim()) {
         await sendTranscript();
-      } else {
-        await shell.openExternal(buildIivoChatUrl(config));
       }
+      push();
       return;
     case "open-chat":
       await shell.openExternal(buildIivoChatUrl(config));
@@ -387,6 +399,15 @@ async function handleCommand(command: GlassCommand): Promise<void> {
       return;
     case "toggle-panel":
       togglePanel();
+      push();
+      return;
+    case "toggle-overlay":
+      toggleOverlay();
+      push();
+      return;
+    case "set-overlay-mode":
+      setOverlayMode(command.mode);
+      push();
       return;
     case "window-context-refresh":
       state.windowContext = await refreshWindowContext();
@@ -743,7 +764,14 @@ function registerIpc(): void {
 
   ipcMain.on(IPC.setIgnoreMouse, (event, ignore: boolean) => {
     const win = BrowserWindow.fromWebContents(event.sender);
-    win?.setIgnoreMouseEvents(ignore, { forward: true });
+    if (!win) return;
+    setOverlayClickThroughFromWindow(win, !!ignore);
+  });
+
+  ipcMain.on(IPC.resizeDock, (_event, width: number, height: number) => {
+    if (typeof width === "number" && typeof height === "number") {
+      resizeDockWindow(width, height);
+    }
   });
 }
 
@@ -754,12 +782,12 @@ app.whenReady().then(async () => {
   sessions = await loadSessions();
   state.windowContext = await getCurrentWindowContext();
   registerIpc();
-  createWindows();
+  createWindows(config);
   push();
 
   app.on("activate", () => {
     if (getWindows() === null) {
-      createWindows();
+      createWindows(config);
       push();
     }
   });

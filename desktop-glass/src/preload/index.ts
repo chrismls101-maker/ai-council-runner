@@ -28,6 +28,9 @@ const glassApi = {
   setIgnoreMouse(ignore: boolean): void {
     ipcRenderer.send(IPC.setIgnoreMouse, ignore);
   },
+  resizeDock(width: number, height: number): void {
+    ipcRenderer.send(IPC.resizeDock, width, height);
+  },
 };
 
 export type GlassApi = typeof glassApi;

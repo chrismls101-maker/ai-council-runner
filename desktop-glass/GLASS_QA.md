@@ -21,9 +21,38 @@ first** — it never captures or sends anything without an explicit click.
    including full-screen apps.
 3. **Underlying screen remains clickable** — clicking anywhere outside the dock
    and panel interacts with the app underneath (no full-screen blocking layer).
-4. **Capture Screen captures current display** — click **Capture Screen**; the
+
+## Full-screen overlay architecture
+
+IIVO Glass uses **three separate windows**:
+
+1. **Overlay** — full-screen transparent layer (`display.bounds`), click-through by default
+2. **Dock** — compact draggable controls (`display.workArea`)
+3. **Panel** — optional detail view, hidden until opened
+
+### Overlay manual QA
+
+1. Launch IIVO server (`npm run dev` from repo root).
+2. Launch Glass (`npm run glass:dev`).
+3. Confirm a **full-screen transparent overlay** appears (subtle grid/glow + “IIVO Glass active” badge in the top-left corner).
+4. Confirm you can **click the desktop/browser behind the overlay** (Finder, browser tabs, etc.).
+5. Confirm the **dock is clickable** (Start Session, Capture, Listen, etc.).
+6. Confirm the **side panel opens** when you click **Open Panel** and is clickable inside its bounds.
+7. Confirm clicking **outside** dock and panel goes to the app behind (overlay does not block).
+8. Confirm overlay status chips / insight cards (insights mode) do **not** block clicks except when hovering interactive cards.
+9. Confirm **Capture** still works from the dock.
+10. Confirm **Start Session** still works from the dock.
+11. Confirm **Stop Everything** stops listening/capture from the dock.
+12. Confirm overlay **resizes correctly** after display change or app restart (check terminal log: `Glass windows: overlay=... clickThrough=true`).
+
+Dock menu extras:
+
+- **Hide/Show Overlay** — toggles overlay visibility without quitting Glass
+- **Overlay mode** — cycles passive (grid only) → insights (cards/toasts) → hidden
+
+4. **Capture captures current display** — click **Capture** in the dock; the
    status pill shows "Capturing screen", then a screenshot is created.
-5. **Send to IIVO creates a context item** — Capture Screen / Send to IIVO calls
+5. **Send to IIVO creates a context item** — Capture / Send to IIVO calls
    `POST /api/context` then `POST /api/context/:id/screenshot` on the existing
    server; status pill shows "Sending to IIVO" → "Sent to IIVO".
 6. **IIVO opens with lensAsk/context chip** — the browser opens

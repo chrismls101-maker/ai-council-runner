@@ -15,6 +15,7 @@ import type { GlassSession } from "./sessionTypes.ts";
 import type { TranscriptionMode, SystemAudioStatus } from "./audioCaptureTypes.ts";
 import type { WindowContext } from "./windowContextTypes.ts";
 import type { GlassSttState } from "./sttTypes.ts";
+import type { GlassWindowState, OverlayMode } from "./glassWindowTypes.ts";
 
 export type { GlassSttState } from "./sttTypes.ts";
 
@@ -42,6 +43,7 @@ export const IPC = {
   getState: "glass:get-state",
   state: "glass:state",
   setIgnoreMouse: "glass:set-ignore-mouse",
+  resizeDock: "glass:resize-dock",
   windowContextGet: "glass:window-context-get-current",
   sttProcessChunk: "glass:stt-process-chunk",
 } as const;
@@ -68,6 +70,8 @@ export type GlassCommand =
   | { type: "open-chat" }
   | { type: "set-tab"; tab: PanelTab }
   | { type: "toggle-panel" }
+  | { type: "toggle-overlay" }
+  | { type: "set-overlay-mode"; mode: OverlayMode }
   | { type: "window-context-refresh" }
   | { type: "session-start"; title?: string }
   | { type: "session-pause" }
@@ -109,6 +113,8 @@ export interface GlassState {
   windowContext: WindowContext;
   iivoAnalysis: IivoAnalysisState;
   stt: GlassSttState;
+  panelVisible: boolean;
+  windows: GlassWindowState;
 }
 
 export interface SttProcessChunkRequest {

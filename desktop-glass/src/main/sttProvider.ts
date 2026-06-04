@@ -6,6 +6,7 @@
 import type { GlassConfig } from "../shared/config.ts";
 import type { SttConfig, SttTranscribeRequest, SttTranscribeResult } from "../shared/sttTypes.ts";
 import {
+  glassDirectApiKey,
   resolveSttConfig,
   sttStatusMessage,
   STT_SERVER_UNAVAILABLE_MESSAGE,
@@ -23,7 +24,7 @@ async function transcribeDirect(
   env: Record<string, string | undefined>,
   fetchImpl?: FetchLike,
 ): Promise<SttTranscribeResult> {
-  const apiKey = env.OPENAI_API_KEY?.trim();
+  const apiKey = glassDirectApiKey(env);
   if (!apiKey) {
     throw new Error(sttStatusMessage("missing_key", "direct"));
   }

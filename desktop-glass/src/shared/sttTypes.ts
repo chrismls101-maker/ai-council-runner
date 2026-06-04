@@ -68,7 +68,13 @@ export interface GlassSttState {
 }
 
 export const STT_MISSING_KEY_MESSAGE =
-  "OpenAI transcription is not configured. Start IIVO server with OPENAI_API_KEY or set direct Glass STT.";
+  "OpenAI transcription is not configured. Set IIVO_GLASS_OPENAI_API_KEY in root .env for direct Glass STT.";
+
+export function glassDirectApiKey(env: Record<string, string | undefined>): string | null {
+  const glassKey = env.IIVO_GLASS_OPENAI_API_KEY?.trim();
+  if (glassKey) return glassKey;
+  return env.OPENAI_API_KEY?.trim() || null;
+}
 
 export const STT_SERVER_UNAVAILABLE_MESSAGE =
   "IIVO transcription server unavailable. Start npm run dev or configure direct Glass STT.";
@@ -114,7 +120,7 @@ export function sttStatusMessage(
     case "configured":
       return endpoint === "server"
         ? `${STT_COST_NOTE} Uses your running IIVO server's OPENAI_API_KEY.`
-        : STT_COST_NOTE;
+        : `${STT_COST_NOTE} Uses IIVO_GLASS_OPENAI_API_KEY (Glass main process only).`;
     case "missing_key":
       return STT_MISSING_KEY_MESSAGE;
     case "server_unavailable":
@@ -163,7 +169,7 @@ export function resolveSttConfig(
   const autoStopEnabled = parseBool(env.IIVO_GLASS_STT_AUTO_STOP, false);
   const autoStopMinutes = parseInt(env.IIVO_GLASS_STT_AUTO_STOP_MINUTES ?? "30", 10);
   const autoStopMs = Number.isFinite(autoStopMinutes) ? autoStopMinutes * 60 * 1000 : DEFAULT_AUTO_STOP_MS;
-  const directKeyAvailable = !!env.OPENAI_API_KEY?.trim();
+  const directKeyAvailable = !!glassDirectApiKey(env);
 
   if (!enabled || endpoint === "none" || provider === "none") {
     return {

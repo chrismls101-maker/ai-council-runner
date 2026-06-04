@@ -14,6 +14,28 @@ test("defaults to localhost web + api", () => {
   const config = resolveConfig({});
   assert.equal(config.iivoWebUrl, "http://localhost:5173");
   assert.equal(config.iivoApiUrl, "http://localhost:3001");
+  assert.equal(config.overlayEnabled, true);
+  assert.equal(config.overlayMode, "passive");
+});
+
+test("overlay mode from env", () => {
+  const config = resolveConfig({ IIVO_GLASS_OVERLAY_MODE: "insights" });
+  assert.equal(config.overlayMode, "insights");
+});
+
+test("overlay enabled via env", () => {
+  const config = resolveConfig({ IIVO_GLASS_OVERLAY_ENABLED: "true" });
+  assert.equal(config.overlayEnabled, true);
+});
+
+test("layout preset defaults to compact_dock", () => {
+  const config = resolveConfig({});
+  assert.equal(config.layoutPreset, "compact_dock");
+});
+
+test("layout preset from env", () => {
+  const config = resolveConfig({ IIVO_GLASS_LAYOUT_PRESET: "floating_dock" });
+  assert.equal(config.layoutPreset, "floating_dock");
 });
 
 test("reads env vars and strips trailing slashes", () => {

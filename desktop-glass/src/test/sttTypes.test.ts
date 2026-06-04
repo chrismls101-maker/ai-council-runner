@@ -22,17 +22,26 @@ test("explicit disable", () => {
   assert.equal(config.enabled, false);
 });
 
-test("direct STT missing key when no OPENAI_API_KEY", () => {
+test("direct STT missing key when no Glass key", () => {
   const config = resolveSttConfig({
     IIVO_GLASS_STT_ENDPOINT: "direct",
     IIVO_GLASS_STT_ENABLED: "true",
   });
   assert.equal(config.endpoint, "direct");
   assert.equal(config.status, "missing_key");
-  assert.match(STT_MISSING_KEY_MESSAGE, /OPENAI_API_KEY/i);
+  assert.match(STT_MISSING_KEY_MESSAGE, /IIVO_GLASS_OPENAI_API_KEY/i);
 });
 
-test("direct STT configured with key", () => {
+test("direct STT configured with IIVO_GLASS_OPENAI_API_KEY", () => {
+  const config = resolveSttConfig({
+    IIVO_GLASS_STT_ENDPOINT: "direct",
+    IIVO_GLASS_OPENAI_API_KEY: "sk-test",
+  });
+  assert.equal(config.status, "configured");
+  assert.equal(buildGlassSttState(config).enabled, true);
+});
+
+test("direct STT configured with OPENAI_API_KEY fallback", () => {
   const config = resolveSttConfig({
     IIVO_GLASS_STT_ENDPOINT: "direct",
     OPENAI_API_KEY: "sk-test",

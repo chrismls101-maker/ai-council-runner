@@ -8,12 +8,30 @@ const LABELS: Record<GlassSessionStatus | "none", string> = {
   ended: "Session ended",
 };
 
-export function SessionPill({ status }: { status: GlassSessionStatus | null }): JSX.Element {
+const COMPACT_LABELS: Record<GlassSessionStatus | "none", string> = {
+  none: "Idle",
+  idle: "Idle",
+  active: "Active",
+  paused: "Paused",
+  ended: "Ended",
+};
+
+export function SessionPill({
+  status,
+  compact = false,
+}: {
+  status: GlassSessionStatus | null;
+  compact?: boolean;
+}): JSX.Element {
   const key = status ?? "none";
+  const label = compact ? COMPACT_LABELS[key] : LABELS[key];
   return (
-    <span className={`pill session-pill session-pill--${key}`} title={LABELS[key]}>
+    <span
+      className={`pill session-pill session-pill--${key}${compact ? " pill--compact" : ""}`}
+      title={LABELS[key]}
+    >
       <span className="pill__dot" />
-      {LABELS[key]}
+      {label}
     </span>
   );
 }

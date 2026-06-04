@@ -8,11 +8,26 @@ const LABELS: Record<GlassStatus, string> = {
   sent: "Sent to IIVO",
 };
 
-export function StatusPill({ status }: { status: GlassStatus }): JSX.Element {
+const COMPACT_LABELS: Record<GlassStatus, string> = {
+  idle: "Idle",
+  listening: "Listening",
+  capturing: "Capturing",
+  sending: "Sending",
+  sent: "Sent",
+};
+
+export function StatusPill({
+  status,
+  compact = false,
+}: {
+  status: GlassStatus;
+  compact?: boolean;
+}): JSX.Element {
+  const label = compact ? COMPACT_LABELS[status] : LABELS[status];
   return (
-    <span className={`pill pill--${status}`} title={LABELS[status]}>
+    <span className={`pill pill--${status}${compact ? " pill--compact" : ""}`} title={LABELS[status]}>
       <span className="pill__dot" />
-      {LABELS[status]}
+      {label}
     </span>
   );
 }

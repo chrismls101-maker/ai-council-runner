@@ -33,6 +33,14 @@ const fallbackState: GlassState = {
   windowContext: { status: "unavailable", reason: WINDOW_CONTEXT_UNAVAILABLE_MESSAGE },
   iivoAnalysis: { status: "idle" },
   stt: fallbackStt,
+  panelVisible: false,
+  windows: {
+    overlayVisible: true,
+    overlayClickThrough: true,
+    overlayMode: "passive",
+    panelVisible: false,
+    diagnostics: "",
+  },
 };
 
 export function useGlassState(): GlassState {

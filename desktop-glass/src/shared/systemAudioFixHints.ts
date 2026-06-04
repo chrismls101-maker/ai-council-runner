@@ -29,9 +29,9 @@ export function sttFixHint(status: SttProviderStatus): string {
     case "missing_key":
       return `How to fix: ${STT_MISSING_KEY_MESSAGE}`;
     case "server_unavailable":
-      return `How to fix: run npm run dev so Glass can use /api/transcribe-audio, or set IIVO_GLASS_STT_ENDPOINT=direct with OPENAI_API_KEY.`;
+      return "How to fix: run npm run dev so Glass can use /api/transcribe-audio, or set IIVO_GLASS_STT_ENDPOINT=direct with IIVO_GLASS_OPENAI_API_KEY.";
     case "disabled":
-      return "How to fix: set IIVO_GLASS_STT_ENABLED=true and IIVO_GLASS_STT_ENDPOINT=server (default).";
+      return "How to fix: set IIVO_GLASS_STT_ENABLED=true and IIVO_GLASS_STT_ENDPOINT=direct (or server).";
     default:
       return "";
   }

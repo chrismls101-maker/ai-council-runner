@@ -618,6 +618,32 @@ export function Panel(): JSX.Element {
       {state.lastError ? <div className="error-banner">{state.lastError}</div> : null}
       {state.lastNotice ? <div className="notice-banner">{state.lastNotice}</div> : null}
 
+      <div className="panel__quick-actions">
+        <button type="button" className="gbtn" onClick={() => send({ type: "ask-iivo" })}>
+          Ask IIVO
+        </button>
+        <button type="button" className="gbtn" onClick={() => send({ type: "save-moment" })}>
+          Save Moment
+        </button>
+        <button
+          type="button"
+          className="gbtn"
+          onClick={() => send(state.session ? { type: "session-send" } : { type: "send-transcript" })}
+        >
+          {state.session ? "Send Session" : "Send to IIVO"}
+        </button>
+        <button type="button" className="gbtn" onClick={() => send({ type: "open-chat" })}>
+          Open IIVO
+        </button>
+        <button
+          type="button"
+          className="gbtn"
+          onClick={() => send(sessionLive ? { type: "session-capture" } : { type: "send-screenshot" })}
+        >
+          Capture Screen
+        </button>
+      </div>
+
       <div className="panel__tabs">
         {TABS.map((t) => (
           <button
