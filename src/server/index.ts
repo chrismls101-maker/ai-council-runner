@@ -76,6 +76,13 @@ import {
 import { checkCreditsAvailable, logCreditEstimate } from "./usage/usageGuards.js";
 import { InsufficientCreditsError } from "./usage/types.js";
 import {
+  GlassAskServiceError,
+  GlassAskValidationError,
+  handleGlassAsk,
+  insufficientCreditsPayload as glassAskInsufficientCreditsPayload,
+} from "./glass/glassAskHandler.js";
+import type { GlassAskRequestBody } from "./glass/glassAskTypes.js";
+import {
   createBenchmarkRun,
   estimateBenchmarkRun,
 } from "./benchmarks/createBenchmark.js";
@@ -988,6 +995,29 @@ app.post("/api/run-council", async (req, res) => {
       return;
     }
     const message = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.post("/api/glass/ask", async (req, res) => {
+  const body = req.body as GlassAskRequestBody;
+  try {
+    const result = await handleGlassAsk(body);
+    res.json(result);
+  } catch (err) {
+    if (err instanceof GlassAskValidationError) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
+    if (err instanceof InsufficientCreditsError) {
+      res.status(402).json(glassAskInsufficientCreditsPayload(err));
+      return;
+    }
+    if (err instanceof GlassAskServiceError) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
+    const message = err instanceof Error ? err.message : "Glass ask failed";
     res.status(500).json({ error: message });
   }
 });

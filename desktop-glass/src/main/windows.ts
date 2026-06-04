@@ -6,7 +6,7 @@
  */
 
 import { join } from "node:path";
-import { BrowserWindow, shell } from "electron";
+import { BrowserWindow, globalShortcut, shell } from "electron";
 import type { GlassConfig } from "../shared/config.ts";
 import type { OverlayMode } from "../shared/glassWindowTypes.ts";
 import { GlassLayoutManager } from "./glassLayoutManager.ts";
@@ -515,4 +515,47 @@ export function disposeWindows(): void {
   layoutManager?.dispose();
   layoutManager = null;
   windows = null;
+}
+
+let commandBarHotkeyStatus = "Hotkey unavailable — command bar still clickable";
+
+export function getCommandBarHotkeyStatus(): string {
+  return commandBarHotkeyStatus;
+}
+
+/** Register global shortcut(s) to focus the command bar. Logs success/failure. */
+export function registerCommandBarHotkeys(): string {
+  const accelerators = ["CommandOrControl+Shift+Space", "Alt+Space"];
+  for (const accel of accelerators) {
+    try {
+      if (globalShortcut.isRegistered(accel)) {
+        globalShortcut.unregister(accel);
+      }
+      const ok = globalShortcut.register(accel, () => focusCommandBar());
+      if (ok) {
+        commandBarHotkeyStatus = accel;
+        console.log(`Glass hotkey registered: ${accel}`);
+        return commandBarHotkeyStatus;
+      }
+      console.warn(`Glass hotkey failed to register: ${accel}`);
+    } catch (err) {
+      console.warn(`Glass hotkey error for ${accel}:`, err);
+    }
+  }
+  commandBarHotkeyStatus = "Hotkey unavailable — command bar still clickable";
+  console.warn(commandBarHotkeyStatus);
+  return commandBarHotkeyStatus;
+}
+
+export function unregisterCommandBarHotkeys(): void {
+  globalShortcut.unregisterAll();
+}
+
+/** Compact display/layout summary for diagnostics (primary display only). */
+export function getDisplayLayoutSummary(): string {
+  if (!layoutManager) return "display: not initialized";
+  const d = layoutManager.getDisplay();
+  const overlay = layoutManager.getOverlayLayout();
+  const bar = layoutManager.getCommandBarLayout();
+  return `primary id${d.id} ${d.workArea.width}x${d.workArea.height} · overlay ${overlay.width}x${overlay.height} · commandBar y${bar.y}`;
 }

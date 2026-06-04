@@ -570,11 +570,20 @@ function StatusGrid({ state }: { state: GlassState }): JSX.Element {
             ? "needs permission"
             : "unavailable",
     },
+    { label: "Hotkey", value: diag.hotkeyStatus ?? "—" },
+    { label: "Display", value: diag.displayInfo ?? "primary display" },
   ];
 
   return (
     <div className="status-grid">
       <p className="section-title">System status</p>
+      {state.lastAskResponse ? (
+        <div className="summary-box panel__last-ask">
+          <strong>Last IIVO answer</strong>
+          <div className="panel__last-ask-prompt">{state.lastAskResponse.prompt}</div>
+          <div className="panel__last-ask-body">{state.lastAskResponse.answer.slice(0, 280)}</div>
+        </div>
+      ) : null}
       <div className="summary-box status-grid__cells">
         {items.map((item) => (
           <div key={item.label} className="status-grid__cell">

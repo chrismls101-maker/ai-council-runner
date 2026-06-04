@@ -4,9 +4,8 @@ import { useTranscriptionContext } from "../TranscriptionProvider.tsx";
 import type { TranscriptionMode } from "../../shared/audioCaptureTypes.ts";
 
 /**
- * Bottom-centered Glass command bar. Lives in its own clickable window that
- * floats over the click-through overlay. Minimal by design: voice control,
- * a single question input, and Ask. No tabs / timeline / dashboards.
+ * Bottom-centered Glass command bar. Direct ask renders inline on the overlay;
+ * Context Bridge handoff remains available from response card actions.
  */
 export function CommandBar(): JSX.Element {
   const state = useGlassState();
@@ -18,9 +17,8 @@ export function CommandBar(): JSX.Element {
   const hoverCountRef = useRef(0);
 
   const listening = state.privacy.listening || tx.status === "listening";
+  const askPending = state.askStatus === "pending";
 
-  // Keep the window click-through unless the pointer is over the bar or the
-  // input is focused — so clicks outside the pill reach the app behind.
   useEffect(() => {
     window.glass.setIgnoreMouse(true);
   }, []);
@@ -51,10 +49,10 @@ export function CommandBar(): JSX.Element {
 
   const submit = useCallback(() => {
     const value = text.trim();
-    if (!value) return;
+    if (!value || askPending) return;
     send({ type: "submit-command", text: value });
     setText("");
-  }, [text]);
+  }, [text, askPending]);
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>): void => {
     if (event.key === "Enter") {
@@ -70,37 +68,43 @@ export function CommandBar(): JSX.Element {
     }
   };
 
-  const handleVoice = (): void => {
+  const handleVoiceClick = (): void => {
     if (listening) {
       send({ type: "pause" });
       return;
     }
     if (tx.selectedMode === "manual") {
-      setShowSources((v) => !v);
+      tx.setMode("microphone_web_speech");
+      tx.startListening();
       return;
     }
     tx.startListening();
   };
 
-  const startWithMode = (mode: TranscriptionMode): void => {
+  const handleVoiceContext = (event: React.MouseEvent<HTMLButtonElement>): void => {
+    event.preventDefault();
+    if (listening) return;
+    setShowSources((v) => !v);
+  };
+
+  const pickSource = (mode: TranscriptionMode): void => {
     tx.setMode(mode);
     setShowSources(false);
-    // setMode applies asynchronously; let the user press the mic again or the
-    // explicit Start button below. We expose a Start control in the source row.
+    tx.startListening();
   };
 
   const statusTone = listening
     ? "listen"
-    : state.privacy.status === "sending"
+    : askPending
       ? "send"
-      : state.lastError
+      : state.askStatus === "error" || state.lastError
         ? "error"
         : "idle";
 
   return (
     <div className="command-root">
       <div
-        className={`command-bar${listening ? " command-bar--listening" : ""}`}
+        className={`command-bar${listening ? " command-bar--listening" : ""}${askPending ? " command-bar--pending" : ""}`}
         onMouseEnter={enterInteractive}
         onMouseLeave={leaveInteractive}
       >
@@ -108,9 +112,14 @@ export function CommandBar(): JSX.Element {
           <button
             type="button"
             className={`command-voice${listening ? " command-voice--active" : ""}`}
-            onClick={handleVoice}
-            title={listening ? "Stop listening" : "Listen"}
-            aria-label={listening ? "Stop listening" : "Listen"}
+            onClick={handleVoiceClick}
+            onContextMenu={handleVoiceContext}
+            title={
+              listening
+                ? "Stop listening"
+                : "Start listening (Microphone). Right-click for source options."
+            }
+            aria-label={listening ? "Stop listening" : "Start listening"}
           >
             <span className="command-voice__bars" aria-hidden="true">
               <i />
@@ -125,7 +134,8 @@ export function CommandBar(): JSX.Element {
             className="command-input"
             type="text"
             value={text}
-            placeholder="Ask IIVO while you work…"
+            placeholder={askPending ? "IIVO is thinking…" : "Ask IIVO while you work…"}
+            disabled={askPending}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={handleKeyDown}
             onFocus={() => {
@@ -140,8 +150,21 @@ export function CommandBar(): JSX.Element {
 
           <span className={`command-dot command-dot--${statusTone}`} aria-hidden="true" />
 
-          <button type="button" className="command-ask" onClick={submit} disabled={!text.trim()}>
-            Ask <span aria-hidden="true">↑</span>
+          <button
+            type="button"
+            className="command-ask"
+            onClick={submit}
+            disabled={!text.trim() || askPending}
+          >
+            {askPending ? (
+              <>
+                Thinking <span className="command-ask__spinner" aria-hidden="true" />
+              </>
+            ) : (
+              <>
+                Ask <span aria-hidden="true">↑</span>
+              </>
+            )}
           </button>
         </div>
 
@@ -169,24 +192,16 @@ export function CommandBar(): JSX.Element {
                 <button
                   type="button"
                   className={`command-mini${tx.selectedMode === "microphone_web_speech" ? " command-mini--on" : ""}`}
-                  onClick={() => startWithMode("microphone_web_speech")}
+                  onClick={() => pickSource("microphone_web_speech")}
                 >
                   Microphone
                 </button>
                 <button
                   type="button"
                   className={`command-mini${tx.selectedMode === "system_audio" ? " command-mini--on" : ""}`}
-                  onClick={() => startWithMode("system_audio")}
+                  onClick={() => pickSource("system_audio")}
                 >
                   System Audio
-                </button>
-                <button
-                  type="button"
-                  className="command-mini command-mini--primary"
-                  onClick={() => tx.startListening()}
-                  disabled={tx.selectedMode === "manual" || !tx.canListen}
-                >
-                  Start
                 </button>
               </>
             )}

@@ -7,7 +7,7 @@
  */
 
 import { loadGlassEnv } from "./loadGlassEnv.ts";
-import { app, BrowserWindow, globalShortcut, ipcMain, protocol, shell } from "electron";
+import { app, BrowserWindow, ipcMain, protocol, shell } from "electron";
 import { resolveConfig, buildIivoChatUrl, buildLensAskUrl } from "../shared/config.ts";
 import {
   privacyReducer,
@@ -50,16 +50,19 @@ import {
   blurCommandBar,
   broadcast,
   createWindows,
-  focusCommandBar,
+  getCommandBarHotkeyStatus,
+  getDisplayLayoutSummary,
   getGlassWindowState,
   getWindows,
   isPanelVisible,
+  registerCommandBarHotkeys,
   resizeDockWindow,
   setIgnoreMouseFromWindow,
   setOverlayMode,
   toggleCommandBar,
   toggleOverlay,
   togglePanel,
+  unregisterCommandBarHotkeys,
 } from "./windows.ts";
 import { loadMoments, persistMoments } from "./store.ts";
 import { loadSessions, persistSessions } from "./sessionPersistence.ts";
@@ -106,6 +109,9 @@ import {
   createCommandFeedItem,
   type GlassCommandFeedItem,
 } from "../shared/commandFeed.ts";
+import { askIivoGlass } from "./glassAskClient.ts";
+import type { GlassAskSessionPayload, GlassAskStatus, GlassLastAskResponse } from "../shared/glassAskTypes.ts";
+import { shouldUseCouncilMode } from "../shared/glassAskTypes.ts";
 
 loadGlassEnv();
 
@@ -143,6 +149,9 @@ interface AppState {
   stt: GlassSttState;
   operationDiagnostics: GlassOperationDiagnostics;
   commandFeed: GlassCommandFeedItem[];
+  askStatus: GlassAskStatus;
+  lastAskResponse?: GlassLastAskResponse;
+  askInFlight: boolean;
 }
 
 const state: AppState = {
@@ -160,6 +169,8 @@ const state: AppState = {
   stt: buildGlassSttState(sttConfig),
   operationDiagnostics: createInitialOperationDiagnostics(),
   commandFeed: [],
+  askStatus: "idle",
+  askInFlight: false,
 };
 
 let moments = new SavedMomentsStore();
@@ -193,8 +204,14 @@ function snapshot(): GlassState {
     stt: state.stt,
     panelVisible: isPanelVisible(),
     windows: getGlassWindowState(),
-    operationDiagnostics: state.operationDiagnostics,
+    operationDiagnostics: {
+      ...state.operationDiagnostics,
+      hotkeyStatus: getCommandBarHotkeyStatus(),
+      displayInfo: getDisplayLayoutSummary(),
+    },
     commandFeed: state.commandFeed,
+    askStatus: state.askStatus,
+    lastAskResponse: state.lastAskResponse,
   };
 }
 
@@ -304,81 +321,177 @@ async function sendTranscript(): Promise<void> {
   }
 }
 
+function buildGlassAskSessionPayload(): GlassAskSessionPayload | undefined {
+  const session = sessions.current();
+  const live = sessionIsLive();
+  const ctx = getCachedWindowContext();
+
+  const payload: GlassAskSessionPayload = {
+    sessionId: session?.id,
+    title: session?.title,
+    summary: live && session ? buildSessionSummary(session) : undefined,
+    recentTranscript: state.transcript.trim() ? state.transcript.trim().slice(-1500) : undefined,
+    currentSource:
+      ctx.status === "available"
+        ? {
+            appName: ctx.appName,
+            windowTitle: ctx.windowTitle,
+            sourceTitle: ctx.sourceName ?? ctx.displayName,
+          }
+        : ctx.sourceName
+          ? { sourceTitle: ctx.sourceName }
+          : undefined,
+  };
+
+  if (live && session) {
+    payload.recentEvents = session.events.slice(-8).map((e) => ({
+      kind: e.kind,
+      title: e.title,
+      text: e.text,
+      timestamp: e.timestamp,
+      sourceTitle: e.sourceTitle,
+    }));
+    payload.recentInsights = session.insights.slice(-5).map((i) => i.text);
+  }
+
+  const hasContext =
+    payload.summary ||
+    payload.recentTranscript ||
+    payload.recentEvents?.length ||
+    payload.recentInsights?.length ||
+    payload.currentSource;
+  return hasContext ? payload : undefined;
+}
+
+async function openFeedInIivo(feedId: string): Promise<void> {
+  const item = state.commandFeed.find((f) => f.id === feedId);
+  if (!item) return;
+
+  if (item.contextId) {
+    await openHandoff(item.contextId);
+    push();
+    return;
+  }
+
+  const question = item.prompt ?? item.title;
+  const answer = item.fullBody ?? (item.kind === "response" ? item.body : undefined);
+  const text = answer
+    ? `Question:\n${question}\n\nAnswer:\n${answer}`
+    : `Question:\n${question}\n\n(Continue this conversation in IIVO.)`;
+  const payload = buildTextContextPayload({
+    title: `IIVO Glass · ${question.length > 60 ? `${question.slice(0, 59)}…` : question}`,
+    text,
+    kind: "note",
+  });
+  const created = await createContextItem(config, payload);
+  await openHandoff(created.id);
+  push();
+}
+
+async function saveFeedMoment(feedId: string): Promise<void> {
+  const item = state.commandFeed.find((f) => f.id === feedId);
+  if (!item) return;
+  const note = item.fullBody ?? item.body;
+  moments.add({ kind: "note", note: note.slice(0, 500) });
+  await persistMoments(moments);
+  if (sessionIsLive()) {
+    sessions.addEvent({ kind: "saved_moment", title: note.slice(0, 80) });
+    await persistSessions(sessions);
+  }
+  pushFeed(createCommandFeedItem("moment", "Saved as a moment."));
+  state.lastNotice = "Saved moment from IIVO answer.";
+  push();
+}
+
 /**
- * Command-bar submit. Routes the question through the existing Context Bridge and
- * opens it in IIVO (no new/unsafe backend flow). Surfaces progress as overlay
- * response cards and stores it as a session event when a session is live.
+ * Command-bar direct ask. Calls POST /api/glass/ask and renders the answer inline
+ * as overlay response cards. Falls back to Context Bridge handoff on failure.
  */
 async function submitCommand(rawText: string): Promise<void> {
   const text = rawText.trim();
-  if (!text) return;
+  if (!text || state.askInFlight) return;
 
+  state.askInFlight = true;
+  state.askStatus = "pending";
   state.lastError = undefined;
-  pushFeed(createCommandFeedItem("command", text));
-  pushFeed(createCommandFeedItem("thinking", "Routing your question to IIVO…"));
-  state.operationDiagnostics = recordOperation(state.operationDiagnostics, "submit-command", "pending");
+  pushFeed(createCommandFeedItem("command", text, { prompt: text }));
+  pushFeed(createCommandFeedItem("thinking", "IIVO is thinking…"));
+  state.operationDiagnostics = recordOperation(state.operationDiagnostics, "ask-iivo", "pending");
   push();
 
   const live = sessionIsLive();
   const session = sessions.current();
+  const mode = shouldUseCouncilMode(text);
 
-  // Build lightweight context from whatever Glass already has locally.
-  const contextLines: string[] = [];
   if (live && session) {
-    contextLines.push(buildSessionSummary(session));
+    sessions.addEvent({
+      kind: "iivo_command",
+      title: text.length > 70 ? `${text.slice(0, 69)}…` : text,
+      text,
+      ...eventContextFields(),
+    });
+    await persistSessions(sessions);
   }
-  if (state.transcript.trim()) {
-    contextLines.push(`Recent transcript:\n${state.transcript.trim().slice(-1200)}`);
-  }
-  const ctx = getCachedWindowContext();
-  if (ctx.status === "available" && (ctx.appName || ctx.windowTitle)) {
-    contextLines.push(`Active window: ${[ctx.appName, ctx.windowTitle].filter(Boolean).join(" — ")}`);
-  }
-
-  const body =
-    contextLines.length > 0
-      ? `${text}\n\n---\nContext from IIVO Glass:\n${contextLines.join("\n\n")}`
-      : text;
 
   try {
-    const payload = buildTextContextPayload({
-      title: `IIVO Glass · ${text.length > 60 ? `${text.slice(0, 59)}…` : text}`,
-      text: body,
-      kind: "note",
+    const result = await askIivoGlass(config, {
+      prompt: text,
+      session: buildGlassAskSessionPayload(),
+      mode,
+      responseStyle: "overlay",
     });
-    const item = await createContextItem(config, payload);
+
+    state.askStatus = "done";
+    state.lastAskResponse = {
+      prompt: text,
+      answer: result.answer,
+      fullAnswer: result.answer,
+      runId: result.runId,
+      contextId: result.contextId,
+      at: new Date().toISOString(),
+      modeUsed: result.modeUsed,
+    };
+
+    pushFeed(
+      createCommandFeedItem("response", result.answer, {
+        prompt: text,
+        fullBody: result.answer,
+        runId: result.runId,
+        contextId: result.contextId,
+      }),
+    );
 
     if (live && session) {
       sessions.addEvent({
-        kind: "manual_note",
-        title: text.length > 70 ? `${text.slice(0, 69)}…` : text,
-        text,
+        kind: "iivo_response",
+        title: "IIVO response",
+        text: result.answer,
+        importance: "high",
         ...eventContextFields(),
+        metadata: { runId: result.runId, modeUsed: result.modeUsed },
       });
       await persistSessions(sessions);
     }
 
-    await openHandoff(item.id);
-
-    pushFeed(
-      createCommandFeedItem(
-        "response",
-        live
-          ? "Opened in IIVO with your session context. The answer appears in your browser."
-          : "Opened in IIVO. Start a session to save this context.",
-      ),
-    );
     state.lastNotice = live
-      ? "Sent to IIVO with session context."
-      : "Sent to IIVO. Start a session to save this context.";
-    state.operationDiagnostics = recordOperation(state.operationDiagnostics, "submit-command", "ok");
+      ? "IIVO answered inline. Saved to session."
+      : result.warnings?.[0] ?? "IIVO answered inline. Start a session to save this context.";
+    state.operationDiagnostics = recordOperation(state.operationDiagnostics, "ask-iivo", "ok");
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Could not reach IIVO.";
-    pushFeed(createCommandFeedItem("error", message));
+    const message = err instanceof Error ? err.message : "Could not reach IIVO server.";
+    state.askStatus = "error";
+    pushFeed(
+      createCommandFeedItem("error", `${message} Use Open in IIVO to continue in the browser.`, {
+        prompt: text,
+      }),
+    );
     state.lastError = message;
-    state.operationDiagnostics = recordOperation(state.operationDiagnostics, "submit-command", "error", message);
+    state.operationDiagnostics = recordOperation(state.operationDiagnostics, "ask-iivo", "error", message);
+  } finally {
+    state.askInFlight = false;
+    if (state.askStatus === "pending") state.askStatus = "idle";
+    push();
   }
-  push();
 }
 
 async function handleCommand(command: GlassCommand): Promise<void> {
@@ -539,7 +652,19 @@ async function handleCommand(command: GlassCommand): Promise<void> {
       push();
       return;
     case "submit-command":
+    case "ask-iivo-direct":
       await submitCommand(command.text);
+      return;
+    case "open-feed-in-iivo":
+      try {
+        await openFeedInIivo(command.id);
+      } catch (err) {
+        state.lastError = err instanceof Error ? err.message : "Open in IIVO failed";
+        push();
+      }
+      return;
+    case "save-feed-moment":
+      await saveFeedMoment(command.id);
       return;
     case "command-bar-blur":
       blurCommandBar();
@@ -950,17 +1075,11 @@ function registerIpc(): void {
 }
 
 function registerGlobalHotkeys(): void {
-  // Cmd/Ctrl+Shift+Space summons & focuses the command bar. Fail-soft if the OS
-  // refuses the accelerator (e.g. already claimed by another app).
-  const accelerators = ["CommandOrControl+Shift+Space", "Alt+Space"];
-  for (const accel of accelerators) {
-    try {
-      const ok = globalShortcut.register(accel, () => focusCommandBar());
-      if (ok) return;
-    } catch {
-      // try the next accelerator
-    }
-  }
+  const status = registerCommandBarHotkeys();
+  state.operationDiagnostics = {
+    ...state.operationDiagnostics,
+    hotkeyStatus: status,
+  };
 }
 
 app.whenReady().then(async () => {
@@ -977,13 +1096,14 @@ app.whenReady().then(async () => {
   app.on("activate", () => {
     if (getWindows() === null) {
       createWindows(config);
+      registerGlobalHotkeys();
       push();
     }
   });
 });
 
 app.on("will-quit", () => {
-  globalShortcut.unregisterAll();
+  unregisterCommandBarHotkeys();
 });
 
 app.on("window-all-closed", () => {

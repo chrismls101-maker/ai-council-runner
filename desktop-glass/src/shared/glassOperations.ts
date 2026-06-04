@@ -16,6 +16,8 @@ export interface GlassOperationDiagnostics {
   sttProviderStatus?: string;
   captureStatus?: string;
   serverSttStatus?: string;
+  hotkeyStatus?: string;
+  displayInfo?: string;
 }
 
 export const INITIAL_OPERATION_DIAGNOSTICS: GlassOperationDiagnostics = {

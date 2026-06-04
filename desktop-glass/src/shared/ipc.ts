@@ -18,6 +18,7 @@ import type { GlassSttState } from "./sttTypes.ts";
 import type { GlassWindowState, OverlayMode } from "./glassWindowTypes.ts";
 import type { GlassOperationDiagnostics } from "./glassOperations.ts";
 import type { GlassCommandFeedItem } from "./commandFeed.ts";
+import type { GlassAskStatus, GlassLastAskResponse } from "./glassAskTypes.ts";
 
 export type { GlassSttState } from "./sttTypes.ts";
 
@@ -79,6 +80,9 @@ export type GlassCommand =
   | { type: "send-moment"; id: string }
   | { type: "ask-iivo" }
   | { type: "submit-command"; text: string }
+  | { type: "ask-iivo-direct"; text: string }
+  | { type: "open-feed-in-iivo"; id: string }
+  | { type: "save-feed-moment"; id: string }
   | { type: "command-bar-blur" }
   | { type: "toggle-command-bar" }
   | { type: "clear-command-feed" }
@@ -133,6 +137,8 @@ export interface GlassState {
   windows: GlassWindowState;
   operationDiagnostics: GlassOperationDiagnostics;
   commandFeed: GlassCommandFeedItem[];
+  askStatus: GlassAskStatus;
+  lastAskResponse?: GlassLastAskResponse;
 }
 
 export interface SttProcessChunkRequest {

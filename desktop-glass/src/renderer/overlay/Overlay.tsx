@@ -256,6 +256,84 @@ function useOverlayToasts(state: GlassState, enabled: boolean): Toast[] {
   return toasts;
 }
 
+async function copyFeedText(text: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    /* clipboard may be unavailable */
+  }
+}
+
+function FeedCard({
+  item,
+  enterInteractive,
+  leaveInteractive,
+}: {
+  item: GlassCommandFeedItem;
+  enterInteractive: () => void;
+  leaveInteractive: () => void;
+}): JSX.Element {
+  const [expanded, setExpanded] = useState(false);
+  const isThinking = item.kind === "thinking";
+  const isResponse = item.kind === "response";
+  const isError = item.kind === "error";
+  const displayBody =
+    expanded && item.fullBody ? item.fullBody : item.body;
+  const canExpand = Boolean(item.fullBody && item.fullBody !== item.body);
+
+  return (
+    <article
+      className={`overlay-feed-card overlay-feed-card--${item.kind}${item.pinned ? " overlay-feed-card--pinned" : ""}`}
+      onMouseEnter={enterInteractive}
+      onMouseLeave={leaveInteractive}
+    >
+      <div className="overlay-feed-card__eyebrow">
+        <span className="overlay-feed-card__dot" aria-hidden="true" />
+        {item.title}
+      </div>
+      <div className="overlay-feed-card__body-wrap">
+        <p className="overlay-feed-card__body">{displayBody}</p>
+      </div>
+      {!isThinking ? (
+        <div className="overlay-feed-card__actions">
+          {(isResponse || isError) && item.body ? (
+            <button type="button" className="gbtn gbtn--ghost" onClick={() => void copyFeedText(item.fullBody ?? item.body)}>
+              Copy
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="gbtn gbtn--ghost"
+            onClick={() => send({ type: "pin-command-feed-item", id: item.id, pinned: !item.pinned })}
+          >
+            {item.pinned ? "Unpin" : "Pin"}
+          </button>
+          {isResponse ? (
+            <>
+              <button type="button" className="gbtn gbtn--ghost" onClick={() => send({ type: "save-feed-moment", id: item.id })}>
+                Save Moment
+              </button>
+              <button type="button" className="gbtn gbtn--primary" onClick={() => send({ type: "open-feed-in-iivo", id: item.id })}>
+                Open in IIVO
+              </button>
+            </>
+          ) : null}
+          {isError ? (
+            <button type="button" className="gbtn gbtn--primary" onClick={() => send({ type: "open-feed-in-iivo", id: item.id })}>
+              Open in IIVO
+            </button>
+          ) : null}
+          {canExpand ? (
+            <button type="button" className="gbtn gbtn--ghost" onClick={() => setExpanded((v) => !v)}>
+              {expanded ? "Collapse" : "Expand"}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
 export function Overlay(): JSX.Element {
   const state = useGlassState();
   const overlayMode = state.windows?.overlayMode ?? state.config.overlayMode ?? "passive";
@@ -294,29 +372,7 @@ export function Overlay(): JSX.Element {
       {feedCards.length > 0 ? (
         <div className="overlay-feed">
           {feedCards.map((item) => (
-            <article
-              key={item.id}
-              className={`overlay-feed-card overlay-feed-card--${item.kind}`}
-              onMouseEnter={enterInteractive}
-              onMouseLeave={leaveInteractive}
-            >
-              <div className="overlay-feed-card__eyebrow">
-                <span className="overlay-feed-card__dot" aria-hidden="true" />
-                {item.title}
-              </div>
-              <p className="overlay-feed-card__body">{item.body}</p>
-              <div className="overlay-feed-card__actions">
-                <button
-                  type="button"
-                  className="gbtn gbtn--ghost"
-                  onClick={() =>
-                    send({ type: "pin-command-feed-item", id: item.id, pinned: !item.pinned })
-                  }
-                >
-                  {item.pinned ? "Unpin" : "Pin"}
-                </button>
-              </div>
-            </article>
+            <FeedCard key={item.id} item={item} enterInteractive={enterInteractive} leaveInteractive={leaveInteractive} />
           ))}
         </div>
       ) : null}

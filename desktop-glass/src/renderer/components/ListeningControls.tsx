@@ -80,6 +80,14 @@ export function OperationDiagnosticsFooter(): JSX.Element {
           <strong>Server STT</strong>
           <div>{diag.serverSttStatus ?? state.stt.endpoint}</div>
         </div>
+        <div>
+          <strong>Hotkey</strong>
+          <div>{diag.hotkeyStatus ?? "—"}</div>
+        </div>
+        <div>
+          <strong>Display</strong>
+          <div>{diag.displayInfo ?? "primary display"}</div>
+        </div>
       </div>
       {diag.lastError || state.lastError ? (
         <div className="error-banner">{diag.lastError ?? state.lastError}</div>

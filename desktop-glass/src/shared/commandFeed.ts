@@ -19,6 +19,10 @@ export interface GlassCommandFeedItem {
   body: string;
   at: string;
   pinned?: boolean;
+  runId?: string;
+  contextId?: string;
+  prompt?: string;
+  fullBody?: string;
 }
 
 export const MAX_COMMAND_FEED_ITEMS = 12;
@@ -38,7 +42,15 @@ let feedSeq = 0;
 export function createCommandFeedItem(
   kind: GlassCommandFeedKind,
   body: string,
-  opts: { title?: string; pinned?: boolean; at?: string } = {},
+  opts: {
+    title?: string;
+    pinned?: boolean;
+    at?: string;
+    runId?: string;
+    contextId?: string;
+    prompt?: string;
+    fullBody?: string;
+  } = {},
 ): GlassCommandFeedItem {
   feedSeq += 1;
   return {
@@ -48,6 +60,10 @@ export function createCommandFeedItem(
     body,
     at: opts.at ?? new Date().toISOString(),
     pinned: opts.pinned,
+    runId: opts.runId,
+    contextId: opts.contextId,
+    prompt: opts.prompt,
+    fullBody: opts.fullBody,
   };
 }
 

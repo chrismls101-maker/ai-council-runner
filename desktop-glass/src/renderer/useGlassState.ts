@@ -45,6 +45,7 @@ const fallbackState: GlassState = {
   },
   operationDiagnostics: { ...INITIAL_OPERATION_DIAGNOSTICS },
   commandFeed: [],
+  askStatus: "idle" as const,
 };
 
 export function useGlassState(): GlassState {

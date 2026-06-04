@@ -1028,7 +1028,7 @@ body {
   flex-direction: column-reverse;
   align-items: stretch;
   gap: 10px;
-  max-width: min(340px, calc(100vw - 48px));
+  max-width: min(480px, calc(100vw - 48px));
   pointer-events: none;
   z-index: 4;
 }
@@ -1043,6 +1043,12 @@ body {
   -webkit-backdrop-filter: blur(20px) saturate(140%);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.42), 0 0 20px rgba(56, 225, 255, 0.1);
   animation: overlay-card-in 0.22s ease-out;
+  max-width: 480px;
+}
+
+.overlay-feed-card--pinned {
+  border-color: rgba(120, 235, 255, 0.45);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.42), 0 0 24px rgba(56, 225, 255, 0.18);
 }
 
 .overlay-feed-card--command {
@@ -1087,19 +1093,23 @@ body {
   animation: command-pulse 1.2s ease-in-out infinite;
 }
 
+.overlay-feed-card__body-wrap {
+  max-height: 220px;
+  overflow-y: auto;
+  margin-bottom: 8px;
+}
+
 .overlay-feed-card__body {
-  margin: 0 0 8px;
+  margin: 0;
   font-size: 12px;
   line-height: 1.45;
   color: var(--glass-text-dim);
-  display: -webkit-box;
-  -webkit-line-clamp: 4;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  white-space: pre-wrap;
 }
 
 .overlay-feed-card__actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   justify-content: flex-end;
 }
@@ -1145,6 +1155,11 @@ body {
 .command-bar--listening {
   border-color: rgba(74, 222, 128, 0.45);
   box-shadow: 0 22px 60px rgba(0, 0, 0, 0.5), 0 0 36px rgba(74, 222, 128, 0.2);
+}
+
+.command-bar--pending {
+  border-color: rgba(56, 225, 255, 0.5);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.5), 0 0 36px rgba(56, 225, 255, 0.22);
 }
 
 .command-bar__row {
@@ -1282,6 +1297,24 @@ body {
   box-shadow: none;
 }
 
+.command-ask__spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-left: 6px;
+  border: 2px solid rgba(4, 18, 26, 0.25);
+  border-top-color: rgba(4, 18, 26, 0.85);
+  border-radius: 50%;
+  animation: command-spin 0.8s linear infinite;
+  vertical-align: middle;
+}
+
+@keyframes command-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .command-bar__secondary {
   display: flex;
   align-items: center;
@@ -1363,4 +1396,18 @@ body {
 .status-grid__cell div {
   font-size: 13px;
   color: var(--glass-text);
+}
+
+.panel__last-ask {
+  margin-bottom: 10px;
+}
+.panel__last-ask-prompt {
+  font-size: 12px;
+  color: var(--glass-text-dim);
+  margin: 6px 0 4px;
+}
+.panel__last-ask-body {
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
 }

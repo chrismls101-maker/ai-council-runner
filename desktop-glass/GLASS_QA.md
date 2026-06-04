@@ -67,6 +67,34 @@ Expected UX:
     Open in IIVO, Analyze Now, Capture, Stop Everything, diagnostics) — not a crowded
     primary command surface.
 
+## Direct Response v1 (inline IIVO answers)
+
+Expected UX:
+
+- Command bar asks IIVO via `POST /api/glass/ask` (Quick/Direct Answer by default).
+- **Inline answer** appears on the overlay without opening the browser first.
+- Response card supports **Copy**, **Pin**, **Save Moment**, **Open in IIVO**.
+- On server failure, error card shows with **Open in IIVO** fallback (no silent fail).
+- Session stores `iivo_command` + `iivo_response` events when a session is active.
+
+### Direct Response manual QA
+
+1. Start IIVO server (`npm run dev`).
+2. Start Glass (`npm run glass:dev`).
+3. Confirm overlay click-through still works.
+4. Type in command bar: **“What am I working on?”** and submit.
+5. Confirm **“IIVO is thinking…”** card appears.
+6. Confirm **inline answer card** appears **without** opening the browser automatically.
+7. Click **Copy** on the answer card.
+8. Click **Pin** — card stays visible.
+9. Click **Save Moment**.
+10. Click **Open in IIVO** — browser opens with Context Bridge handoff.
+11. **Start Session**, ask another question, confirm command/response saved to session timeline.
+12. Stop IIVO server, ask again — confirm **error card** + **Open in IIVO** fallback.
+13. Confirm command bar shows **Thinking** state while pending (input disabled).
+14. Click mic once — should start **Microphone** listening (one click). Right-click mic for source menu.
+15. Check panel **Hotkey** and **Display** diagnostics rows.
+
 ### Overlay manual QA
 
 1. Launch IIVO server (`npm run dev` from repo root).
