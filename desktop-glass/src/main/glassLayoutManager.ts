@@ -24,6 +24,8 @@ import {
   type GlassLayoutPreset,
 } from "../shared/glassLayoutTypes.ts";
 import type { GlassDisplayTarget } from "../shared/glassSettings.ts";
+import { resolveEffectiveDisplayId } from "../shared/displayInfo.ts";
+import { displayIdContainingPoint } from "../shared/displayTargetMath.ts";
 
 export type { GlassLayoutPreset } from "../shared/glassLayoutTypes.ts";
 export {
@@ -58,16 +60,15 @@ export function listDisplayIds(): number[] {
 
 export function resolveDisplayContext(target: GlassDisplayTarget): DisplayLayoutContext {
   const displays = screen.getAllDisplays();
-  if (target === "follow_mouse") {
-    const nearest = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-    return displayContextFromDisplay(nearest);
-  }
-  if (target === "primary") {
-    return getPrimaryDisplayContext();
-  }
-  const match = displays.find((d) => d.id === target);
+  const primary = screen.getPrimaryDisplay();
+  const primaryId = primary.id;
+  const cursor = screen.getCursorScreenPoint();
+  const displayBounds = displays.map((d) => ({ id: d.id, bounds: { ...d.bounds } }));
+
+  const activeId = resolveEffectiveDisplayId(target, displayBounds, cursor, primaryId);
+  const match = displays.find((d) => d.id === activeId);
   if (match) return displayContextFromDisplay(match);
-  return getPrimaryDisplayContext();
+  return displayContextFromDisplay(primary);
 }
 
 export class GlassLayoutManager {

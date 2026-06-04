@@ -57,13 +57,13 @@ const COMMAND_BAR_HEIGHT = 96;
 const COMMAND_BAR_BOTTOM_MARGIN = 28;
 const COMMAND_BAR_SIDE_MARGIN = 48;
 
-/** Visible desktop region — avoids macOS menu bar/dock clipping the bottom border. */
+/** Visible desktop region — full display bounds for edge-to-edge transparent overlay. */
 export function overlayLayoutFromDisplay(ctx: DisplayLayoutContext): OverlayLayout {
   return {
-    x: ctx.workArea.x,
-    y: ctx.workArea.y,
-    width: ctx.workArea.width,
-    height: ctx.workArea.height,
+    x: ctx.bounds.x,
+    y: ctx.bounds.y,
+    width: ctx.bounds.width,
+    height: ctx.bounds.height,
   };
 }
 

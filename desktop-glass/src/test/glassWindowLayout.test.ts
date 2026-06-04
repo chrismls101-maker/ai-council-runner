@@ -34,12 +34,12 @@ test("parseOverlayMode accepts known modes and falls back", () => {
   assert.equal(parseOverlayMode("bogus"), "passive");
 });
 
-test("overlay layout uses workArea so frame is fully visible", () => {
+test("overlay layout uses display bounds for full-screen overlay", () => {
   const overlay = overlayLayoutFromDisplay(primaryDisplay);
   const panel = panelLayoutFromDisplay(primaryDisplay);
   const dock = dockLayoutFromDisplay(primaryDisplay, "compact_dock");
 
-  assert.deepEqual(overlay, primaryDisplay.workArea);
+  assert.deepEqual(overlay, primaryDisplay.bounds);
   assert.ok(panel.y >= primaryDisplay.workArea.y);
   assert.ok(dock.y >= primaryDisplay.workArea.y);
 });

@@ -24,5 +24,5 @@ test("serializeDisplayTarget round trips primary", () => {
 });
 
 test("formatDisplayTargetLabel numbers displays", () => {
-  assert.equal(formatDisplayTargetLabel(10, [10, 20]), "Display 1 (id 10)");
+  assert.equal(formatDisplayTargetLabel(10, [10, 20]), "Display 1");
 });

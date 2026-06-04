@@ -117,11 +117,17 @@ export function diagnosticsForCapture(
   diagnostics: GlassOperationDiagnostics,
   ok: boolean,
   error?: string,
+  displayLabel?: string,
 ): GlassOperationDiagnostics {
+  const captureStatus = ok
+    ? displayLabel
+      ? `Captured ${displayLabel}`
+      : "ok"
+    : "failed";
   return recordOperation(
     {
       ...diagnostics,
-      captureStatus: ok ? "ok" : "failed",
+      captureStatus,
     },
     "capture-screen",
     ok ? "ok" : "error",

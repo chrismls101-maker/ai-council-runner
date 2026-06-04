@@ -10,7 +10,7 @@ export type GlassHotkeyPreset =
   | "cmd-alt-i"
   | "disabled";
 
-export type GlassDisplayTarget = "primary" | "follow_mouse" | number;
+export type GlassDisplayTarget = "primary" | "follow_mouse" | "all_displays" | number;
 
 export interface GlassUserSettings {
   hotkeyPreset: GlassHotkeyPreset;
@@ -61,13 +61,14 @@ export function isValidHotkeyPreset(value: string): value is GlassHotkeyPreset {
 
 export function parseDisplayTarget(value: string | undefined): GlassDisplayTarget {
   if (value === "follow_mouse") return "follow_mouse";
+  if (value === "all_displays") return "all_displays";
   if (value === "primary" || value == null || value === "") return "primary";
   const id = Number(value);
   return Number.isFinite(id) ? id : "primary";
 }
 
 export function serializeDisplayTarget(target: GlassDisplayTarget): string {
-  if (target === "primary" || target === "follow_mouse") return target;
+  if (target === "primary" || target === "follow_mouse" || target === "all_displays") return target;
   return String(target);
 }
 
@@ -76,9 +77,10 @@ export function formatDisplayTargetLabel(
   displayIds: number[] = [],
 ): string {
   if (target === "primary") return "Primary Display";
-  if (target === "follow_mouse") return "Follow Mouse Display";
+  if (target === "follow_mouse") return "Follow Mouse";
+  if (target === "all_displays") return "All Displays Overlay";
   const index = displayIds.indexOf(target);
-  if (index >= 0) return `Display ${index + 1} (id ${target})`;
+  if (index >= 0) return `Display ${index + 1}`;
   return `Display id ${target}`;
 }
 

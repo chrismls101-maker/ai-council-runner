@@ -1,5 +1,5 @@
 /**
- * Manual screen capture using Electron's desktopCapturer. Captures the primary
+ * Manual screen capture using Electron's desktopCapturer. Captures a specific
  * display at native resolution and returns a PNG data URL. Only ever called in
  * response to an explicit user action (Capture Screen / Send to IIVO).
  *
@@ -14,13 +14,19 @@ export interface CaptureResult {
   width: number;
   height: number;
   sourceName: string;
+  displayId: number;
+  displayLabel: string;
 }
 
-export async function capturePrimaryScreen(): Promise<CaptureResult> {
-  const primary = screen.getPrimaryDisplay();
-  const scale = primary.scaleFactor || 1;
-  const width = Math.round(primary.size.width * scale);
-  const height = Math.round(primary.size.height * scale);
+export async function captureDisplayById(
+  displayId: number,
+  displayLabel: string,
+): Promise<CaptureResult> {
+  const display =
+    screen.getAllDisplays().find((d) => d.id === displayId) ?? screen.getPrimaryDisplay();
+  const scale = display.scaleFactor || 1;
+  const width = Math.round(display.size.width * scale);
+  const height = Math.round(display.size.height * scale);
 
   const sources = await desktopCapturer.getSources({
     types: ["screen"],
@@ -31,10 +37,8 @@ export async function capturePrimaryScreen(): Promise<CaptureResult> {
     throw new Error("No screen sources available for capture.");
   }
 
-  // Prefer the source matching the primary display when ids are exposed.
-  const primaryId = String(primary.id);
-  const source =
-    sources.find((s) => s.display_id === primaryId) ?? sources[0];
+  const targetId = String(display.id);
+  const source = sources.find((s) => s.display_id === targetId) ?? sources[0];
 
   const image = source.thumbnail;
   if (image.isEmpty()) {
@@ -49,5 +53,13 @@ export async function capturePrimaryScreen(): Promise<CaptureResult> {
     width: size.width,
     height: size.height,
     sourceName: source.name,
+    displayId: display.id,
+    displayLabel,
   };
+}
+
+/** @deprecated Use captureDisplayById with the active Glass display. */
+export async function capturePrimaryScreen(): Promise<CaptureResult> {
+  const primary = screen.getPrimaryDisplay();
+  return captureDisplayById(primary.id, "Primary Display");
 }

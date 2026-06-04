@@ -20,6 +20,7 @@ import type { GlassOperationDiagnostics } from "./glassOperations.ts";
 import type { GlassCommandFeedItem } from "./commandFeed.ts";
 import type { GlassAskStatus, GlassLastAskResponse } from "./glassAskTypes.ts";
 import type { GlassUserSettings } from "./glassSettings.ts";
+import type { ConnectedDisplaySnapshot } from "./displayInfo.ts";
 
 export type { GlassSttState } from "./sttTypes.ts";
 
@@ -148,6 +149,7 @@ export interface GlassState {
   lastAskResponse?: GlassLastAskResponse;
   glassSettings: GlassUserSettings;
   availableDisplayIds: number[];
+  connectedDisplays: ConnectedDisplaySnapshot[];
 }
 
 export interface SttProcessChunkRequest {

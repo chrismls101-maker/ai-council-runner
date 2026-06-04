@@ -46,7 +46,11 @@ import {
   estimateCouncilCredits,
   runCouncilAnalysis,
 } from "../shared/iivoAnalysisClient.ts";
-import { capturePrimaryScreen } from "./capture.ts";
+import { captureDisplayById } from "./capture.ts";
+import {
+  resolveCaptureDisplay,
+  sanitizeDisplayTarget,
+} from "./displayRegistry.ts";
 import {
   blurCommandBar,
   broadcast,
@@ -54,6 +58,7 @@ import {
   getCommandBarHotkeyStatus,
   applyGlassUserSettings,
   getAvailableDisplayIds,
+  getConnectedDisplays,
   getDisplayLayoutSummary,
   refreshGlassDisplayLayout,
   getGlassWindowState,
@@ -233,6 +238,7 @@ function snapshot(): GlassState {
     lastAskResponse: state.lastAskResponse,
     glassSettings: state.glassSettings,
     availableDisplayIds: getAvailableDisplayIds(),
+    connectedDisplays: getConnectedDisplays(),
   };
 }
 
@@ -267,14 +273,23 @@ async function openHandoff(contextId: string): Promise<void> {
 
 async function handleCapture(): Promise<string | undefined> {
   state.lastError = undefined;
-  state.operationDiagnostics = recordOperation(state.operationDiagnostics, "capture-screen", "pending");
+  const captureTarget = resolveCaptureDisplay(state.glassSettings.displayTarget);
+  state.operationDiagnostics = {
+    ...recordOperation(state.operationDiagnostics, "capture-screen", "pending"),
+    captureStatus: `Capturing ${captureTarget.label}`,
+  };
   dispatchPrivacy({ type: "CAPTURE_START", at: new Date().toISOString() });
   push();
   try {
-    const result = await capturePrimaryScreen();
+    const result = await captureDisplayById(captureTarget.id, captureTarget.label);
     state.pendingCaptureDataUrl = result.imageDataUrl;
-    state.lastNotice = CAPTURE_SUCCESS_MESSAGE;
-    state.operationDiagnostics = diagnosticsForCapture(state.operationDiagnostics, true);
+    state.lastNotice = `${CAPTURE_SUCCESS_MESSAGE} (${result.displayLabel})`;
+    state.operationDiagnostics = diagnosticsForCapture(
+      state.operationDiagnostics,
+      true,
+      undefined,
+      result.displayLabel,
+    );
     dispatchPrivacy({ type: "CAPTURE_DONE", at: new Date().toISOString() });
     push();
     return result.imageDataUrl;
@@ -743,13 +758,15 @@ async function handleCommand(command: GlassCommand): Promise<void> {
       registerGlobalHotkeys();
       push();
       return;
-    case "set-glass-display":
-      state.glassSettings = { ...state.glassSettings, displayTarget: command.target };
+    case "set-glass-display": {
+      const displayTarget = sanitizeDisplayTarget(command.target);
+      state.glassSettings = { ...state.glassSettings, displayTarget };
       glassUserSettings = state.glassSettings;
       await persistGlassUserSettings(glassUserSettings);
       applyGlassUserSettings(glassUserSettings);
       push();
       return;
+    }
     case "refresh-glass-layout":
       refreshGlassDisplayLayout();
       push();
@@ -863,15 +880,19 @@ async function handleSessionCommand(command: GlassCommand): Promise<void> {
       const session = sessions.current();
       if (!session) break;
       state.lastError = undefined;
-      state.operationDiagnostics = recordOperation(state.operationDiagnostics, "session-capture", "pending");
+      const captureTarget = resolveCaptureDisplay(state.glassSettings.displayTarget);
+      state.operationDiagnostics = {
+        ...recordOperation(state.operationDiagnostics, "session-capture", "pending"),
+        captureStatus: `Capturing ${captureTarget.label}`,
+      };
       dispatchPrivacy({ type: "CAPTURE_START", at: new Date().toISOString() });
       push();
       try {
-        const result = await capturePrimaryScreen();
+        const result = await captureDisplayById(captureTarget.id, captureTarget.label);
         const ctxFields = eventContextFields({ captureSource: result.sourceName });
         const event = sessions.addEvent({
           kind: "screen_capture",
-          title: `Screen capture (${result.width}×${result.height})`,
+          title: `Screen capture · ${result.displayLabel} (${result.width}×${result.height})`,
           sourceApp: ctxFields.sourceApp,
           sourceTitle: ctxFields.sourceTitle ?? result.sourceName,
           importance: "medium",
@@ -885,8 +906,13 @@ async function handleSessionCommand(command: GlassCommand): Promise<void> {
           event.screenshotSizeBytes = refs.screenshotSizeBytes;
           event.screenshotDataUrl = result.imageDataUrl;
         }
-        state.lastNotice = CAPTURE_SESSION_SUCCESS_MESSAGE;
-        state.operationDiagnostics = diagnosticsForCapture(state.operationDiagnostics, true);
+        state.lastNotice = `${CAPTURE_SESSION_SUCCESS_MESSAGE} (${result.displayLabel})`;
+        state.operationDiagnostics = diagnosticsForCapture(
+          state.operationDiagnostics,
+          true,
+          undefined,
+          result.displayLabel,
+        );
       } catch (err) {
         const message = captureErrorMessage(err);
         state.lastError = message;
@@ -1194,6 +1220,11 @@ app.whenReady().then(async () => {
   moments = await loadMoments();
   sessions = await loadSessions();
   glassUserSettings = await loadGlassUserSettings();
+  const sanitizedTarget = sanitizeDisplayTarget(glassUserSettings.displayTarget);
+  if (sanitizedTarget !== glassUserSettings.displayTarget) {
+    glassUserSettings = { ...glassUserSettings, displayTarget: sanitizedTarget };
+    await persistGlassUserSettings(glassUserSettings);
+  }
   if (process.env.IIVO_GLASS_E2E === "1") {
     glassUserSettings = { ...glassUserSettings, hotkeyPreset: "disabled" };
   }

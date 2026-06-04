@@ -93,7 +93,7 @@ npm run glass:e2e:debug
 - Panel open + status grid
 - Stop Everything clears listening state
 - Open in IIVO only on user click (URL captured, not launched)
-- Window layout bounds (overlay = workArea, command bar bottom-centered)
+- Window layout bounds (overlay = display bounds, command bar bottom-centered)
 
 Skipped automatically in CI unless `GLASS_E2E_FORCE=1`. Requires `npm run glass:build` first (the e2e script builds automatically).
 
@@ -137,11 +137,29 @@ Expected UX:
 14. **Start Session**, ask another question, confirm command/response saved to session timeline.
 15. Stop IIVO server, ask again — confirm **error card** + **Open in IIVO** fallback.
 16. Panel → change **Command bar hotkey** preset — confirm diagnostics update.
-17. Panel → change **Display** (Primary / Display N / Follow Mouse) — confirm layout moves or status updates.
+17. Panel → change **Glass Display** (Primary / HDMI or external / Follow Mouse) — confirm overlay, command bar, dock, and panel move to that display.
 18. Click **Refresh display layout** after display change.
 
 19. Open IIVO with `/?runId=<valid-run-id>` — confirm saved run loads in console view.
-20. Select **Follow Mouse** display — move cursor to another monitor — confirm Glass follows within ~1s.
+20. Select **Follow Mouse** — move cursor to another monitor — confirm Glass follows within ~1s.
+
+### Multi-display manual QA
+
+1. Connect an external monitor or TV (HDMI).
+2. Launch Glass (`npm run glass:dev`).
+3. Open the panel (dock → Open Panel).
+4. Under **Glass Display**, select the external / HDMI display (e.g. **HDMI Display (Display 2)**).
+5. Confirm the full-screen overlay moves to the TV — MacBook screen is no longer blocked.
+6. Confirm the command bar appears centered near the bottom of the TV.
+7. Confirm the dock and panel open on the TV when used.
+8. Confirm overlay click-through still works on the TV (desktop apps remain usable).
+9. Confirm the MacBook screen is clear when Glass is pinned to the TV.
+10. Switch to **Follow Mouse** and move the cursor between screens — Glass should follow within ~0.5–1s.
+11. Return to a fixed **Glass Display** selection and confirm Glass stays on that monitor.
+12. Click **Capture** while working on the TV — status should show **Capturing HDMI Display…** (or the active display label).
+13. Confirm the captured image matches the TV, not the MacBook, or that the notice names the display captured.
+
+**All Displays Overlay** is listed as “coming soon” — not enabled in this release.
 
 ### Pass/Fail log template (Direct Response v1)
 

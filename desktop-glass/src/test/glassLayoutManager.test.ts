@@ -23,13 +23,12 @@ const externalMonitor: DisplayLayoutContext = {
   workArea: { x: 2560, y: 0, width: 1920, height: 1055 },
 };
 
-test("overlay uses workArea so border fits on screen", () => {
+test("overlay uses selected display bounds", () => {
   const layout = overlayLayoutFromDisplay(macBook13);
-  assert.equal(layout.x, macBook13.workArea.x);
-  assert.equal(layout.y, macBook13.workArea.y);
-  assert.equal(layout.width, macBook13.workArea.width);
-  assert.equal(layout.height, macBook13.workArea.height);
-  assert.ok(layout.height < macBook13.bounds.height);
+  assert.equal(layout.x, macBook13.bounds.x);
+  assert.equal(layout.y, macBook13.bounds.y);
+  assert.equal(layout.width, macBook13.bounds.width);
+  assert.equal(layout.height, macBook13.bounds.height);
 });
 
 test("panel uses workArea and responsive width", () => {

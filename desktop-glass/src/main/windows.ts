@@ -10,16 +10,19 @@ import { BrowserWindow, globalShortcut, shell } from "electron";
 import type { GlassConfig } from "../shared/config.ts";
 import type { OverlayMode } from "../shared/glassWindowTypes.ts";
 import {
-  formatDisplayTargetLabel,
   GLASS_HOTKEY_PRESETS,
   hotkeyRegistrationMessage,
   type GlassDisplayTarget,
   type GlassHotkeyPreset,
   type GlassUserSettings,
 } from "../shared/glassSettings.ts";
-import { GlassLayoutManager, listDisplayIds } from "./glassLayoutManager.ts";
 import {
-  getLastFollowMouseDisplayId,
+  buildDisplayDiagnosticsSummary,
+  listConnectedDisplaySnapshots,
+  sanitizeDisplayTarget,
+} from "./displayRegistry.ts";
+import { GlassLayoutManager } from "./glassLayoutManager.ts";
+import {
   isFollowMouseTrackingActive,
   startFollowMouseTracking,
   stopFollowMouseTracking,
@@ -284,9 +287,16 @@ function createCommandBarWindow(): BrowserWindow {
 
 export function createWindows(glassConfig: GlassConfig, displayTarget: GlassDisplayTarget = "primary"): GlassWindows {
   layoutManager?.dispose();
-  activeDisplayTarget = displayTarget;
-  layoutManager = new GlassLayoutManager(glassConfig.layoutPreset, displayTarget);
-  layoutManager.onDisplayChanged(() => relayoutAllWindows());
+  activeDisplayTarget = sanitizeDisplayTarget(displayTarget);
+  layoutManager = new GlassLayoutManager(glassConfig.layoutPreset, activeDisplayTarget);
+  layoutManager.onDisplayChanged(() => {
+    const normalized = sanitizeDisplayTarget(activeDisplayTarget);
+    if (normalized !== activeDisplayTarget) {
+      activeDisplayTarget = normalized;
+      layoutManager?.setDisplayTarget(normalized);
+    }
+    relayoutAllWindows();
+  });
 
   overlayVisible = glassConfig.overlayEnabled;
   overlayMode = glassConfig.overlayMode;
@@ -551,7 +561,11 @@ export function getActiveDisplayTarget(): GlassDisplayTarget {
 }
 
 export function getAvailableDisplayIds(): number[] {
-  return listDisplayIds();
+  return listConnectedDisplaySnapshots().map((d) => d.id);
+}
+
+export function getConnectedDisplays() {
+  return listConnectedDisplaySnapshots();
 }
 
 /** Register global shortcut to focus the command bar. Logs success/failure. */
@@ -601,16 +615,20 @@ export function unregisterCommandBarHotkeys(): void {
 
 /** Compact display/layout summary for diagnostics. */
 export function getDisplayLayoutSummary(): string {
-  if (!layoutManager) return "display: not initialized";
-  const d = layoutManager.getDisplay();
+  if (!layoutManager || !windows) return "display: not initialized";
+  const layoutDisplay = layoutManager.getDisplay();
   const overlay = layoutManager.getOverlayLayout();
   const bar = layoutManager.getCommandBarLayout();
-  const targetLabel = formatDisplayTargetLabel(activeDisplayTarget, listDisplayIds());
-  const followInfo =
-    activeDisplayTarget === "follow_mouse" && isFollowMouseTrackingActive()
-      ? ` · cursor display id${getLastFollowMouseDisplayId() ?? "?"}`
-      : "";
-  return `${targetLabel}${followInfo} · id${d.id} ${d.workArea.width}x${d.workArea.height} · overlay ${overlay.width}x${overlay.height} · commandBar y${bar.y}`;
+  const panelLayout = layoutManager.getPanelLayout();
+  return buildDisplayDiagnosticsSummary({
+    target: activeDisplayTarget,
+    layoutDisplay,
+    overlayBounds: overlay,
+    commandBarBounds: bar,
+    panelBounds: panelLayout,
+    panelVisible: windows.panel.isVisible(),
+    followMouseActive: isFollowMouseTrackingActive(),
+  });
 }
 
 function syncFollowMouseMode(): void {
@@ -621,9 +639,9 @@ function syncFollowMouseMode(): void {
 }
 
 export function applyGlassUserSettings(settings: GlassUserSettings): void {
-  activeDisplayTarget = settings.displayTarget;
+  activeDisplayTarget = sanitizeDisplayTarget(settings.displayTarget);
   if (layoutManager) {
-    layoutManager.setDisplayTarget(settings.displayTarget);
+    layoutManager.setDisplayTarget(activeDisplayTarget);
     relayoutAllWindows();
   }
   syncFollowMouseMode();

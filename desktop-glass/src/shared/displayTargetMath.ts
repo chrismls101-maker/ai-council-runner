@@ -41,4 +41,4 @@ export function shouldRelayoutForDisplayChange(
 }
 
 /** Throttled poll interval when Follow Mouse display mode is active. */
-export const FOLLOW_MOUSE_POLL_MS = 750;
+export const FOLLOW_MOUSE_POLL_MS = 500;

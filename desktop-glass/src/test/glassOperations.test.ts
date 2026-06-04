@@ -53,8 +53,8 @@ test("stopAllActiveCaptureAndListening clears listening state", () => {
 });
 
 test("diagnosticsForCapture records success and failure", () => {
-  const ok = diagnosticsForCapture({ lastCommandStatus: "idle" }, true);
-  assert.equal(ok.captureStatus, "ok");
+  const ok = diagnosticsForCapture({ lastCommandStatus: "idle" }, true, undefined, "Primary Display");
+  assert.equal(ok.captureStatus, "Captured Primary Display");
   assert.equal(ok.lastCommandStatus, "ok");
 
   const fail = diagnosticsForCapture({ lastCommandStatus: "idle" }, false, "nope");

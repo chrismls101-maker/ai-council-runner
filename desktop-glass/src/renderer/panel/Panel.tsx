@@ -643,26 +643,52 @@ function StatusGrid({ state }: { state: GlassState }): JSX.Element {
 
 function GlassLayoutSettings({ state }: { state: GlassState }): JSX.Element {
   const settings = state.glassSettings;
+  const connected = state.connectedDisplays.length
+    ? state.connectedDisplays
+    : state.availableDisplayIds.map((id, index) => ({
+        id,
+        label: `Display ${index + 1}`,
+        bounds: { x: 0, y: 0, width: 0, height: 0 },
+        workArea: { x: 0, y: 0, width: 0, height: 0 },
+        scaleFactor: 1,
+        isPrimary: index === 0,
+        cursorInside: false,
+      }));
 
   const hotkeyOptions = (Object.keys(GLASS_HOTKEY_PRESETS) as GlassHotkeyPreset[]).map((preset) => ({
     preset,
     label: GLASS_HOTKEY_PRESETS[preset].label,
   }));
 
-  const displayOptions: { target: GlassDisplayTarget; label: string }[] = [
+  const displayOptions: { target: GlassDisplayTarget; label: string; disabled?: boolean }[] = [
     { target: "primary", label: "Primary Display" },
-    ...state.availableDisplayIds.map((id, index) => ({
-      target: id as GlassDisplayTarget,
-      label: `Display ${index + 1} (id ${id})`,
-    })),
-    { target: "follow_mouse", label: "Follow Mouse Display" },
+    ...connected
+      .filter((display) => !display.isPrimary)
+      .map((display) => ({
+        target: display.id as GlassDisplayTarget,
+        label: display.label,
+      })),
+    { target: "follow_mouse", label: "Follow Mouse" },
+    {
+      target: "all_displays",
+      label: "All Displays Overlay (coming soon)",
+      disabled: true,
+    },
   ];
+
+  const activeDisplay =
+    connected.find((d) => d.cursorInside)?.label ??
+    connected.find((d) =>
+      typeof settings.displayTarget === "number" ? d.id === settings.displayTarget : d.isPrimary,
+    )?.label ??
+    formatDisplayTargetLabel(settings.displayTarget, state.availableDisplayIds);
 
   return (
     <div className="summary-box panel__settings">
       <p className="section-title">Glass layout</p>
       <p className="hint">
-        Glass is using {formatDisplayTargetLabel(settings.displayTarget)}. Command bar hotkey:{" "}
+        Glass is on {formatDisplayTargetLabel(settings.displayTarget, state.availableDisplayIds)}.
+        {connected.length > 1 ? ` Cursor on ${activeDisplay}.` : ""} Command bar hotkey:{" "}
         {state.operationDiagnostics.hotkeyStatus ?? "—"}
       </p>
       <label className="panel__settings-row">
@@ -681,7 +707,7 @@ function GlassLayoutSettings({ state }: { state: GlassState }): JSX.Element {
         </select>
       </label>
       <label className="panel__settings-row">
-        <span>Display</span>
+        <span>Glass Display</span>
         <select
           value={
             typeof settings.displayTarget === "number"
@@ -690,6 +716,7 @@ function GlassLayoutSettings({ state }: { state: GlassState }): JSX.Element {
           }
           onChange={(e) => {
             const value = e.target.value;
+            if (value === "all_displays") return;
             const target: GlassDisplayTarget =
               value === "primary" || value === "follow_mouse" ? value : Number(value);
             send({ type: "set-glass-display", target });
@@ -699,12 +726,19 @@ function GlassLayoutSettings({ state }: { state: GlassState }): JSX.Element {
             <option
               key={String(opt.target)}
               value={typeof opt.target === "number" ? String(opt.target) : opt.target}
+              disabled={opt.disabled}
             >
               {opt.label}
             </option>
           ))}
         </select>
       </label>
+      {connected.length > 1 ? (
+        <p className="hint panel__display-list">
+          {connected.length} connected displays — select HDMI / external display to move Glass off
+          the MacBook screen.
+        </p>
+      ) : null}
       <button type="button" className="gbtn gbtn--ghost" onClick={() => send({ type: "refresh-glass-layout" })}>
         Refresh display layout
       </button>
