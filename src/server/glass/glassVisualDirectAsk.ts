@@ -1,0 +1,219 @@
+/**
+ * IIVO Glass visual direct ask — single vision call via Context Bridge screenshot, no Council.
+ */
+
+import { getContextItem } from "../contextBridge/contextStore.js";
+import type { ContextItem } from "../contextBridge/types.js";
+import { getImageVisionConfig } from "../config/vision.js";
+import { runVisionAnswer, type VisionAnswerResult } from "../agents/runVisionAnswer.js";
+import { callOpenAIVision } from "../providers/openai.js";
+import { getMaxOutputTokens } from "../config/tokenModes.js";
+import { formatGlassDirectAnswer } from "./glassDirectAsk.js";
+import type { GlassAskLatestScreenshot, GlassAskRequestBody, GlassAskResponseBody } from "./glassAskTypes.js";
+
+const GLASS_VISUAL_SYSTEM = `You are IIVO Glass, a fast conversational AI companion. The user asked about their screen using a screenshot they explicitly captured in IIVO Glass moments ago.
+
+Answer naturally and directly. Describe what you can see in the image. Be concise unless they asked for depth. Do not invent UI or text that is not visible. Do not use council/report formatting.
+
+If helpful, start with a brief phrase like "Based on your latest capture…" then answer.
+
+Style:
+- 1–5 short paragraphs or bullets
+- conversational and practical
+- no heavy markdown, no ## headers`;
+
+export const GLASS_CAPTURE_FIRST_MESSAGE =
+  "I can't see the live screen until you capture it. Click Capture, then ask again.";
+
+export const GLASS_VISION_NOT_CONFIGURED_MESSAGE =
+  "I found your latest capture, but visual analysis is not configured yet.";
+
+function buildVisualUserPrompt(prompt: string, meta?: GlassAskLatestScreenshot): string {
+  const lines = [prompt.trim()];
+  if (meta?.label || meta?.sourceTitle) {
+    lines.push("", "Capture metadata:");
+    if (meta.label) lines.push(`- Display: ${meta.label}`);
+    if (meta.sourceTitle) lines.push(`- Source: ${meta.sourceTitle}`);
+    if (meta.capturedAt) lines.push(`- Captured: ${meta.capturedAt}`);
+  }
+  lines.push("", "Analyze the attached screenshot image.");
+  return lines.join("\n");
+}
+
+async function runVisionFromContextItem(
+  prompt: string,
+  item: ContextItem,
+  signal?: AbortSignal,
+): Promise<VisionAnswerResult> {
+  return runVisionAnswer({
+    prompt: buildVisualUserPrompt(prompt, undefined),
+    contextItem: item,
+    signal,
+  });
+}
+
+async function runVisionFromDataUrl(
+  prompt: string,
+  imageDataUrl: string,
+  meta: GlassAskLatestScreenshot | undefined,
+  signal?: AbortSignal,
+): Promise<VisionAnswerResult> {
+  const config = getImageVisionConfig();
+  const startedAt = new Date().toISOString();
+
+  if (!config.enabled || !config.configured || !config.model) {
+    return {
+      output: config.reason ?? GLASS_VISION_NOT_CONFIGURED_MESSAGE,
+      meta: {
+        status: "error",
+        displayName: "IIVO Vision",
+        error: config.reason,
+        startedAt,
+        completedAt: new Date().toISOString(),
+      },
+      visionTrace: {
+        screenshotAnalyzedVisually: false,
+        visionConfigured: config.configured,
+        visionEnabled: config.enabled,
+        error: config.reason,
+      },
+    };
+  }
+
+  try {
+    const result = await callOpenAIVision(
+      GLASS_VISUAL_SYSTEM,
+      buildVisualUserPrompt(prompt, meta),
+      imageDataUrl,
+      signal,
+      config.model,
+      getMaxOutputTokens("strategy", "standard"),
+    );
+    const completedAt = new Date().toISOString();
+    return {
+      output: result.content,
+      meta: {
+        status: "complete",
+        displayName: "IIVO Vision",
+        startedAt,
+        completedAt,
+        durationMs: Date.parse(completedAt) - Date.parse(startedAt),
+      },
+      visionTrace: {
+        screenshotAnalyzedVisually: true,
+        visionConfigured: true,
+        visionEnabled: true,
+        visionProvider: result.provider,
+        visionModel: result.model,
+      },
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Visual analysis failed.";
+    return {
+      output: message,
+      meta: {
+        status: "error",
+        displayName: "IIVO Vision",
+        error: message,
+        startedAt,
+        completedAt: new Date().toISOString(),
+      },
+      visionTrace: {
+        screenshotAnalyzedVisually: false,
+        visionConfigured: true,
+        visionEnabled: true,
+        error: message,
+      },
+    };
+  }
+}
+
+function mapVisionToGlassResponse(
+  prompt: string,
+  vision: VisionAnswerResult,
+  contextId?: string,
+): GlassAskResponseBody {
+  const raw = vision.output.trim();
+  const visionDisabled =
+    !vision.visionTrace.visionEnabled ||
+    (!vision.visionTrace.visionConfigured && /not configured|disabled/i.test(raw));
+
+  if (visionDisabled) {
+    return {
+      answer: GLASS_VISION_NOT_CONFIGURED_MESSAGE,
+      routeUsed: "glass_visual_direct",
+      contextId,
+      title: prompt.length > 60 ? `${prompt.slice(0, 59)}…` : prompt,
+      warnings: [raw],
+    };
+  }
+
+  if (!vision.visionTrace.screenshotAnalyzedVisually) {
+    const answer =
+      raw.includes("not configured") || raw.includes("disabled")
+        ? GLASS_VISION_NOT_CONFIGURED_MESSAGE
+        : raw || GLASS_VISION_NOT_CONFIGURED_MESSAGE;
+    return {
+      answer,
+      routeUsed: "glass_visual_direct",
+      contextId,
+      title: prompt.length > 60 ? `${prompt.slice(0, 59)}…` : prompt,
+    };
+  }
+
+  const formatted = formatGlassDirectAnswer(raw);
+  return {
+    answer: formatted.answer,
+    shortAnswer: formatted.shortAnswer,
+    model: vision.visionTrace.visionModel,
+    routeUsed: "glass_visual_direct",
+    contextId,
+    title: prompt.length > 60 ? `${prompt.slice(0, 59)}…` : prompt,
+    warnings: formatted.warnings,
+  };
+}
+
+export async function runGlassVisualDirectAsk(
+  body: GlassAskRequestBody,
+  signal?: AbortSignal,
+): Promise<GlassAskResponseBody> {
+  const prompt = body.prompt?.trim() ?? "";
+  const shot = body.latestScreenshot;
+
+  if (!shot?.contextId && !shot?.imageDataUrl) {
+    return {
+      answer: GLASS_CAPTURE_FIRST_MESSAGE,
+      routeUsed: "glass_direct",
+      title: prompt.length > 60 ? `${prompt.slice(0, 59)}…` : prompt,
+    };
+  }
+
+  let vision: VisionAnswerResult;
+
+  if (shot.contextId) {
+    const item = await getContextItem(shot.contextId);
+    if (!item || item.type !== "screenshot") {
+      if (shot.imageDataUrl) {
+        vision = await runVisionFromDataUrl(prompt, shot.imageDataUrl, shot, signal);
+      } else {
+        return {
+          answer: GLASS_CAPTURE_FIRST_MESSAGE,
+          routeUsed: "glass_direct",
+          title: prompt.length > 60 ? `${prompt.slice(0, 59)}…` : prompt,
+        };
+      }
+    } else {
+      vision = await runVisionFromContextItem(prompt, item, signal);
+    }
+  } else if (shot.imageDataUrl) {
+    vision = await runVisionFromDataUrl(prompt, shot.imageDataUrl, shot, signal);
+  } else {
+    return {
+      answer: GLASS_CAPTURE_FIRST_MESSAGE,
+      routeUsed: "glass_direct",
+      title: prompt.length > 60 ? `${prompt.slice(0, 59)}…` : prompt,
+    };
+  }
+
+  return mapVisionToGlassResponse(prompt, vision, shot.contextId);
+}

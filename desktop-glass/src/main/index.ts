@@ -9,7 +9,10 @@
 import { loadGlassEnv } from "./loadGlassEnv.ts";
 import { installGlassE2eHooks, getE2eExternalUrls, resetE2eExternalUrls } from "./e2eMainHooks.ts";
 import { getGlassE2eWindowMetadata } from "./e2eWindowMetadata.ts";
-import { app, BrowserWindow, ipcMain, protocol, shell } from "electron";
+import { join } from "node:path";
+import { app, BrowserWindow, ipcMain, protocol, shell, type WebContents } from "electron";
+import { GLASS_BOOT_DURATION_MS } from "../shared/bootTiming.ts";
+import { DOCK_MIN_WIDTH_VERTICAL } from "../shared/glassLayoutMath.ts";
 import { resolveConfig, buildIivoChatUrl, buildLensAskUrl, buildRunHistoryUrl } from "../shared/config.ts";
 import {
   privacyReducer,
@@ -56,7 +59,11 @@ import {
 import {
   blurCommandBar,
   broadcast,
+  beginGlassBootSequence,
+  createSplashWindow,
   createWindows,
+  finishSplash,
+  whenGlassWindowsReady,
   getCommandBarHotkeyStatus,
   applyGlassUserSettings,
   getAvailableDisplayIds,
@@ -66,8 +73,14 @@ import {
   getGlassWindowState,
   getWindows,
   isPanelVisible,
+  lockChromeLayout,
+  unlockChromeLayout,
+  resetChromeLayoutOrigins,
+  nudgeChromeWindowFromWebContents,
   registerCommandBarHotkeys,
   resizeDockWindow,
+  setChromeLayoutPersistHandler,
+  syncChromeLayoutFromSettings,
   setIgnoreMouseFromWindow,
   setOverlayClickThrough,
   setOverlayMode,
@@ -122,7 +135,17 @@ import {
   type GlassCommandFeedItem,
 } from "../shared/commandFeed.ts";
 import { askIivoGlass, GlassAskCancelledError } from "./glassAskClient.ts";
+import {
+  buildLatestScreenshotAskPayload,
+  uploadGlassScreenshotContext,
+} from "./glassLatestScreenshot.ts";
+import { createLatestScreenshotState } from "../shared/glassLatestScreenshotAsk.ts";
 import type { GlassAskSessionPayload, GlassAskStatus, GlassLastAskResponse } from "../shared/glassAskTypes.ts";
+import {
+  buildGlassScreenContextStatus,
+  promptRequestsGlassScreenVisual,
+  type GlassLatestScreenshotState,
+} from "../shared/glassScreenContext.ts";
 import {
   DEFAULT_GLASS_USER_SETTINGS,
   type GlassUserSettings,
@@ -130,6 +153,7 @@ import {
 import { loadGlassUserSettings, persistGlassUserSettings } from "./glassSettingsPersistence.ts";
 
 loadGlassEnv();
+app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 installGlassE2eHooks();
 
 if (process.env.IIVO_GLASS_E2E === "1") {
@@ -161,6 +185,7 @@ interface AppState {
   lastNotice?: string;
   lastSentUrl?: string;
   pendingCaptureDataUrl?: string;
+  latestScreenshot?: GlassLatestScreenshotState | null;
   sessionActionStatus: SessionActionStatus;
   transcriptionMode: TranscriptionMode;
   systemAudioStatus: SystemAudioStatus;
@@ -198,6 +223,7 @@ const state: AppState = {
   commandFeed: [],
   askStatus: "idle",
   askInFlight: false,
+  latestScreenshot: null,
   glassSettings: { ...DEFAULT_GLASS_USER_SETTINGS },
 };
 
@@ -240,6 +266,8 @@ function snapshot(): GlassState {
     commandFeed: state.commandFeed,
     askStatus: state.askStatus,
     lastAskResponse: state.lastAskResponse,
+    latestScreenshot: state.latestScreenshot ?? null,
+    screenContextStatus: buildGlassScreenContextStatus(state.latestScreenshot),
     glassSettings: state.glassSettings,
     availableDisplayIds: getAvailableDisplayIds(),
     connectedDisplays: getConnectedDisplays(),
@@ -275,6 +303,36 @@ async function openHandoff(contextId: string): Promise<void> {
   await shell.openExternal(url);
 }
 
+async function registerLatestGlassCapture(input: {
+  imageDataUrl: string;
+  displayLabel: string;
+  displayId: number;
+  sourceTitle?: string;
+  sessionId?: string;
+  eventId?: string;
+  screenshotPath?: string;
+  thumbnailPath?: string;
+  mimeType?: string;
+}): Promise<void> {
+  state.latestScreenshot = createLatestScreenshotState({
+    ...input,
+    contextUploadStatus: "pending",
+  });
+  push();
+
+  const title = `IIVO Glass capture ${new Date().toLocaleString()}${input.displayLabel ? ` · ${input.displayLabel}` : ""}`;
+  const contextId = await uploadGlassScreenshotContext(config, input.imageDataUrl, title);
+  if (state.latestScreenshot) {
+    if (contextId) {
+      state.latestScreenshot.contextId = contextId;
+      state.latestScreenshot.contextUploadStatus = "ready";
+    } else {
+      state.latestScreenshot.contextUploadStatus = "failed";
+    }
+    push();
+  }
+}
+
 async function handleCapture(): Promise<string | undefined> {
   state.lastError = undefined;
   const captureTarget = resolveCaptureDisplay(state.glassSettings.displayTarget);
@@ -287,6 +345,12 @@ async function handleCapture(): Promise<string | undefined> {
   try {
     const result = await captureDisplayById(captureTarget.id, captureTarget.label);
     state.pendingCaptureDataUrl = result.imageDataUrl;
+    await registerLatestGlassCapture({
+      imageDataUrl: result.imageDataUrl,
+      displayLabel: result.displayLabel,
+      displayId: result.displayId,
+      sourceTitle: result.sourceName,
+    });
     state.lastNotice = `${CAPTURE_SUCCESS_MESSAGE} (${result.displayLabel})`;
     state.operationDiagnostics = diagnosticsForCapture(
       state.operationDiagnostics,
@@ -427,9 +491,14 @@ async function openFeedInIivo(feedId: string): Promise<void> {
   const answer = item.fullBody ?? (item.kind === "response" ? item.body : undefined);
   const session = sessions.current();
   const summary = session ? buildSessionSummary(session) : undefined;
+  const screenshotContextId =
+    item.contextId ?? state.lastAskResponse?.contextId ?? state.latestScreenshot?.contextId;
   const parts = [`Question:\n${question}`];
   if (answer) parts.push(`Answer:\n${answer}`);
   if (summary?.trim()) parts.push(`Session context:\n${summary.trim()}`);
+  if (screenshotContextId) {
+    parts.push(`Screenshot context id: ${screenshotContextId}`);
+  }
   const text =
     parts.length > 1
       ? parts.join("\n\n")
@@ -514,12 +583,21 @@ async function submitCommand(rawText: string): Promise<void> {
     await persistSessions(sessions);
   }
 
+  const latestScreenshot = promptRequestsGlassScreenVisual(text)
+    ? await buildLatestScreenshotAskPayload({
+        latest: state.latestScreenshot ?? undefined,
+        pendingDataUrl: state.pendingCaptureDataUrl,
+        session: session ?? null,
+      })
+    : undefined;
+
   try {
     const result = await askIivoGlass(
       config,
       {
         prompt: text,
         session: buildGlassAskSessionPayload(),
+        latestScreenshot,
         responseStyle: "overlay",
       },
       signal,
@@ -565,7 +643,20 @@ async function submitCommand(rawText: string): Promise<void> {
         text: fullAnswer,
         importance: "high",
         ...eventContextFields(),
-        metadata: { routeUsed: result.routeUsed, model: result.model },
+        metadata: {
+          routeUsed: result.routeUsed,
+          model: result.model,
+          ...(latestScreenshot?.eventId
+            ? {
+                usedScreenshotEventId: latestScreenshot.eventId,
+                usedScreenshotCapturedAt: latestScreenshot.capturedAt,
+              }
+            : {}),
+          ...(latestScreenshot?.displayId != null
+            ? { displayId: latestScreenshot.displayId }
+            : {}),
+          ...(result.contextId ? { screenshotContextId: result.contextId } : {}),
+        },
       });
       await persistSessions(sessions);
     }
@@ -599,7 +690,10 @@ async function submitCommand(rawText: string): Promise<void> {
   }
 }
 
-async function handleCommand(command: GlassCommand): Promise<void> {
+async function handleCommand(
+  command: GlassCommand,
+  sender?: WebContents,
+): Promise<void> {
   switch (command.type) {
     case "capture-screen":
     case "capture-screen-only":
@@ -783,6 +877,52 @@ async function handleCommand(command: GlassCommand): Promise<void> {
       refreshGlassDisplayLayout();
       push();
       return;
+    case "chrome-window-drag": {
+      if (sender) {
+        nudgeChromeWindowFromWebContents(sender, command.dx, command.dy);
+      }
+      return;
+    }
+    case "set-chrome-layout-locked": {
+      if (command.locked) {
+        const origins = lockChromeLayout();
+        glassUserSettings = {
+          ...glassUserSettings,
+          chromeLayoutLocked: true,
+          dockCustomOrigin: origins.dockCustomOrigin,
+          commandBarCustomOrigin: origins.commandBarCustomOrigin,
+        };
+      } else {
+        glassUserSettings = { ...glassUserSettings, chromeLayoutLocked: false };
+        unlockChromeLayout();
+      }
+      syncChromeLayoutFromSettings(glassUserSettings);
+      state.glassSettings = glassUserSettings;
+      await persistGlassUserSettings(glassUserSettings);
+      push();
+      return;
+    }
+    case "set-dock-orientation": {
+      glassUserSettings = { ...glassUserSettings, dockOrientation: command.orientation };
+      state.glassSettings = glassUserSettings;
+      await persistGlassUserSettings(glassUserSettings);
+      push();
+      return;
+    }
+    case "reset-chrome-layout": {
+      resetChromeLayoutOrigins();
+      glassUserSettings = {
+        ...glassUserSettings,
+        chromeLayoutLocked: true,
+        dockCustomOrigin: null,
+        commandBarCustomOrigin: null,
+      };
+      state.glassSettings = glassUserSettings;
+      await persistGlassUserSettings(glassUserSettings);
+      syncChromeLayoutFromSettings(glassUserSettings);
+      push();
+      return;
+    }
     case "open-feed-in-iivo":
       try {
         await openFeedInIivo(command.id);
@@ -861,6 +1001,8 @@ async function handleSessionCommand(command: GlassCommand): Promise<void> {
       const session = sessions.current();
       if (session) await clearSessionScreenshotFolder(session.id);
       sessions.clearSession();
+      state.latestScreenshot = null;
+      state.pendingCaptureDataUrl = undefined;
       break;
     }
     case "session-add-note": {
@@ -918,6 +1060,18 @@ async function handleSessionCommand(command: GlassCommand): Promise<void> {
           event.screenshotMimeType = refs.screenshotMimeType;
           event.screenshotSizeBytes = refs.screenshotSizeBytes;
           event.screenshotDataUrl = result.imageDataUrl;
+          state.pendingCaptureDataUrl = result.imageDataUrl;
+          await registerLatestGlassCapture({
+            imageDataUrl: result.imageDataUrl,
+            displayLabel: result.displayLabel,
+            displayId: result.displayId,
+            sourceTitle: ctxFields.sourceTitle ?? result.sourceName,
+            sessionId: session.id,
+            eventId: event.id,
+            screenshotPath: event.screenshotPath,
+            thumbnailPath: event.thumbnailPath,
+            mimeType: event.screenshotMimeType,
+          });
         }
         state.lastNotice = `${CAPTURE_SESSION_SUCCESS_MESSAGE} (${result.displayLabel})`;
         state.operationDiagnostics = diagnosticsForCapture(
@@ -1192,8 +1346,8 @@ function registerIpc(): void {
     }),
   );
 
-  ipcMain.on(IPC.command, (_event, command: GlassCommand) => {
-    void handleCommand(command).catch((err) => {
+  ipcMain.on(IPC.command, (event, command: GlassCommand) => {
+    void handleCommand(command, event.sender).catch((err) => {
       state.lastError = err instanceof Error ? err.message : String(err);
       push();
     });
@@ -1207,7 +1361,12 @@ function registerIpc(): void {
 
   ipcMain.on(IPC.resizeDock, (_event, width: number, height: number) => {
     if (typeof width === "number" && typeof height === "number") {
-      resizeDockWindow(width, height);
+      const vertical = glassUserSettings.dockOrientation === "vertical";
+      resizeDockWindow(
+        width,
+        height,
+        vertical ? { minWidth: DOCK_MIN_WIDTH_VERTICAL, vertical: true } : undefined,
+      );
     }
   });
 
@@ -1232,6 +1391,16 @@ function registerGlobalHotkeys(): void {
 }
 
 app.whenReady().then(async () => {
+  // Show the cinematic boot splash immediately, before any async startup work.
+  const showSplash = process.env.IIVO_GLASS_E2E !== "1";
+  if (showSplash) {
+    const settingsPath = join(app.getPath("userData"), "glass-settings.json");
+    beginGlassBootSequence();
+    createSplashWindow();
+  }
+  // Hybrid timing: never close the splash before its animation has played fully.
+  const splashMinDisplay = new Promise<void>((resolve) => setTimeout(resolve, GLASS_BOOT_DURATION_MS));
+
   registerScreenshotProtocol();
   registerSystemAudioHandler();
   moments = await loadMoments();
@@ -1247,11 +1416,22 @@ app.whenReady().then(async () => {
   }
   state.glassSettings = glassUserSettings;
   state.windowContext = await getCurrentWindowContext();
+  setChromeLayoutPersistHandler((partial) => {
+    glassUserSettings = { ...glassUserSettings, ...partial };
+    state.glassSettings = glassUserSettings;
+    void persistGlassUserSettings(glassUserSettings);
+  });
   registerIpc();
   createWindows(config, glassUserSettings.displayTarget);
   applyGlassUserSettings(glassUserSettings);
   registerGlobalHotkeys();
   push();
+
+  if (showSplash) {
+    const readyWindows = getWindows();
+    const windowsReady = readyWindows ? whenGlassWindowsReady(readyWindows) : Promise.resolve();
+    void Promise.all([windowsReady, splashMinDisplay]).then(() => finishSplash());
+  }
 
   app.on("activate", () => {
     if (getWindows() === null) {

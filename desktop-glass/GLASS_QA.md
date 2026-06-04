@@ -124,6 +124,19 @@ Expected UX:
 - Session stores `iivo_command` + `iivo_response` events when a session is active.
 - **Analyze Now** remains separate (Council/deep analysis) — not used by command bar asks.
 
+### Visual Ask manual QA
+
+1. Start IIVO server (`npm run dev`) with `OPENAI_API_KEY` and `IMAGE_VISION_ENABLED=true`.
+2. Start Glass (`npm run glass:dev`).
+3. Select target display (e.g. HDMI) in panel settings.
+4. **Start Session**.
+5. Click **Capture Screen** (session capture).
+6. Confirm command bar / panel shows **Screen context: captured … ago** (or **visual analysis ready** after upload).
+7. Ask: **“What’s on my screen?”**
+8. Confirm inline answer references the capture (e.g. “Based on your latest capture…”) and describes visible content — not “I can’t see your screen.”
+9. **End/clear session** or wait past recency, ask again without capturing — confirm answer says to **capture first**.
+10. With vision disabled (`IMAGE_VISION_ENABLED=false`), capture then ask — confirm honest **visual analysis is not configured** message.
+
 ### Direct Response manual QA
 
 1. Start IIVO server (`npm run dev`) with `OPENAI_API_KEY` configured.

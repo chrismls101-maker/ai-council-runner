@@ -19,6 +19,7 @@ import type { GlassWindowState, OverlayMode } from "./glassWindowTypes.ts";
 import type { GlassOperationDiagnostics } from "./glassOperations.ts";
 import type { GlassCommandFeedItem } from "./commandFeed.ts";
 import type { GlassAskStatus, GlassLastAskResponse } from "./glassAskTypes.ts";
+import type { GlassLatestScreenshotState, GlassScreenContextStatus } from "./glassScreenContext.ts";
 import type { GlassUserSettings } from "./glassSettings.ts";
 import type { ConnectedDisplaySnapshot } from "./displayInfo.ts";
 
@@ -91,6 +92,10 @@ export type GlassCommand =
   | { type: "set-glass-hotkey"; preset: GlassUserSettings["hotkeyPreset"] }
   | { type: "set-glass-display"; target: GlassUserSettings["displayTarget"] }
   | { type: "refresh-glass-layout" }
+  | { type: "set-chrome-layout-locked"; locked: boolean }
+  | { type: "chrome-window-drag"; dx: number; dy: number }
+  | { type: "set-dock-orientation"; orientation: GlassUserSettings["dockOrientation"] }
+  | { type: "reset-chrome-layout" }
   | { type: "open-feed-in-iivo"; id: string }
   | { type: "save-feed-moment"; id: string }
   | { type: "command-bar-blur" }
@@ -149,6 +154,8 @@ export interface GlassState {
   commandFeed: GlassCommandFeedItem[];
   askStatus: GlassAskStatus;
   lastAskResponse?: GlassLastAskResponse;
+  latestScreenshot?: GlassLatestScreenshotState | null;
+  screenContextStatus?: GlassScreenContextStatus;
   glassSettings: GlassUserSettings;
   availableDisplayIds: number[];
   connectedDisplays: ConnectedDisplaySnapshot[];

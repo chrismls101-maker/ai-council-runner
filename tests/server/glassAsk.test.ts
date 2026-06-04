@@ -9,6 +9,8 @@ import {
   runGlassDirectAsk,
 } from "../../dist/server/glass/glassDirectAsk.js";
 import { handleGlassAsk } from "../../dist/server/glass/glassAskHandler.js";
+import { promptRequestsGlassScreenVisual } from "../../dist/server/glass/glassScreenVisualPrompt.js";
+import { GLASS_VISION_NOT_CONFIGURED_MESSAGE } from "../../dist/server/glass/glassVisualDirectAsk.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const handlerSource = readFileSync(
@@ -118,6 +120,60 @@ await test("handleGlassAsk returns routeUsed glass_direct via mock caller", asyn
 await test("GLASS_DIRECT_SYSTEM_PROMPT forbids council formatting", () => {
   assert.match(GLASS_DIRECT_SYSTEM_PROMPT, /no Final Action Plan/i);
   assert.match(GLASS_DIRECT_SYSTEM_PROMPT, /Analyze Now/i);
+});
+
+await test("promptRequestsGlassScreenVisual detects screen questions", () => {
+  assert.equal(promptRequestsGlassScreenVisual("What's on my screen?"), true);
+  assert.equal(promptRequestsGlassScreenVisual("Hello there"), false);
+});
+
+await test("screen question without screenshot returns capture-first message", async () => {
+  const previousKey = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "test-key";
+  try {
+    const result = await handleGlassAsk({ prompt: "What's on my screen?" });
+    assert.equal(result.routeUsed, "glass_direct");
+    assert.match(result.answer, /capture/i);
+    assert.doesNotMatch(result.answer, /cannot see your screen/i);
+  } finally {
+    if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previousKey;
+  }
+});
+
+await test("screen question with screenshot but vision disabled returns honest error", async () => {
+  const previousKey = process.env.OPENAI_API_KEY;
+  const previousVision = process.env.IMAGE_VISION_ENABLED;
+  process.env.OPENAI_API_KEY = "test-key";
+  process.env.IMAGE_VISION_ENABLED = "false";
+  try {
+    const result = await handleGlassAsk({
+      prompt: "What's on my screen?",
+      latestScreenshot: {
+        imageDataUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+        capturedAt: new Date().toISOString(),
+        label: "Primary",
+      },
+    });
+    assert.equal(result.routeUsed, "glass_visual_direct");
+    assert.match(result.answer, new RegExp(GLASS_VISION_NOT_CONFIGURED_MESSAGE.slice(0, 20), "i"));
+    for (const marker of ["Final Action Plan", "Sales Attack", "runCouncil"]) {
+      assert.doesNotMatch(result.answer, new RegExp(marker, "i"));
+    }
+  } finally {
+    if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previousKey;
+    if (previousVision === undefined) delete process.env.IMAGE_VISION_ENABLED;
+    else process.env.IMAGE_VISION_ENABLED = previousVision;
+  }
+});
+
+await test("visual ask path does not call runCouncilFull", () => {
+  const visualSource = readFileSync(
+    join(__dirname, "../../dist/server/glass/glassVisualDirectAsk.js"),
+    "utf8",
+  );
+  assert.doesNotMatch(visualSource, /runCouncilFull/);
 });
 
 console.log("glassAsk.test.ts: all assertions passed");

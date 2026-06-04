@@ -29,20 +29,22 @@ body {
   user-select: none;
 }
 
-.glass-body--dock,
-.glass-body--dock html,
-.glass-body--dock body {
+/* Dock window: shrink-wrap only — never 100vw/vh (causes scrollbars in frameless win) */
+html.glass-dock-window,
+html.glass-dock-window body.glass-body--dock,
+html.glass-dock-window #root {
+  margin: 0;
+  padding: 0;
   overflow: hidden;
-  width: fit-content;
-  height: fit-content;
+  width: max-content;
+  height: max-content;
   min-width: 0;
   min-height: 0;
+  max-width: none;
+  max-height: none;
 }
 
 .glass-body--dock #root {
-  overflow: hidden;
-  width: fit-content;
-  height: fit-content;
   display: block;
 }
 
@@ -55,7 +57,11 @@ body {
   pointer-events: none;
 }
 
-#root {
+.glass-body--overlay #root,
+.glass-body--panel #root,
+.glass-body--command #root,
+.glass-body--splash #root,
+.glass-body--splash-preview #root {
   width: 100vw;
   height: 100vh;
 }
@@ -67,8 +73,9 @@ body {
   align-items: stretch;
   gap: 8px;
   width: max-content;
-  min-width: 280px;
+  min-width: 0;
   padding: 8px 12px;
+  overflow: hidden;
   border-radius: 16px;
   background: linear-gradient(135deg, rgba(12, 16, 28, 0.82), rgba(10, 14, 24, 0.72));
   border: 1px solid rgba(255, 255, 255, 0.14);
@@ -80,12 +87,21 @@ body {
   -webkit-app-region: no-drag;
 }
 
+.dock--minimal:not(.dock--vertical) {
+  min-width: 280px;
+}
+
 .dock--minimal {
   flex-direction: row;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   padding: 7px 10px;
+}
+
+/* Horizontal: strip is layout-transparent so drag | chrome | actions stay one row */
+.dock--minimal .dock__strip {
+  display: contents;
 }
 
 .dock--minimal .dock__drag {
@@ -129,12 +145,214 @@ body {
 }
 
 .dock__drag {
-  -webkit-app-region: drag;
   display: flex;
   align-items: center;
   gap: 8px;
   padding-right: 8px;
+  -webkit-app-region: no-drag;
+  cursor: default;
+}
+
+.dock--unlocked.dock--minimal {
+  position: relative;
+}
+
+.dock--unlocked .dock__chrome,
+.dock--unlocked .dock__actions,
+.dock--unlocked .dock__row--menu,
+.dock--unlocked .dock__toast,
+.dock--unlocked .dock__drag {
+  -webkit-app-region: no-drag;
+  pointer-events: none;
+  opacity: 0.34;
+  filter: saturate(0.35);
+  cursor: default;
+}
+
+.dock--unlocked .dock__chrome {
+  position: relative;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.dock--unlocked .chrome-lock,
+.dock--unlocked .chrome-rotate {
+  pointer-events: auto;
+  opacity: 1;
+  filter: none;
+  position: relative;
+  z-index: 11;
+  cursor: pointer;
+}
+
+.dock--unlocked {
+  outline: 1px dashed rgba(56, 225, 255, 0.42);
+  outline-offset: 2px;
+}
+
+.chrome-reposition {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: inherit;
+  pointer-events: auto;
   cursor: grab;
+  background: transparent;
+  touch-action: none;
+}
+
+.chrome-reposition:active {
+  cursor: grabbing;
+}
+
+.chrome-reposition__hint {
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  color: rgba(190, 245, 255, 0.96);
+  padding: 7px 16px;
+  border-radius: 999px;
+  border: 1px dashed rgba(56, 225, 255, 0.48);
+  background: rgba(8, 14, 26, 0.82);
+  box-shadow: 0 0 24px rgba(56, 225, 255, 0.18);
+  text-align: center;
+  user-select: none;
+  pointer-events: none;
+}
+
+.dock__chrome {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+
+/* Vertical: glass pill ends at last button (content height) */
+.dock.dock--vertical.dock--minimal {
+  --dock-vertical-track: 112px;
+
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  width: max-content;
+  min-width: var(--dock-vertical-track);
+  height: max-content;
+  min-height: 0;
+  max-width: none;
+  overflow: visible;
+  padding: 10px 12px;
+  gap: 8px;
+  box-sizing: border-box;
+}
+
+.dock--vertical.dock--minimal .dock__strip {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-width: var(--dock-vertical-track);
+  align-self: stretch;
+  flex-shrink: 0;
+  padding-bottom: 8px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.dock--vertical.dock--minimal .dock__strip .dock__drag {
+  border-right: none;
+  padding-right: 0;
+  margin-right: 0;
+}
+
+.dock--vertical.dock--minimal .dock__strip .dock__chrome {
+  flex-shrink: 0;
+  padding-bottom: 0;
+  margin-bottom: 0;
+  border-bottom: none;
+}
+
+.dock--vertical .dock__actions {
+  flex: 0 0 auto;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  align-self: stretch;
+  justify-content: flex-start;
+  width: 100%;
+  gap: 8px;
+}
+
+.dock--vertical .dock__actions .gbtn {
+  display: flex;
+  width: 100%;
+  min-width: var(--dock-vertical-track, 112px);
+  min-height: 38px;
+  box-sizing: border-box;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  white-space: nowrap;
+  padding: 9px 12px;
+}
+
+.dock--vertical .dock__row--menu {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  align-self: stretch;
+  width: 100%;
+  flex-basis: auto;
+  gap: 8px;
+}
+
+.dock--vertical .dock-menu__item {
+  display: flex;
+  width: 100%;
+  min-height: 36px;
+  box-sizing: border-box;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.dock--vertical .dock__toast {
+  flex: 0 0 auto;
+  align-self: center;
+  width: max-content;
+  max-width: 14rem;
+  box-sizing: border-box;
+  text-align: center;
+}
+
+.dock--vertical .chrome-reposition {
+  overflow: hidden;
+}
+
+.chrome-lock,
+.chrome-rotate {
+  min-width: 30px;
+  padding: 6px 8px;
+  font-size: 13px;
+  line-height: 1;
+  background: rgba(14, 19, 32, 0.88);
+  -webkit-app-region: no-drag;
+}
+
+.chrome-lock--unlocked,
+.chrome-rotate:hover {
+  border-color: rgba(56, 225, 255, 0.45);
+  background: rgba(56, 225, 255, 0.12);
+}
+
+.chrome-lock--locked {
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .dock__logo {
@@ -1185,6 +1403,76 @@ body {
   box-shadow: 0 22px 60px rgba(0, 0, 0, 0.5), 0 0 36px rgba(56, 225, 255, 0.22);
 }
 
+.command-bar__drag {
+  -webkit-app-region: drag;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 10px;
+  margin: -4px 0 2px;
+  cursor: grab;
+}
+
+.command-bar__drag-grip {
+  width: 36px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.command-chrome-lock {
+  -webkit-app-region: no-drag;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(14, 19, 32, 0.92);
+  color: var(--glass-text-dim);
+  font-size: 15px;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+}
+
+.command-chrome-lock:hover {
+  border-color: var(--glass-border-bright);
+  background: rgba(56, 225, 255, 0.14);
+}
+
+.command-chrome-lock--unlocked {
+  border-color: rgba(56, 225, 255, 0.5);
+  box-shadow: 0 0 12px rgba(56, 225, 255, 0.2);
+}
+
+.command-bar--unlocked {
+  position: relative;
+  outline: 1px dashed rgba(56, 225, 255, 0.42);
+  outline-offset: 3px;
+}
+
+.command-bar--unlocked .command-bar__row,
+.command-bar--unlocked .command-bar__secondary {
+  pointer-events: none;
+  opacity: 0.34;
+  filter: saturate(0.35);
+}
+
+.command-bar--unlocked .command-bar__row {
+  position: relative;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.command-bar--unlocked .command-chrome-lock {
+  pointer-events: auto;
+  opacity: 1;
+  filter: none;
+  position: relative;
+  z-index: 11;
+  -webkit-app-region: no-drag;
+  cursor: pointer;
+}
+
 .command-bar__row {
   display: flex;
   align-items: center;
@@ -1336,6 +1624,14 @@ body {
   to {
     transform: rotate(360deg);
   }
+}
+
+.command-bar__screen-context {
+  margin: 0;
+  padding: 0 4px 4px;
+  font-size: 11px;
+  color: var(--glass-text-dim);
+  line-height: 1.35;
 }
 
 .command-bar__secondary {

@@ -11,7 +11,23 @@ test("status grid includes spec labels", () => {
     windowContextStatus: "available",
   });
   const labels = cards.map((c) => c.label);
-  assert.deepEqual(labels, ["Server", "STT", "Capture", "Audio", "Permissions", "Session"]);
+  assert.deepEqual(labels, ["Server", "STT", "Capture", "Audio", "Permissions", "Session", "Screen"]);
+});
+
+test("screen context card shows captured status", () => {
+  const cards = buildPanelStatusCards({
+    sttStatus: "configured",
+    sttEndpoint: "server",
+    systemAudioStatus: "available",
+    windowContextStatus: "available",
+    screenContext: {
+      kind: "captured",
+      label: "Screen context: captured 12s ago",
+      ageSeconds: 12,
+    },
+  });
+  const screen = cards.find((c) => c.key === "screen_context");
+  assert.match(screen?.status ?? "", /captured/i);
 });
 
 test("server card shows offline on network error", () => {

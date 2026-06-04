@@ -10,6 +10,8 @@ import {
   validateGlassDirectApiKey,
   type GlassDirectAskCaller,
 } from "./glassDirectAsk.js";
+import { promptRequestsGlassScreenVisual } from "./glassScreenVisualPrompt.js";
+import { runGlassVisualDirectAsk } from "./glassVisualDirectAsk.js";
 
 export {
   buildGlassDirectUserPrompt,
@@ -38,6 +40,9 @@ export async function handleGlassAsk(
   }
 
   try {
+    if (promptRequestsGlassScreenVisual(prompt)) {
+      return await runGlassVisualDirectAsk(body, signal);
+    }
     return await runGlassDirectAsk(body, signal, caller);
   } catch (err) {
     if (err instanceof ProviderError) {

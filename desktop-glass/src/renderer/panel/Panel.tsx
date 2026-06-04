@@ -575,6 +575,7 @@ function StatusGrid({ state }: { state: GlassState }): JSX.Element {
     systemAudioStatus: state.systemAudioStatus,
     windowContextStatus: state.windowContext.status,
     listening: state.privacy.listening,
+    screenContext: state.screenContextStatus,
   });
 
   return (

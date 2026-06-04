@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { send, useGlassState } from "../useGlassState.ts";
+import { ChromeRepositionOverlay } from "../ChromeRepositionOverlay.tsx";
+import { ensureCommandBarClickable, useChromeLockToggle } from "../useChromeLockToggle.ts";
+import { useChromeWindowDrag } from "../useChromeWindowDrag.ts";
 import { useTranscriptionContext } from "../TranscriptionProvider.tsx";
 import type { TranscriptionMode } from "../../shared/audioCaptureTypes.ts";
 
@@ -11,6 +14,7 @@ export function CommandBar(): JSX.Element {
   const state = useGlassState();
   const tx = useTranscriptionContext();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const dragSurfaceRef = useRef<HTMLDivElement | null>(null);
   const [text, setText] = useState("");
   const [showSources, setShowSources] = useState(false);
   const focusedRef = useRef(false);
@@ -101,14 +105,32 @@ export function CommandBar(): JSX.Element {
         ? "error"
         : "idle";
 
+  const chromeLocked = state.glassSettings.chromeLayoutLocked !== false;
+  const toggleChromeLock = useChromeLockToggle(chromeLocked);
+  useChromeWindowDrag(!chromeLocked, dragSurfaceRef);
+
+  useEffect(() => {
+    if (!chromeLocked) {
+      ensureCommandBarClickable();
+      return () => {
+        window.glass.setIgnoreMouse(true);
+      };
+    }
+  }, [chromeLocked]);
+
   return (
     <div className="command-root">
       <div
         data-testid="glass-command-bar"
-        className={`command-bar${listening ? " command-bar--listening" : ""}${askPending ? " command-bar--pending" : ""}`}
-        onMouseEnter={enterInteractive}
-        onMouseLeave={leaveInteractive}
+        className={`command-bar${listening ? " command-bar--listening" : ""}${askPending ? " command-bar--pending" : ""}${!chromeLocked ? " command-bar--unlocked" : ""}`}
+        onMouseEnter={chromeLocked ? enterInteractive : undefined}
+        onMouseLeave={chromeLocked ? leaveInteractive : undefined}
+        aria-label={
+          chromeLocked ? undefined : "Layout unlocked — hold and drag to move, then lock when done"
+        }
       >
+        {!chromeLocked ? <ChromeRepositionOverlay surfaceRef={dragSurfaceRef} /> : null}
+
         <div className="command-bar__row">
           <button
             type="button"
@@ -168,7 +190,26 @@ export function CommandBar(): JSX.Element {
               </>
             )}
           </button>
+
+          <button
+            type="button"
+            data-testid="glass-command-chrome-lock"
+            className={`command-chrome-lock${chromeLocked ? " command-chrome-lock--locked" : " command-chrome-lock--unlocked"}`}
+            title={chromeLocked ? "Unlock layout to move dock and bar" : "Lock layout in place"}
+            aria-label={chromeLocked ? "Unlock layout" : "Lock layout"}
+            onPointerDown={ensureCommandBarClickable}
+            onMouseEnter={ensureCommandBarClickable}
+            onClick={toggleChromeLock}
+          >
+            {chromeLocked ? "🔒" : "🔓"}
+          </button>
         </div>
+
+        {state.screenContextStatus && state.screenContextStatus.kind !== "none" ? (
+          <p className="command-bar__screen-context" data-testid="glass-command-screen-context">
+            {state.screenContextStatus.label}
+          </p>
+        ) : null}
 
         {(showSources || listening) && (
           <div className="command-bar__secondary">

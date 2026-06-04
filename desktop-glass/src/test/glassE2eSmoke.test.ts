@@ -102,6 +102,16 @@ test("main submitCommand success path does not auto-open browser", () => {
   assert.doesNotMatch(successBlock, /openHandoff|openExternal/);
 });
 
+test("submitCommand attaches latestScreenshot for visual screen prompts", () => {
+  const mainSource = readFileSync(join(root, "main/index.ts"), "utf8");
+  const start = mainSource.indexOf("async function submitCommand");
+  const end = mainSource.indexOf("\nasync function handleCommand", start);
+  const block = mainSource.slice(start, end);
+  assert.match(block, /buildLatestScreenshotAskPayload/);
+  assert.match(block, /latestScreenshot/);
+  assert.match(block, /promptRequestsGlassScreenVisual/);
+});
+
 test("COUNCIL_RESPONSE_MARKERS covers required phrases", () => {
   for (const phrase of ["Final Action Plan", "Decision Quality", "Sales Attack"]) {
     assert.match(phrase, COUNCIL_RESPONSE_MARKERS);

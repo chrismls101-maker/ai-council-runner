@@ -10,6 +10,7 @@ export interface StubServerHandle {
   port: number;
   close: () => Promise<void>;
   getAskCallCount: () => number;
+  getLastAskBody: () => Record<string, unknown> | null;
 }
 
 const STUB_ASK_RESPONSE = {
@@ -50,9 +51,11 @@ export async function startStubServer(
         askCallCount += 1;
         let prompt = "";
         try {
-          prompt = JSON.parse(bodyText).prompt ?? "";
+          const parsed = JSON.parse(bodyText) as Record<string, unknown>;
+          lastAskBody = parsed;
+          prompt = String(parsed.prompt ?? "");
         } catch {
-          /* ignore */
+          lastAskBody = null;
         }
         const responseDelay = prompt.includes("E2E_DELAY_ASK") ? Math.max(delayMs, 2500) : 0;
 
@@ -68,10 +71,16 @@ export async function startStubServer(
         res.end(
           JSON.stringify({
             id: "ctx-e2e-1",
-            type: "note",
+            type: "screenshot",
             title: "IIVO Glass E2E context",
           }),
         );
+        return;
+      }
+
+      if (req.method === "POST" && /^\/api\/context\/[^/]+\/screenshot$/.test(url)) {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: true }));
         return;
       }
 
@@ -96,6 +105,7 @@ export async function startStubServer(
         server.close((err) => (err ? reject(err) : resolve()));
       }),
     getAskCallCount: () => askCallCount,
+    getLastAskBody: () => lastAskBody,
   };
 }
 

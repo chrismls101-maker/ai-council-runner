@@ -6,6 +6,7 @@ import type { SystemAudioStatus } from "./systemAudioTypes.ts";
 import { systemAudioStatusMessage } from "./systemAudioTypes.ts";
 import type { SttProviderStatus } from "./sttTypes.ts";
 import type { WindowContextStatus } from "./windowContextTypes.ts";
+import type { GlassScreenContextStatus } from "./glassScreenContext.ts";
 
 export type PanelStatusLevel = "ok" | "warn" | "error" | "idle";
 
@@ -27,6 +28,7 @@ export interface PanelStatusGridInput {
   systemAudioStatus: SystemAudioStatus;
   windowContextStatus: WindowContextStatus;
   listening?: boolean;
+  screenContext?: GlassScreenContextStatus;
 }
 
 export function buildPanelStatusCards(input: PanelStatusGridInput): PanelStatusCard[] {
@@ -37,7 +39,32 @@ export function buildPanelStatusCards(input: PanelStatusGridInput): PanelStatusC
     buildAudioCard(input),
     buildPermissionsCard(input),
     buildSessionCard(input),
+    buildScreenContextCard(input),
   ];
+}
+
+function buildScreenContextCard(input: PanelStatusGridInput): PanelStatusCard {
+  const sc = input.screenContext;
+  if (!sc || sc.kind === "none") {
+    return { key: "screen_context", label: "Screen", level: "idle", status: "Screen context: none" };
+  }
+  const level: PanelStatusLevel =
+    sc.kind === "ready"
+      ? "ok"
+      : sc.kind === "captured"
+        ? "ok"
+        : sc.kind === "vision_not_configured"
+          ? "warn"
+          : sc.kind === "unavailable"
+            ? "warn"
+            : "idle";
+  return {
+    key: "screen_context",
+    label: "Screen",
+    level,
+    status: sc.label.replace(/^Screen context:\s*/i, ""),
+    detail: sc.detail,
+  };
 }
 
 function buildServerCard(input: PanelStatusGridInput): PanelStatusCard {

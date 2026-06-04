@@ -3,6 +3,7 @@ import type { GlassState } from "../shared/ipc.ts";
 import { emptyNotes } from "../shared/noteExtraction.ts";
 import { initialPrivacyState } from "../shared/privacyState.ts";
 import { DEFAULT_CONFIG } from "../shared/config.ts";
+import { DEFAULT_GLASS_USER_SETTINGS } from "../shared/glassSettings.ts";
 import { INITIAL_OPERATION_DIAGNOSTICS } from "../shared/glassOperations.ts";
 import { WINDOW_CONTEXT_UNAVAILABLE_MESSAGE } from "../shared/windowContextTypes.ts";
 
@@ -46,7 +47,9 @@ const fallbackState: GlassState = {
   operationDiagnostics: { ...INITIAL_OPERATION_DIAGNOSTICS },
   commandFeed: [],
   askStatus: "idle" as const,
-  glassSettings: { hotkeyPreset: "cmd-shift-space", displayTarget: "primary" },
+  latestScreenshot: null,
+  screenContextStatus: { kind: "none", label: "Screen context: none" },
+  glassSettings: { ...DEFAULT_GLASS_USER_SETTINGS },
   availableDisplayIds: [],
   connectedDisplays: [],
 };
