@@ -175,6 +175,18 @@ import {
   type GlassUserSettings,
 } from "../shared/glassSettings.ts";
 import { loadGlassUserSettings, persistGlassUserSettings } from "./glassSettingsPersistence.ts";
+import {
+  buildGlassSetupCapabilities,
+  formatSetupCheckSummary,
+  mapCaptureErrorToScreenCaptureStatus,
+  VIRTUAL_AUDIO_HELP_DETAIL,
+  type GlassCapabilityRow,
+  type GlassServerHealthForSetup,
+  type MicPermissionReport,
+  type ScreenCaptureProbeStatus,
+} from "../shared/glassCapabilities.ts";
+import { runGlassSetupCheck } from "./glassSetupCheck.ts";
+import { openGlassSystemSettings } from "./glassSystemSettings.ts";
 
 loadGlassEnv();
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
@@ -229,6 +241,12 @@ interface AppState {
   lastAskResponse?: GlassLastAskResponse;
   askInFlight: boolean;
   glassSettings: GlassUserSettings;
+  screenCaptureProbe: ScreenCaptureProbeStatus;
+  screenCaptureDetail?: string;
+  micPermission: MicPermissionReport;
+  serverHealthForSetup: GlassServerHealthForSetup | null;
+  setupCapabilities: GlassCapabilityRow[];
+  setupCheckSummary?: string;
 }
 
 let askAbortController: AbortController | null = null;
@@ -261,6 +279,10 @@ const state: AppState = {
   visualAskDiagnostics: null,
   ephemeralVisualCapture: null,
   glassSettings: { ...DEFAULT_GLASS_USER_SETTINGS },
+  screenCaptureProbe: "unknown",
+  micPermission: "not_requested",
+  serverHealthForSetup: null,
+  setupCapabilities: [],
 };
 
 let moments = new SavedMomentsStore();
@@ -269,6 +291,24 @@ let sessions = new GlassSessionStore();
 function sessionIsLive(): boolean {
   const s = sessions.current();
   return !!s && (s.status === "active" || s.status === "paused");
+}
+
+function refreshSetupCapabilities(): void {
+  state.setupCapabilities = buildGlassSetupCapabilities({
+    platform: process.platform,
+    screenCaptureProbe: state.screenCaptureProbe,
+    screenCaptureDetail: state.screenCaptureDetail,
+    captureStatus: state.operationDiagnostics.captureStatus,
+    micPermission: state.micPermission,
+    micListening: state.privacy.listening,
+    systemAudioStatus: state.systemAudioStatus,
+    systemAudioDetail: state.systemAudioDetail,
+    transcriptionMode: state.transcriptionMode,
+    serverHealth: state.serverHealthForSetup,
+    sttStatus: state.stt.status,
+    sttEnabled: state.stt.enabled,
+    lastError: state.lastError,
+  });
 }
 
 function snapshot(): GlassState {
@@ -312,6 +352,9 @@ function snapshot(): GlassState {
     glassSettings: state.glassSettings,
     availableDisplayIds: getAvailableDisplayIds(),
     connectedDisplays: getConnectedDisplays(),
+    setupCapabilities: state.setupCapabilities,
+    setupCheckSummary: state.setupCheckSummary,
+    micPermission: state.micPermission,
   };
 }
 
@@ -331,6 +374,7 @@ function eventContextFields(opts?: { sourceTitle?: string; captureSource?: strin
 }
 
 function push(): void {
+  refreshSetupCapabilities();
   broadcast(IPC.state, snapshot());
 }
 
@@ -471,6 +515,8 @@ async function handleCapture(): Promise<string | undefined> {
       sourceTitle: result.sourceName,
     });
     state.lastNotice = `${CAPTURE_SUCCESS_MESSAGE} (${result.displayLabel})`;
+    state.screenCaptureProbe = "ready";
+    state.screenCaptureDetail = undefined;
     state.operationDiagnostics = diagnosticsForCapture(
       state.operationDiagnostics,
       true,
@@ -478,14 +524,20 @@ async function handleCapture(): Promise<string | undefined> {
       result.displayLabel,
     );
     dispatchPrivacy({ type: "CAPTURE_DONE", at: new Date().toISOString() });
+    refreshSetupCapabilities();
     push();
     return result.imageDataUrl;
   } catch (err) {
     const message = captureErrorMessage(err);
     state.lastError = message;
-    state.lastNotice = undefined;
+    state.lastNotice = /permission|screen recording/i.test(message)
+      ? "Screen Recording permission needed. Open Settings, grant access to IIVO Glass, then Retry Capture."
+      : message;
+    state.screenCaptureProbe = mapCaptureErrorToScreenCaptureStatus(message);
+    state.screenCaptureDetail = message;
     state.operationDiagnostics = diagnosticsForCapture(state.operationDiagnostics, false, message);
     dispatchPrivacy({ type: "CAPTURE_DONE", at: new Date().toISOString() });
+    refreshSetupCapabilities();
     push();
     return undefined;
   }
@@ -901,11 +953,16 @@ async function submitCommand(rawText: string): Promise<void> {
       displayLabel: captureTarget.label,
       hasConnectedDisplays: getConnectedDisplays().length > 0,
       windowBoundsAvailable: !!getCachedWindowContext().windowBounds,
-      skipCaptureProbe: process.env.IIVO_GLASS_E2E === "1",
+      skipCaptureProbe:
+        process.env.IIVO_GLASS_E2E === "1" && process.env.IIVO_GLASS_E2E_CAPTURE_FAIL !== "1",
       signal,
     });
 
     if (!preflight.ok) {
+      if (preflight.code === "capture_permission") {
+        state.screenCaptureProbe = "permission_required";
+        state.screenCaptureDetail = preflight.message;
+      }
       state.askInFlight = false;
       state.askStatus = "error";
       state.visualAskPhase = "idle";
@@ -1644,6 +1701,96 @@ async function handleCommand(
       state.windowContext = await refreshWindowContext();
       push();
       return;
+    case "report-mic-permission":
+      state.micPermission = command.status;
+      refreshSetupCapabilities();
+      push();
+      return;
+    case "run-setup-check": {
+      const result = await runGlassSetupCheck({
+        config,
+        displayTarget: state.glassSettings.displayTarget,
+        skipCaptureProbe:
+          process.env.IIVO_GLASS_E2E === "1" && process.env.IIVO_GLASS_E2E_CAPTURE_FAIL !== "1",
+      });
+      state.serverHealthForSetup = result.serverHealth;
+      state.screenCaptureProbe = result.screenCaptureProbe;
+      state.screenCaptureDetail = result.screenCaptureDetail;
+      refreshSetupCapabilities();
+      state.setupCheckSummary = formatSetupCheckSummary(state.setupCapabilities);
+      state.lastNotice = state.setupCheckSummary;
+      push();
+      return;
+    }
+    case "open-screen-recording-settings": {
+      const opened = await openGlassSystemSettings("screenRecording");
+      state.lastNotice = opened.message;
+      push();
+      return;
+    }
+    case "open-microphone-settings": {
+      const opened = await openGlassSystemSettings("microphone");
+      state.lastNotice = opened.message;
+      push();
+      return;
+    }
+    case "open-privacy-settings": {
+      const opened = await openGlassSystemSettings("privacy");
+      state.lastNotice = opened.message;
+      push();
+      return;
+    }
+    case "open-audio-midi-setup": {
+      const opened = await openGlassSystemSettings("audioMidi");
+      state.lastNotice = opened.message;
+      push();
+      return;
+    }
+    case "show-virtual-audio-help":
+      state.lastNotice = VIRTUAL_AUDIO_HELP_DETAIL;
+      push();
+      return;
+    case "retry-capture-permission": {
+      const target = resolveCaptureDisplay(state.glassSettings.displayTarget);
+      const probe = await import("./capture.ts").then((m) =>
+        m.probeScreenCapturePermission(target.id),
+      );
+      if (probe.ok) {
+        state.screenCaptureProbe = "ready";
+        state.screenCaptureDetail = undefined;
+        state.lastNotice = "Screen capture permission looks good. Try Capture Screen or a visual ask.";
+      } else {
+        state.screenCaptureProbe = mapCaptureErrorToScreenCaptureStatus(probe.error);
+        state.screenCaptureDetail = probe.error;
+        state.lastNotice = "Screen Recording permission still needed.";
+      }
+      refreshSetupCapabilities();
+      push();
+      return;
+    }
+    case "test-microphone":
+      state.panelTab = "context";
+      if (!isPanelVisible()) togglePanel();
+      broadcastTranscriptionControl({ type: "probe-microphone" });
+      state.lastNotice = "Testing microphone — approve the macOS prompt if shown.";
+      push();
+      return;
+    case "test-system-audio":
+      state.transcriptionMode = "system_audio";
+      state.panelTab = "context";
+      if (!isPanelVisible()) togglePanel();
+      push();
+      broadcastTranscriptionControl({ type: "start" });
+      state.lastNotice =
+        "Testing system audio — choose the screen in the picker. Stop listening when finished.";
+      push();
+      return;
+    case "e2e-set-server-health":
+      if (process.env.IIVO_GLASS_E2E === "1") {
+        state.serverHealthForSetup = command.health;
+        push();
+      }
+      return;
     default:
       await handleSessionCommand(command);
       return;
@@ -2049,6 +2196,10 @@ function registerIpc(): void {
     ipcMain.handle(IPC.e2eGetCaptureTarget, () =>
       resolveCaptureDisplay(glassUserSettings.displayTarget),
     );
+    ipcMain.handle(IPC.e2eSimulateCaptureFail, () => {
+      process.env.IIVO_GLASS_E2E_CAPTURE_FAIL = "1";
+      return { ok: true };
+    });
   }
 }
 

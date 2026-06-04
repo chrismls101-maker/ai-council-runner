@@ -60,6 +60,9 @@ const glassApi = {
   getE2eCaptureTarget(): Promise<{ id: number; label: string }> {
     return ipcRenderer.invoke(IPC.e2eGetCaptureTarget) as Promise<{ id: number; label: string }>;
   },
+  simulateE2eCaptureFail(): Promise<{ ok: boolean }> {
+    return ipcRenderer.invoke(IPC.e2eSimulateCaptureFail) as Promise<{ ok: boolean }>;
+  },
 };
 
 export type GlassApi = typeof glassApi;

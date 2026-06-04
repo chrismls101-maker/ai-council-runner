@@ -13,6 +13,9 @@ import {
   usesSttChunkCapture,
 } from "../shared/transcriptionProviders.ts";
 import {
+  mapGetUserMediaErrorToMicPermission,
+} from "../shared/glassCapabilities.ts";
+import {
   mapSystemAudioCaptureError,
   mapSystemAudioStreamResult,
   stopMediaStreamState,
@@ -90,6 +93,7 @@ export interface TranscriptionController {
   stopListeningLocal: () => void;
   transcribeLastChunk: () => void;
   addChunkToSession: () => void;
+  probeMicrophone: () => Promise<void>;
 }
 
 export function useTranscription(): TranscriptionController {
@@ -298,7 +302,16 @@ export function useTranscription(): TranscriptionController {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStreamRef.current = stream;
       startChunkRecorder(stream, "microphone");
-    } catch {
+    } catch (err) {
+      const denied = mapGetUserMediaErrorToMicPermission(err);
+      if (denied === "denied") {
+        send({ type: "report-mic-permission", status: "denied" });
+        dispatch({
+          type: "SET_ERROR",
+          message: "Microphone permission denied. Open Microphone Settings, then retry.",
+        });
+        return;
+      }
       dispatch({
         type: "SET_ERROR",
         message: modeStatusMessage("microphone_media_recorder", snapshot),
@@ -409,6 +422,30 @@ export function useTranscription(): TranscriptionController {
     void processBlob(blob, lastMimeRef.current, chunkSourceRef.current);
   }, [processBlob]);
 
+  const probeMicrophone = useCallback(async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      send({ type: "report-mic-permission", status: "error" });
+      dispatch({ type: "SET_ERROR", message: "Microphone API is not available." });
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stopMediaStreamState(stream.getTracks());
+      send({ type: "report-mic-permission", status: "granted" });
+      dispatch({ type: "SET_ERROR", message: undefined });
+    } catch (err) {
+      const status = mapGetUserMediaErrorToMicPermission(err);
+      send({ type: "report-mic-permission", status });
+      dispatch({
+        type: "SET_ERROR",
+        message:
+          status === "denied"
+            ? "Microphone permission denied."
+            : "Could not access microphone.",
+      });
+    }
+  }, []);
+
   const addChunkToSession = useCallback(() => {
     const chunk = state.interimText?.trim();
     if (!chunk) return;
@@ -476,5 +513,6 @@ export function useTranscription(): TranscriptionController {
     stopListeningLocal,
     transcribeLastChunk,
     addChunkToSession,
+    probeMicrophone,
   };
 }

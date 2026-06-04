@@ -12,6 +12,8 @@ export function TranscriptionProvider({ children }: { children: ReactNode }): JS
         tx.startListening();
       } else if (command.type === "stop") {
         tx.stopListeningLocal();
+      } else if (command.type === "probe-microphone") {
+        void tx.probeMicrophone();
       }
     });
     return unsubscribe;

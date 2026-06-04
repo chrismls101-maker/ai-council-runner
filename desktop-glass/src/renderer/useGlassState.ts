@@ -52,6 +52,8 @@ const fallbackState: GlassState = {
   glassSettings: { ...DEFAULT_GLASS_USER_SETTINGS },
   availableDisplayIds: [],
   connectedDisplays: [],
+  setupCapabilities: [],
+  micPermission: "not_requested",
 };
 
 export function useGlassState(): GlassState {

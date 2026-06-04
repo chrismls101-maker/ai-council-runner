@@ -11,6 +11,11 @@ import {
   formatVisualAskDiagnosticsDetail,
   type VisualAskDiagnostics,
 } from "./visualAskDiagnostics.ts";
+import {
+  captureStatusFromSetup,
+  permissionsSummaryFromSetup,
+  type GlassCapabilityRow,
+} from "./glassCapabilities.ts";
 
 export type PanelStatusLevel = "ok" | "warn" | "error" | "idle";
 
@@ -32,9 +37,11 @@ export interface PanelStatusGridInput {
   systemAudioStatus: SystemAudioStatus;
   windowContextStatus: WindowContextStatus;
   listening?: boolean;
+  transcriptionMode?: string;
   screenContext?: GlassScreenContextStatus;
   visualAskPayload?: VisualAskPayloadDiagnostics | null;
   visualAskDiagnostics?: VisualAskDiagnostics | null;
+  setupCapabilities?: GlassCapabilityRow[];
 }
 
 export function buildPanelStatusCards(input: PanelStatusGridInput): PanelStatusCard[] {
@@ -95,6 +102,16 @@ function formatBytes(bytes: number): string {
 }
 
 function buildServerCard(input: PanelStatusGridInput): PanelStatusCard {
+  const row = input.setupCapabilities?.find((r) => r.id === "server");
+  if (row) {
+    return {
+      key: "server",
+      label: "Server",
+      level: row.severity,
+      status: row.label,
+      detail: row.detail,
+    };
+  }
   const err = input.lastError ?? "";
   if (/fetch|network|econnrefused|unavailable|failed to reach|cannot connect/i.test(err)) {
     return {
@@ -118,6 +135,16 @@ function buildServerCard(input: PanelStatusGridInput): PanelStatusCard {
 }
 
 function buildSttCard(input: PanelStatusGridInput): PanelStatusCard {
+  const row = input.setupCapabilities?.find((r) => r.id === "stt");
+  if (row && row.severity !== "ok") {
+    return {
+      key: "stt",
+      label: "STT",
+      level: row.severity,
+      status: row.label,
+      detail: row.detail,
+    };
+  }
   switch (input.sttStatus) {
     case "configured":
       return { key: "stt", label: "STT", level: "ok", status: "OpenAI ready" };
@@ -138,7 +165,9 @@ function buildCaptureCard(input: PanelStatusGridInput): PanelStatusCard {
   if (input.capturing) {
     return { key: "capture", label: "Capture", level: "warn", status: "Capturing" };
   }
-  const capture = input.captureStatus ?? "idle";
+  const setupCapture =
+    input.setupCapabilities?.length ? captureStatusFromSetup(input.setupCapabilities) : null;
+  const capture = setupCapture ?? input.captureStatus ?? "idle";
   if (capture === "failed") {
     return { key: "capture", label: "Capture", level: "error", status: "Error" };
   }
@@ -196,6 +225,15 @@ function buildAudioCard(input: PanelStatusGridInput): PanelStatusCard {
 }
 
 function buildPermissionsCard(input: PanelStatusGridInput): PanelStatusCard {
+  if (input.setupCapabilities?.length) {
+    const summary = permissionsSummaryFromSetup(input.setupCapabilities);
+    return {
+      key: "permissions",
+      label: "Permissions",
+      level: summary.level,
+      status: summary.status,
+    };
+  }
   const needed: string[] = [];
   if (input.windowContextStatus === "permission_required") {
     needed.push("Accessibility");

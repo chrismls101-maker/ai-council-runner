@@ -79,8 +79,15 @@ export async function captureDisplayById(
 export async function probeScreenCapturePermission(
   displayId: number,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (process.env.IIVO_GLASS_E2E === "1") {
+  if (process.env.IIVO_GLASS_E2E === "1" && process.env.IIVO_GLASS_E2E_CAPTURE_FAIL !== "1") {
     return { ok: true };
+  }
+  if (process.env.IIVO_GLASS_E2E_CAPTURE_FAIL === "1") {
+    return {
+      ok: false,
+      error:
+        "Screen capture returned an empty image. On macOS, grant Screen Recording permission to IIVO Glass.",
+    };
   }
 
   const display =

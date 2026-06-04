@@ -16,6 +16,12 @@ export interface GlassServerHealthSnapshot {
     configured: boolean;
     reason?: string;
   };
+  stt?: {
+    configured: boolean;
+    enabled?: boolean;
+    reason?: string;
+    endpoint?: string;
+  };
   missingKeys?: string[];
 }
 

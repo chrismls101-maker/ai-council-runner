@@ -30,6 +30,7 @@ import {
 import { useTranscriptionContext } from "../TranscriptionProvider.tsx";
 import { IivoAnalysisPanel } from "../components/IivoAnalysisPanel.tsx";
 import { ListeningControls, OperationDiagnosticsFooter } from "../components/ListeningControls.tsx";
+import { SetupSection } from "./SetupSection.tsx";
 
 const TABS: { id: PanelTab; label: string }[] = [
   { id: "summary", label: "Summary" },
@@ -578,10 +579,13 @@ function StatusGrid({ state }: { state: GlassState }): JSX.Element {
     screenContext: state.screenContextStatus,
     visualAskPayload: state.visualAskPayloadDiagnostics,
     visualAskDiagnostics: state.visualAskDiagnostics,
+    setupCapabilities: state.setupCapabilities,
+    transcriptionMode: state.transcriptionMode,
   });
 
   return (
     <div className="status-grid" data-testid="glass-panel-status-grid">
+      <SetupSection />
       <p className="section-title">System status</p>
       {state.lastAskResponse ? (
         <div className="summary-box panel__last-ask">

@@ -21,17 +21,31 @@ This document separates **fixed automated coverage** from **environment / manual
 
 ## Manual / human QA only
 
-These require real OS permissions, hardware, or subjective verification — **not code limitations**:
+These require real OS permissions, hardware, or subjective verification — **not product bugs**:
 
 | Area | Why manual |
 |------|------------|
-| **macOS Screen Recording** | Permission prompt and capture quality cannot be faked in E2E. |
-| **Microphone permission** | Real mic access and OS prompts. |
-| **System audio loopback** | Virtual device setup and OS-specific audio routing. |
+| **macOS Screen Recording** | Required for visual ask and Capture. Glass uses a lightweight probe and opens System Settings when permission is missing; macOS may require quitting and reopening Glass after you grant access. |
+| **Microphone permission** | Requested **only** when you choose Microphone and start listening — never on launch. |
+| **System audio loopback** | Glass tries native loopback first. If no audio track is returned, the panel explains virtual audio routing (BlackHole, Loopback, etc.) — guidance appears only after that path fails. |
+| **OpenAI vision / STT** | Server-side config and billing (`OPENAI_API_KEY`, `IMAGE_VISION_ENABLED`, STT provider). The renderer never sees API key values; Setup shows Online/Ready/Disabled/Missing config from `/api/health`. |
 | **Real browser handoff (optional)** | E2E records handoff URLs and verifies the stub IIVO web URL loads; set `IIVO_GLASS_E2E_REAL_HANDOFF=1` to use the real system browser. Production uses `openGlassHandoffUrl` with clipboard fallback on failure. |
 | **Click-through feel** | OS-level pointer pass-through and visual polish on your desktop/TV. |
-| **Live OpenAI STT** | Requires API keys and live transcription. |
+| **Live OpenAI STT** | Requires API keys and live transcription for server STT; Web Speech may work without server STT when configured locally. |
 | **Multi-monitor visual verification** | Automated tests assert bounds/metadata; human confirms TV/HDMI placement feels correct. |
+
+### Permission & setup panel (v1)
+
+The Glass panel includes a **Setup** section with green/yellow/red status rows:
+
+- **Screen Recording** — probe on Run Setup Check or visual ask preflight; **Open Screen Recording Settings** when needed.
+- **Microphone** — **Not requested** until you start listening with Microphone; **Test Mic** runs the normal macOS prompt.
+- **System Audio** — native loopback test on user action; virtual-device help only if no track is returned.
+- **Vision / STT / Server** — derived from IIVO server health (no secrets exposed).
+
+**Run Setup Check** refreshes server/vision/STT and screen-recording probe without requesting microphone or system audio.
+
+Glass does **not** bypass macOS security, auto-capture on launch, or enable recording without explicit user action.
 
 ## Commands
 
@@ -61,3 +75,36 @@ See also `GLASS_QA.md` for the full manual checklist.
 | **Periodic Live Vision** | **Not implemented (by design).** Deferred for privacy, API cost, and performance. A future mode must include a clear ON indicator, stop control, capture frequency setting, and the same retention policy as manual capture. |
 
 Run `npm run glass:qa:manual-report` before manual QA for server/vision/STT status and a short step list.
+
+## User setup instructions (permissions & server)
+
+### Screen Recording (visual ask / Capture)
+
+1. Open Glass panel → **Setup** → **Screen Recording** (or trigger a visual ask).
+2. If status is **Permission needed**, click **Open Screen Recording Settings**.
+3. Enable **IIVO Glass** (or your dev Electron app name) under Privacy & Security → Screen Recording.
+4. If capture still fails, **quit and reopen IIVO Glass** (macOS often requires a restart).
+5. Click **Retry Capture** or **Run Setup Check** to verify.
+
+### Microphone (listening / STT)
+
+1. Use the command bar voice control → **Microphone** → **Start** (Glass does not ask on launch).
+2. Allow the macOS microphone prompt when it appears.
+3. If denied: **Open Microphone Settings** from Setup, enable Glass, then **Test Mic** or start listening again.
+4. **Stop Everything** stops active microphone tracks.
+
+### System audio
+
+1. Choose **System Audio** and start listening (user-initiated).
+2. If **System audio ready** appears, native loopback worked.
+3. If **Virtual device required** appears, install/route via BlackHole or Loopback, open **Audio MIDI Setup** if offered, and select the virtual device as the capture source.
+4. Virtual-device guidance is shown only when the native path fails.
+
+### Vision & STT (IIVO server)
+
+1. Run IIVO server: `npm run dev` from repo root.
+2. Set `OPENAI_API_KEY` in server `.env` (never pasted into Glass UI).
+3. Vision: `IMAGE_VISION_ENABLED=true` and vision model env as documented for IIVO.
+4. STT: configure server STT provider; Setup → **STT** should show **Ready** when `/api/health` reports configured.
+5. **Run Setup Check** in the panel to refresh **Server**, **Vision**, and **STT** rows.
+6. If vision is disabled, visual ask shows an honest message — not a fake screen description.

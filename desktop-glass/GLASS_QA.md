@@ -11,8 +11,21 @@ first** — it never captures or sends anything without an explicit click.
 2. Install Glass deps once (from repo root): `npm run glass:install`
 3. Start Glass (from repo root): `npm run glass:dev`
    - Optional config: `IIVO_WEB_URL` and `IIVO_API_URL` env vars.
-3. macOS only: grant **Screen Recording** permission to the Glass app
-   (System Settings → Privacy & Security → Screen Recording) for screen capture.
+3. macOS only: Screen Recording and Microphone are **OS requirements**, not Glass bugs.
+   Use the panel **Setup** section and **Run Setup Check** — see `GLASS_LIMITATIONS.md`
+   for step-by-step grant instructions. Microphone is requested only when you start
+   listening with Microphone; system audio may need a virtual device only if native
+   loopback fails.
+
+## Setup & permissions (panel)
+
+1. Open the panel (dock → **Open Panel**).
+2. Confirm the **Setup** section lists Screen Recording, Microphone, System Audio, Vision, STT.
+3. Click **Run Setup Check** — server/vision/STT and screen probe update; mic stays **Not requested** until you test or listen.
+4. **Screen Recording**: if needed, use **Open Screen Recording Settings**, grant access, restart Glass if macOS requires it, then **Retry Capture**.
+5. **Microphone**: command bar → Microphone → Start (or Setup → **Test Mic**); use **Open Microphone Settings** if denied.
+6. **System Audio**: start from command bar; follow virtual-device guidance only if shown.
+7. **Vision/STT**: with `npm run dev` and server env configured, rows should show **Ready**; keys are never shown in Glass.
 
 ## Checklist
 
@@ -95,7 +108,11 @@ See `desktop-glass/GLASS_LIMITATIONS.md` for what E2E covers vs manual QA.
 - Command bar ask → thinking card → inline response card
 - No browser auto-open on normal direct ask
 - Cancel pending ask
-- Panel open + status grid
+- Panel open + status grid + **Setup** section
+- Launch does not request microphone (`micPermission: not_requested`)
+- Simulated mic denied + virtual audio setup rows
+- Simulated capture permission failure → Open Screen Recording Settings action
+- Stub vision disabled → Vision **Disabled** in Setup
 - Stop Everything clears listening state
 - Open in IIVO only on user click (URL captured, not launched)
 - Window layout bounds (overlay = display bounds, command bar bottom-centered)

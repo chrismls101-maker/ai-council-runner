@@ -148,7 +148,11 @@ app.get("/api/health", (_req, res) => {
     missingKeys: missing,
     stt: {
       configured: !!getOpenAiKey(),
+      enabled: !!getOpenAiKey(),
       endpoint: "/api/transcribe-audio",
+      reason: getOpenAiKey()
+        ? undefined
+        : "OpenAI API key not configured on server (OPENAI_API_KEY).",
     },
     vision: {
       enabled: vision.enabled,
