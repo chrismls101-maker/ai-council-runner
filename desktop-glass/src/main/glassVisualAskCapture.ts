@@ -18,6 +18,8 @@ import type { CaptureResult } from "./capture.ts";
 import { captureDisplayById } from "./capture.ts";
 import { captureErrorMessage } from "../shared/glassOperations.ts";
 import { readScreenshotDataUrl, saveSessionScreenshot } from "./sessionScreenshots.ts";
+import { shouldPersistVisualAskToSession } from "../shared/glassScreenshotRetention.ts";
+import type { GlassUserSettings } from "../shared/glassSettings.ts";
 import type { GlassSessionStore } from "../shared/sessionStore.ts";
 
 export const GLASS_VISUAL_CAPTURE_PERMISSION_MESSAGE =
@@ -32,11 +34,13 @@ export type VisualAskCaptureOutcome =
       eventId?: string;
       latestState: GlassLatestScreenshotState;
       imageDataUrl: string;
+      savedToSession: boolean;
     }
   | { ok: false; error: string; permissionHint?: boolean };
 
 export type VisualAskCaptureDeps = {
   config: GlassConfig;
+  glassSettings: GlassUserSettings;
   sessions: GlassSessionStore;
   sessionIsLive: () => boolean;
   latestScreenshot: GlassLatestScreenshotState | null | undefined;
@@ -73,7 +77,7 @@ async function persistSessionCapture(
   event.thumbnailPath = refs.thumbnailPath;
   event.screenshotMimeType = refs.screenshotMimeType;
   event.screenshotSizeBytes = refs.screenshotSizeBytes;
-  event.screenshotDataUrl = result.imageDataUrl;
+  // Keep pixels on disk only; never rely on screenshotDataUrl in persisted JSON.
   return event.id;
 }
 
@@ -175,7 +179,8 @@ export async function resolveScreenshotForVisualAsk(
   try {
     const result = await captureDisplayById(target.id, target.label);
     const session = deps.sessions.current();
-    const eventId = await persistSessionCapture(deps, result);
+    const saveToSession = shouldPersistVisualAskToSession(deps.glassSettings, deps.sessionIsLive());
+    const eventId = saveToSession ? await persistSessionCapture(deps, result) : undefined;
 
     const latestState = createLatestScreenshotState({
       displayLabel: result.displayLabel,
@@ -183,7 +188,7 @@ export async function resolveScreenshotForVisualAsk(
       sourceTitle: result.sourceName,
       sessionId: session?.id,
       eventId,
-      contextUploadStatus: "pending",
+      contextUploadStatus: "none",
     });
 
     const payload = buildPayloadFromCapture(result, session?.id, eventId);
@@ -194,6 +199,7 @@ export async function resolveScreenshotForVisualAsk(
       eventId,
       latestState,
       imageDataUrl: result.imageDataUrl,
+      savedToSession: saveToSession && !!eventId,
     };
   } catch (err) {
     const message = captureErrorMessage(err);
@@ -220,6 +226,7 @@ export async function resolveScreenshotForVisualAsk(
         eventId: fallback.payload.eventId,
         latestState,
         imageDataUrl: fallback.payload.imageDataUrl ?? "",
+        savedToSession: !!fallback.payload.eventId && !!fallback.payload.sessionId,
       };
     }
     return {

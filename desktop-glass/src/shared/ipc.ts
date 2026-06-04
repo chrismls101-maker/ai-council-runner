@@ -20,6 +20,7 @@ import type { GlassOperationDiagnostics } from "./glassOperations.ts";
 import type { GlassCommandFeedItem } from "./commandFeed.ts";
 import type { GlassAskStatus, GlassLastAskResponse } from "./glassAskTypes.ts";
 import type { GlassLatestScreenshotState, GlassScreenContextStatus } from "./glassScreenContext.ts";
+import type { GlassVisualAskRetention } from "./glassScreenshotRetention.ts";
 import type { GlassUserSettings } from "./glassSettings.ts";
 import type { ConnectedDisplaySnapshot } from "./displayInfo.ts";
 
@@ -95,6 +96,9 @@ export type GlassCommand =
   | { type: "set-chrome-layout-locked"; locked: boolean }
   | { type: "chrome-window-drag"; dx: number; dy: number }
   | { type: "set-dock-orientation"; orientation: GlassUserSettings["dockOrientation"] }
+  | { type: "set-save-visual-asks-to-session"; enabled: boolean }
+  | { type: "set-auto-upload-captures-to-context"; enabled: boolean }
+  | { type: "save-last-visual-capture" }
   | { type: "reset-chrome-layout" }
   | { type: "open-feed-in-iivo"; id: string }
   | { type: "save-feed-moment"; id: string }
@@ -156,6 +160,7 @@ export interface GlassState {
   lastAskResponse?: GlassLastAskResponse;
   latestScreenshot?: GlassLatestScreenshotState | null;
   screenContextStatus?: GlassScreenContextStatus;
+  visualAskRetention?: GlassVisualAskRetention | null;
   glassSettings: GlassUserSettings;
   availableDisplayIds: number[];
   connectedDisplays: ConnectedDisplaySnapshot[];

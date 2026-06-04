@@ -136,6 +136,13 @@ import {
 } from "../shared/commandFeed.ts";
 import { askIivoGlass, GlassAskCancelledError } from "./glassAskClient.ts";
 import { uploadGlassScreenshotContext } from "./glassLatestScreenshot.ts";
+import {
+  buildVisualAskRetentionStatus,
+  shouldAutoUploadCapturesToContext,
+  shouldDiscardEphemeralAfterAsk,
+  type EphemeralVisualCapture,
+  type GlassVisualAskRetention,
+} from "../shared/glassScreenshotRetention.ts";
 import { createLatestScreenshotState } from "../shared/glassLatestScreenshotAsk.ts";
 import type { GlassAskSessionPayload, GlassAskStatus, GlassLastAskResponse } from "../shared/glassAskTypes.ts";
 import {
@@ -186,6 +193,8 @@ interface AppState {
   pendingCaptureDataUrl?: string;
   latestScreenshot?: GlassLatestScreenshotState | null;
   visualAskPhase: GlassScreenContextPhase;
+  visualAskRetention: GlassVisualAskRetention | null;
+  ephemeralVisualCapture: EphemeralVisualCapture | null;
   sessionActionStatus: SessionActionStatus;
   transcriptionMode: TranscriptionMode;
   systemAudioStatus: SystemAudioStatus;
@@ -225,6 +234,8 @@ const state: AppState = {
   askInFlight: false,
   latestScreenshot: null,
   visualAskPhase: "idle",
+  visualAskRetention: null,
+  ephemeralVisualCapture: null,
   glassSettings: { ...DEFAULT_GLASS_USER_SETTINGS },
 };
 
@@ -271,6 +282,7 @@ function snapshot(): GlassState {
     screenContextStatus: buildGlassScreenContextStatus(state.latestScreenshot, {
       phase: state.visualAskPhase,
     }),
+    visualAskRetention: state.visualAskRetention,
     glassSettings: state.glassSettings,
     availableDisplayIds: getAvailableDisplayIds(),
     connectedDisplays: getConnectedDisplays(),
@@ -319,11 +331,17 @@ async function registerLatestGlassCapture(input: {
 }): Promise<void> {
   state.latestScreenshot = createLatestScreenshotState({
     ...input,
-    contextUploadStatus: "pending",
+    contextUploadStatus: "none",
   });
   push();
 
+  if (!shouldAutoUploadCapturesToContext(state.glassSettings)) {
+    return;
+  }
+
   const title = `IIVO Glass capture ${new Date().toLocaleString()}${input.displayLabel ? ` · ${input.displayLabel}` : ""}`;
+  state.latestScreenshot.contextUploadStatus = "pending";
+  push();
   const contextId = await uploadGlassScreenshotContext(config, input.imageDataUrl, title);
   if (state.latestScreenshot) {
     if (contextId) {
@@ -334,6 +352,75 @@ async function registerLatestGlassCapture(input: {
     }
     push();
   }
+}
+
+async function uploadEphemeralVisualToContext(
+  capture: EphemeralVisualCapture,
+  title: string,
+): Promise<string | undefined> {
+  return uploadGlassScreenshotContext(config, capture.imageDataUrl, title);
+}
+
+function setEphemeralVisualCapture(input: {
+  imageDataUrl: string;
+  displayLabel?: string;
+  displayId?: number;
+  sourceTitle?: string;
+  sessionId?: string;
+  eventId?: string;
+}): void {
+  state.ephemeralVisualCapture = {
+    imageDataUrl: input.imageDataUrl,
+    capturedAt: new Date().toISOString(),
+    displayLabel: input.displayLabel,
+    displayId: input.displayId,
+    sourceTitle: input.sourceTitle,
+    sessionId: input.sessionId,
+    eventId: input.eventId,
+  };
+}
+
+function clearEphemeralVisualCapture(): void {
+  state.ephemeralVisualCapture = null;
+}
+
+async function persistEphemeralVisualToSession(): Promise<boolean> {
+  const ephemeral = state.ephemeralVisualCapture;
+  if (!ephemeral || !sessionIsLive()) return false;
+  const session = sessions.current();
+  if (!session) return false;
+
+  const ctxFields = eventContextFields({ sourceTitle: ephemeral.sourceTitle });
+  const event = sessions.addEvent({
+    kind: "screen_capture",
+    title: `Screen capture · ${ephemeral.displayLabel ?? "Display"}`,
+    sourceApp: ctxFields.sourceApp,
+    sourceTitle: ctxFields.sourceTitle ?? ephemeral.sourceTitle,
+    importance: "medium",
+    metadata: { ...ctxFields.metadata, source: "visual_ask_save" },
+  });
+  if (!event) return false;
+
+  const refs = await saveSessionScreenshot(session.id, event.id, ephemeral.imageDataUrl);
+  event.screenshotPath = refs.screenshotPath;
+  event.thumbnailPath = refs.thumbnailPath;
+  event.screenshotMimeType = refs.screenshotMimeType;
+  event.screenshotSizeBytes = refs.screenshotSizeBytes;
+
+  state.latestScreenshot = createLatestScreenshotState({
+    displayLabel: ephemeral.displayLabel ?? "Display",
+    displayId: ephemeral.displayId ?? 0,
+    sourceTitle: ephemeral.sourceTitle,
+    sessionId: session.id,
+    eventId: event.id,
+    screenshotPath: refs.screenshotPath,
+    thumbnailPath: refs.thumbnailPath,
+    mimeType: refs.screenshotMimeType,
+    contextUploadStatus: state.latestScreenshot?.contextUploadStatus ?? "none",
+  });
+  clearEphemeralVisualCapture();
+  await persistSessions(sessions);
+  return true;
 }
 
 async function handleCapture(): Promise<string | undefined> {
@@ -494,8 +581,27 @@ async function openFeedInIivo(feedId: string): Promise<void> {
   const answer = item.fullBody ?? (item.kind === "response" ? item.body : undefined);
   const session = sessions.current();
   const summary = session ? buildSessionSummary(session) : undefined;
-  const screenshotContextId =
+
+  let screenshotContextId =
     item.contextId ?? state.lastAskResponse?.contextId ?? state.latestScreenshot?.contextId;
+
+  const ephemeral = state.ephemeralVisualCapture;
+  if (!screenshotContextId && ephemeral?.imageDataUrl) {
+    const title = `IIVO Glass · ${question.length > 60 ? `${question.slice(0, 59)}…` : question}`;
+    screenshotContextId = await uploadEphemeralVisualToContext(ephemeral, title);
+    if (screenshotContextId && state.latestScreenshot) {
+      state.latestScreenshot.contextId = screenshotContextId;
+      state.latestScreenshot.contextUploadStatus = "ready";
+    }
+    if (state.visualAskRetention?.usedForAnswer) {
+      state.visualAskRetention = buildVisualAskRetentionStatus({
+        usedForAnswer: true,
+        savedToSession: state.visualAskRetention.savedToSession,
+        uploadedToContext: !!screenshotContextId,
+      });
+    }
+  }
+
   const parts = [`Question:\n${question}`];
   if (answer) parts.push(`Answer:\n${answer}`);
   if (summary?.trim()) parts.push(`Session context:\n${summary.trim()}`);
@@ -513,7 +619,9 @@ async function openFeedInIivo(feedId: string): Promise<void> {
   });
   const created = await createContextItem(config, payload);
   await openHandoff(created.id);
-  state.lastNotice = "Opened in IIVO with this answer attached.";
+  state.lastNotice = screenshotContextId
+    ? "Opened in IIVO with answer and screen context."
+    : "Opened in IIVO with this answer attached.";
   push();
 }
 
@@ -521,20 +629,6 @@ function removeThinkingFeedItems(): void {
   state.commandFeed = state.commandFeed.filter(
     (item) => item.kind !== "thinking" && item.kind !== "looking",
   );
-}
-
-function beginVisualContextUpload(imageDataUrl: string, displayLabel: string): void {
-  const title = `IIVO Glass visual ask ${new Date().toLocaleString()} · ${displayLabel}`;
-  void uploadGlassScreenshotContext(config, imageDataUrl, title).then((contextId) => {
-    if (!state.latestScreenshot) return;
-    if (contextId) {
-      state.latestScreenshot.contextId = contextId;
-      state.latestScreenshot.contextUploadStatus = "ready";
-    } else {
-      state.latestScreenshot.contextUploadStatus = "failed";
-    }
-    push();
-  });
 }
 
 function cancelGlassAsk(): void {
@@ -563,8 +657,24 @@ async function saveFeedMoment(feedId: string): Promise<void> {
     sessions.addEvent({ kind: "saved_moment", title: note.slice(0, 80) });
     await persistSessions(sessions);
   }
+
+  let savedScreen = false;
+  if (state.ephemeralVisualCapture && sessionIsLive()) {
+    savedScreen = await persistEphemeralVisualToSession();
+  }
+
+  if (state.visualAskRetention?.usedForAnswer) {
+    state.visualAskRetention = buildVisualAskRetentionStatus({
+      usedForAnswer: true,
+      savedToSession: savedScreen || state.visualAskRetention.savedToSession,
+      uploadedToContext: state.visualAskRetention.uploadedToContext,
+    });
+  }
+
   pushFeed(createCommandFeedItem("moment", "Saved as a moment."));
-  state.lastNotice = "Saved moment from IIVO answer.";
+  state.lastNotice = savedScreen
+    ? "Saved answer and screen capture to session."
+    : "Saved moment from IIVO answer.";
   push();
 }
 
@@ -604,6 +714,7 @@ async function submitCommand(rawText: string): Promise<void> {
   let latestScreenshot: import("../shared/glassScreenContext.ts").GlassAskLatestScreenshot | undefined;
   let visualCaptureWarning: string | undefined;
   let usedVision = false;
+  let visualSavedToSession = false;
 
   if (visualIntent) {
     state.visualAskPhase = "looking";
@@ -616,6 +727,7 @@ async function submitCommand(rawText: string): Promise<void> {
 
     const captureOutcome = await resolveScreenshotForVisualAsk({
       config,
+      glassSettings: state.glassSettings,
       sessions,
       sessionIsLive,
       latestScreenshot: state.latestScreenshot,
@@ -645,19 +757,25 @@ async function submitCommand(rawText: string): Promise<void> {
     }
 
     state.latestScreenshot = captureOutcome.latestState;
-    state.pendingCaptureDataUrl = captureOutcome.imageDataUrl || state.pendingCaptureDataUrl;
-    if (captureOutcome.fresh && captureOutcome.imageDataUrl) {
-      beginVisualContextUpload(
-        captureOutcome.imageDataUrl,
-        captureOutcome.latestState.displayLabel ?? "Display",
-      );
-    }
     latestScreenshot = captureOutcome.payload;
     visualCaptureWarning = captureOutcome.warning;
     usedVision = true;
 
-    if (live && sessionIsLive()) {
-      await persistSessions(sessions);
+    visualSavedToSession = captureOutcome.savedToSession;
+    if (captureOutcome.savedToSession) {
+      state.pendingCaptureDataUrl = captureOutcome.imageDataUrl;
+      if (live && sessionIsLive()) {
+        await persistSessions(sessions);
+      }
+    } else {
+      setEphemeralVisualCapture({
+        imageDataUrl: captureOutcome.imageDataUrl,
+        displayLabel: captureOutcome.latestState.displayLabel,
+        displayId: captureOutcome.latestState.displayId,
+        sourceTitle: captureOutcome.latestState.sourceTitle,
+        sessionId: captureOutcome.latestState.sessionId,
+        eventId: captureOutcome.eventId,
+      });
     }
   }
 
@@ -719,8 +837,22 @@ async function submitCommand(rawText: string): Promise<void> {
         contextId: result.contextId,
       }),
     );
+    if (visualIntent && usedVision) {
+      state.visualAskRetention = buildVisualAskRetentionStatus({
+        usedForAnswer: true,
+        savedToSession: visualSavedToSession,
+        uploadedToContext: false,
+      });
+
+      if (shouldDiscardEphemeralAfterAsk(state.glassSettings, !!live, visualSavedToSession)) {
+        state.pendingCaptureDataUrl = undefined;
+      }
+    }
+
     if (responseWarnings.length) {
       state.lastNotice = responseWarnings[0];
+    } else if (state.visualAskRetention?.detail) {
+      state.lastNotice = `${state.visualAskRetention.label} · ${state.visualAskRetention.detail}`;
     }
 
     if (live && session) {
@@ -743,15 +875,18 @@ async function submitCommand(rawText: string): Promise<void> {
           ...(latestScreenshot?.displayId != null
             ? { displayId: latestScreenshot.displayId }
             : {}),
-          ...(result.contextId ? { screenshotContextId: result.contextId } : {}),
         },
       });
       await persistSessions(sessions);
     }
 
-    state.lastNotice = live
-      ? "IIVO answered inline. Saved to session."
-      : result.warnings?.[0] ?? "IIVO answered inline. Start a session to save this context.";
+    if (!state.lastNotice || state.lastNotice.startsWith("IIVO answered")) {
+      state.lastNotice = live
+        ? "IIVO answered inline. Saved to session."
+        : visualIntent && state.visualAskRetention
+          ? `${state.visualAskRetention.label} · ${state.visualAskRetention.detail ?? "Not saved"}`
+          : "IIVO answered inline. Start a session to save this context.";
+    }
     state.operationDiagnostics = recordOperation(state.operationDiagnostics, "ask-iivo", "ok");
   } catch (err) {
     if (requestGeneration !== askRequestGeneration || signal.aborted || err instanceof GlassAskCancelledError) {
@@ -964,6 +1099,46 @@ async function handleCommand(
       push();
       return;
     }
+    case "set-save-visual-asks-to-session":
+      state.glassSettings = {
+        ...state.glassSettings,
+        saveVisualAsksToSession: command.enabled,
+      };
+      glassUserSettings = state.glassSettings;
+      await persistGlassUserSettings(glassUserSettings);
+      push();
+      return;
+    case "set-auto-upload-captures-to-context":
+      state.glassSettings = {
+        ...state.glassSettings,
+        autoUploadCapturesToContext: command.enabled,
+      };
+      glassUserSettings = state.glassSettings;
+      await persistGlassUserSettings(glassUserSettings);
+      push();
+      return;
+    case "save-last-visual-capture": {
+      if (!sessionIsLive()) {
+        state.lastNotice = "Start a session to save the screen capture.";
+        push();
+        break;
+      }
+      const saved = await persistEphemeralVisualToSession();
+      if (saved && state.visualAskRetention?.usedForAnswer) {
+        state.visualAskRetention = buildVisualAskRetentionStatus({
+          usedForAnswer: true,
+          savedToSession: true,
+          uploadedToContext: state.visualAskRetention.uploadedToContext,
+        });
+        state.lastNotice = "Screen capture saved to session.";
+      } else if (!state.ephemeralVisualCapture) {
+        state.lastNotice = "No recent screen capture to save.";
+      } else {
+        state.lastNotice = "Could not save screen capture.";
+      }
+      push();
+      return;
+    }
     case "refresh-glass-layout":
       refreshGlassDisplayLayout();
       push();
@@ -1094,6 +1269,8 @@ async function handleSessionCommand(command: GlassCommand): Promise<void> {
       sessions.clearSession();
       state.latestScreenshot = null;
       state.pendingCaptureDataUrl = undefined;
+      clearEphemeralVisualCapture();
+      state.visualAskRetention = null;
       break;
     }
     case "session-add-note": {
@@ -1150,7 +1327,6 @@ async function handleSessionCommand(command: GlassCommand): Promise<void> {
           event.thumbnailPath = refs.thumbnailPath;
           event.screenshotMimeType = refs.screenshotMimeType;
           event.screenshotSizeBytes = refs.screenshotSizeBytes;
-          event.screenshotDataUrl = result.imageDataUrl;
           state.pendingCaptureDataUrl = result.imageDataUrl;
           await registerLatestGlassCapture({
             imageDataUrl: result.imageDataUrl,

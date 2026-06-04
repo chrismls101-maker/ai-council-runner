@@ -291,6 +291,18 @@ async function copyFeedText(text: string): Promise<void> {
   }
 }
 
+function VisualAskRetentionHint(): JSX.Element | null {
+  const state = useGlassState();
+  const retention = state.visualAskRetention;
+  if (!retention?.usedForAnswer) return null;
+  return (
+    <p className="overlay-feed-card__retention" data-testid="glass-visual-ask-retention">
+      {retention.label}
+      {retention.detail ? ` · ${retention.detail}` : ""}
+    </p>
+  );
+}
+
 function FeedCard({
   item,
   enterInteractive,
@@ -300,6 +312,7 @@ function FeedCard({
   enterInteractive: () => void;
   leaveInteractive: () => void;
 }): JSX.Element {
+  const state = useGlassState();
   const [expanded, setExpanded] = useState(false);
   const isLooking = item.kind === "looking";
   const isThinking = item.kind === "thinking";
@@ -329,6 +342,7 @@ function FeedCard({
       <div className="overlay-feed-card__body-wrap">
         <p className="overlay-feed-card__body">{displayBody}</p>
       </div>
+      {isResponse ? <VisualAskRetentionHint /> : null}
       {!isThinking && !isLooking ? (
         <div className="overlay-feed-card__actions">
           {(isResponse || isError) && item.body ? (
@@ -348,6 +362,16 @@ function FeedCard({
               <button type="button" className="gbtn gbtn--ghost" onClick={() => send({ type: "save-feed-moment", id: item.id })}>
                 Save Moment
               </button>
+              {state.visualAskRetention?.kind === "not_saved" && state.session ? (
+                <button
+                  type="button"
+                  className="gbtn gbtn--ghost"
+                  data-testid="glass-save-visual-capture"
+                  onClick={() => send({ type: "save-last-visual-capture" })}
+                >
+                  Save screen
+                </button>
+              ) : null}
               <button
                 type="button"
                 data-testid="glass-overlay-open-iivo"

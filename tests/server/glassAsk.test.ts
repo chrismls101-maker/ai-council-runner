@@ -156,6 +156,27 @@ await test("screen question without screenshot returns capture-first message", a
   }
 });
 
+await test("visual ask request with imageDataUrl does not imply Council", async () => {
+  const previousKey = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "test-key";
+  process.env.IMAGE_VISION_ENABLED = "false";
+  try {
+    const result = await handleGlassAsk({
+      prompt: "What's on my screen?",
+      visualIntent: true,
+      latestScreenshot: {
+        imageDataUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+      },
+    });
+    assert.equal(result.routeUsed, "glass_visual_direct");
+    assert.doesNotMatch(result.answer, /runCouncilFull/i);
+  } finally {
+    if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previousKey;
+    delete process.env.IMAGE_VISION_ENABLED;
+  }
+});
+
 await test("screen question with screenshot but vision disabled returns honest error", async () => {
   const previousKey = process.env.OPENAI_API_KEY;
   const previousVision = process.env.IMAGE_VISION_ENABLED;

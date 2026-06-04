@@ -12,15 +12,52 @@ export type GlassHotkeyPreset =
 
 export type GlassDisplayTarget = "primary" | "follow_mouse" | "all_displays" | number;
 
+export type DockOrientation = "horizontal" | "vertical";
+
+export interface ChromeOrigin {
+  x: number;
+  y: number;
+}
+
 export interface GlassUserSettings {
   hotkeyPreset: GlassHotkeyPreset;
   displayTarget: GlassDisplayTarget;
+  /** When true, dock and command bar stay at the saved/custom layout anchor. */
+  chromeLayoutLocked: boolean;
+  dockOrientation: DockOrientation;
+  dockCustomOrigin: ChromeOrigin | null;
+  commandBarCustomOrigin: ChromeOrigin | null;
+  /** Premium startup cue on boot splash (off until cue is final). */
+  bootSoundEnabled: boolean;
+  /** Visual asks during a live session create a screen_capture on disk (default on). */
+  saveVisualAsksToSession: boolean;
+  /** Upload captures to IIVO Context Bridge without an explicit Open/Save (default off). */
+  autoUploadCapturesToContext: boolean;
 }
 
 export const DEFAULT_GLASS_USER_SETTINGS: GlassUserSettings = {
   hotkeyPreset: "cmd-shift-space",
   displayTarget: "primary",
+  chromeLayoutLocked: true,
+  dockOrientation: "horizontal",
+  dockCustomOrigin: null,
+  commandBarCustomOrigin: null,
+  bootSoundEnabled: false,
+  saveVisualAsksToSession: true,
+  autoUploadCapturesToContext: false,
 };
+
+export function parseBootSoundEnabled(value: unknown): boolean {
+  return value !== false;
+}
+
+export function parseSaveVisualAsksToSession(value: unknown): boolean {
+  return value !== false;
+}
+
+export function parseAutoUploadCapturesToContext(value: unknown): boolean {
+  return value === true;
+}
 
 export const GLASS_HOTKEY_PRESETS: Record<
   GlassHotkeyPreset,
@@ -57,6 +94,18 @@ export function parseHotkeyPreset(value: string | undefined): GlassHotkeyPreset 
 
 export function isValidHotkeyPreset(value: string): value is GlassHotkeyPreset {
   return VALID_HOTKEY_PRESETS.has(value);
+}
+
+export function parseDockOrientation(value: string | undefined): DockOrientation {
+  return value === "vertical" ? "vertical" : "horizontal";
+}
+
+export function parseChromeOrigin(value: unknown): ChromeOrigin | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as { x?: unknown; y?: unknown };
+  if (typeof record.x !== "number" || typeof record.y !== "number") return null;
+  if (!Number.isFinite(record.x) || !Number.isFinite(record.y)) return null;
+  return { x: record.x, y: record.y };
 }
 
 export function parseDisplayTarget(value: string | undefined): GlassDisplayTarget {

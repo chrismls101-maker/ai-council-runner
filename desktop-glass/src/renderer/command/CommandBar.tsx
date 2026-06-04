@@ -212,7 +212,12 @@ export function CommandBar(): JSX.Element {
           </button>
         </div>
 
-        {state.screenContextStatus && state.screenContextStatus.kind !== "none" ? (
+        {state.visualAskRetention?.usedForAnswer ? (
+          <p className="command-bar__screen-context" data-testid="glass-visual-ask-retention">
+            {state.visualAskRetention.label}
+            {state.visualAskRetention.detail ? ` · ${state.visualAskRetention.detail}` : ""}
+          </p>
+        ) : state.screenContextStatus && state.screenContextStatus.kind !== "none" ? (
           <p className="command-bar__screen-context" data-testid="glass-command-screen-context">
             {state.screenContextStatus.label}
           </p>

@@ -753,6 +753,29 @@ function GlassLayoutSettings({ state }: { state: GlassState }): JSX.Element {
       <button type="button" className="gbtn gbtn--ghost" onClick={() => send({ type: "refresh-glass-layout" })}>
         Refresh display layout
       </button>
+      <p className="section-title panel__settings-privacy">Screen capture privacy</p>
+      <label className="panel__settings-row panel__settings-row--check">
+        <input
+          type="checkbox"
+          checked={settings.saveVisualAsksToSession !== false}
+          onChange={(e) => send({ type: "set-save-visual-asks-to-session", enabled: e.target.checked })}
+        />
+        <span>Save visual asks to session</span>
+      </label>
+      <label className="panel__settings-row panel__settings-row--check">
+        <input
+          type="checkbox"
+          checked={settings.autoUploadCapturesToContext === true}
+          onChange={(e) =>
+            send({ type: "set-auto-upload-captures-to-context", enabled: e.target.checked })
+          }
+        />
+        <span>Auto-upload captures to IIVO Context</span>
+      </label>
+      <p className="hint">
+        Visual asks always send the image to IIVO for that answer only. Context Bridge upload
+        happens when you Open in IIVO, Save screen, or enable auto-upload above.
+      </p>
     </div>
   );
 }

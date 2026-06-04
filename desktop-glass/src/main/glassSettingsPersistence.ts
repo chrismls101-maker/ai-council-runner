@@ -7,8 +7,13 @@ import { join } from "node:path";
 import { app } from "electron";
 import {
   DEFAULT_GLASS_USER_SETTINGS,
+  parseChromeOrigin,
   parseDisplayTarget,
+  parseAutoUploadCapturesToContext,
+  parseBootSoundEnabled,
+  parseDockOrientation,
   parseHotkeyPreset,
+  parseSaveVisualAsksToSession,
   type GlassUserSettings,
 } from "../shared/glassSettings.ts";
 
@@ -26,6 +31,15 @@ export async function loadGlassUserSettings(): Promise<GlassUserSettings> {
         typeof parsed.displayTarget === "number"
           ? String(parsed.displayTarget)
           : (parsed.displayTarget as string | undefined),
+      ),
+      chromeLayoutLocked: parsed.chromeLayoutLocked !== false,
+      dockOrientation: parseDockOrientation(parsed.dockOrientation),
+      dockCustomOrigin: parseChromeOrigin(parsed.dockCustomOrigin),
+      commandBarCustomOrigin: parseChromeOrigin(parsed.commandBarCustomOrigin),
+      bootSoundEnabled: parseBootSoundEnabled(parsed.bootSoundEnabled),
+      saveVisualAsksToSession: parseSaveVisualAsksToSession(parsed.saveVisualAsksToSession),
+      autoUploadCapturesToContext: parseAutoUploadCapturesToContext(
+        parsed.autoUploadCapturesToContext,
       ),
     };
   } catch {
