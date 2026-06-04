@@ -65,6 +65,15 @@ import {
   getCurrentWindowContext,
   refreshWindowContext,
 } from "./windowContext.ts";
+import {
+  applySystemAudioChromiumFlags,
+  registerSystemAudioHandler,
+} from "./systemAudioHandler.ts";
+import { release } from "node:os";
+import { resolveInitialSystemAudioStatus, darwinMajorFromRelease } from "../shared/systemAudioCapture.ts";
+import type { SystemAudioStatus } from "../shared/systemAudioTypes.ts";
+
+applySystemAudioChromiumFlags();
 
 const defaultWindowContext: WindowContext = {
   status: "unavailable",
@@ -90,6 +99,8 @@ interface AppState {
   pendingCaptureDataUrl?: string;
   sessionActionStatus: SessionActionStatus;
   transcriptionMode: TranscriptionMode;
+  systemAudioStatus: SystemAudioStatus;
+  systemAudioDetail?: string;
   windowContext: WindowContext;
   iivoAnalysis: IivoAnalysisState;
 }
@@ -100,6 +111,10 @@ const state: AppState = {
   panelTab: "summary",
   sessionActionStatus: "idle",
   transcriptionMode: "manual",
+  systemAudioStatus: resolveInitialSystemAudioStatus(
+    process.platform,
+    darwinMajorFromRelease(release()),
+  ),
   windowContext: defaultWindowContext,
   iivoAnalysis: { status: "idle" },
 };
@@ -128,6 +143,8 @@ function snapshot(): GlassState {
     sessionSummary: session ? buildSessionSummary(session) : "",
     sessionActionStatus: state.sessionActionStatus,
     transcriptionMode: state.transcriptionMode,
+    systemAudioStatus: state.systemAudioStatus,
+    systemAudioDetail: state.systemAudioDetail,
     windowContext: state.windowContext,
     iivoAnalysis: state.iivoAnalysis,
   };
@@ -260,6 +277,7 @@ async function handleCommand(command: GlassCommand): Promise<void> {
           kind: "transcript_note",
           title: chunk.length > 70 ? `${chunk.slice(0, 69)}…` : chunk,
           text: chunk,
+          tags: command.tags,
           ...ctxFields,
         });
         await persistSessions(sessions);
@@ -271,6 +289,11 @@ async function handleCommand(command: GlassCommand): Promise<void> {
     }
     case "transcription-set-mode":
       state.transcriptionMode = command.mode;
+      push();
+      return;
+    case "system-audio-set-status":
+      state.systemAudioStatus = command.status;
+      state.systemAudioDetail = command.detail;
       push();
       return;
     case "clear-transcript":
@@ -684,6 +707,7 @@ function registerIpc(): void {
 
 app.whenReady().then(async () => {
   registerScreenshotProtocol();
+  registerSystemAudioHandler();
   moments = await loadMoments();
   sessions = await loadSessions();
   state.windowContext = await getCurrentWindowContext();

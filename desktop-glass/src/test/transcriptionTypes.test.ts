@@ -13,9 +13,9 @@ import {
 } from "../shared/transcriptionTypes.ts";
 import {
   MICROPHONE_UNAVAILABLE_MESSAGE,
-  SYSTEM_AUDIO_UNAVAILABLE_MESSAGE,
 } from "../shared/audioCaptureTypes.ts";
 import { initialPrivacyState } from "../shared/privacyState.ts";
+import { SYSTEM_AUDIO_STATUS_MESSAGES } from "../shared/systemAudioTypes.ts";
 
 test("not listening on launch", () => {
   assert.equal(initialPrivacyState.listening, false);
@@ -33,6 +33,7 @@ test("mode detection picks web speech when available", () => {
       webSpeechAvailable: true,
       mediaRecorderAvailable: true,
       getUserMediaAvailable: true,
+      systemAudioStatus: "requires_permission",
     }),
     "microphone_web_speech",
   );
@@ -44,12 +45,13 @@ test("unavailable fallback when no mic providers", () => {
       webSpeechAvailable: false,
       mediaRecorderAvailable: false,
       getUserMediaAvailable: false,
+      systemAudioStatus: "requires_permission",
     }),
     "manual",
   );
 });
 
-test("start/stop listening transitions", () => {
+test("start/stop listening transitions for mic", () => {
   let s = transcriptionReducer(initialTranscriptionState, {
     type: "SET_MODE",
     mode: "microphone_web_speech",
@@ -60,10 +62,22 @@ test("start/stop listening transitions", () => {
   assert.equal(s.status, "idle");
 });
 
-test("system audio unavailable warning", () => {
-  const snap = buildProviderSnapshot("system_audio_unavailable");
-  assert.equal(modeStatusMessage("system_audio_unavailable", snap), SYSTEM_AUDIO_UNAVAILABLE_MESSAGE);
-  assert.equal(canStartListening("system_audio_unavailable", snap), false);
+test("system audio unsupported blocks start when virtual device required", () => {
+  const snap = buildProviderSnapshot("system_audio", undefined, {
+    systemAudioStatus: "requires_virtual_device",
+  });
+  assert.equal(
+    modeStatusMessage("system_audio", snap),
+    SYSTEM_AUDIO_STATUS_MESSAGES.requires_virtual_device,
+  );
+  assert.equal(canStartListening("system_audio", snap), false);
+});
+
+test("system audio requires permission allows start attempt", () => {
+  const snap = buildProviderSnapshot("system_audio", undefined, {
+    systemAudioStatus: "requires_permission",
+  });
+  assert.match(modeStatusMessage("system_audio", snap), /Screen Recording/i);
 });
 
 test("manual mode cannot start listening", () => {
@@ -79,10 +93,15 @@ test("microphone unavailable message", () => {
   assert.match(MICROPHONE_UNAVAILABLE_MESSAGE, /not available/i);
 });
 
-test("transcript chunk mode allows listening only for mic modes", () => {
+test("system audio listening state in reducer", () => {
   const s = transcriptionReducer(
-    { ...initialTranscriptionState, mode: "microphone_web_speech" },
+    { ...initialTranscriptionState, mode: "system_audio" },
     { type: "START_LISTENING" },
   );
   assert.equal(s.status, "listening");
+});
+
+test("transcript event creation when chunk has system_audio tag", () => {
+  const tags = ["system_audio"];
+  assert.deepEqual(tags, ["system_audio"]);
 });

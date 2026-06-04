@@ -485,7 +485,10 @@ function Transcript({ transcript }: { transcript: string }): JSX.Element {
       </div>
       <p className="empty">{tx.statusMessage}</p>
       {tx.status === "listening" ? (
-        <p className="privacy__warning">● Listening — microphone active</p>
+        <p className="privacy__warning">
+          ● Listening —{" "}
+          {tx.selectedMode === "system_audio" ? "system audio active" : "microphone active"}
+        </p>
       ) : null}
       {transcript ? (
         <div className="summary-box" style={{ whiteSpace: "pre-wrap" }}>
@@ -503,7 +506,7 @@ function Transcript({ transcript }: { transcript: string }): JSX.Element {
         onChange={(e) => setDraft(e.target.value)}
       />
       <div className="transcript__row">
-        {tx.selectedMode !== "manual" && tx.selectedMode !== "system_audio_unavailable" ? (
+        {tx.selectedMode !== "manual" ? (
           tx.status === "listening" ? (
             <button className="gbtn gbtn--danger" onClick={tx.stopListening}>
               Stop Listening
@@ -644,9 +647,12 @@ export function Panel(): JSX.Element {
           </button>
         </div>
         <div>
-          Glass captures screen/audio only when you start it. Session data stays local
-          until you send or analyze. Analyze Now sends the session to your configured
-          IIVO server. Open in IIVO creates a Context Bridge item and opens the browser.
+          Glass captures screen/audio only when you start it. IIVO Glass does not capture
+          audio on launch. System audio capture only starts when you press Start Listening
+          and may require macOS Screen Recording permission or a virtual audio device.
+          Audio and transcript stay local until you send or analyze. Analyze Now sends
+          the session to your configured IIVO server. Open in IIVO creates a Context
+          Bridge item and opens the browser.
         </div>
       </div>
     </div>

@@ -12,7 +12,7 @@ import type {
 } from "./types.ts";
 import type { PrivacyState } from "./privacyState.ts";
 import type { GlassSession } from "./sessionTypes.ts";
-import type { TranscriptionMode } from "./audioCaptureTypes.ts";
+import type { TranscriptionMode, SystemAudioStatus } from "./audioCaptureTypes.ts";
 import type { WindowContext } from "./windowContextTypes.ts";
 
 export type SessionActionStatus =
@@ -48,9 +48,10 @@ export type GlassCommand =
   | { type: "pause" }
   | { type: "stop" }
   | { type: "append-transcript"; text: string }
-  | { type: "add-transcript-chunk"; text: string }
+  | { type: "add-transcript-chunk"; text: string; tags?: string[] }
   | { type: "clear-transcript" }
   | { type: "transcription-set-mode"; mode: TranscriptionMode }
+  | { type: "system-audio-set-status"; status: SystemAudioStatus; detail?: string }
   | { type: "save-moment"; note?: string; kind?: GlassMomentKind }
   | { type: "delete-moment"; id: string }
   | { type: "clear-moments" }
@@ -97,6 +98,8 @@ export interface GlassState {
   sessionSummary: string;
   sessionActionStatus: SessionActionStatus;
   transcriptionMode: TranscriptionMode;
+  systemAudioStatus: SystemAudioStatus;
+  systemAudioDetail?: string;
   windowContext: WindowContext;
   iivoAnalysis: IivoAnalysisState;
 }

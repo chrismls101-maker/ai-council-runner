@@ -28,7 +28,11 @@ export const initialTranscriptionState: TranscriptionState = {
 };
 
 function isListeningCapableMode(mode: TranscriptionMode): boolean {
-  return mode === "microphone_web_speech" || mode === "microphone_media_recorder";
+  return (
+    mode === "microphone_web_speech" ||
+    mode === "microphone_media_recorder" ||
+    mode === "system_audio"
+  );
 }
 
 export function transcriptionReducer(
@@ -40,14 +44,11 @@ export function transcriptionReducer(
       return {
         ...state,
         mode: action.mode,
-        status:
-          action.mode === "system_audio_unavailable" || action.mode === "manual"
-            ? "idle"
-            : state.status,
+        status: action.mode === "manual" ? "idle" : state.status,
         lastError: undefined,
       };
     case "START_LISTENING":
-      if (state.mode === "system_audio_unavailable" || state.mode === "manual") return state;
+      if (state.mode === "manual") return state;
       if (!isListeningCapableMode(state.mode)) {
         return { ...state, lastError: MICROPHONE_UNAVAILABLE_MESSAGE };
       }

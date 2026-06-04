@@ -180,13 +180,58 @@ request) sending the summarized session to IIVO Council.
 - Microphone uses Web Speech when available; MediaRecorder record-only fallback possible.
 - No listening on launch.
 
+## Glass v1.3 — system audio capture foundation
+
+### Research summary
+
+- **Electron 31.7.7** with Chromium loopback via `setDisplayMediaRequestHandler({ audio: 'loopback' })`.
+- Renderer calls `getDisplayMedia({ video: true, audio: true })` only on **Start Listening**.
+- **macOS 13+** (Darwin 22+): native loopback possible with Screen Recording / audio capture permission.
+- **No local STT for system audio** — Web Speech uses microphone only. Capture can succeed while
+  transcript remains manual paste.
+- If loopback returns no audio track on macOS → **requires virtual device** (e.g. BlackHole).
+
+### v1.3 checklist
+
+1. Launch Glass — confirm **no listening/capture on launch**.
+2. **Start Session**.
+3. **Capture Screen** — confirm source context behavior.
+4. Add **manual transcript**.
+5. Test **Microphone** mode (Web Speech if available).
+6. Select **System Audio** — confirm status message matches reality (permission / available / virtual device).
+7. Click **Start Listening** for system audio — grant permission if prompted.
+8. Confirm UI shows capture active or honest failure (no fake transcript).
+9. **Stop Listening** — all tracks stop, privacy pill returns to idle.
+10. **Extract Insights**.
+11. **Analyze Now** — analysis appears in Glass.
+12. **Open in IIVO** — confirm `?lensAsk=<id>` context chip.
+13. Quit/reopen Glass — screenshot thumbnail reloads.
+14. Delete screenshot file manually — **Screenshot unavailable.**, no crash.
+
+### System audio status messages
+
+| Status | UI message |
+|--------|------------|
+| `available` | System audio capture available. (When listening: transcription provider not connected — paste manually.) |
+| `requires_permission` | Grant Screen Recording / audio capture permission. |
+| `requires_virtual_device` | System audio capture requires a virtual audio device. |
+| `unsupported` | System audio capture is not supported in this build. |
+| `error` | Safe error text from capture attempt |
+
+### Privacy (v1.3)
+
+- System audio capture only starts when you press **Start Listening**.
+- System audio may require macOS Screen Recording permission or a virtual audio device.
+- IIVO Glass does not capture audio on launch.
+- Audio/transcript stays local until you send/analyze.
+
 ## Privacy controls
 
 - Session recording starts **only** when you click **Start Session** — never on
   launch.
 - Screen capture happens **only** when you click **Capture**.
-- Microphone transcription (when available) starts **only** when you click Start
-  Listening — not system audio, not on launch.
+- Microphone and system audio capture start **only** when you click **Start Listening**
+  — never on launch.
 - You can **Pause**, **End**, **Delete events**, and **Clear session** at any
   time. A session stays **local** until you click **Send to IIVO**.
 - While a session is active the panel shows a pulsing warning: "IIVO Glass is
@@ -302,6 +347,8 @@ and assembles the `.icns` with `iconutil` — no extra dependencies.
 ## Notes / known limitations (v1)
 
 - Screen capture uses Electron `desktopCapturer` on the primary display.
-- No system-audio or microphone transcription yet (placeholder transcript input).
+- System audio uses Electron desktop loopback when supported; local transcription of system
+  audio is not connected — paste manually or use Microphone mode for live transcript.
+- Microphone transcription depends on Web Speech / MediaRecorder availability in Electron.
 - No autonomous control: Glass observes and hands off; it does not click or type
   into other apps.

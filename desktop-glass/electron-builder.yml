@@ -18,6 +18,9 @@ asar: true
 
 mac:
   category: public.app-category.productivity
+  extendInfo:
+    NSAudioCaptureUsageDescription: "IIVO Glass captures system audio only when you press Start Listening."
+    NSScreenCaptureUsageDescription: "IIVO Glass captures your screen only when you press Capture."
   target:
     - dmg
     - zip

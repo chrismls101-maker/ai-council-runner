@@ -16,6 +16,7 @@ const fallbackState: GlassState = {
   sessionSummary: "",
   sessionActionStatus: "idle",
   transcriptionMode: "manual",
+  systemAudioStatus: "requires_permission",
   windowContext: { status: "unavailable", reason: WINDOW_CONTEXT_UNAVAILABLE_MESSAGE },
   iivoAnalysis: { status: "idle" },
 };
