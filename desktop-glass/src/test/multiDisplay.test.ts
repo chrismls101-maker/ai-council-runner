@@ -78,9 +78,9 @@ test("normalizeDisplayTarget falls back when display removed", () => {
   assert.equal(normalizeDisplayTarget("all_displays", [1, 2]), "primary");
 });
 
-test("overlay uses selected display bounds", () => {
+test("overlay uses selected display workArea", () => {
   const overlay = overlayLayoutFromDisplay(tv);
-  assert.deepEqual(overlay, tv.bounds);
+  assert.deepEqual(overlay, tv.workArea);
 });
 
 test("command bar centered on selected display workArea", () => {

@@ -5,8 +5,8 @@ import {
   findExternalDisplay,
   findPrimaryDisplay,
   formatDisplayReport,
+  overlayBoundsOnDisplay,
   rectInsideWorkArea,
-  windowBoundsOnDisplay,
 } from "./helpers/displayTestHelpers.ts";
 import {
   closeGlassApp,
@@ -116,7 +116,7 @@ test.describe("IIVO Glass multi-display E2E", () => {
         return (
           overlay?.bounds != null &&
           overlay.displayId === externalLive.id &&
-          windowBoundsOnDisplay(overlay.bounds, externalLive)
+          overlayBoundsOnDisplay(overlay.bounds, externalLive)
         );
       })
       .toBe(true);
@@ -129,7 +129,7 @@ test.describe("IIVO Glass multi-display E2E", () => {
 
     expect(overlay.displayId).toBe(externalLive.id);
     expect(commandBar.displayId).toBe(externalLive.id);
-    expect(windowBoundsOnDisplay(overlay.bounds!, externalLive)).toBe(true);
+    expect(overlayBoundsOnDisplay(overlay.bounds!, externalLive)).toBe(true);
     expect(rectInsideWorkArea(commandBar.bounds!, externalLive.workArea)).toBe(true);
     expect(rectInsideWorkArea(dockMeta.bounds!, externalLive.workArea)).toBe(true);
     expect(rectInsideWorkArea(panelMeta.bounds!, externalLive.workArea)).toBe(true);
@@ -140,7 +140,7 @@ test.describe("IIVO Glass multi-display E2E", () => {
     );
 
     // Windows should no longer match primary display bounds when external is selected.
-    expect(windowBoundsOnDisplay(overlay.bounds!, primary!)).toBe(false);
+    expect(overlayBoundsOnDisplay(overlay.bounds!, primary!)).toBe(false);
   });
 
   test("capture target follows selected external display", async () => {

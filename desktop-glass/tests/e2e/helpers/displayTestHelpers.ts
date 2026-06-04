@@ -1,4 +1,5 @@
 import type { ConnectedDisplaySnapshot } from "../../../src/shared/displayInfo.ts";
+import { overlayLayoutFromDisplay } from "../../../src/shared/glassLayoutMath.ts";
 
 export interface BoundsRect {
   x: number;
@@ -32,6 +33,23 @@ export function windowBoundsOnDisplay(
     Math.abs(windowBounds.width - display.bounds.width) <= tolerance &&
     Math.abs(windowBounds.height - display.bounds.height) <= tolerance
   );
+}
+
+export function expectedOverlayBounds(display: ConnectedDisplaySnapshot): BoundsRect {
+  return overlayLayoutFromDisplay({
+    id: display.id,
+    bounds: display.bounds,
+    workArea: display.workArea,
+    scaleFactor: display.scaleFactor,
+  });
+}
+
+export function overlayBoundsOnDisplay(
+  windowBounds: BoundsRect,
+  display: ConnectedDisplaySnapshot,
+  tolerance = TOLERANCE_PX,
+): boolean {
+  return boundsNear(windowBounds, expectedOverlayBounds(display), tolerance);
 }
 
 export function rectInsideWorkArea(rect: BoundsRect, workArea: BoundsRect): boolean {

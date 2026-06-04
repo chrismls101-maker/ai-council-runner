@@ -758,7 +758,7 @@ body {
 /* Screen-edge glass frame — border only, center stays clear */
 .overlay-glass-border {
   position: fixed;
-  inset: 10px;
+  inset: 10px 10px var(--overlay-frame-bottom, 10px) 10px;
   pointer-events: none;
   border: 2px solid rgba(56, 225, 255, 0.72);
   box-shadow:

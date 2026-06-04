@@ -1,6 +1,6 @@
 /**
  * IIVO Glass — three-layer window architecture:
- * 1. Full-screen overlay (display.bounds, click-through by default)
+ * 1. Full-screen overlay (workArea + bottom safe inset, click-through by default)
  * 2. Compact dock (workArea, clickable)
  * 3. Optional side panel (workArea, clickable when open)
  */

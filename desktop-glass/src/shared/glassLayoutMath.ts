@@ -57,13 +57,20 @@ const COMMAND_BAR_HEIGHT = 96;
 const COMMAND_BAR_BOTTOM_MARGIN = 28;
 const COMMAND_BAR_SIDE_MARGIN = 48;
 
-/** Visible desktop region — full display bounds for edge-to-edge transparent overlay. */
+/** Bottom gap between workArea and display bounds (dock reserve, etc.). */
+export function displayBottomReserve(ctx: DisplayLayoutContext): number {
+  const boundsBottom = ctx.bounds.y + ctx.bounds.height;
+  const workBottom = ctx.workArea.y + ctx.workArea.height;
+  return Math.max(0, boundsBottom - workBottom);
+}
+
+/** Visible desktop region — align overlay to workArea so the frame stays on-screen. */
 export function overlayLayoutFromDisplay(ctx: DisplayLayoutContext): OverlayLayout {
   return {
-    x: ctx.bounds.x,
-    y: ctx.bounds.y,
-    width: ctx.bounds.width,
-    height: ctx.bounds.height,
+    x: ctx.workArea.x,
+    y: ctx.workArea.y,
+    width: ctx.workArea.width,
+    height: ctx.workArea.height,
   };
 }
 

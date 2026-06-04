@@ -31,12 +31,12 @@ const display: DisplayLayoutContext = {
   workArea: { x: 0, y: 25, width: 1920, height: 1055 },
 };
 
-test("overlay bounds match display bounds", () => {
+test("overlay bounds match visible workArea", () => {
   const overlay = overlayLayoutFromDisplay(display);
-  assert.equal(overlay.x, display.bounds.x);
-  assert.equal(overlay.y, display.bounds.y);
-  assert.equal(overlay.width, display.bounds.width);
-  assert.equal(overlay.height, display.bounds.height);
+  assert.equal(overlay.x, display.workArea.x);
+  assert.equal(overlay.y, display.workArea.y);
+  assert.equal(overlay.width, display.workArea.width);
+  assert.equal(overlay.height, display.workArea.height);
 });
 
 test("command bar is centered near bottom of workArea", () => {

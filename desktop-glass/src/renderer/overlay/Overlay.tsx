@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { GlassState } from "../../shared/ipc.ts";
 import type { OverlayMode } from "../../shared/glassWindowTypes.ts";
 import type { GlassSessionInsight } from "../../shared/sessionTypes.ts";
@@ -15,6 +15,33 @@ const TOAST_TTL_MS = 5_000;
 const MAX_CARDS = 4;
 const MAX_FEED_CARDS = 5;
 const MAX_TOASTS = 3;
+/** Built-in primary display — locked; sits at dock edge (workArea bottom). */
+const PRIMARY_FRAME_BOTTOM_INSET_PX = 10;
+/** HDMI / external TV — same bottom alignment when Glass is on Display 2+. */
+const EXTERNAL_FRAME_BOTTOM_INSET_PX = 10;
+
+function overlayFrameBottomInsetPx(state: GlassState): number {
+  const displays = state.connectedDisplays;
+  if (!displays.length) return PRIMARY_FRAME_BOTTOM_INSET_PX;
+
+  const target = state.glassSettings.displayTarget;
+  const active =
+    displays.find((d) =>
+      target === "follow_mouse"
+        ? d.cursorInside
+        : typeof target === "number"
+          ? d.id === target
+          : d.isPrimary,
+    ) ?? displays.find((d) => d.isPrimary);
+
+  if (!active) return PRIMARY_FRAME_BOTTOM_INSET_PX;
+
+  if (active.internal === false) {
+    return EXTERNAL_FRAME_BOTTOM_INSET_PX;
+  }
+
+  return PRIMARY_FRAME_BOTTOM_INSET_PX;
+}
 
 type FloatingCard = {
   id: string;
@@ -377,7 +404,15 @@ export function Overlay(): JSX.Element {
   }
 
   return (
-    <div className="overlay-root" data-testid="glass-overlay-root">
+    <div
+      className="overlay-root"
+      data-testid="glass-overlay-root"
+      style={
+        {
+          "--overlay-frame-bottom": `${overlayFrameBottomInsetPx(state)}px`,
+        } as CSSProperties
+      }
+    >
       <OverlayPassiveLayer overlayMode={overlayMode} />
       <OverlayStatus state={state} />
 
