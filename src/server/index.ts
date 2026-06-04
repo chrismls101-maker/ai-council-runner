@@ -83,6 +83,10 @@ import {
 } from "./glass/glassAskHandler.js";
 import type { GlassAskRequestBody } from "./glass/glassAskTypes.js";
 import {
+  GlassAskPayloadTooLargeError,
+  validateGlassAskPayloadSize,
+} from "./glass/glassAskPayload.js";
+import {
   createBenchmarkRun,
   estimateBenchmarkRun,
 } from "./benchmarks/createBenchmark.js";
@@ -104,6 +108,36 @@ const PORT = Number(process.env.PORT) || 3001;
 
 const app = express();
 app.use(cors());
+
+/** Visual ask may include optimized JPEG data URLs — parse before the global 2mb limit. */
+app.post("/api/glass/ask", express.json({ limit: "6mb" }), async (req, res) => {
+  const body = req.body as GlassAskRequestBody;
+  try {
+    validateGlassAskPayloadSize(body);
+    const result = await handleGlassAsk(body);
+    res.json(result);
+  } catch (err) {
+    if (err instanceof GlassAskValidationError) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
+    if (err instanceof GlassAskPayloadTooLargeError) {
+      res.status(413).json({ error: err.message });
+      return;
+    }
+    if (err instanceof InsufficientCreditsError) {
+      res.status(402).json(glassAskInsufficientCreditsPayload(err));
+      return;
+    }
+    if (err instanceof GlassAskServiceError) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
+    const message = err instanceof Error ? err.message : "Glass ask failed";
+    res.status(500).json({ error: message });
+  }
+});
+
 app.use(express.json({ limit: "2mb" }));
 
 app.get("/api/health", (_req, res) => {
@@ -995,29 +1029,6 @@ app.post("/api/run-council", async (req, res) => {
       return;
     }
     const message = err instanceof Error ? err.message : "Unknown error";
-    res.status(500).json({ error: message });
-  }
-});
-
-app.post("/api/glass/ask", async (req, res) => {
-  const body = req.body as GlassAskRequestBody;
-  try {
-    const result = await handleGlassAsk(body);
-    res.json(result);
-  } catch (err) {
-    if (err instanceof GlassAskValidationError) {
-      res.status(400).json({ error: err.message });
-      return;
-    }
-    if (err instanceof InsufficientCreditsError) {
-      res.status(402).json(glassAskInsufficientCreditsPayload(err));
-      return;
-    }
-    if (err instanceof GlassAskServiceError) {
-      res.status(err.status).json({ error: err.message });
-      return;
-    }
-    const message = err instanceof Error ? err.message : "Glass ask failed";
     res.status(500).json({ error: message });
   }
 });

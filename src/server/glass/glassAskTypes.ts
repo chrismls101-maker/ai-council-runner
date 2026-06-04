@@ -17,13 +17,20 @@ export interface GlassAskLatestScreenshot {
   screenshotPath?: string;
   thumbnailPath?: string;
   mimeType?: string;
-  /** Inline capture bytes for one-shot ask when context upload is unavailable (not persisted). */
+  /** Optimized inline capture for vision (JPEG/WebP data URL — not full-resolution PNG). */
   imageDataUrl?: string;
   imageBase64?: string;
   capturedAt?: string;
   sourceTitle?: string;
   displayId?: number;
   label?: string;
+  originalWidth?: number;
+  originalHeight?: number;
+  optimizedWidth?: number;
+  optimizedHeight?: number;
+  optimizedMimeType?: string;
+  optimizedSizeBytes?: number;
+  compressionApplied?: boolean;
 }
 
 export interface GlassAskSessionPayload {

@@ -141,6 +141,21 @@ Expected UX:
 
 **Modes:** Manual Capture (Capture button), Visual Ask (screen-related command captures fresh on submit), Live Vision toggle — not implemented yet (future).
 
+### Visual Ask large-display test (413 / payload size)
+
+Works on **MacBook built-in**, **HDMI/TV**, or any external display — full PNG captures are downscaled to JPEG before `POST /api/glass/ask`.
+
+1. Start IIVO server (`npm run dev`) with `OPENAI_API_KEY` and `IMAGE_VISION_ENABLED=true`.
+2. Start Glass (`npm run glass:dev`).
+3. Select **HDMI Display / Display 2** (or stay on MacBook — both paths use the same optimizer).
+4. Put recognizable content on that display.
+5. Ask: **“What do you see on my screen?”**
+6. Confirm **no** `IIVO ask failed (413): Payload Too Large` error.
+7. Confirm overlay may show **Looking…** → **Optimizing screen image…** → **Analyzing screen…** (brief).
+8. Confirm inline answer references the screen.
+9. Open panel → **Screen** status — detail should mention **Visual payload** size (e.g. `245 KB JPEG (1280×720), compressed`).
+10. Optional: set `IIVO_GLASS_VISUAL_MAX_WIDTH=1024` in env, restart Glass, repeat — still no 413.
+
 ### Direct Response manual QA
 
 1. Start IIVO server (`npm run dev`) with `OPENAI_API_KEY` configured.

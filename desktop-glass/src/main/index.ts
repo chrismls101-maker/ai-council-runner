@@ -134,7 +134,14 @@ import {
   createCommandFeedItem,
   type GlassCommandFeedItem,
 } from "../shared/commandFeed.ts";
-import { askIivoGlass, GlassAskCancelledError } from "./glassAskClient.ts";
+import { askIivoGlass, GlassAskCancelledError, isGlassAskPayloadTooLargeError } from "./glassAskClient.ts";
+import { optimizeVisualAskImage } from "./visualImageOptimizer.ts";
+import { applyOptimizedToPayload } from "./glassVisualAskCapture.ts";
+import {
+  GLASS_VISUAL_PAYLOAD_RETRY_MESSAGE,
+  GLASS_VISUAL_PAYLOAD_TOO_LARGE_MESSAGE,
+} from "../shared/visualImageOptimizerConfig.ts";
+import type { VisualAskPayloadDiagnostics } from "../shared/glassScreenContext.ts";
 import { uploadGlassScreenshotContext } from "./glassLatestScreenshot.ts";
 import {
   buildVisualAskRetentionStatus,
@@ -194,6 +201,7 @@ interface AppState {
   latestScreenshot?: GlassLatestScreenshotState | null;
   visualAskPhase: GlassScreenContextPhase;
   visualAskRetention: GlassVisualAskRetention | null;
+  visualAskPayloadDiagnostics: VisualAskPayloadDiagnostics | null;
   ephemeralVisualCapture: EphemeralVisualCapture | null;
   sessionActionStatus: SessionActionStatus;
   transcriptionMode: TranscriptionMode;
@@ -236,6 +244,7 @@ const state: AppState = {
   latestScreenshot: null,
   visualAskPhase: "idle",
   visualAskRetention: null,
+  visualAskPayloadDiagnostics: null,
   ephemeralVisualCapture: null,
   glassSettings: { ...DEFAULT_GLASS_USER_SETTINGS },
 };
@@ -284,6 +293,7 @@ function snapshot(): GlassState {
       phase: state.visualAskPhase,
     }),
     visualAskRetention: state.visualAskRetention,
+    visualAskPayloadDiagnostics: state.visualAskPayloadDiagnostics,
     glassSettings: state.glassSettings,
     availableDisplayIds: getAvailableDisplayIds(),
     connectedDisplays: getConnectedDisplays(),
@@ -725,8 +735,11 @@ async function submitCommand(rawText: string): Promise<void> {
   let visualCaptureWarning: string | undefined;
   let usedVision = false;
   let visualSavedToSession = false;
+  let visualCaptureFull: { imageDataUrl: string; width: number; height: number } | null = null;
+  let visualAsk413Retried = false;
 
   if (visualIntent) {
+    state.visualAskPayloadDiagnostics = null;
     state.visualAskPhase = "looking";
     lookingStartedAtMs = Date.now();
     pushFeed(
@@ -745,6 +758,17 @@ async function submitCommand(rawText: string): Promise<void> {
       pendingCaptureDataUrl: state.pendingCaptureDataUrl,
       resolveCaptureTarget: () => resolveCaptureDisplay(state.glassSettings.displayTarget),
       eventContextFields,
+      prompt: text,
+      onOptimizing: () => {
+        state.visualAskPhase = "optimizing";
+        removeLookingFeedItems();
+        pushFeed(
+          createCommandFeedItem("looking", "Optimizing screen image…", {
+            title: "IIVO",
+          }),
+        );
+        push();
+      },
     });
 
     state.visualAskPhase = "idle";
@@ -771,6 +795,12 @@ async function submitCommand(rawText: string): Promise<void> {
     latestScreenshot = captureOutcome.payload;
     visualCaptureWarning = captureOutcome.warning;
     usedVision = true;
+    state.visualAskPayloadDiagnostics = captureOutcome.payloadDiagnostics ?? null;
+    visualCaptureFull = {
+      imageDataUrl: captureOutcome.imageDataUrl,
+      width: captureOutcome.captureWidth,
+      height: captureOutcome.captureHeight,
+    };
 
     visualSavedToSession = captureOutcome.savedToSession;
     if (captureOutcome.savedToSession) {
@@ -797,17 +827,22 @@ async function submitCommand(rawText: string): Promise<void> {
     }
     removeLookingFeedItems();
   }
+  if (visualIntent) {
+    state.visualAskPhase = "analyzing";
+    push();
+  }
+
   thinkingStartedAtMs = Date.now();
   pushFeed(
     createCommandFeedItem(
       "thinking",
-      visualIntent ? "IIVO is thinking about your screen…" : "IIVO is thinking…",
+      visualIntent ? "Analyzing screen…" : "IIVO is thinking…",
     ),
   );
   push();
 
-  try {
-    const result = await askIivoGlass(
+  const runGlassAsk = async (): Promise<import("../shared/glassAskTypes.ts").GlassAskResponse> =>
+    askIivoGlass(
       config,
       {
         prompt: text,
@@ -818,6 +853,9 @@ async function submitCommand(rawText: string): Promise<void> {
       },
       signal,
     );
+
+  try {
+    let result = await runGlassAsk();
 
     if (requestGeneration !== askRequestGeneration) return;
 
@@ -906,13 +944,102 @@ async function submitCommand(rawText: string): Promise<void> {
           : "IIVO answered inline. Start a session to save this context.";
     }
     state.operationDiagnostics = recordOperation(state.operationDiagnostics, "ask-iivo", "ok");
+    state.visualAskPhase = "idle";
   } catch (err) {
     if (requestGeneration !== askRequestGeneration || signal.aborted || err instanceof GlassAskCancelledError) {
       return;
     }
 
+    if (
+      visualIntent &&
+      !visualAsk413Retried &&
+      visualCaptureFull &&
+      latestScreenshot &&
+      isGlassAskPayloadTooLargeError(err)
+    ) {
+      visualAsk413Retried = true;
+      state.lastNotice = GLASS_VISUAL_PAYLOAD_RETRY_MESSAGE;
+      state.visualAskPhase = "optimizing";
+      push();
+
+      const aggressive = optimizeVisualAskImage(
+        visualCaptureFull.imageDataUrl,
+        { width: visualCaptureFull.width, height: visualCaptureFull.height },
+        { preset: "aggressive", prompt: text },
+      );
+      latestScreenshot = applyOptimizedToPayload(latestScreenshot, aggressive);
+      state.visualAskPayloadDiagnostics = {
+        originalWidth: aggressive.originalWidth,
+        originalHeight: aggressive.originalHeight,
+        originalSizeBytes: aggressive.originalSizeBytes,
+        optimizedWidth: aggressive.optimizedWidth,
+        optimizedHeight: aggressive.optimizedHeight,
+        optimizedSizeBytes: aggressive.optimizedSizeBytes,
+        optimizedMimeType: aggressive.mimeType,
+        compressionApplied: aggressive.compressionApplied,
+        status: "retry",
+      };
+      state.visualAskPhase = "analyzing";
+      push();
+
+      try {
+        const retryResult = await runGlassAsk();
+        if (requestGeneration !== askRequestGeneration) return;
+
+        if (thinkingStartedAtMs != null) {
+          await waitForMinThinkingDuration(thinkingStartedAtMs);
+          thinkingStartedAtMs = null;
+        }
+        removeThinkingFeedItems();
+        state.askStatus = "done";
+        const overlayAnswer = retryResult.shortAnswer ?? retryResult.answer;
+        state.lastAskResponse = {
+          prompt: text,
+          answer: overlayAnswer,
+          fullAnswer: retryResult.answer,
+          shortAnswer: retryResult.shortAnswer,
+          runId: retryResult.runId,
+          contextId: retryResult.contextId,
+          at: new Date().toISOString(),
+          routeUsed: retryResult.routeUsed,
+          model: retryResult.model,
+        };
+        pushFeed(
+          createCommandFeedItem("response", overlayAnswer, {
+            prompt: text,
+            fullBody: retryResult.answer,
+            runId: retryResult.runId,
+            contextId: retryResult.contextId,
+          }),
+        );
+        if (usedVision) {
+          state.visualAskRetention = buildVisualAskRetentionStatus({
+            usedForAnswer: true,
+            savedToSession: visualSavedToSession,
+            uploadedToContext: false,
+          });
+        }
+        state.visualAskPhase = "idle";
+        state.operationDiagnostics = recordOperation(state.operationDiagnostics, "ask-iivo", "ok");
+        push();
+        return;
+      } catch (retryErr) {
+        if (requestGeneration !== askRequestGeneration || signal.aborted || retryErr instanceof GlassAskCancelledError) {
+          return;
+        }
+        err = retryErr;
+      }
+    }
+
     removePendingAskFeedItems();
-    const message = err instanceof Error ? err.message : "Could not reach IIVO server.";
+    const rawMessage = err instanceof Error ? err.message : "Could not reach IIVO server.";
+    const message = isGlassAskPayloadTooLargeError(err)
+      ? GLASS_VISUAL_PAYLOAD_TOO_LARGE_MESSAGE
+      : rawMessage;
+    state.visualAskPayloadDiagnostics = state.visualAskPayloadDiagnostics
+      ? { ...state.visualAskPayloadDiagnostics, status: "failed" }
+      : null;
+    state.visualAskPhase = "idle";
     state.askStatus = "error";
     pushFeed(
       createCommandFeedItem("error", `${message} Use Open in IIVO to continue in the browser.`, {

@@ -34,6 +34,7 @@ export async function startStubServer(
   let askCallCount = 0;
   let lastAskBody: Record<string, unknown> | null = null;
   let delayMs = options.askDelayMs ?? 0;
+  let force413Once = false;
 
   const server = http.createServer((req, res) => {
     const url = req.url ?? "/";
@@ -72,6 +73,13 @@ export async function startStubServer(
         const visual =
           parsed?.visualIntent === true ||
           (parsed?.latestScreenshot != null && typeof parsed.latestScreenshot === "object");
+
+        if (visual && prompt.includes("E2E_FORCE_413_ONCE") && !force413Once) {
+          force413Once = true;
+          res.writeHead(413, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Payload Too Large" }));
+          return;
+        }
 
         setTimeout(() => {
           res.writeHead(200, { "Content-Type": "application/json" });

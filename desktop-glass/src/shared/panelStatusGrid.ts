@@ -6,7 +6,7 @@ import type { SystemAudioStatus } from "./systemAudioTypes.ts";
 import { systemAudioStatusMessage } from "./systemAudioTypes.ts";
 import type { SttProviderStatus } from "./sttTypes.ts";
 import type { WindowContextStatus } from "./windowContextTypes.ts";
-import type { GlassScreenContextStatus } from "./glassScreenContext.ts";
+import type { GlassScreenContextStatus, VisualAskPayloadDiagnostics } from "./glassScreenContext.ts";
 
 export type PanelStatusLevel = "ok" | "warn" | "error" | "idle";
 
@@ -29,6 +29,7 @@ export interface PanelStatusGridInput {
   windowContextStatus: WindowContextStatus;
   listening?: boolean;
   screenContext?: GlassScreenContextStatus;
+  visualAskPayload?: VisualAskPayloadDiagnostics | null;
 }
 
 export function buildPanelStatusCards(input: PanelStatusGridInput): PanelStatusCard[] {
@@ -62,13 +63,27 @@ function buildScreenContextCard(input: PanelStatusGridInput): PanelStatusCard {
               : sc.kind === "unavailable"
                 ? "warn"
                 : "idle";
+  const payload = input.visualAskPayload;
+  const payloadDetail =
+    payload && payload.optimizedSizeBytes > 0
+      ? `Visual payload: ${formatBytes(payload.optimizedSizeBytes)} JPEG (${payload.optimizedWidth}×${payload.optimizedHeight})${
+          payload.compressionApplied ? ", compressed" : ""
+        }${payload.status === "retry" ? ", retried smaller" : ""}`
+      : undefined;
+
   return {
     key: "screen_context",
     label: "Screen",
     level,
-    status: sc.label.replace(/^Screen context:\s*/i, ""),
-    detail: sc.detail,
+    status: sc.label.replace(/^Screen context:\s*/i, "").replace(/^Screen:\s*/i, ""),
+    detail: [sc.detail, payloadDetail].filter(Boolean).join(" · ") || undefined,
   };
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
 function buildServerCard(input: PanelStatusGridInput): PanelStatusCard {

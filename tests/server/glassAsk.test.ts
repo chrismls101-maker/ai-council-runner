@@ -11,6 +11,10 @@ import {
 import { handleGlassAsk } from "../../dist/server/glass/glassAskHandler.js";
 import { promptRequestsGlassScreenVisual } from "../../dist/server/glass/glassScreenVisualPrompt.js";
 import { GLASS_VISION_NOT_CONFIGURED_MESSAGE } from "../../dist/server/glass/glassVisualDirectAsk.js";
+import {
+  GlassAskPayloadTooLargeError,
+  validateGlassAskPayloadSize,
+} from "../../dist/server/glass/glassAskPayload.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const handlerSource = readFileSync(
@@ -202,6 +206,32 @@ await test("screen question with screenshot but vision disabled returns honest e
     if (previousVision === undefined) delete process.env.IMAGE_VISION_ENABLED;
     else process.env.IMAGE_VISION_ENABLED = previousVision;
   }
+});
+
+await test("validateGlassAskPayloadSize rejects oversized visual image", () => {
+  const huge = `data:image/jpeg;base64,${"A".repeat(7_000_000)}`;
+  assert.throws(
+    () =>
+      validateGlassAskPayloadSize({
+        prompt: "What's on my screen?",
+        latestScreenshot: { imageDataUrl: huge, optimizedSizeBytes: 6_000_000 },
+      }),
+    GlassAskPayloadTooLargeError,
+  );
+});
+
+await test("validateGlassAskPayloadSize allows small optimized payload", () => {
+  validateGlassAskPayloadSize({
+    prompt: "What's on my screen?",
+    latestScreenshot: {
+      imageDataUrl:
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+      optimizedSizeBytes: 120,
+      compressionApplied: true,
+      optimizedWidth: 1,
+      optimizedHeight: 1,
+    },
+  });
 });
 
 await test("visual ask path does not call runCouncilFull", () => {

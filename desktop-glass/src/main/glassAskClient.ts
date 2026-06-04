@@ -16,6 +16,11 @@ export class GlassAskCancelledError extends Error {
   }
 }
 
+export function isGlassAskPayloadTooLargeError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return /\b413\b/.test(err.message) || /payload too large/i.test(err.message);
+}
+
 export async function askIivoGlass(
   config: GlassConfig,
   request: GlassAskRequest,

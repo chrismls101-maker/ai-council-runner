@@ -51,9 +51,28 @@ export interface GlassAskLatestScreenshot {
   sourceTitle?: string;
   displayId?: number;
   label?: string;
+  originalWidth?: number;
+  originalHeight?: number;
+  optimizedWidth?: number;
+  optimizedHeight?: number;
+  optimizedMimeType?: string;
+  optimizedSizeBytes?: number;
+  compressionApplied?: boolean;
 }
 
-export type GlassScreenContextPhase = "idle" | "looking";
+export interface VisualAskPayloadDiagnostics {
+  originalWidth: number;
+  originalHeight: number;
+  originalSizeBytes: number;
+  optimizedWidth: number;
+  optimizedHeight: number;
+  optimizedSizeBytes: number;
+  optimizedMimeType: string;
+  compressionApplied: boolean;
+  status: "ok" | "retry" | "failed";
+}
+
+export type GlassScreenContextPhase = "idle" | "looking" | "optimizing" | "analyzing";
 
 export type GlassScreenContextStatusKind =
   | "none"
@@ -82,6 +101,14 @@ export function buildGlassScreenContextStatus(
 ): GlassScreenContextStatus {
   if (options?.phase === "looking") {
     return { kind: "looking", label: "Screen: looking now…" };
+  }
+
+  if (options?.phase === "optimizing") {
+    return { kind: "looking", label: "Screen: optimizing image…" };
+  }
+
+  if (options?.phase === "analyzing") {
+    return { kind: "looking", label: "Screen: analyzing…" };
   }
 
   if (options?.lastCaptureError && /permission|screen recording/i.test(options.lastCaptureError)) {

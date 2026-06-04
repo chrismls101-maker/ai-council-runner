@@ -7,7 +7,12 @@ import {
   buildLatestScreenshotAskPayload,
   createLatestScreenshotState,
 } from "../shared/glassLatestScreenshotAsk.ts";
-import type { GlassAskLatestScreenshot, GlassLatestScreenshotState } from "../shared/glassScreenContext.ts";
+import type {
+  GlassAskLatestScreenshot,
+  GlassLatestScreenshotState,
+  VisualAskPayloadDiagnostics,
+} from "../shared/glassScreenContext.ts";
+import { optimizeVisualAskImage } from "./visualImageOptimizer.ts";
 import {
   formatCaptureAgeSeconds,
   isFallbackGlassCapture,
@@ -35,6 +40,9 @@ export type VisualAskCaptureOutcome =
       latestState: GlassLatestScreenshotState;
       imageDataUrl: string;
       savedToSession: boolean;
+      payloadDiagnostics?: VisualAskPayloadDiagnostics;
+      captureWidth: number;
+      captureHeight: number;
     }
   | { ok: false; error: string; permissionHint?: boolean };
 
@@ -46,12 +54,71 @@ export type VisualAskCaptureDeps = {
   latestScreenshot: GlassLatestScreenshotState | null | undefined;
   pendingCaptureDataUrl: string | undefined;
   resolveCaptureTarget: () => { id: number; label: string };
+  prompt?: string;
+  onOptimizing?: () => void;
+  optimizePreset?: "default" | "aggressive" | "text";
   eventContextFields: (opts?: { sourceTitle?: string; captureSource?: string }) => {
     sourceApp?: string;
     sourceTitle?: string;
     metadata?: Record<string, unknown>;
   };
 };
+
+export function applyOptimizedToPayload(
+  base: GlassAskLatestScreenshot,
+  optimized: ReturnType<typeof optimizeVisualAskImage>,
+): GlassAskLatestScreenshot {
+  return {
+    ...base,
+    imageDataUrl: optimized.imageDataUrl,
+    mimeType: optimized.mimeType,
+    originalWidth: optimized.originalWidth,
+    originalHeight: optimized.originalHeight,
+    optimizedWidth: optimized.optimizedWidth,
+    optimizedHeight: optimized.optimizedHeight,
+    optimizedMimeType: optimized.mimeType,
+    optimizedSizeBytes: optimized.optimizedSizeBytes,
+    compressionApplied: optimized.compressionApplied,
+  };
+}
+
+function diagnosticsFromOptimized(
+  optimized: ReturnType<typeof optimizeVisualAskImage>,
+  status: VisualAskPayloadDiagnostics["status"],
+): VisualAskPayloadDiagnostics {
+  return {
+    originalWidth: optimized.originalWidth,
+    originalHeight: optimized.originalHeight,
+    originalSizeBytes: optimized.originalSizeBytes,
+    optimizedWidth: optimized.optimizedWidth,
+    optimizedHeight: optimized.optimizedHeight,
+    optimizedSizeBytes: optimized.optimizedSizeBytes,
+    optimizedMimeType: optimized.mimeType,
+    compressionApplied: optimized.compressionApplied,
+    status,
+  };
+}
+
+async function optimizePayloadImage(
+  deps: VisualAskCaptureDeps,
+  imageDataUrl: string,
+  width: number,
+  height: number,
+): Promise<{
+  optimized: ReturnType<typeof optimizeVisualAskImage>;
+  diagnostics: VisualAskPayloadDiagnostics;
+}> {
+  deps.onOptimizing?.();
+  const optimized = optimizeVisualAskImage(
+    imageDataUrl,
+    { width, height },
+    { prompt: deps.prompt, preset: deps.optimizePreset },
+  );
+  return {
+    optimized,
+    diagnostics: diagnosticsFromOptimized(optimized, deps.optimizePreset === "aggressive" ? "retry" : "ok"),
+  };
+}
 
 async function persistSessionCapture(
   deps: VisualAskCaptureDeps,
@@ -191,7 +258,16 @@ export async function resolveScreenshotForVisualAsk(
       contextUploadStatus: "none",
     });
 
-    const payload = buildPayloadFromCapture(result, session?.id, eventId);
+    const { optimized, diagnostics } = await optimizePayloadImage(
+      deps,
+      result.imageDataUrl,
+      result.width,
+      result.height,
+    );
+    const payload = applyOptimizedToPayload(
+      buildPayloadFromCapture(result, session?.id, eventId),
+      optimized,
+    );
     return {
       ok: true,
       payload,
@@ -200,6 +276,9 @@ export async function resolveScreenshotForVisualAsk(
       latestState,
       imageDataUrl: result.imageDataUrl,
       savedToSession: saveToSession && !!eventId,
+      payloadDiagnostics: diagnostics,
+      captureWidth: result.width,
+      captureHeight: result.height,
     };
   } catch (err) {
     const message = captureErrorMessage(err);
@@ -218,15 +297,21 @@ export async function resolveScreenshotForVisualAsk(
         displayId: fallback.payload.displayId,
         mimeType: fallback.payload.mimeType,
       };
+      const rawUrl = fallback.payload.imageDataUrl ?? "";
+      const { optimized, diagnostics } = await optimizePayloadImage(deps, rawUrl, 0, 0);
+      const payload = applyOptimizedToPayload(fallback.payload, optimized);
       return {
         ok: true,
-        payload: fallback.payload,
+        payload,
         fresh: false,
         warning: fallback.warning,
         eventId: fallback.payload.eventId,
         latestState,
-        imageDataUrl: fallback.payload.imageDataUrl ?? "",
+        imageDataUrl: rawUrl,
         savedToSession: !!fallback.payload.eventId && !!fallback.payload.sessionId,
+        payloadDiagnostics: diagnostics,
+        captureWidth: optimized.originalWidth,
+        captureHeight: optimized.originalHeight,
       };
     }
     return {

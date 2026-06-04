@@ -193,7 +193,25 @@ test.describe("IIVO Glass Electron E2E", () => {
     expect(await getE2eExternalUrls(command)).toHaveLength(0);
   });
 
-  test("8 — window metadata via E2E IPC", async () => {
+  test("8 — visual ask retries after 413 payload too large", async () => {
+    const { command, overlay } = await getGlassWindows(app.browser);
+
+    const input = command.locator('[data-testid="glass-command-input"]');
+    await input.click();
+    await input.fill("E2E_FORCE_413_ONCE What do you see on my screen?");
+    await input.press("Enter");
+
+    await expect(overlay.locator('[data-testid="glass-overlay-response-card"]')).toBeVisible({
+      timeout: 20_000,
+    });
+
+    const responseText = await overlay
+      .locator('[data-testid="glass-overlay-response-card"]')
+      .innerText();
+    expect(responseText).toMatch(/see the test screen/i);
+  });
+
+  test("9 — window metadata via E2E IPC", async () => {
     const { command } = await getGlassWindows(app.browser);
     const metadata = await getE2eWindowMetadata(command);
     const state = await readGlassState(command);

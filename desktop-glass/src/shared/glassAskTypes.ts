@@ -37,6 +37,13 @@ export interface GlassAskLatestScreenshot {
   sourceTitle?: string;
   displayId?: number;
   label?: string;
+  originalWidth?: number;
+  originalHeight?: number;
+  optimizedWidth?: number;
+  optimizedHeight?: number;
+  optimizedMimeType?: string;
+  optimizedSizeBytes?: number;
+  compressionApplied?: boolean;
 }
 
 export interface GlassAskRequest {

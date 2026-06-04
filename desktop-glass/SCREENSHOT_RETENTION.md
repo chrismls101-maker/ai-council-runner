@@ -27,3 +27,9 @@ Session JSON (`glass-sessions.json`) never stores base64 — `screenshotDataUrl`
 ## Live Vision
 
 Periodic background capture is not implemented. Only explicit Capture and visual-intent asks capture the display.
+
+## Visual ask payload size
+
+Full-resolution PNG captures stay on disk (when retention allows). `/api/glass/ask` receives a **downscaled JPEG** (default max 1280px, ~1.5 MB target) with optimization metadata. If the server returns 413, Glass retries once with a smaller frame (768px, quality 0.65).
+
+Env overrides: `IIVO_GLASS_VISUAL_MAX_WIDTH`, `IIVO_GLASS_VISUAL_JPEG_QUALITY`, `IIVO_GLASS_VISUAL_MAX_PAYLOAD_BYTES`.
