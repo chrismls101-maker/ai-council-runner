@@ -386,6 +386,12 @@ body {
   border-bottom: 1px solid var(--glass-border);
 }
 
+.panel__close {
+  -webkit-app-region: no-drag;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
 .panel__quick-actions {
   display: flex;
   flex-wrap: wrap;

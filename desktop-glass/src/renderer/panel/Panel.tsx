@@ -581,7 +581,7 @@ function StatusGrid({ state }: { state: GlassState }): JSX.Element {
   ];
 
   return (
-    <div className="status-grid">
+    <div className="status-grid" data-testid="glass-panel-status-grid">
       <p className="section-title">System status</p>
       {state.lastAskResponse ? (
         <div className="summary-box panel__last-ask">
@@ -592,7 +592,11 @@ function StatusGrid({ state }: { state: GlassState }): JSX.Element {
       ) : null}
       <div className="summary-box status-grid__cells">
         {items.map((item) => (
-          <div key={item.label} className="status-grid__cell">
+          <div
+            key={item.label}
+            className="status-grid__cell"
+            data-testid={`glass-panel-status-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
+          >
             <strong>{item.label}</strong>
             <div>{item.value}</div>
           </div>
@@ -626,6 +630,7 @@ function StatusGrid({ state }: { state: GlassState }): JSX.Element {
         <button
           type="button"
           className="gbtn gbtn--danger"
+          data-testid="glass-panel-stop-everything"
           onClick={() => send({ type: "stop-everything" })}
         >
           Stop Everything
@@ -741,7 +746,7 @@ export function Panel(): JSX.Element {
     state.session?.status === "active" || state.session?.status === "paused";
 
   return (
-    <div className="panel">
+    <div className="panel" data-testid="glass-panel">
       <div className="panel__header">
         <div className="panel__brand">
           <span className="dock__logo" />
@@ -754,6 +759,15 @@ export function Panel(): JSX.Element {
           <SessionPill status={state.session?.status ?? null} />
           <StatusPill status={state.privacy.status} />
         </div>
+        <button
+          type="button"
+          className="gbtn gbtn--ghost panel__close"
+          data-testid="glass-panel-close"
+          onClick={() => send({ type: "toggle-panel" })}
+          title="Close panel"
+        >
+          ✕
+        </button>
       </div>
 
       {state.lastError ? <div className="error-banner">{state.lastError}</div> : null}

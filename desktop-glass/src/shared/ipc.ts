@@ -52,6 +52,8 @@ export const IPC = {
   sttProcessChunk: "glass:stt-process-chunk",
   transcriptionControl: "glass:transcription-control",
   commandBarFocus: "glass:command-bar-focus",
+  e2eGetExternalUrls: "glass:e2e-get-external-urls",
+  e2eResetExternalUrls: "glass:e2e-reset-external-urls",
 } as const;
 
 export type TranscriptionControlCommand =

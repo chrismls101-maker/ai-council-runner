@@ -46,6 +46,12 @@ const glassApi = {
   resizeDock(width: number, height: number): void {
     ipcRenderer.send(IPC.resizeDock, width, height);
   },
+  getE2eExternalUrls(): Promise<string[]> {
+    return ipcRenderer.invoke(IPC.e2eGetExternalUrls) as Promise<string[]>;
+  },
+  resetE2eExternalUrls(): Promise<void> {
+    return ipcRenderer.invoke(IPC.e2eResetExternalUrls) as Promise<void>;
+  },
 };
 
 export type GlassApi = typeof glassApi;

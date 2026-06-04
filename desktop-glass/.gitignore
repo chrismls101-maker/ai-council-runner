@@ -22,3 +22,7 @@ build/.icon-master.png
 
 # Logs
 *.log
+
+# Playwright E2E artifacts
+test-results/
+playwright-report/

@@ -7,6 +7,7 @@
  */
 
 import { loadGlassEnv } from "./loadGlassEnv.ts";
+import { installGlassE2eHooks, getE2eExternalUrls, resetE2eExternalUrls } from "./e2eMainHooks.ts";
 import { app, BrowserWindow, ipcMain, protocol, shell } from "electron";
 import { resolveConfig, buildIivoChatUrl, buildLensAskUrl, buildRunHistoryUrl } from "../shared/config.ts";
 import {
@@ -121,6 +122,11 @@ import {
 import { loadGlassUserSettings, persistGlassUserSettings } from "./glassSettingsPersistence.ts";
 
 loadGlassEnv();
+installGlassE2eHooks();
+
+if (process.env.IIVO_GLASS_E2E === "1") {
+  app.commandLine.appendSwitch("remote-debugging-port", "19222");
+}
 
 applySystemAudioChromiumFlags();
 
@@ -1165,6 +1171,13 @@ function registerIpc(): void {
       resizeDockWindow(width, height);
     }
   });
+
+  if (process.env.IIVO_GLASS_E2E === "1") {
+    ipcMain.handle(IPC.e2eGetExternalUrls, () => getE2eExternalUrls());
+    ipcMain.handle(IPC.e2eResetExternalUrls, () => {
+      resetE2eExternalUrls();
+    });
+  }
 }
 
 function registerGlobalHotkeys(): void {
@@ -1181,6 +1194,9 @@ app.whenReady().then(async () => {
   moments = await loadMoments();
   sessions = await loadSessions();
   glassUserSettings = await loadGlassUserSettings();
+  if (process.env.IIVO_GLASS_E2E === "1") {
+    glassUserSettings = { ...glassUserSettings, hotkeyPreset: "disabled" };
+  }
   state.glassSettings = glassUserSettings;
   state.windowContext = await getCurrentWindowContext();
   registerIpc();

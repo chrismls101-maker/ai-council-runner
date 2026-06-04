@@ -44,7 +44,7 @@ export function Dock(): JSX.Element {
   };
 
   return (
-    <div className="dock dock--minimal" ref={dockRef}>
+    <div className="dock dock--minimal" ref={dockRef} data-testid="glass-dock">
       {(state.lastError || state.lastNotice) && !menuOpen ? (
         <div className={`dock__toast${state.lastError ? " dock__toast--error" : ""}`}>
           {state.lastError ?? state.lastNotice}
@@ -85,6 +85,7 @@ export function Dock(): JSX.Element {
 
         <button
           type="button"
+          data-testid="glass-dock-capture"
           className="gbtn"
           onClick={() =>
             send(sessionLive ? { type: "session-capture" } : { type: "capture-screen-only" })
@@ -110,6 +111,7 @@ export function Dock(): JSX.Element {
 
         <button
           type="button"
+          data-testid="glass-dock-open-panel"
           className="gbtn gbtn--panel"
           onClick={() => send({ type: "toggle-panel" })}
         >
@@ -118,6 +120,7 @@ export function Dock(): JSX.Element {
 
         <button
           type="button"
+          data-testid="glass-dock-stop-everything"
           className="gbtn gbtn--danger"
           onClick={() => send({ type: "stop-everything" })}
           title="Stop listening, capture, and sending"

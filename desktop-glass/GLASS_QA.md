@@ -77,18 +77,25 @@ npm run glass:qa:auto
 npm run test:glass-ask
 npm run glass:test
 npm run glass:qa:smoke
+npm run glass:e2e
+npm run glass:e2e:headed
+npm run glass:e2e:debug
 ```
 
-`glass:qa:auto` prints a JSON report covering:
+`glass:qa:auto` prints a JSON report covering layout/config/direct-ask guards.
 
-- overlay / command bar / panel layout config
-- `/api/glass/ask` direct endpoint present
-- no `runCouncilFull` in Glass ask handler
-- command bar success path does not auto-open browser
-- `?runId=` web handoff wired
-- Follow Mouse polling module present
-- unit + smoke test pass/fail summary
-- list of checks that **still require human GUI/permissions**
+**Electron E2E** (`glass:e2e`) launches the real Glass desktop app with a stub IIVO server and verifies:
+
+- App launch and overlay / command bar / dock windows
+- Command bar ask → thinking card → inline response card
+- No browser auto-open on normal direct ask
+- Cancel pending ask
+- Panel open + status grid
+- Stop Everything clears listening state
+- Open in IIVO only on user click (URL captured, not launched)
+- Window layout bounds (overlay = workArea, command bar bottom-centered)
+
+Skipped automatically in CI unless `GLASS_E2E_FORCE=1`. Requires `npm run glass:build` first (the e2e script builds automatically).
 
 ### Human-only QA (permissions + real desktop)
 

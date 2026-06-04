@@ -283,6 +283,13 @@ function FeedCard({
 
   return (
     <article
+      data-testid={
+        isThinking
+          ? "glass-overlay-thinking-card"
+          : isResponse
+            ? "glass-overlay-response-card"
+            : "glass-overlay-card"
+      }
       className={`overlay-feed-card overlay-feed-card--${item.kind}${item.pinned ? " overlay-feed-card--pinned" : ""}`}
       onMouseEnter={enterInteractive}
       onMouseLeave={leaveInteractive}
@@ -313,7 +320,12 @@ function FeedCard({
               <button type="button" className="gbtn gbtn--ghost" onClick={() => send({ type: "save-feed-moment", id: item.id })}>
                 Save Moment
               </button>
-              <button type="button" className="gbtn gbtn--primary" onClick={() => send({ type: "open-feed-in-iivo", id: item.id })}>
+              <button
+                type="button"
+                data-testid="glass-overlay-open-iivo"
+                className="gbtn gbtn--primary"
+                onClick={() => send({ type: "open-feed-in-iivo", id: item.id })}
+              >
                 Open in IIVO
               </button>
             </>
@@ -365,7 +377,7 @@ export function Overlay(): JSX.Element {
   }
 
   return (
-    <div className="overlay-root">
+    <div className="overlay-root" data-testid="glass-overlay-root">
       <OverlayPassiveLayer overlayMode={overlayMode} />
       <OverlayStatus state={state} />
 

@@ -104,6 +104,7 @@ export function CommandBar(): JSX.Element {
   return (
     <div className="command-root">
       <div
+        data-testid="glass-command-bar"
         className={`command-bar${listening ? " command-bar--listening" : ""}${askPending ? " command-bar--pending" : ""}`}
         onMouseEnter={enterInteractive}
         onMouseLeave={leaveInteractive}
@@ -111,6 +112,7 @@ export function CommandBar(): JSX.Element {
         <div className="command-bar__row">
           <button
             type="button"
+            data-testid="glass-command-listen"
             className={`command-voice${listening ? " command-voice--active" : ""}`}
             onClick={handleVoiceClick}
             onContextMenu={handleVoiceContext}
@@ -131,6 +133,7 @@ export function CommandBar(): JSX.Element {
 
           <input
             ref={inputRef}
+            data-testid="glass-command-input"
             className="command-input"
             type="text"
             value={text}
@@ -152,6 +155,7 @@ export function CommandBar(): JSX.Element {
 
           <button
             type="button"
+            data-testid={askPending ? "glass-command-cancel" : "glass-command-submit"}
             className="command-ask"
             onClick={askPending ? () => send({ type: "cancel-glass-ask" }) : submit}
             disabled={!askPending && !text.trim()}
@@ -178,6 +182,7 @@ export function CommandBar(): JSX.Element {
                 </span>
                 <button
                   type="button"
+                  data-testid="glass-command-stop-listening"
                   className="command-mini command-mini--danger"
                   onClick={() => send({ type: "pause" })}
                 >
