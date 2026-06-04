@@ -67,33 +67,67 @@ Expected UX:
     Open in IIVO, Analyze Now, Capture, Stop Everything, diagnostics) — not a crowded
     primary command surface.
 
-## Direct Response v1 (inline IIVO answers)
+## Direct Response v1 (inline IIVO answers — direct-only)
 
 Expected UX:
 
-- Command bar asks IIVO via `POST /api/glass/ask` (Quick/Direct Answer by default).
+- Command bar asks IIVO via `POST /api/glass/ask` using **one direct OpenAI call** (`routeUsed: glass_direct`).
+- **No Council**, no workflow router, no Sales Attack / Product Decision formatting.
 - **Inline answer** appears on the overlay without opening the browser first.
-- Response card supports **Copy**, **Pin**, **Save Moment**, **Open in IIVO**.
+- Response card supports **Copy**, **Pin**, **Save Moment**, **Expand** (long answers), **Open in IIVO**.
+- Pending ask shows **Cancel** on the command bar; cancelled requests show **Request cancelled.**
 - On server failure, error card shows with **Open in IIVO** fallback (no silent fail).
 - Session stores `iivo_command` + `iivo_response` events when a session is active.
+- **Analyze Now** remains separate (Council/deep analysis) — not used by command bar asks.
 
 ### Direct Response manual QA
 
-1. Start IIVO server (`npm run dev`).
+1. Start IIVO server (`npm run dev`) with `OPENAI_API_KEY` configured.
 2. Start Glass (`npm run glass:dev`).
 3. Confirm overlay click-through still works.
 4. Type in command bar: **“What am I working on?”** and submit.
 5. Confirm **“IIVO is thinking…”** card appears.
 6. Confirm **inline answer card** appears **without** opening the browser automatically.
-7. Click **Copy** on the answer card.
-8. Click **Pin** — card stays visible.
-9. Click **Save Moment**.
-10. Click **Open in IIVO** — browser opens with Context Bridge handoff.
-11. **Start Session**, ask another question, confirm command/response saved to session timeline.
-12. Stop IIVO server, ask again — confirm **error card** + **Open in IIVO** fallback.
-13. Confirm command bar shows **Thinking** state while pending (input disabled).
-14. Click mic once — should start **Microphone** listening (one click). Right-click mic for source menu.
-15. Check panel **Hotkey** and **Display** diagnostics rows.
+7. Confirm answer has **no Council formatting** (no Final Action Plan, Decision Quality, Risk Flags, Score).
+8. Click **Copy** on the answer card.
+9. Click **Pin** — card stays visible.
+10. Click **Save Moment**.
+11. Click **Open in IIVO** — browser opens with Context Bridge handoff; notice **Opened in IIVO with this answer attached.**
+12. Ask a long question — confirm **Expand** shows full answer when shortened.
+13. Submit a question, click **Cancel** while pending — confirm **Request cancelled.** and bar returns idle.
+14. **Start Session**, ask another question, confirm command/response saved to session timeline.
+15. Stop IIVO server, ask again — confirm **error card** + **Open in IIVO** fallback.
+16. Panel → change **Command bar hotkey** preset — confirm diagnostics update.
+17. Panel → change **Display** (Primary / Display N / Follow Mouse) — confirm layout moves or status updates.
+18. Click **Refresh display layout** after display change.
+
+### Pass/Fail log template (Direct Response v1)
+
+```text
+Date:
+Tester:
+Branch:
+Glass version:
+IIVO server: running / not running
+OPENAI_API_KEY: configured / missing
+
+Direct Response:
+[ ] Inline answer without browser auto-open
+[ ] No Council formatting in command bar answers
+[ ] Cancel pending ask
+[ ] Open in IIVO fallback with notice
+[ ] Hotkey preset change
+[ ] Display selection / refresh
+[ ] Session iivo_command + iivo_response events
+
+Results: ___ / 18 passed
+
+Blockers:
+-
+
+Follow-ups:
+-
+```
 
 ### Overlay manual QA
 

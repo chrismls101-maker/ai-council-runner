@@ -89,3 +89,8 @@ export function buildLensContextUrl(config: GlassConfig, contextId: string): str
 export function buildIivoChatUrl(config: GlassConfig): string {
   return `${config.iivoWebUrl}/`;
 }
+
+/** Best-effort deep link when a council run id exists (Analyze Now path). */
+export function buildRunHistoryUrl(config: GlassConfig, runId: string): string {
+  return `${config.iivoWebUrl}/?runId=${encodeURIComponent(runId)}`;
+}

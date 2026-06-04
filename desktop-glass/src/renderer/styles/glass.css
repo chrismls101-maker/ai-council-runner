@@ -1157,6 +1157,23 @@ body {
   box-shadow: 0 22px 60px rgba(0, 0, 0, 0.5), 0 0 36px rgba(74, 222, 128, 0.2);
 }
 
+.panel__settings-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.panel__settings-row select {
+  width: 100%;
+}
+
+.panel__settings .hint {
+  margin-bottom: 10px;
+  opacity: 0.85;
+  font-size: 12px;
+}
+
 .command-bar--pending {
   border-color: rgba(56, 225, 255, 0.5);
   box-shadow: 0 22px 60px rgba(0, 0, 0, 0.5), 0 0 36px rgba(56, 225, 255, 0.22);

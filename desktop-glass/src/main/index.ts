@@ -8,7 +8,7 @@
 
 import { loadGlassEnv } from "./loadGlassEnv.ts";
 import { app, BrowserWindow, ipcMain, protocol, shell } from "electron";
-import { resolveConfig, buildIivoChatUrl, buildLensAskUrl } from "../shared/config.ts";
+import { resolveConfig, buildIivoChatUrl, buildLensAskUrl, buildRunHistoryUrl } from "../shared/config.ts";
 import {
   privacyReducer,
   initialPrivacyState,
@@ -51,7 +51,10 @@ import {
   broadcast,
   createWindows,
   getCommandBarHotkeyStatus,
+  applyGlassUserSettings,
+  getAvailableDisplayIds,
   getDisplayLayoutSummary,
+  refreshGlassDisplayLayout,
   getGlassWindowState,
   getWindows,
   isPanelVisible,
@@ -109,9 +112,13 @@ import {
   createCommandFeedItem,
   type GlassCommandFeedItem,
 } from "../shared/commandFeed.ts";
-import { askIivoGlass } from "./glassAskClient.ts";
+import { askIivoGlass, GlassAskCancelledError } from "./glassAskClient.ts";
 import type { GlassAskSessionPayload, GlassAskStatus, GlassLastAskResponse } from "../shared/glassAskTypes.ts";
-import { shouldUseCouncilMode } from "../shared/glassAskTypes.ts";
+import {
+  DEFAULT_GLASS_USER_SETTINGS,
+  type GlassUserSettings,
+} from "../shared/glassSettings.ts";
+import { loadGlassUserSettings, persistGlassUserSettings } from "./glassSettingsPersistence.ts";
 
 loadGlassEnv();
 
@@ -152,7 +159,12 @@ interface AppState {
   askStatus: GlassAskStatus;
   lastAskResponse?: GlassLastAskResponse;
   askInFlight: boolean;
+  glassSettings: GlassUserSettings;
 }
+
+let askAbortController: AbortController | null = null;
+let askRequestGeneration = 0;
+let glassUserSettings: GlassUserSettings = { ...DEFAULT_GLASS_USER_SETTINGS };
 
 const state: AppState = {
   privacy: { ...initialPrivacyState },
@@ -171,6 +183,7 @@ const state: AppState = {
   commandFeed: [],
   askStatus: "idle",
   askInFlight: false,
+  glassSettings: { ...DEFAULT_GLASS_USER_SETTINGS },
 };
 
 let moments = new SavedMomentsStore();
@@ -212,6 +225,8 @@ function snapshot(): GlassState {
     commandFeed: state.commandFeed,
     askStatus: state.askStatus,
     lastAskResponse: state.lastAskResponse,
+    glassSettings: state.glassSettings,
+    availableDisplayIds: getAvailableDisplayIds(),
   };
 }
 
@@ -367,17 +382,33 @@ async function openFeedInIivo(feedId: string): Promise<void> {
   const item = state.commandFeed.find((f) => f.id === feedId);
   if (!item) return;
 
+  if (item.runId) {
+    const runUrl = buildRunHistoryUrl(config, item.runId);
+    state.lastSentUrl = runUrl;
+    await shell.openExternal(runUrl);
+    state.lastNotice = "Opened run in IIVO.";
+    push();
+    return;
+  }
+
   if (item.contextId) {
     await openHandoff(item.contextId);
+    state.lastNotice = "Opened in IIVO with this answer attached.";
     push();
     return;
   }
 
   const question = item.prompt ?? item.title;
   const answer = item.fullBody ?? (item.kind === "response" ? item.body : undefined);
-  const text = answer
-    ? `Question:\n${question}\n\nAnswer:\n${answer}`
-    : `Question:\n${question}\n\n(Continue this conversation in IIVO.)`;
+  const session = sessions.current();
+  const summary = session ? buildSessionSummary(session) : undefined;
+  const parts = [`Question:\n${question}`];
+  if (answer) parts.push(`Answer:\n${answer}`);
+  if (summary?.trim()) parts.push(`Session context:\n${summary.trim()}`);
+  const text =
+    parts.length > 1
+      ? parts.join("\n\n")
+      : `Question:\n${question}\n\n(Continue this conversation in IIVO.)`;
   const payload = buildTextContextPayload({
     title: `IIVO Glass · ${question.length > 60 ? `${question.slice(0, 59)}…` : question}`,
     text,
@@ -385,6 +416,25 @@ async function openFeedInIivo(feedId: string): Promise<void> {
   });
   const created = await createContextItem(config, payload);
   await openHandoff(created.id);
+  state.lastNotice = "Opened in IIVO with this answer attached.";
+  push();
+}
+
+function removeThinkingFeedItems(): void {
+  state.commandFeed = state.commandFeed.filter((item) => item.kind !== "thinking");
+}
+
+function cancelGlassAsk(): void {
+  if (!state.askInFlight) return;
+
+  askRequestGeneration += 1;
+  askAbortController?.abort();
+  askAbortController = null;
+  state.askInFlight = false;
+  state.askStatus = "idle";
+  removeThinkingFeedItems();
+  pushFeed(createCommandFeedItem("error", "Request cancelled."));
+  state.operationDiagnostics = recordOperation(state.operationDiagnostics, "ask-iivo", "error", "cancelled");
   push();
 }
 
@@ -411,6 +461,11 @@ async function submitCommand(rawText: string): Promise<void> {
   const text = rawText.trim();
   if (!text || state.askInFlight) return;
 
+  const requestGeneration = ++askRequestGeneration;
+  askAbortController?.abort();
+  askAbortController = new AbortController();
+  const signal = askAbortController.signal;
+
   state.askInFlight = true;
   state.askStatus = "pending";
   state.lastError = undefined;
@@ -421,7 +476,6 @@ async function submitCommand(rawText: string): Promise<void> {
 
   const live = sessionIsLive();
   const session = sessions.current();
-  const mode = shouldUseCouncilMode(text);
 
   if (live && session) {
     sessions.addEvent({
@@ -434,28 +488,38 @@ async function submitCommand(rawText: string): Promise<void> {
   }
 
   try {
-    const result = await askIivoGlass(config, {
-      prompt: text,
-      session: buildGlassAskSessionPayload(),
-      mode,
-      responseStyle: "overlay",
-    });
+    const result = await askIivoGlass(
+      config,
+      {
+        prompt: text,
+        session: buildGlassAskSessionPayload(),
+        responseStyle: "overlay",
+      },
+      signal,
+    );
 
+    if (requestGeneration !== askRequestGeneration) return;
+
+    removeThinkingFeedItems();
     state.askStatus = "done";
+    const overlayAnswer = result.shortAnswer ?? result.answer;
+    const fullAnswer = result.answer;
     state.lastAskResponse = {
       prompt: text,
-      answer: result.answer,
-      fullAnswer: result.answer,
+      answer: overlayAnswer,
+      fullAnswer,
+      shortAnswer: result.shortAnswer,
       runId: result.runId,
       contextId: result.contextId,
       at: new Date().toISOString(),
-      modeUsed: result.modeUsed,
+      routeUsed: result.routeUsed,
+      model: result.model,
     };
 
     pushFeed(
-      createCommandFeedItem("response", result.answer, {
+      createCommandFeedItem("response", overlayAnswer, {
         prompt: text,
-        fullBody: result.answer,
+        fullBody: fullAnswer,
         runId: result.runId,
         contextId: result.contextId,
       }),
@@ -465,10 +529,10 @@ async function submitCommand(rawText: string): Promise<void> {
       sessions.addEvent({
         kind: "iivo_response",
         title: "IIVO response",
-        text: result.answer,
+        text: fullAnswer,
         importance: "high",
         ...eventContextFields(),
-        metadata: { runId: result.runId, modeUsed: result.modeUsed },
+        metadata: { routeUsed: result.routeUsed, model: result.model },
       });
       await persistSessions(sessions);
     }
@@ -478,6 +542,11 @@ async function submitCommand(rawText: string): Promise<void> {
       : result.warnings?.[0] ?? "IIVO answered inline. Start a session to save this context.";
     state.operationDiagnostics = recordOperation(state.operationDiagnostics, "ask-iivo", "ok");
   } catch (err) {
+    if (requestGeneration !== askRequestGeneration || signal.aborted || err instanceof GlassAskCancelledError) {
+      return;
+    }
+
+    removeThinkingFeedItems();
     const message = err instanceof Error ? err.message : "Could not reach IIVO server.";
     state.askStatus = "error";
     pushFeed(
@@ -488,9 +557,12 @@ async function submitCommand(rawText: string): Promise<void> {
     state.lastError = message;
     state.operationDiagnostics = recordOperation(state.operationDiagnostics, "ask-iivo", "error", message);
   } finally {
-    state.askInFlight = false;
-    if (state.askStatus === "pending") state.askStatus = "idle";
-    push();
+    if (requestGeneration === askRequestGeneration) {
+      state.askInFlight = false;
+      askAbortController = null;
+      if (state.askStatus === "pending") state.askStatus = "idle";
+      push();
+    }
   }
 }
 
@@ -654,6 +726,27 @@ async function handleCommand(command: GlassCommand): Promise<void> {
     case "submit-command":
     case "ask-iivo-direct":
       await submitCommand(command.text);
+      return;
+    case "cancel-glass-ask":
+      cancelGlassAsk();
+      return;
+    case "set-glass-hotkey":
+      state.glassSettings = { ...state.glassSettings, hotkeyPreset: command.preset };
+      glassUserSettings = state.glassSettings;
+      await persistGlassUserSettings(glassUserSettings);
+      registerGlobalHotkeys();
+      push();
+      return;
+    case "set-glass-display":
+      state.glassSettings = { ...state.glassSettings, displayTarget: command.target };
+      glassUserSettings = state.glassSettings;
+      await persistGlassUserSettings(glassUserSettings);
+      applyGlassUserSettings(glassUserSettings);
+      push();
+      return;
+    case "refresh-glass-layout":
+      refreshGlassDisplayLayout();
+      push();
       return;
     case "open-feed-in-iivo":
       try {
@@ -1075,7 +1168,7 @@ function registerIpc(): void {
 }
 
 function registerGlobalHotkeys(): void {
-  const status = registerCommandBarHotkeys();
+  const status = registerCommandBarHotkeys(state.glassSettings.hotkeyPreset);
   state.operationDiagnostics = {
     ...state.operationDiagnostics,
     hotkeyStatus: status,
@@ -1087,15 +1180,19 @@ app.whenReady().then(async () => {
   registerSystemAudioHandler();
   moments = await loadMoments();
   sessions = await loadSessions();
+  glassUserSettings = await loadGlassUserSettings();
+  state.glassSettings = glassUserSettings;
   state.windowContext = await getCurrentWindowContext();
   registerIpc();
-  createWindows(config);
+  createWindows(config, glassUserSettings.displayTarget);
+  applyGlassUserSettings(glassUserSettings);
   registerGlobalHotkeys();
   push();
 
   app.on("activate", () => {
     if (getWindows() === null) {
-      createWindows(config);
+      createWindows(config, glassUserSettings.displayTarget);
+      applyGlassUserSettings(glassUserSettings);
       registerGlobalHotkeys();
       push();
     }

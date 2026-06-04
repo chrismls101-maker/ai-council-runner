@@ -46,6 +46,8 @@ const fallbackState: GlassState = {
   operationDiagnostics: { ...INITIAL_OPERATION_DIAGNOSTICS },
   commandFeed: [],
   askStatus: "idle" as const,
+  glassSettings: { hotkeyPreset: "cmd-shift-space", displayTarget: "primary" },
+  availableDisplayIds: [],
 };
 
 export function useGlassState(): GlassState {

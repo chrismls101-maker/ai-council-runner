@@ -1,7 +1,7 @@
 /**
  * Dynamic layout for IIVO Glass windows (Electron main process).
  *
- * Reads display.bounds / workArea from screen.getPrimaryDisplay().
+ * Display target can be primary, a specific display id, or follow mouse.
  * Pure math lives in shared/glassLayoutMath.ts (testable without Electron).
  */
 
@@ -23,6 +23,7 @@ import {
   DEFAULT_GLASS_LAYOUT_PRESET,
   type GlassLayoutPreset,
 } from "../shared/glassLayoutTypes.ts";
+import type { GlassDisplayTarget } from "../shared/glassSettings.ts";
 
 export type { GlassLayoutPreset } from "../shared/glassLayoutTypes.ts";
 export {
@@ -51,12 +52,35 @@ export function getPrimaryDisplayContext(): DisplayLayoutContext {
   return displayContextFromDisplay(screen.getPrimaryDisplay());
 }
 
+export function listDisplayIds(): number[] {
+  return screen.getAllDisplays().map((d) => d.id);
+}
+
+export function resolveDisplayContext(target: GlassDisplayTarget): DisplayLayoutContext {
+  const displays = screen.getAllDisplays();
+  if (target === "follow_mouse") {
+    const nearest = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    return displayContextFromDisplay(nearest);
+  }
+  if (target === "primary") {
+    return getPrimaryDisplayContext();
+  }
+  const match = displays.find((d) => d.id === target);
+  if (match) return displayContextFromDisplay(match);
+  return getPrimaryDisplayContext();
+}
+
 export class GlassLayoutManager {
   private preset: GlassLayoutPreset;
+  private displayTarget: GlassDisplayTarget;
   private displayChangeHandler: (() => void) | null = null;
 
-  constructor(preset: GlassLayoutPreset = DEFAULT_GLASS_LAYOUT_PRESET) {
+  constructor(
+    preset: GlassLayoutPreset = DEFAULT_GLASS_LAYOUT_PRESET,
+    displayTarget: GlassDisplayTarget = "primary",
+  ) {
     this.preset = preset;
+    this.displayTarget = displayTarget;
   }
 
   getPreset(): GlassLayoutPreset {
@@ -67,8 +91,16 @@ export class GlassLayoutManager {
     this.preset = preset;
   }
 
+  getDisplayTarget(): GlassDisplayTarget {
+    return this.displayTarget;
+  }
+
+  setDisplayTarget(target: GlassDisplayTarget): void {
+    this.displayTarget = target;
+  }
+
   getDisplay(): DisplayLayoutContext {
-    return getPrimaryDisplayContext();
+    return resolveDisplayContext(this.displayTarget);
   }
 
   getOverlayLayout(): OverlayLayout {

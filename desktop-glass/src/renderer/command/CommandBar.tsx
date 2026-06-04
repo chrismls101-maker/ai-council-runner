@@ -153,13 +153,11 @@ export function CommandBar(): JSX.Element {
           <button
             type="button"
             className="command-ask"
-            onClick={submit}
-            disabled={!text.trim() || askPending}
+            onClick={askPending ? () => send({ type: "cancel-glass-ask" }) : submit}
+            disabled={!askPending && !text.trim()}
           >
             {askPending ? (
-              <>
-                Thinking <span className="command-ask__spinner" aria-hidden="true" />
-              </>
+              <>Cancel</>
             ) : (
               <>
                 Ask <span aria-hidden="true">↑</span>

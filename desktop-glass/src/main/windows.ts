@@ -9,7 +9,14 @@ import { join } from "node:path";
 import { BrowserWindow, globalShortcut, shell } from "electron";
 import type { GlassConfig } from "../shared/config.ts";
 import type { OverlayMode } from "../shared/glassWindowTypes.ts";
-import { GlassLayoutManager } from "./glassLayoutManager.ts";
+import {
+  formatDisplayTargetLabel,
+  GLASS_HOTKEY_PRESETS,
+  type GlassDisplayTarget,
+  type GlassHotkeyPreset,
+  type GlassUserSettings,
+} from "../shared/glassSettings.ts";
+import { GlassLayoutManager, listDisplayIds } from "./glassLayoutManager.ts";
 import {
   buildWindowState,
   formatGlassWindowDiagnostics,
@@ -268,9 +275,10 @@ function createCommandBarWindow(): BrowserWindow {
   return commandBar;
 }
 
-export function createWindows(glassConfig: GlassConfig): GlassWindows {
+export function createWindows(glassConfig: GlassConfig, displayTarget: GlassDisplayTarget = "primary"): GlassWindows {
   layoutManager?.dispose();
-  layoutManager = new GlassLayoutManager(glassConfig.layoutPreset);
+  activeDisplayTarget = displayTarget;
+  layoutManager = new GlassLayoutManager(glassConfig.layoutPreset, displayTarget);
   layoutManager.onDisplayChanged(() => relayoutAllWindows());
 
   overlayVisible = glassConfig.overlayEnabled;
@@ -518,22 +526,52 @@ export function disposeWindows(): void {
 }
 
 let commandBarHotkeyStatus = "Hotkey unavailable — command bar still clickable";
+let activeHotkeyPreset: GlassHotkeyPreset = "cmd-shift-space";
+let activeDisplayTarget: GlassDisplayTarget = "primary";
 
 export function getCommandBarHotkeyStatus(): string {
   return commandBarHotkeyStatus;
 }
 
-/** Register global shortcut(s) to focus the command bar. Logs success/failure. */
-export function registerCommandBarHotkeys(): string {
-  const accelerators = ["CommandOrControl+Shift+Space", "Alt+Space"];
-  for (const accel of accelerators) {
+export function getActiveHotkeyPreset(): GlassHotkeyPreset {
+  return activeHotkeyPreset;
+}
+
+export function getActiveDisplayTarget(): GlassDisplayTarget {
+  return activeDisplayTarget;
+}
+
+export function getAvailableDisplayIds(): number[] {
+  return listDisplayIds();
+}
+
+/** Register global shortcut to focus the command bar. Logs success/failure. */
+export function registerCommandBarHotkeys(preset: GlassHotkeyPreset = activeHotkeyPreset): string {
+  activeHotkeyPreset = preset;
+  unregisterCommandBarHotkeys();
+
+  const spec = GLASS_HOTKEY_PRESETS[preset];
+  if (!spec.accelerator) {
+    commandBarHotkeyStatus = "Hotkey disabled — command bar still clickable";
+    console.log(commandBarHotkeyStatus);
+    return commandBarHotkeyStatus;
+  }
+
+  const fallbacks: GlassHotkeyPreset[] =
+    preset === "cmd-shift-space"
+      ? ["cmd-shift-space", "alt-space"]
+      : [preset];
+
+  for (const key of fallbacks) {
+    const accel = GLASS_HOTKEY_PRESETS[key].accelerator;
+    if (!accel) continue;
     try {
       if (globalShortcut.isRegistered(accel)) {
         globalShortcut.unregister(accel);
       }
       const ok = globalShortcut.register(accel, () => focusCommandBar());
       if (ok) {
-        commandBarHotkeyStatus = accel;
+        commandBarHotkeyStatus = `${GLASS_HOTKEY_PRESETS[key].label} registered`;
         console.log(`Glass hotkey registered: ${accel}`);
         return commandBarHotkeyStatus;
       }
@@ -542,6 +580,7 @@ export function registerCommandBarHotkeys(): string {
       console.warn(`Glass hotkey error for ${accel}:`, err);
     }
   }
+
   commandBarHotkeyStatus = "Hotkey unavailable — command bar still clickable";
   console.warn(commandBarHotkeyStatus);
   return commandBarHotkeyStatus;
@@ -551,11 +590,26 @@ export function unregisterCommandBarHotkeys(): void {
   globalShortcut.unregisterAll();
 }
 
-/** Compact display/layout summary for diagnostics (primary display only). */
+/** Compact display/layout summary for diagnostics. */
 export function getDisplayLayoutSummary(): string {
   if (!layoutManager) return "display: not initialized";
   const d = layoutManager.getDisplay();
   const overlay = layoutManager.getOverlayLayout();
   const bar = layoutManager.getCommandBarLayout();
-  return `primary id${d.id} ${d.workArea.width}x${d.workArea.height} · overlay ${overlay.width}x${overlay.height} · commandBar y${bar.y}`;
+  const targetLabel = formatDisplayTargetLabel(activeDisplayTarget, listDisplayIds());
+  return `${targetLabel} · id${d.id} ${d.workArea.width}x${d.workArea.height} · overlay ${overlay.width}x${overlay.height} · commandBar y${bar.y}`;
+}
+
+export function applyGlassUserSettings(settings: GlassUserSettings): void {
+  activeDisplayTarget = settings.displayTarget;
+  if (layoutManager) {
+    layoutManager.setDisplayTarget(settings.displayTarget);
+    relayoutAllWindows();
+  }
+  registerCommandBarHotkeys(settings.hotkeyPreset);
+}
+
+export function refreshGlassDisplayLayout(): void {
+  relayoutAllWindows();
+  logDiagnostics();
 }

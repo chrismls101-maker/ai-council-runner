@@ -2,8 +2,6 @@
  * IIVO Glass direct ask — server request/response types.
  */
 
-export type GlassAskMode = "quick" | "council";
-
 export interface GlassAskSessionEvent {
   kind: string;
   title: string;
@@ -29,13 +27,14 @@ export interface GlassAskSessionPayload {
 export interface GlassAskRequestBody {
   prompt: string;
   session?: GlassAskSessionPayload;
-  mode?: GlassAskMode;
   responseStyle?: "overlay";
 }
 
 export interface GlassAskResponseBody {
   answer: string;
-  modeUsed: GlassAskMode;
+  shortAnswer?: string;
+  model?: string;
+  routeUsed: "glass_direct";
   runId?: string;
   contextId?: string;
   title?: string;

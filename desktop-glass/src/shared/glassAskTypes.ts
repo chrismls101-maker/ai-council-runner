@@ -2,8 +2,6 @@
  * IIVO Glass direct ask — shared types (no Electron).
  */
 
-export type GlassAskMode = "quick" | "council";
-
 export interface GlassAskSessionEvent {
   kind: string;
   title: string;
@@ -29,13 +27,14 @@ export interface GlassAskSessionPayload {
 export interface GlassAskRequest {
   prompt: string;
   session?: GlassAskSessionPayload;
-  mode?: GlassAskMode;
   responseStyle?: "overlay";
 }
 
 export interface GlassAskResponse {
   answer: string;
-  modeUsed: GlassAskMode;
+  shortAnswer?: string;
+  model?: string;
+  routeUsed: "glass_direct";
   runId?: string;
   contextId?: string;
   title?: string;
@@ -47,10 +46,12 @@ export interface GlassLastAskResponse {
   prompt: string;
   answer: string;
   fullAnswer?: string;
+  shortAnswer?: string;
   runId?: string;
   contextId?: string;
   at: string;
-  modeUsed?: GlassAskMode;
+  routeUsed?: "glass_direct";
+  model?: string;
 }
 
 export type GlassAskStatus = "idle" | "pending" | "done" | "error";
@@ -60,14 +61,14 @@ export function formatOverlayAnswerText(raw: string): string {
   return raw
     .trim()
     .replace(/^#{1,6}\s+/gm, "")
-    .replace(/\*\*Final Action Plan\*\*/gi, "Summary")
+    .replace(/\*\*Final Action Plan\*\*/gi, "")
+    .replace(/\*\*(Decision Quality|Risk Flags|Recommended Action)\*\*/gi, "")
     .replace(/\n{3,}/g, "\n\n");
 }
 
-export function shouldUseCouncilMode(prompt: string, explicit?: GlassAskMode): GlassAskMode {
-  if (explicit === "council" || explicit === "quick") return explicit;
-  if (/\b(analyze|analysis|council|strategic decision|deep analysis|strategy for|decision between|tradeoff)\b/i.test(prompt)) {
-    return "council";
-  }
-  return "quick";
+const COUNCIL_MARKERS =
+  /\b(Final Action Plan|Decision Quality|Risk Flags|Recommended Action|Sales Attack|Product Decision|Final Judge|Strategist complete)\b/i;
+
+export function isCouncilFormattedAnswer(text: string): boolean {
+  return COUNCIL_MARKERS.test(text);
 }

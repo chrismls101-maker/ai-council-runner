@@ -19,6 +19,7 @@ import type { GlassWindowState, OverlayMode } from "./glassWindowTypes.ts";
 import type { GlassOperationDiagnostics } from "./glassOperations.ts";
 import type { GlassCommandFeedItem } from "./commandFeed.ts";
 import type { GlassAskStatus, GlassLastAskResponse } from "./glassAskTypes.ts";
+import type { GlassUserSettings } from "./glassSettings.ts";
 
 export type { GlassSttState } from "./sttTypes.ts";
 
@@ -81,6 +82,10 @@ export type GlassCommand =
   | { type: "ask-iivo" }
   | { type: "submit-command"; text: string }
   | { type: "ask-iivo-direct"; text: string }
+  | { type: "cancel-glass-ask" }
+  | { type: "set-glass-hotkey"; preset: GlassUserSettings["hotkeyPreset"] }
+  | { type: "set-glass-display"; target: GlassUserSettings["displayTarget"] }
+  | { type: "refresh-glass-layout" }
   | { type: "open-feed-in-iivo"; id: string }
   | { type: "save-feed-moment"; id: string }
   | { type: "command-bar-blur" }
@@ -139,6 +144,8 @@ export interface GlassState {
   commandFeed: GlassCommandFeedItem[];
   askStatus: GlassAskStatus;
   lastAskResponse?: GlassLastAskResponse;
+  glassSettings: GlassUserSettings;
+  availableDisplayIds: number[];
 }
 
 export interface SttProcessChunkRequest {

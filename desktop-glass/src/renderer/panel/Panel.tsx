@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
 import { send, useGlassState } from "../useGlassState.ts";
+import {
+  formatDisplayTargetLabel,
+  GLASS_HOTKEY_PRESETS,
+  type GlassDisplayTarget,
+  type GlassHotkeyPreset,
+} from "../../shared/glassSettings.ts";
 import { StatusPill } from "../components/StatusPill.tsx";
 import { SessionPill } from "../components/SessionPill.tsx";
 import type { GlassState } from "../../shared/ipc.ts";
@@ -625,6 +631,78 @@ function StatusGrid({ state }: { state: GlassState }): JSX.Element {
           Stop Everything
         </button>
       </div>
+      <GlassLayoutSettings state={state} />
+    </div>
+  );
+}
+
+function GlassLayoutSettings({ state }: { state: GlassState }): JSX.Element {
+  const settings = state.glassSettings;
+
+  const hotkeyOptions = (Object.keys(GLASS_HOTKEY_PRESETS) as GlassHotkeyPreset[]).map((preset) => ({
+    preset,
+    label: GLASS_HOTKEY_PRESETS[preset].label,
+  }));
+
+  const displayOptions: { target: GlassDisplayTarget; label: string }[] = [
+    { target: "primary", label: "Primary Display" },
+    ...state.availableDisplayIds.map((id, index) => ({
+      target: id as GlassDisplayTarget,
+      label: `Display ${index + 1} (id ${id})`,
+    })),
+    { target: "follow_mouse", label: "Follow Mouse Display" },
+  ];
+
+  return (
+    <div className="summary-box panel__settings">
+      <p className="section-title">Glass layout</p>
+      <p className="hint">
+        Glass is using {formatDisplayTargetLabel(settings.displayTarget)}. Command bar hotkey:{" "}
+        {state.operationDiagnostics.hotkeyStatus ?? "—"}
+      </p>
+      <label className="panel__settings-row">
+        <span>Command bar hotkey</span>
+        <select
+          value={settings.hotkeyPreset}
+          onChange={(e) =>
+            send({ type: "set-glass-hotkey", preset: e.target.value as GlassHotkeyPreset })
+          }
+        >
+          {hotkeyOptions.map((opt) => (
+            <option key={opt.preset} value={opt.preset}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="panel__settings-row">
+        <span>Display</span>
+        <select
+          value={
+            typeof settings.displayTarget === "number"
+              ? String(settings.displayTarget)
+              : settings.displayTarget
+          }
+          onChange={(e) => {
+            const value = e.target.value;
+            const target: GlassDisplayTarget =
+              value === "primary" || value === "follow_mouse" ? value : Number(value);
+            send({ type: "set-glass-display", target });
+          }}
+        >
+          {displayOptions.map((opt) => (
+            <option
+              key={String(opt.target)}
+              value={typeof opt.target === "number" ? String(opt.target) : opt.target}
+            >
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button type="button" className="gbtn gbtn--ghost" onClick={() => send({ type: "refresh-glass-layout" })}>
+        Refresh display layout
+      </button>
     </div>
   );
 }
