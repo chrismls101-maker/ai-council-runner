@@ -1217,6 +1217,9 @@ function registerIpc(): void {
       resetE2eExternalUrls();
     });
     ipcMain.handle(IPC.e2eGetWindowMetadata, () => getGlassE2eWindowMetadata());
+    ipcMain.handle(IPC.e2eGetCaptureTarget, () =>
+      resolveCaptureDisplay(glassUserSettings.displayTarget),
+    );
   }
 }
 

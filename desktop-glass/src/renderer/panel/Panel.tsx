@@ -718,6 +718,7 @@ function GlassLayoutSettings({ state }: { state: GlassState }): JSX.Element {
       <label className="panel__settings-row">
         <span>Glass Display</span>
         <select
+          data-testid="glass-display-select"
           value={
             typeof settings.displayTarget === "number"
               ? String(settings.displayTarget)

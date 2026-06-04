@@ -57,6 +57,9 @@ const glassApi = {
       import("../shared/glassE2eTypes.ts").GlassE2eWindowMetadata[]
     >;
   },
+  getE2eCaptureTarget(): Promise<{ id: number; label: string }> {
+    return ipcRenderer.invoke(IPC.e2eGetCaptureTarget) as Promise<{ id: number; label: string }>;
+  },
 };
 
 export type GlassApi = typeof glassApi;

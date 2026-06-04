@@ -77,6 +77,10 @@ export async function getE2eWindowMetadata(page: Page) {
   return page.evaluate(() => window.glass.getE2eWindowMetadata());
 }
 
+export async function getE2eCaptureTarget(page: Page): Promise<{ id: number; label: string }> {
+  return page.evaluate(() => window.glass.getE2eCaptureTarget());
+}
+
 export async function readGlassState(page: Page) {
   return page.evaluate(async () => window.glass.getState());
 }
