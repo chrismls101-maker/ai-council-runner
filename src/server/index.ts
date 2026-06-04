@@ -86,6 +86,11 @@ import {
   updateBenchmarkRun,
 } from "./benchmarks/benchmarkStore.js";
 import { BENCHMARK_PROMPTS } from "../constants/benchmarkPrompts.js";
+import {
+  getOpenAiKey,
+  MAX_AUDIO_BYTES,
+  transcribeAudioBuffer,
+} from "./transcription/transcribeAudio.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3001;
@@ -96,7 +101,66 @@ app.use(express.json({ limit: "2mb" }));
 
 app.get("/api/health", (_req, res) => {
   const missing = validateApiKeys();
-  res.json({ ok: missing.length === 0, missingKeys: missing });
+  res.json({
+    ok: missing.length === 0,
+    missingKeys: missing,
+    stt: {
+      configured: !!getOpenAiKey(),
+      endpoint: "/api/transcribe-audio",
+    },
+  });
+});
+
+app.post("/api/transcribe-audio", express.json({ limit: "8mb" }), async (req, res) => {
+  const { audioBase64, mimeType, model, source } = req.body as {
+    audioBase64?: string;
+    mimeType?: string;
+    model?: string;
+    source?: string;
+  };
+  if (!audioBase64?.trim()) {
+    res.status(400).json({ error: "audioBase64 is required" });
+    return;
+  }
+  if (!mimeType?.trim()) {
+    res.status(400).json({ error: "mimeType is required" });
+    return;
+  }
+  if (!getOpenAiKey()) {
+    res.status(503).json({
+      error: "OPENAI_API_KEY is not configured on the IIVO server.",
+      provider: "openai",
+    });
+    return;
+  }
+  let buffer: Buffer;
+  try {
+    buffer = Buffer.from(audioBase64, "base64");
+  } catch {
+    res.status(400).json({ error: "Invalid audioBase64 payload" });
+    return;
+  }
+  if (buffer.length > MAX_AUDIO_BYTES) {
+    res.status(413).json({
+      error: `Audio exceeds maximum size (${MAX_AUDIO_BYTES} bytes).`,
+    });
+    return;
+  }
+  try {
+    const result = await transcribeAudioBuffer(buffer, mimeType.trim(), model?.trim());
+    res.json({
+      ...result,
+      source: source ?? "unknown",
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Transcription failed";
+    const status = /not configured/i.test(message)
+      ? 503
+      : /Unsupported audio|empty|maximum size/i.test(message)
+        ? 422
+        : 502;
+    res.status(status).json({ error: message, provider: "openai" });
+  }
 });
 
 app.get("/api/workflows", (_req, res) => {

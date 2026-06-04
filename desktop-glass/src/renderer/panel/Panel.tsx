@@ -488,7 +488,10 @@ function Transcript({ transcript }: { transcript: string }): JSX.Element {
         {tx.sttProviderLabel}
       </p>
       <p className="empty">{tx.sttStatusMessage}</p>
+      {tx.sttFixHint ? <p className="empty">{tx.sttFixHint}</p> : null}
+      {tx.micPathLabel ? <p className="empty">{tx.micPathLabel}</p> : null}
       <p className="empty">{tx.statusMessage}</p>
+      {tx.systemAudioHint ? <p className="empty">{tx.systemAudioHint}</p> : null}
       {tx.status === "listening" ? (
         <p className="privacy__warning">
           ● Listening {tx.listeningDuration} —{" "}

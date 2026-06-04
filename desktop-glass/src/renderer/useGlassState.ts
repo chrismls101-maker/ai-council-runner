@@ -9,6 +9,7 @@ import type { GlassSttState } from "../shared/sttTypes.ts";
 
 const fallbackStt: GlassSttState = {
   provider: "none",
+  endpoint: "server",
   status: "disabled",
   model: "gpt-4o-mini-transcribe",
   enabled: false,

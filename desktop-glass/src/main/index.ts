@@ -712,6 +712,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.sttProcessChunk, (_event, payload: SttProcessChunkPayload) =>
     processSttChunk(payload, {
       userDataPath: app.getPath("userData"),
+      glassConfig: config,
       sessions,
       sessionIsLive,
       eventContextFields,

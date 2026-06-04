@@ -73,10 +73,11 @@ export function buildProviderSnapshot(
   const getUserMediaAvailable = detectGetUserMedia();
   const getDisplayMediaAvailable = detectGetDisplayMedia();
   const defaultStt: GlassSttState = extras.stt ?? {
-    provider: "none",
-    status: "disabled",
+    provider: "openai",
+    endpoint: "server",
+    status: "configured",
     model: "gpt-4o-mini-transcribe",
-    enabled: false,
+    enabled: true,
     chunkMs: 20_000,
     autoStopEnabled: false,
     autoStopMs: 30 * 60 * 1000,
@@ -101,7 +102,7 @@ export function modeStatusMessage(
   switch (mode) {
     case "system_audio":
       if (snapshot.systemAudioListening && snapshot.stt.enabled) {
-        return systemAudioListeningMessage("available", true);
+        return "System audio capture active. Chunk transcription via OpenAI every ~20 seconds.";
       }
       if (snapshot.systemAudioListening && !snapshot.stt.enabled) {
         return `${systemAudioListeningMessage("available", true)} ${sttStatusMessage(snapshot.stt.status)}`;
@@ -115,7 +116,7 @@ export function modeStatusMessage(
       return "Paste or type transcript manually.";
     case "microphone_web_speech":
       return snapshot.webSpeechAvailable
-        ? "Microphone listening uses Web Speech (not system audio)."
+        ? "Microphone live transcription via Web Speech (not system audio)."
         : MICROPHONE_UNAVAILABLE_MESSAGE;
     case "microphone_media_recorder":
       return snapshot.stt.enabled

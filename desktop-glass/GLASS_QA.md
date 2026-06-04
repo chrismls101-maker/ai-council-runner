@@ -212,11 +212,22 @@ request) sending the summarized session to IIVO Council.
 
 | Status | UI message |
 |--------|------------|
-| `available` | System audio capture available. (When listening: transcription provider not connected — paste manually.) |
+| `available` | System audio capture available. |
 | `requires_permission` | Grant Screen Recording / audio capture permission. |
 | `requires_virtual_device` | System audio capture requires a virtual audio device. |
 | `unsupported` | System audio capture is not supported in this build. |
 | `error` | Safe error text from capture attempt |
+
+STT-specific statuses (shown when listening):
+
+| STT status | Meaning |
+|------------|---------|
+| `configured` | Server or direct OpenAI STT ready |
+| `server_unavailable` | IIVO server not reachable — run `npm run dev` or use direct fallback |
+| `missing_key` | No `OPENAI_API_KEY` on server (or direct env when endpoint=direct) |
+| `disabled` | STT disabled via env |
+
+Each status includes a **How to fix** hint in the panel.
 
 ### Privacy (v1.3)
 
@@ -225,23 +236,63 @@ request) sending the summarized session to IIVO Council.
 - IIVO Glass does not capture audio on launch.
 - Audio/transcript stays local until you send/analyze.
 
-## Glass v1.4 — OpenAI speech-to-text
+## Glass v1.4 — OpenAI speech-to-text (server-first)
 
-### Enable OpenAI STT
+### Enable server STT (preferred)
 
-Set environment variables before launching Glass (repo root `npm run glass:dev`):
+Glass defaults to **server** endpoint mode. The IIVO server uses your existing
+`OPENAI_API_KEY` — Glass does **not** need a separate key.
 
-```bash
-export OPENAI_API_KEY=sk-...
-export IIVO_GLASS_STT_ENABLED=true
-export IIVO_GLASS_STT_PROVIDER=openai
-# optional:
-export IIVO_GLASS_STT_MODEL=gpt-4o-mini-transcribe
-export IIVO_GLASS_STT_AUTO_STOP=true
-export IIVO_GLASS_STT_AUTO_STOP_MINUTES=30
+1. Add to repo root `.env`:
+
+```env
+OPENAI_API_KEY=sk-...
+IIVO_GLASS_STT_ENABLED=true
+IIVO_GLASS_STT_ENDPOINT=server
+IIVO_GLASS_STT_MODEL=gpt-4o-mini-transcribe
 ```
 
-Without `OPENAI_API_KEY`, UI shows **Not configured** — manual paste still works. No mock provider in UI.
+2. Start IIVO server: `npm run dev`
+3. Start Glass: `npm run glass:dev`
+4. Panel **STT Provider** should show **OpenAI (IIVO server)** when configured.
+
+Health check: `GET /api/health` includes `stt.configured` and `stt.endpoint`.
+
+### Enable direct Glass STT fallback
+
+Use only when the IIVO server is unavailable or you want Glass to call OpenAI
+directly from the **main process** (key never exposed to renderer):
+
+```env
+IIVO_GLASS_STT_ENDPOINT=direct
+OPENAI_API_KEY=sk-...
+```
+
+If server fails and direct is not configured, UI shows **IIVO transcription server unavailable**
+and manual paste remains available.
+
+### Disable STT
+
+```env
+IIVO_GLASS_STT_ENABLED=false
+# or
+IIVO_GLASS_STT_ENDPOINT=none
+```
+
+Manual transcript paste always works.
+
+### Optional live verification (may incur OpenAI cost)
+
+Not part of the normal test suite. Requires `OPENAI_API_KEY` and optional fixture:
+
+```bash
+npm run glass:stt:live
+```
+
+Uses server STT when `IIVO_GLASS_STT_ENDPOINT=server` (default), or direct OpenAI
+when `endpoint=direct`. Exits safely if no key or missing fixture.
+
+See `desktop-glass/.env.example` for all STT variables.
 
 ### Cost warning
 
@@ -251,21 +302,26 @@ Without `OPENAI_API_KEY`, UI shows **Not configured** — manual paste still wor
 
 ### Microphone paths
 
-1. **Web Speech** when Electron/Chromium supports it (local browser STT, no OpenAI).
-2. **MediaRecorder + OpenAI STT** when Web Speech unavailable and STT configured.
+1. **Web Speech** — live microphone transcription when Electron/Chromium supports it
+   (browser-local; label: *Microphone live transcription via Web Speech*).
+2. **MediaRecorder + OpenAI STT** — chunk-based fallback when Web Speech unavailable
+   (label: *Microphone chunk transcription via OpenAI*).
+
+No duplicate transcript events when both paths could apply — Web Speech takes precedence.
 
 ### System audio path
 
-- Electron loopback capture → 20s chunks → OpenAI STT when configured.
-- No YouTube-specific behavior. General system/screen audio only.
+- Electron loopback capture → 20s chunks → OpenAI STT via server (or direct fallback).
+- No YouTube-specific behavior. General **system audio** only.
 - Virtual audio device may still be required on macOS if loopback returns no audio track.
+- No fake transcripts when audio track is missing.
 
 ### v1.4 checklist
 
 1. Launch Glass — no listening on launch.
-2. Confirm STT Provider shows **Not configured** without env vars.
-3. Set OpenAI env vars, relaunch — STT Provider shows **OpenAI**.
-4. Start Session → Microphone → Start Listening → confirm chunks transcribe (~20s).
+2. With server stopped — STT shows server unavailable or not configured; manual paste works.
+3. Start `npm run dev` with `OPENAI_API_KEY` — STT Provider shows **OpenAI (IIVO server)**.
+4. Start Session → Microphone → Start Listening → confirm chunks transcribe (~20s) or Web Speech interim.
 5. System Audio → Start Listening → confirm honest status + transcription when stream available.
 6. Stop Listening stops all tracks.
 7. Transcripts appear as `transcript_note` events with `microphone` or `system_audio` tags.
@@ -274,9 +330,10 @@ Without `OPENAI_API_KEY`, UI shows **Not configured** — manual paste still wor
 ### Privacy (v1.4)
 
 - Audio only starts when you press **Start Listening**.
-- Audio chunks may be sent to **OpenAI** for transcription when STT is enabled.
+- Audio chunks may be sent to **OpenAI** for transcription when STT is enabled (via IIVO server or direct main process).
 - Transcripts stay local until you send/analyze.
 - Stop Listening stops microphone/system audio tracks.
+- `OPENAI_API_KEY` never reaches the renderer.
 
 ## Privacy controls
 
@@ -400,8 +457,56 @@ and assembles the `.icns` with `iconutil` — no extra dependencies.
 ## Notes / known limitations (v1)
 
 - Screen capture uses Electron `desktopCapturer` on the primary display.
-- System audio uses Electron desktop loopback when supported; local transcription of system
-  audio is not connected — paste manually or use Microphone mode for live transcript.
-- Microphone transcription depends on Web Speech / MediaRecorder availability in Electron.
+- System audio uses Electron desktop loopback when supported; transcription via OpenAI STT
+  (server-first) when configured. Virtual device or Screen Recording permission may still be required.
+- Microphone: Web Speech when available; OpenAI chunk STT as fallback.
+- No Deepgram provider in v1 (future optional).
 - No autonomous control: Glass observes and hands off; it does not click or type
   into other apps.
+
+See `desktop-glass/GLASS_LIMITATIONS.md` for the full limitation audit.
+
+## Final manual QA checklist
+
+Run from repo root. This cannot be fully automated — record pass/fail below.
+
+```bash
+npm run glass:qa:manual   # prints this checklist path
+```
+
+### Required manual verification
+
+| # | Step | Pass | Fail | Notes |
+|---|------|------|------|-------|
+| 1 | `npm run dev` — IIVO server running with `OPENAI_API_KEY` | | | |
+| 2 | `npm run glass:dev` — Glass launches, no crash | | | |
+| 3 | **Start Session** | | | |
+| 4 | **Capture Screen** — thumbnail appears | | | |
+| 5 | Quit and reopen Glass | | | |
+| 6 | Confirm screenshot thumbnail persists | | | |
+| 7 | **Start Microphone** transcription — Web Speech or OpenAI chunk label correct | | | |
+| 8 | **Start System Audio** mode — status matches reality | | | |
+| 9 | Confirm STT provider label (server / Web Speech / unavailable) | | | |
+| 10 | **Stop Listening** — tracks stopped, privacy pill idle | | | |
+| 11 | **Analyze Now** — analysis in Glass | | | |
+| 12 | **Open in IIVO** — `?lensAsk=` context chip | | | |
+| 13 | Delete screenshot file manually — **Screenshot unavailable.**, no crash | | | |
+
+### Pass/fail log template
+
+```text
+Date:
+Tester:
+Branch:
+Glass version:
+IIVO server: running / not running
+OPENAI_API_KEY: configured / missing
+
+Results: ___ / 13 passed
+
+Blockers:
+-
+
+Follow-ups:
+-
+```

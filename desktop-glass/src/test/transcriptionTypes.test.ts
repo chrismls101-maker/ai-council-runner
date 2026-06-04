@@ -19,10 +19,11 @@ import { SYSTEM_AUDIO_STATUS_MESSAGES } from "../shared/systemAudioTypes.ts";
 import type { GlassSttState } from "../shared/sttTypes.ts";
 
 const baseStt: GlassSttState = {
-  provider: "none",
-  status: "disabled",
+  provider: "openai",
+  endpoint: "server",
+  status: "configured",
   model: "gpt-4o-mini-transcribe",
-  enabled: false,
+  enabled: true,
   chunkMs: 20_000,
   autoStopEnabled: false,
   autoStopMs: 30 * 60 * 1000,

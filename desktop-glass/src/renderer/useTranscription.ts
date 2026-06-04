@@ -25,7 +25,12 @@ import {
   STT_MIC_NOT_CONFIGURED_MESSAGE,
   sttProviderLabel,
   sttStatusMessage,
+  resolveMicPathLabel,
 } from "../shared/sttTypes.ts";
+import {
+  systemAudioFixHint,
+  sttFixHint,
+} from "../shared/systemAudioFixHints.ts";
 import {
   DEFAULT_CHUNK_MS,
   formatListeningDuration,
@@ -66,6 +71,9 @@ export function useTranscription(): {
   systemAudioStatus: SystemAudioStatus;
   sttProviderLabel: string;
   sttStatusMessage: string;
+  sttFixHint: string;
+  systemAudioHint: string;
+  micPathLabel?: string;
   listeningDuration: string;
   transcribing: boolean;
   lastTranscript?: string;
@@ -400,8 +408,18 @@ export function useTranscription(): {
     interimText: state.interimText,
     statusMessage: modeStatusMessage(selectedMode, snapshot),
     systemAudioStatus,
-    sttProviderLabel: sttProviderLabel(glassState.stt.provider, glassState.stt.status),
-    sttStatusMessage: sttStatusMessage(glassState.stt.status),
+    sttProviderLabel: sttProviderLabel(
+      glassState.stt.provider,
+      glassState.stt.status,
+      glassState.stt.endpoint,
+    ),
+    sttStatusMessage: sttStatusMessage(glassState.stt.status, glassState.stt.endpoint),
+    sttFixHint: sttFixHint(glassState.stt.status),
+    systemAudioHint:
+      selectedMode === "system_audio"
+        ? systemAudioFixHint(systemAudioStatus)
+        : "",
+    micPathLabel: resolveMicPathLabel(effectiveMode),
     listeningDuration: formatListeningDuration(elapsedMs),
     transcribing: !!glassState.stt.transcribing,
     lastTranscript: glassState.stt.lastTranscript,

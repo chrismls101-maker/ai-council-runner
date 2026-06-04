@@ -13,6 +13,8 @@ import {
 import { saveSessionAudioChunk } from "./audioStorage.ts";
 import { getSttConfig, transcribeWithProvider } from "./sttProvider.ts";
 import type { WindowContext } from "../shared/windowContextTypes.ts";
+import type { GlassConfig } from "../shared/config.ts";
+import { sttStatusMessage } from "../shared/sttTypes.ts";
 
 export interface SttProcessChunkPayload {
   buffer: ArrayBuffer;
@@ -30,6 +32,7 @@ export interface SttProcessChunkResult {
 
 export interface SttChunkHandlerDeps {
   userDataPath: string;
+  glassConfig: GlassConfig;
   sessions: GlassSessionStore;
   sessionIsLive: () => boolean;
   eventContextFields: () => {
@@ -55,13 +58,8 @@ export async function processSttChunk(
   deps.setSttState({ ...stt, transcribing: true, lastError: undefined });
   deps.push();
 
-  if (config.status !== "configured") {
-    const error =
-      config.status === "missing_key"
-        ? "OpenAI transcription is not configured. Add OPENAI_API_KEY to enable STT."
-        : config.status === "disabled"
-          ? "OpenAI transcription is disabled."
-          : "Speech-to-text is not available.";
+  if (!config.enabled || config.status !== "configured") {
+    const error = sttStatusMessage(config.status, config.endpoint);
     deps.setSttState({ ...deps.getSttState(), transcribing: false, lastError: error });
     deps.push();
     return { ok: false, error };
@@ -98,13 +96,17 @@ export async function processSttChunk(
   }
 
   try {
-    const result = await transcribeWithProvider(config, {
-      audioPath,
-      mimeType: audioMimeType,
-      source: payload.source,
-      sessionId,
-      eventId,
-    });
+    const result = await transcribeWithProvider(
+      config,
+      deps.glassConfig,
+      {
+        audioPath,
+        mimeType: audioMimeType,
+        source: payload.source,
+        sessionId,
+        eventId,
+      },
+    );
 
     deps.appendTranscript(result.text);
     const tag = payload.source === "system_audio" ? "system_audio" : "microphone";
@@ -127,6 +129,7 @@ export async function processSttChunk(
             source: payload.source,
             durationMs: result.durationMs,
             status: "success",
+            endpoint: result.endpoint,
           }),
         },
       });

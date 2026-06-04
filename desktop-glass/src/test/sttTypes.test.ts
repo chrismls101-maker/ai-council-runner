@@ -8,27 +8,33 @@ import {
   STT_MISSING_KEY_MESSAGE,
 } from "../shared/sttTypes.ts";
 
-test("OpenAI STT disabled by default", () => {
+test("server STT preferred by default", () => {
   const config = resolveSttConfig({});
-  assert.equal(config.provider, "none");
+  assert.equal(config.endpoint, "server");
+  assert.equal(config.status, "configured");
+  assert.equal(config.enabled, true);
+  assert.equal(sttProviderLabel("openai", "configured", "server"), "OpenAI (IIVO server)");
+});
+
+test("explicit disable", () => {
+  const config = resolveSttConfig({ IIVO_GLASS_STT_ENABLED: "false" });
   assert.equal(config.status, "disabled");
   assert.equal(config.enabled, false);
 });
 
-test("OpenAI STT missing key when enabled without OPENAI_API_KEY", () => {
+test("direct STT missing key when no OPENAI_API_KEY", () => {
   const config = resolveSttConfig({
+    IIVO_GLASS_STT_ENDPOINT: "direct",
     IIVO_GLASS_STT_ENABLED: "true",
-    IIVO_GLASS_STT_PROVIDER: "openai",
   });
-  assert.equal(config.provider, "openai");
+  assert.equal(config.endpoint, "direct");
   assert.equal(config.status, "missing_key");
   assert.match(STT_MISSING_KEY_MESSAGE, /OPENAI_API_KEY/i);
 });
 
-test("OpenAI STT configured with key", () => {
+test("direct STT configured with key", () => {
   const config = resolveSttConfig({
-    IIVO_GLASS_STT_ENABLED: "true",
-    IIVO_GLASS_STT_PROVIDER: "openai",
+    IIVO_GLASS_STT_ENDPOINT: "direct",
     OPENAI_API_KEY: "sk-test",
   });
   assert.equal(config.status, "configured");
@@ -37,14 +43,14 @@ test("OpenAI STT configured with key", () => {
 
 test("no mock provider in product config", () => {
   const config = resolveSttConfig({
-    IIVO_GLASS_STT_ENABLED: "true",
     IIVO_GLASS_STT_PROVIDER: "mock",
+    IIVO_GLASS_STT_ENDPOINT: "none",
   });
   assert.equal(config.provider, "none");
-  assert.notEqual(sttProviderLabel("openai", "configured"), "Mock");
+  assert.notEqual(sttProviderLabel("openai", "configured", "server"), "Mock");
 });
 
-test("transcript event metadata on success", () => {
+test("transcript event metadata includes endpoint", () => {
   const meta = buildTranscriptEventMetadata({
     audioPath: "/tmp/session-audio/s1/e1.webm",
     audioMimeType: "audio/webm",
@@ -52,8 +58,8 @@ test("transcript event metadata on success", () => {
     source: "system_audio",
     durationMs: 1200,
     status: "success",
+    endpoint: "server",
   });
   assert.equal(meta.transcriptionProvider, "openai");
-  assert.equal(meta.transcriptionStatus, "success");
-  assert.equal(meta.transcriptionSource, "system_audio");
+  assert.equal(meta.transcriptionEndpoint, "server");
 });
