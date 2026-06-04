@@ -22,10 +22,15 @@ export type WindowContext = {
   windowTitle?: string;
   sourceName?: string;
   displayName?: string;
-  /** Front window bounds in screen coordinates (DIP), when detectable without extra permissions. */
+  /** Front window bounds in screen coordinates (DIP), when detectable. */
   windowBounds?: WindowBounds;
+  /** How window bounds were obtained (workspace API does not require Accessibility). */
+  boundsSource?: "system_events" | "workspace";
   reason?: string;
 };
+
+export const WINDOW_CONTEXT_BOUNDS_WORKSPACE_HINT =
+  "Focused crop can use front-window bounds without Accessibility (workspace API). Grant Accessibility only for app/window titles.";
 
 export const WINDOW_CONTEXT_PERMISSION_MESSAGE =
   "Active app detection requires macOS Accessibility permission for System Events.";

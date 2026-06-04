@@ -8,6 +8,7 @@
 
 import { loadGlassEnv } from "./loadGlassEnv.ts";
 import { installGlassE2eHooks, getE2eExternalUrls, resetE2eExternalUrls } from "./e2eMainHooks.ts";
+import { installDefaultGlassHandoffOpener, openGlassHandoffUrl } from "./glassBrowserHandoff.ts";
 import { getGlassE2eWindowMetadata } from "./e2eWindowMetadata.ts";
 import { join } from "node:path";
 import { app, BrowserWindow, ipcMain, protocol, shell, type WebContents } from "electron";
@@ -177,6 +178,7 @@ import { loadGlassUserSettings, persistGlassUserSettings } from "./glassSettings
 
 loadGlassEnv();
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
+installDefaultGlassHandoffOpener();
 installGlassE2eHooks();
 
 if (process.env.IIVO_GLASS_E2E === "1") {
@@ -339,7 +341,10 @@ function dispatchPrivacy(action: Parameters<typeof privacyReducer>[1]): void {
 async function openHandoff(contextId: string): Promise<void> {
   const url = buildLensAskUrl(config, contextId);
   state.lastSentUrl = url;
-  await shell.openExternal(url);
+  const opened = await openGlassHandoffUrl(url);
+  if (!opened.ok) {
+    throw new Error(opened.error);
+  }
 }
 
 async function registerLatestGlassCapture(input: {
@@ -636,15 +641,20 @@ async function openFeedInIivo(feedId: string): Promise<void> {
   if (item.runId) {
     const runUrl = buildRunHistoryUrl(config, item.runId);
     state.lastSentUrl = runUrl;
-    try {
-      await shell.openExternal(runUrl);
+    const opened = await openGlassHandoffUrl(runUrl);
+    if (opened.ok) {
       state.lastNotice = "Opened run in IIVO.";
       mergeVisualAskDiagnostics({ handoffUrl: runUrl, serverResult: "success" });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      state.lastNotice = `Could not open browser. Copy this URL: ${runUrl}`;
-      state.lastError = msg;
-      mergeVisualAskDiagnostics({ handoffUrl: runUrl, serverResult: "network_error", userMessage: msg });
+    } else {
+      state.lastNotice = opened.copiedToClipboard
+        ? `Could not open browser. URL copied to clipboard: ${runUrl}`
+        : `Could not open browser. Copy this URL: ${runUrl}`;
+      state.lastError = opened.error;
+      mergeVisualAskDiagnostics({
+        handoffUrl: runUrl,
+        serverResult: "network_error",
+        userMessage: opened.error,
+      });
     }
     push();
     return;
@@ -658,7 +668,11 @@ async function openFeedInIivo(feedId: string): Promise<void> {
       mergeVisualAskDiagnostics({ handoffUrl: url, serverResult: "success" });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      state.lastNotice = `Could not open browser. Copy this URL: ${url}`;
+      const fallback = await openGlassHandoffUrl(url);
+      const copied = !fallback.ok && fallback.copiedToClipboard;
+      state.lastNotice = copied
+        ? `Could not open browser. URL copied to clipboard: ${url}`
+        : `Could not open browser. Copy this URL: ${url}`;
       state.lastError = msg;
       mergeVisualAskDiagnostics({ handoffUrl: url, serverResult: "network_error", userMessage: msg });
     }
@@ -739,25 +753,30 @@ async function openFeedInIivo(feedId: string): Promise<void> {
   }
 
   const handoffUrl = buildLensAskUrl(config, contextId);
-  try {
-    state.lastSentUrl = handoffUrl;
-    await shell.openExternal(handoffUrl);
+  state.lastSentUrl = handoffUrl;
+  const opened = await openGlassHandoffUrl(handoffUrl);
+  if (opened.ok) {
     state.lastNotice = screenshotContextId
       ? "Opened in IIVO with answer and screen context."
       : "Opened in IIVO with this answer attached.";
     mergeVisualAskDiagnostics({
       handoffUrl,
       serverResult: "success",
-      retentionResult: screenshotContextId ? "uploaded_to_context" : retention?.savedToSession ? "saved_to_session" : "not_saved",
+      retentionResult: screenshotContextId
+        ? "uploaded_to_context"
+        : retention?.savedToSession
+          ? "saved_to_session"
+          : "not_saved",
     });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    state.lastNotice = `Could not open browser. Copy this URL: ${handoffUrl}`;
-    state.lastError = msg;
+  } else {
+    state.lastNotice = opened.copiedToClipboard
+      ? `Could not open browser. URL copied to clipboard: ${handoffUrl}`
+      : `Could not open browser. Copy this URL: ${handoffUrl}`;
+    state.lastError = opened.error;
     mergeVisualAskDiagnostics({
       handoffUrl,
       serverResult: "network_error",
-      userMessage: msg,
+      userMessage: opened.error,
     });
   }
   push();
@@ -869,8 +888,12 @@ async function submitCommand(rawText: string): Promise<void> {
     state.visualAskPayloadDiagnostics = null;
     state.visualAskDiagnostics = null;
 
-    await refreshWindowContext();
     const captureTarget = resolveCaptureDisplay(state.glassSettings.displayTarget);
+    if (process.env.IIVO_GLASS_E2E === "1") {
+      void refreshWindowContext();
+    } else {
+      await refreshWindowContext();
+    }
     const preflight = await runVisualAskPreflight({
       config,
       prompt: text,

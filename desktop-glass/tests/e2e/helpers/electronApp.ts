@@ -7,6 +7,7 @@ import {
   type LaunchedGlassElectron,
 } from "./launchGlassElectronForE2E.ts";
 import { getElectronE2eSkipReason, shouldSkipElectronE2e } from "./e2eEnvironment.ts";
+import type { StubServerHandle } from "./stubServer.ts";
 
 export {
   GLASS_ELECTRON_BIN,
@@ -75,6 +76,20 @@ export async function getE2eExternalUrls(page: Page): Promise<string[]> {
 
 export async function getE2eWindowMetadata(page: Page) {
   return page.evaluate(() => window.glass.getE2eWindowMetadata());
+}
+
+export function getStubHandoffFromApp(app: LaunchedGlass): StubServerHandle {
+  return app.stub;
+}
+
+export async function verifyHandoffUrlReachable(
+  app: LaunchedGlass,
+  handoffUrl: string,
+): Promise<{ ok: boolean; status: number }> {
+  const parsed = new URL(handoffUrl);
+  const target = `${app.stub.baseUrl}${parsed.pathname}${parsed.search}`;
+  const res = await fetch(target);
+  return { ok: res.ok, status: res.status };
 }
 
 export async function getE2eCaptureTarget(page: Page): Promise<{ id: number; label: string }> {

@@ -6,11 +6,13 @@ import {
   getE2eWindowMetadata,
   getGlassWindows,
   getElectronE2eSkipReason,
+  getStubHandoffFromApp,
   GLASS_ELECTRON_BIN,
   GLASS_MAIN,
   launchGlassApp,
   readGlassState,
   resetE2eExternalUrls,
+  verifyHandoffUrlReachable,
   type LaunchedGlass,
 } from "./helpers/electronApp.ts";
 
@@ -55,6 +57,7 @@ test.beforeEach(async () => {
   const { command } = await getGlassWindows(app.browser);
   await command.evaluate(() => window.glass.send({ type: "clear-command-feed" }));
   await resetE2eExternalUrls(command);
+  app.stub.resetHandoffState();
 });
 
 test.describe("IIVO Glass Electron E2E", () => {
@@ -166,6 +169,43 @@ test.describe("IIVO Glass Electron E2E", () => {
 
     const urls = await getE2eExternalUrls(command);
     expect(urls.some((u) => u.includes("lensAsk=ctx-e2e-1"))).toBe(true);
+
+    const handoffUrl = urls.find((u) => u.includes("lensAsk=ctx-e2e-1"))!;
+    const reachable = await verifyHandoffUrlReachable(app, handoffUrl);
+    expect(reachable.ok).toBe(true);
+
+    const contextBody = getStubHandoffFromApp(app).getLastContextBody();
+    const contextText = String(contextBody?.contentText ?? contextBody?.text ?? "");
+    expect(contextText).toContain("Question:");
+    expect(contextText).toContain("Help me plan the rest of my day");
+    expect(contextText).toMatch(/Answer:/i);
+    expect(getStubHandoffFromApp(app).getHandoffVisits().some((v) => v.includes("lensAsk=ctx-e2e-1"))).toBe(
+      true,
+    );
+  });
+
+  test("6b — visual Open in IIVO uploads screenshot on click only", async () => {
+    const { command, overlay } = await getGlassWindows(app.browser);
+    const stub = getStubHandoffFromApp(app);
+    const uploadsBefore = stub.getScreenshotUploadCount();
+
+    const input = command.locator('[data-testid="glass-command-input"]');
+    await input.click();
+    await input.fill("read this error on screen");
+    await input.press("Enter");
+
+    await expect(overlay.locator('[data-testid="glass-overlay-response-card"]')).toBeVisible({
+      timeout: 15_000,
+    });
+    expect(stub.getScreenshotUploadCount()).toBe(uploadsBefore);
+
+    await overlay.locator('[data-testid="glass-overlay-open-iivo"]').click();
+    await expect.poll(() => getE2eExternalUrls(command).then((u) => u.length)).toBeGreaterThan(0);
+    expect(stub.getScreenshotUploadCount()).toBeGreaterThan(uploadsBefore);
+
+    const contextText = String(stub.getLastContextBody()?.contentText ?? stub.getLastContextBody()?.text ?? "");
+    expect(contextText).toContain("read this error");
+    expect(contextText).toMatch(/Retention:/i);
   });
 
   test("7 — visual ask captures on demand and answers inline", async () => {

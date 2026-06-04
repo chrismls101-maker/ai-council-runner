@@ -28,7 +28,7 @@ These require real OS permissions, hardware, or subjective verification — **no
 | **macOS Screen Recording** | Permission prompt and capture quality cannot be faked in E2E. |
 | **Microphone permission** | Real mic access and OS prompts. |
 | **System audio loopback** | Virtual device setup and OS-specific audio routing. |
-| **Real browser handoff** | E2E mocks `shell.openExternal`; real Safari/Chrome launch is manual. |
+| **Real browser handoff (optional)** | E2E records handoff URLs and verifies the stub IIVO web URL loads; set `IIVO_GLASS_E2E_REAL_HANDOFF=1` to use the real system browser. Production uses `openGlassHandoffUrl` with clipboard fallback on failure. |
 | **Click-through feel** | OS-level pointer pass-through and visual polish on your desktop/TV. |
 | **Live OpenAI STT** | Requires API keys and live transcription. |
 | **Multi-monitor visual verification** | Automated tests assert bounds/metadata; human confirms TV/HDMI placement feels correct. |
@@ -56,7 +56,7 @@ See also `GLASS_QA.md` for the full manual checklist.
 | Capability | Status |
 |------------|--------|
 | **Capture-on-ask** | Implemented — screen is captured only when you send a visual-intent prompt from the command bar. |
-| **Focused crop + quality presets** | Text/error prompts prefer active-window crop (when window bounds are available) or center crop; general prompts use whole-screen JPEG optimization. |
+| **Focused crop + quality presets** | Text/error prompts prefer active-window crop (System Events or workspace CGWindow bounds without Accessibility) or center crop; general prompts use whole-screen JPEG optimization. |
 | **Preflight** | Before capture, Glass checks server health, vision config, display target, and a lightweight Screen Recording probe. |
 | **Periodic Live Vision** | **Not implemented (by design).** Deferred for privacy, API cost, and performance. A future mode must include a clear ON indicator, stop control, capture frequency setting, and the same retention policy as manual capture. |
 

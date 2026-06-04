@@ -11,6 +11,10 @@ export interface StubServerHandle {
   close: () => Promise<void>;
   getAskCallCount: () => number;
   getLastAskBody: () => Record<string, unknown> | null;
+  getLastContextBody: () => Record<string, unknown> | null;
+  getScreenshotUploadCount: () => number;
+  getHandoffVisits: () => string[];
+  resetHandoffState: () => void;
 }
 
 const STUB_ASK_RESPONSE = {
@@ -33,6 +37,9 @@ export async function startStubServer(
 ): Promise<StubServerHandle> {
   let askCallCount = 0;
   let lastAskBody: Record<string, unknown> | null = null;
+  let lastContextBody: Record<string, unknown> | null = null;
+  let screenshotUploadCount = 0;
+  const handoffVisits: string[] = [];
   let delayMs = options.askDelayMs ?? 0;
   let force413Once = false;
 
@@ -69,6 +76,13 @@ export async function startStubServer(
         return;
       }
 
+      if (req.method === "GET" && (url === "/" || url.startsWith("/?") || url.includes("lensAsk="))) {
+        handoffVisits.push(url);
+        res.writeHead(200, { "Content-Type": "text/html" });
+        res.end("<!DOCTYPE html><html><body>IIVO Glass E2E handoff</body></html>");
+        return;
+      }
+
       if (req.method === "POST" && url === "/api/glass/ask") {
         askCallCount += 1;
         let prompt = "";
@@ -101,6 +115,11 @@ export async function startStubServer(
       }
 
       if (req.method === "POST" && url === "/api/context") {
+        try {
+          lastContextBody = JSON.parse(bodyText) as Record<string, unknown>;
+        } catch {
+          lastContextBody = null;
+        }
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(
           JSON.stringify({
@@ -113,6 +132,7 @@ export async function startStubServer(
       }
 
       if (req.method === "POST" && /^\/api\/context\/[^/]+\/screenshot$/.test(url)) {
+        screenshotUploadCount += 1;
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ ok: true }));
         return;
@@ -140,6 +160,14 @@ export async function startStubServer(
       }),
     getAskCallCount: () => askCallCount,
     getLastAskBody: () => lastAskBody,
+    getLastContextBody: () => lastContextBody,
+    getScreenshotUploadCount: () => screenshotUploadCount,
+    getHandoffVisits: () => [...handoffVisits],
+    resetHandoffState: () => {
+      lastContextBody = null;
+      screenshotUploadCount = 0;
+      handoffVisits.length = 0;
+    },
   };
 }
 
