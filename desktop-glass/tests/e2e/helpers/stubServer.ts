@@ -32,6 +32,7 @@ export async function startStubServer(
   options: StubServerOptions = {},
 ): Promise<StubServerHandle> {
   let askCallCount = 0;
+  let lastAskBody: Record<string, unknown> | null = null;
   let delayMs = options.askDelayMs ?? 0;
 
   const server = http.createServer((req, res) => {

@@ -325,11 +325,13 @@ function FeedCard({
   return (
     <article
       data-testid={
-        isThinking
-          ? "glass-overlay-thinking-card"
-          : isResponse
-            ? "glass-overlay-response-card"
-            : "glass-overlay-card"
+        isLooking
+          ? "glass-overlay-looking-card"
+          : isThinking
+            ? "glass-overlay-thinking-card"
+            : isResponse
+              ? "glass-overlay-response-card"
+              : "glass-overlay-card"
       }
       className={`overlay-feed-card overlay-feed-card--${item.kind}${item.pinned ? " overlay-feed-card--pinned" : ""}`}
       onMouseEnter={enterInteractive}

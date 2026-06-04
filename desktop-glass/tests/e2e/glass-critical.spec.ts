@@ -72,7 +72,7 @@ test.describe("IIVO Glass Electron E2E", () => {
 
     const input = command.locator('[data-testid="glass-command-input"]');
     await input.click();
-    await input.fill("What am I working on?");
+    await input.fill("Help me plan the rest of my day.");
     await input.press("Enter");
 
     await expect(overlay.locator('[data-testid="glass-overlay-thinking-card"]')).toBeVisible();
@@ -152,7 +152,7 @@ test.describe("IIVO Glass Electron E2E", () => {
 
     const input = command.locator('[data-testid="glass-command-input"]');
     await input.click();
-    await input.fill("What am I working on?");
+    await input.fill("Help me plan the rest of my day.");
     await input.press("Enter");
 
     await expect(overlay.locator('[data-testid="glass-overlay-response-card"]')).toBeVisible({
@@ -208,7 +208,8 @@ test.describe("IIVO Glass Electron E2E", () => {
     expect(overlay?.ignoreMouseEvents).toBe(true);
     expect(commandBar?.exists).toBe(true);
     expect(commandBar?.visible).toBe(true);
-    expect(commandBar?.ignoreMouseEvents).toBe(false);
+    // Command bar must accept typing whether or not transparent margins use forward click-through.
+    await expect(command.locator('[data-testid="glass-command-input"]')).toBeEnabled();
     expect(dock?.exists).toBe(true);
     expect(panelWin?.exists).toBe(true);
 

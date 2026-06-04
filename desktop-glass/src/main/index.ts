@@ -27,7 +27,7 @@ import {
 } from "../shared/contextPayload.ts";
 import { createScreenshotContext, createContextItem } from "../shared/iivoClient.ts";
 import { IPC, type GlassCommand, type GlassState, type SessionActionStatus } from "../shared/ipc.ts";
-import { waitForMinThinkingDuration } from "../shared/glassAskTiming.ts";
+import { waitForMinLookingDuration, waitForMinThinkingDuration } from "../shared/glassAskTiming.ts";
 import type { PanelTab } from "../shared/types.ts";
 import { GlassSessionStore } from "../shared/sessionStore.ts";
 import {
@@ -213,6 +213,7 @@ interface AppState {
 let askAbortController: AbortController | null = null;
 let askRequestGeneration = 0;
 let thinkingStartedAtMs: number | null = null;
+let lookingStartedAtMs: number | null = null;
 let glassUserSettings: GlassUserSettings = { ...DEFAULT_GLASS_USER_SETTINGS };
 
 const state: AppState = {
@@ -626,6 +627,14 @@ async function openFeedInIivo(feedId: string): Promise<void> {
 }
 
 function removeThinkingFeedItems(): void {
+  state.commandFeed = state.commandFeed.filter((item) => item.kind !== "thinking");
+}
+
+function removeLookingFeedItems(): void {
+  state.commandFeed = state.commandFeed.filter((item) => item.kind !== "looking");
+}
+
+function removePendingAskFeedItems(): void {
   state.commandFeed = state.commandFeed.filter(
     (item) => item.kind !== "thinking" && item.kind !== "looking",
   );
@@ -638,10 +647,11 @@ function cancelGlassAsk(): void {
   askAbortController?.abort();
   askAbortController = null;
   thinkingStartedAtMs = null;
+  lookingStartedAtMs = null;
   state.askInFlight = false;
   state.askStatus = "idle";
   state.visualAskPhase = "idle";
-  removeThinkingFeedItems();
+  removePendingAskFeedItems();
   pushFeed(createCommandFeedItem("error", "Request cancelled."));
   state.operationDiagnostics = recordOperation(state.operationDiagnostics, "ask-iivo", "error", "cancelled");
   push();
@@ -718,6 +728,7 @@ async function submitCommand(rawText: string): Promise<void> {
 
   if (visualIntent) {
     state.visualAskPhase = "looking";
+    lookingStartedAtMs = Date.now();
     pushFeed(
       createCommandFeedItem("looking", "IIVO is looking at your screen…", {
         title: "IIVO is looking",
@@ -737,11 +748,11 @@ async function submitCommand(rawText: string): Promise<void> {
     });
 
     state.visualAskPhase = "idle";
-    removeThinkingFeedItems();
 
     if (requestGeneration !== askRequestGeneration || signal.aborted) return;
 
     if (!captureOutcome.ok) {
+      removeLookingFeedItems();
       state.askInFlight = false;
       state.askStatus = "error";
       pushFeed(createCommandFeedItem("error", captureOutcome.error, { prompt: text }));
@@ -779,6 +790,13 @@ async function submitCommand(rawText: string): Promise<void> {
     }
   }
 
+  if (visualIntent) {
+    if (lookingStartedAtMs != null) {
+      await waitForMinLookingDuration(lookingStartedAtMs);
+      lookingStartedAtMs = null;
+    }
+    removeLookingFeedItems();
+  }
   thinkingStartedAtMs = Date.now();
   pushFeed(
     createCommandFeedItem(
@@ -893,7 +911,7 @@ async function submitCommand(rawText: string): Promise<void> {
       return;
     }
 
-    removeThinkingFeedItems();
+    removePendingAskFeedItems();
     const message = err instanceof Error ? err.message : "Could not reach IIVO server.";
     state.askStatus = "error";
     pushFeed(
