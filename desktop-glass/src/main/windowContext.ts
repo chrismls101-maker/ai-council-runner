@@ -21,6 +21,7 @@ async function queryMacOSFrontmost(): Promise<WindowContext> {
       'tell application "System Events" to get name of first application process whose frontmost is true',
     ]);
     let windowTitle: string | undefined;
+    let windowBounds: import("../shared/windowContextTypes.ts").WindowBounds | undefined;
     try {
       const { stdout: winStdout } = await execFileAsync("osascript", [
         "-e",
@@ -30,6 +31,24 @@ async function queryMacOSFrontmost(): Promise<WindowContext> {
     } catch {
       windowTitle = undefined;
     }
+    try {
+      const { stdout: boundsStdout } = await execFileAsync("osascript", [
+        "-e",
+        'tell application "System Events" to tell (first application process whose frontmost is true)\n' +
+          "if (count of windows) > 0 then\n" +
+          "set p to position of front window\n" +
+          "set s to size of front window\n" +
+          'return (item 1 of p as text) & "," & (item 2 of p as text) & "," & (item 1 of s as text) & "," & (item 2 of s as text)\n' +
+          "end if\n" +
+          "end tell",
+      ]);
+      const parts = boundsStdout.trim().split(",").map((n) => Number(n.trim()));
+      if (parts.length === 4 && parts.every((n) => Number.isFinite(n) && n >= 0)) {
+        windowBounds = { x: parts[0], y: parts[1], width: parts[2], height: parts[3] };
+      }
+    } catch {
+      windowBounds = undefined;
+    }
     const appName = appStdout.trim();
     if (!appName) {
       return { status: "unavailable", reason: WINDOW_CONTEXT_UNAVAILABLE_MESSAGE };
@@ -38,6 +57,7 @@ async function queryMacOSFrontmost(): Promise<WindowContext> {
       status: "available",
       appName,
       windowTitle,
+      windowBounds,
       displayName: windowTitle ? `${appName} — ${windowTitle}` : appName,
     };
   } catch (err) {

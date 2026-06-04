@@ -12,6 +12,7 @@ import type {
   GlassLatestScreenshotState,
   VisualAskPayloadDiagnostics,
 } from "../shared/glassScreenContext.ts";
+import { getCachedWindowContext } from "./windowContext.ts";
 import { optimizeVisualAskImage } from "./visualImageOptimizer.ts";
 import {
   formatCaptureAgeSeconds,
@@ -79,6 +80,9 @@ export function applyOptimizedToPayload(
     optimizedMimeType: optimized.mimeType,
     optimizedSizeBytes: optimized.optimizedSizeBytes,
     compressionApplied: optimized.compressionApplied,
+    visualFrameMode: optimized.visualFrameMode,
+    cropBounds: optimized.cropBounds,
+    qualityPreset: optimized.qualityPreset,
   };
 }
 
@@ -96,6 +100,9 @@ function diagnosticsFromOptimized(
     optimizedMimeType: optimized.mimeType,
     compressionApplied: optimized.compressionApplied,
     status,
+    visualFrameMode: optimized.visualFrameMode,
+    cropBounds: optimized.cropBounds,
+    qualityPreset: optimized.qualityPreset,
   };
 }
 
@@ -109,10 +116,17 @@ async function optimizePayloadImage(
   diagnostics: VisualAskPayloadDiagnostics;
 }> {
   deps.onOptimizing?.();
+  const target = deps.resolveCaptureTarget();
+  const windowBounds = getCachedWindowContext().windowBounds;
   const optimized = optimizeVisualAskImage(
     imageDataUrl,
     { width, height },
-    { prompt: deps.prompt, preset: deps.optimizePreset },
+    {
+      prompt: deps.prompt,
+      preset: deps.optimizePreset,
+      displayId: target.id,
+      windowBounds,
+    },
   );
   return {
     optimized,

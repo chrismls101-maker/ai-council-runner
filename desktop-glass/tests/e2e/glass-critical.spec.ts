@@ -211,7 +211,27 @@ test.describe("IIVO Glass Electron E2E", () => {
     expect(responseText).toMatch(/see the test screen/i);
   });
 
-  test("9 — window metadata via E2E IPC", async () => {
+  test("9 — text/error visual ask uses text preset metadata", async () => {
+    const { command, overlay } = await getGlassWindows(app.browser);
+
+    const input = command.locator('[data-testid="glass-command-input"]');
+    await input.click();
+    await input.fill("read this error on my screen");
+    await input.press("Enter");
+
+    await expect(overlay.locator('[data-testid="glass-overlay-response-card"]')).toBeVisible({
+      timeout: 15_000,
+    });
+
+    const state = await readGlassState(command);
+    expect(state.visualAskPayloadDiagnostics?.qualityPreset).toBe("text");
+    expect(["center_crop", "active_window_crop", "screen"]).toContain(
+      state.visualAskPayloadDiagnostics?.visualFrameMode,
+    );
+    expect(await getE2eExternalUrls(command)).toHaveLength(0);
+  });
+
+  test("10 — window metadata via E2E IPC", async () => {
     const { command } = await getGlassWindows(app.browser);
     const metadata = await getE2eWindowMetadata(command);
     const state = await readGlassState(command);

@@ -2,6 +2,8 @@
  * Glass screen capture context for visual command-bar asks (shared, no Electron).
  */
 
+import type { CropBounds, VisualFrameMode } from "./visualImageCrop.ts";
+import type { VisualQualityPreset } from "./visualAskQuality.ts";
 import {
   formatCaptureAgeSeconds,
   GLASS_SCREEN_CONTEXT_DISPLAY_MAX_AGE_MS,
@@ -58,6 +60,9 @@ export interface GlassAskLatestScreenshot {
   optimizedMimeType?: string;
   optimizedSizeBytes?: number;
   compressionApplied?: boolean;
+  visualFrameMode?: VisualFrameMode;
+  cropBounds?: CropBounds;
+  qualityPreset?: VisualQualityPreset;
 }
 
 export interface VisualAskPayloadDiagnostics {
@@ -70,6 +75,9 @@ export interface VisualAskPayloadDiagnostics {
   optimizedMimeType: string;
   compressionApplied: boolean;
   status: "ok" | "retry" | "failed";
+  visualFrameMode?: VisualFrameMode;
+  cropBounds?: CropBounds;
+  qualityPreset?: VisualQualityPreset;
 }
 
 export type GlassScreenContextPhase = "idle" | "looking" | "optimizing" | "analyzing";

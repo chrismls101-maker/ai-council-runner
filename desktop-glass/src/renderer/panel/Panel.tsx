@@ -577,6 +577,7 @@ function StatusGrid({ state }: { state: GlassState }): JSX.Element {
     listening: state.privacy.listening,
     screenContext: state.screenContextStatus,
     visualAskPayload: state.visualAskPayloadDiagnostics,
+    visualAskDiagnostics: state.visualAskDiagnostics,
   });
 
   return (

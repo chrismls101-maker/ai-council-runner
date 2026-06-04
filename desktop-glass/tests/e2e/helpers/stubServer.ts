@@ -51,9 +51,21 @@ export async function startStubServer(
         return;
       }
 
-      if (req.method === "GET" && url === "/health") {
+      if (req.method === "GET" && (url === "/health" || url === "/api/health")) {
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ ok: true }));
+        res.end(
+          JSON.stringify({
+            ok: true,
+            vision: { enabled: true, configured: true },
+            stt: { configured: true, endpoint: "/api/transcribe-audio" },
+          }),
+        );
+        return;
+      }
+
+      if (req.method === "GET" && url === "/api/config/vision") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ enabled: true, configured: true }));
         return;
       }
 

@@ -142,12 +142,18 @@ app.use(express.json({ limit: "2mb" }));
 
 app.get("/api/health", (_req, res) => {
   const missing = validateApiKeys();
+  const vision = getImageVisionConfig();
   res.json({
     ok: missing.length === 0,
     missingKeys: missing,
     stt: {
       configured: !!getOpenAiKey(),
       endpoint: "/api/transcribe-audio",
+    },
+    vision: {
+      enabled: vision.enabled,
+      configured: vision.configured,
+      reason: vision.reason,
     },
   });
 });

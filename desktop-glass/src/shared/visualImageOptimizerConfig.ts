@@ -76,20 +76,24 @@ export function computeFitDimensions(
   };
 }
 
-export type VisualImageOptimizePreset = "default" | "aggressive" | "text";
+export type VisualImageOptimizePreset = "general" | "aggressive" | "text";
+
+/** @deprecated use "general" */
+export type VisualImageOptimizePresetLegacy = VisualImageOptimizePreset | "default";
 
 export function buildVisualImageOptimizeAttempts(
   config: VisualImageOptimizerConfig,
-  preset: VisualImageOptimizePreset = "default",
+  preset: VisualImageOptimizePreset | "default" = "general",
 ): VisualImageOptimizeAttempt[] {
-  if (preset === "aggressive") {
+  const resolved = preset === "default" ? "general" : preset;
+  if (resolved === "aggressive") {
     return [
       { maxWidth: 768, maxHeight: 768, jpegQuality: 0.65, maxPayloadBytes: config.maxPayloadBytes },
       { maxWidth: 640, maxHeight: 640, jpegQuality: 0.55, maxPayloadBytes: config.maxPayloadBytes },
     ];
   }
 
-  if (preset === "text") {
+  if (resolved === "text") {
     return [
       {
         maxWidth: 1600,

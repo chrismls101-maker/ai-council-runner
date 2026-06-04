@@ -50,3 +50,14 @@ xvfb-run -a GLASS_E2E_CI=1 npm run glass:e2e:ci
 ```
 
 See also `GLASS_QA.md` for the full manual checklist.
+
+## Visual ask (capture-on-ask)
+
+| Capability | Status |
+|------------|--------|
+| **Capture-on-ask** | Implemented — screen is captured only when you send a visual-intent prompt from the command bar. |
+| **Focused crop + quality presets** | Text/error prompts prefer active-window crop (when window bounds are available) or center crop; general prompts use whole-screen JPEG optimization. |
+| **Preflight** | Before capture, Glass checks server health, vision config, display target, and a lightweight Screen Recording probe. |
+| **Periodic Live Vision** | **Not implemented (by design).** Deferred for privacy, API cost, and performance. A future mode must include a clear ON indicator, stop control, capture frequency setting, and the same retention policy as manual capture. |
+
+Run `npm run glass:qa:manual-report` before manual QA for server/vision/STT status and a short step list.

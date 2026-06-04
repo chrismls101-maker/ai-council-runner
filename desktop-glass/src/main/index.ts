@@ -142,6 +142,16 @@ import {
   GLASS_VISUAL_PAYLOAD_TOO_LARGE_MESSAGE,
 } from "../shared/visualImageOptimizerConfig.ts";
 import type { VisualAskPayloadDiagnostics } from "../shared/glassScreenContext.ts";
+import { chooseVisualQualityPreset } from "../shared/visualAskQuality.ts";
+import {
+  formatBytesShort,
+  visualAskUserMessageForFrame,
+  type VisualAskDiagnostics,
+} from "../shared/visualAskDiagnostics.ts";
+import {
+  preflightCodeToServerResult,
+} from "../shared/visualAskPreflight.ts";
+import { runVisualAskPreflight } from "./glassVisualAskPreflight.ts";
 import { uploadGlassScreenshotContext } from "./glassLatestScreenshot.ts";
 import {
   buildVisualAskRetentionStatus,
@@ -202,6 +212,7 @@ interface AppState {
   visualAskPhase: GlassScreenContextPhase;
   visualAskRetention: GlassVisualAskRetention | null;
   visualAskPayloadDiagnostics: VisualAskPayloadDiagnostics | null;
+  visualAskDiagnostics: VisualAskDiagnostics | null;
   ephemeralVisualCapture: EphemeralVisualCapture | null;
   sessionActionStatus: SessionActionStatus;
   transcriptionMode: TranscriptionMode;
@@ -245,6 +256,7 @@ const state: AppState = {
   visualAskPhase: "idle",
   visualAskRetention: null,
   visualAskPayloadDiagnostics: null,
+  visualAskDiagnostics: null,
   ephemeralVisualCapture: null,
   glassSettings: { ...DEFAULT_GLASS_USER_SETTINGS },
 };
@@ -294,6 +306,7 @@ function snapshot(): GlassState {
     }),
     visualAskRetention: state.visualAskRetention,
     visualAskPayloadDiagnostics: state.visualAskPayloadDiagnostics,
+    visualAskDiagnostics: state.visualAskDiagnostics,
     glassSettings: state.glassSettings,
     availableDisplayIds: getAvailableDisplayIds(),
     connectedDisplays: getConnectedDisplays(),
@@ -568,6 +581,54 @@ function buildGlassAskSessionPayload(): GlassAskSessionPayload | undefined {
   return hasContext ? payload : undefined;
 }
 
+function mergeVisualAskDiagnostics(partial: Partial<VisualAskDiagnostics>): void {
+  state.visualAskDiagnostics = {
+    phase: state.visualAskPhase,
+    displayLabel: state.latestScreenshot?.displayLabel,
+    displayId: state.latestScreenshot?.displayId,
+    ...state.visualAskDiagnostics,
+    ...partial,
+  };
+}
+
+function visualDiagnosticsFromPayload(
+  diag: VisualAskPayloadDiagnostics,
+  extra?: Partial<VisualAskDiagnostics>,
+): VisualAskDiagnostics {
+  return {
+    phase: state.visualAskPhase,
+    originalDimensions: { width: diag.originalWidth, height: diag.originalHeight },
+    optimizedDimensions: { width: diag.optimizedWidth, height: diag.optimizedHeight },
+    optimizedSizeBytes: diag.optimizedSizeBytes,
+    compressionPreset: diag.qualityPreset,
+    qualityPreset: diag.qualityPreset,
+    visualFrameMode: diag.visualFrameMode,
+    cropBounds: diag.cropBounds,
+    retryUsed: diag.status === "retry",
+    ...extra,
+  };
+}
+
+function buildVisualAskStatusMessages(
+  captureLabel: string,
+  diag: VisualAskPayloadDiagnostics | null | undefined,
+): string[] {
+  const messages: string[] = [];
+  if (captureLabel) {
+    messages.push(visualAskUserMessageForFrame("screen", captureLabel));
+  }
+  if (diag?.qualityPreset === "text") {
+    messages.push("Using text clarity mode.");
+  }
+  if (diag?.visualFrameMode) {
+    messages.push(visualAskUserMessageForFrame(diag.visualFrameMode));
+  }
+  if (diag?.optimizedSizeBytes) {
+    messages.push(`Optimized screen image to ${formatBytesShort(diag.optimizedSizeBytes)}.`);
+  }
+  return messages;
+}
+
 async function openFeedInIivo(feedId: string): Promise<void> {
   const item = state.commandFeed.find((f) => f.id === feedId);
   if (!item) return;
@@ -575,15 +636,32 @@ async function openFeedInIivo(feedId: string): Promise<void> {
   if (item.runId) {
     const runUrl = buildRunHistoryUrl(config, item.runId);
     state.lastSentUrl = runUrl;
-    await shell.openExternal(runUrl);
-    state.lastNotice = "Opened run in IIVO.";
+    try {
+      await shell.openExternal(runUrl);
+      state.lastNotice = "Opened run in IIVO.";
+      mergeVisualAskDiagnostics({ handoffUrl: runUrl, serverResult: "success" });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      state.lastNotice = `Could not open browser. Copy this URL: ${runUrl}`;
+      state.lastError = msg;
+      mergeVisualAskDiagnostics({ handoffUrl: runUrl, serverResult: "network_error", userMessage: msg });
+    }
     push();
     return;
   }
 
   if (item.contextId) {
-    await openHandoff(item.contextId);
-    state.lastNotice = "Opened in IIVO with this answer attached.";
+    const url = buildLensAskUrl(config, item.contextId);
+    try {
+      await openHandoff(item.contextId);
+      state.lastNotice = "Opened in IIVO with this answer attached.";
+      mergeVisualAskDiagnostics({ handoffUrl: url, serverResult: "success" });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      state.lastNotice = `Could not open browser. Copy this URL: ${url}`;
+      state.lastError = msg;
+      mergeVisualAskDiagnostics({ handoffUrl: url, serverResult: "network_error", userMessage: msg });
+    }
     push();
     return;
   }
@@ -592,6 +670,7 @@ async function openFeedInIivo(feedId: string): Promise<void> {
   const answer = item.fullBody ?? (item.kind === "response" ? item.body : undefined);
   const session = sessions.current();
   const summary = session ? buildSessionSummary(session) : undefined;
+  const retention = state.visualAskRetention;
 
   let screenshotContextId =
     item.contextId ?? state.lastAskResponse?.contextId ?? state.latestScreenshot?.contextId;
@@ -600,16 +679,28 @@ async function openFeedInIivo(feedId: string): Promise<void> {
   if (!screenshotContextId && ephemeral?.imageDataUrl) {
     const title = `IIVO Glass · ${question.length > 60 ? `${question.slice(0, 59)}…` : question}`;
     screenshotContextId = await uploadEphemeralVisualToContext(ephemeral, title);
-    if (screenshotContextId && state.latestScreenshot) {
+    if (!screenshotContextId) {
+      state.lastNotice = "Could not upload screen context to IIVO. Try again or use Capture.";
+      state.lastError = "Context Bridge upload failed.";
+      mergeVisualAskDiagnostics({
+        serverResult: "error",
+        retentionResult: "not_saved",
+        userMessage: "Upload failed — screenshot was not sent to IIVO.",
+      });
+      push();
+      return;
+    }
+    if (state.latestScreenshot) {
       state.latestScreenshot.contextId = screenshotContextId;
       state.latestScreenshot.contextUploadStatus = "ready";
     }
-    if (state.visualAskRetention?.usedForAnswer) {
+    if (retention?.usedForAnswer) {
       state.visualAskRetention = buildVisualAskRetentionStatus({
         usedForAnswer: true,
-        savedToSession: state.visualAskRetention.savedToSession,
-        uploadedToContext: !!screenshotContextId,
+        savedToSession: retention.savedToSession,
+        uploadedToContext: true,
       });
+      mergeVisualAskDiagnostics({ retentionResult: "uploaded_to_context" });
     }
   }
 
@@ -618,6 +709,11 @@ async function openFeedInIivo(feedId: string): Promise<void> {
   if (summary?.trim()) parts.push(`Session context:\n${summary.trim()}`);
   if (screenshotContextId) {
     parts.push(`Screenshot context id: ${screenshotContextId}`);
+  }
+  if (retention) {
+    parts.push(
+      `Retention: savedToSession=${retention.savedToSession ? "yes" : "no"}, uploadedToContext=${retention.uploadedToContext ? "yes" : "no"}`,
+    );
   }
   const text =
     parts.length > 1
@@ -628,11 +724,42 @@ async function openFeedInIivo(feedId: string): Promise<void> {
     text,
     kind: "note",
   });
-  const created = await createContextItem(config, payload);
-  await openHandoff(created.id);
-  state.lastNotice = screenshotContextId
-    ? "Opened in IIVO with answer and screen context."
-    : "Opened in IIVO with this answer attached.";
+
+  let contextId: string;
+  try {
+    const created = await createContextItem(config, payload);
+    contextId = created.id;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    state.lastNotice = "Could not create IIVO context for handoff.";
+    state.lastError = msg;
+    mergeVisualAskDiagnostics({ serverResult: "network_error", userMessage: msg });
+    push();
+    return;
+  }
+
+  const handoffUrl = buildLensAskUrl(config, contextId);
+  try {
+    state.lastSentUrl = handoffUrl;
+    await shell.openExternal(handoffUrl);
+    state.lastNotice = screenshotContextId
+      ? "Opened in IIVO with answer and screen context."
+      : "Opened in IIVO with this answer attached.";
+    mergeVisualAskDiagnostics({
+      handoffUrl,
+      serverResult: "success",
+      retentionResult: screenshotContextId ? "uploaded_to_context" : retention?.savedToSession ? "saved_to_session" : "not_saved",
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    state.lastNotice = `Could not open browser. Copy this URL: ${handoffUrl}`;
+    state.lastError = msg;
+    mergeVisualAskDiagnostics({
+      handoffUrl,
+      serverResult: "network_error",
+      userMessage: msg,
+    });
+  }
   push();
 }
 
@@ -740,6 +867,59 @@ async function submitCommand(rawText: string): Promise<void> {
 
   if (visualIntent) {
     state.visualAskPayloadDiagnostics = null;
+    state.visualAskDiagnostics = null;
+
+    await refreshWindowContext();
+    const captureTarget = resolveCaptureDisplay(state.glassSettings.displayTarget);
+    const preflight = await runVisualAskPreflight({
+      config,
+      prompt: text,
+      displayId: captureTarget.id,
+      displayLabel: captureTarget.label,
+      hasConnectedDisplays: getConnectedDisplays().length > 0,
+      windowBoundsAvailable: !!getCachedWindowContext().windowBounds,
+      skipCaptureProbe: process.env.IIVO_GLASS_E2E === "1",
+      signal,
+    });
+
+    if (!preflight.ok) {
+      state.askInFlight = false;
+      state.askStatus = "error";
+      state.visualAskPhase = "idle";
+      mergeVisualAskDiagnostics({
+        phase: "idle",
+        displayLabel: captureTarget.label,
+        displayId: captureTarget.id,
+        serverResult: preflightCodeToServerResult(preflight.code),
+        lastPreflightIssue: preflight.message,
+        userMessage: preflight.message,
+      });
+      pushFeed(createCommandFeedItem("error", preflight.message, { prompt: text }));
+      state.lastError = preflight.message;
+      state.operationDiagnostics = recordOperation(
+        state.operationDiagnostics,
+        "ask-iivo",
+        "error",
+        preflight.code,
+      );
+      push();
+      return;
+    }
+
+    const qualityPreset = chooseVisualQualityPreset(text);
+    mergeVisualAskDiagnostics({
+      phase: "looking",
+      displayLabel: captureTarget.label,
+      displayId: captureTarget.id,
+      qualityPreset,
+      userMessage: [
+        visualAskUserMessageForFrame("screen", captureTarget.label),
+        qualityPreset === "text" ? "Using text clarity mode." : undefined,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    });
+
     state.visualAskPhase = "looking";
     lookingStartedAtMs = Date.now();
     pushFeed(
@@ -796,6 +976,23 @@ async function submitCommand(rawText: string): Promise<void> {
     visualCaptureWarning = captureOutcome.warning;
     usedVision = true;
     state.visualAskPayloadDiagnostics = captureOutcome.payloadDiagnostics ?? null;
+    if (captureOutcome.payloadDiagnostics) {
+      const statusMessages = buildVisualAskStatusMessages(
+        captureOutcome.latestState.displayLabel ?? captureTarget.label,
+        captureOutcome.payloadDiagnostics,
+      );
+      mergeVisualAskDiagnostics(
+        visualDiagnosticsFromPayload(captureOutcome.payloadDiagnostics, {
+          displayLabel: captureOutcome.latestState.displayLabel ?? captureTarget.label,
+          displayId: captureOutcome.latestState.displayId ?? captureTarget.id,
+          retentionResult: captureOutcome.savedToSession ? "saved_to_session" : "not_saved",
+          userMessage: statusMessages.join(" "),
+        }),
+      );
+      if (statusMessages.length) {
+        state.lastNotice = statusMessages[statusMessages.length - 1];
+      }
+    }
     visualCaptureFull = {
       imageDataUrl: captureOutcome.imageDataUrl,
       width: captureOutcome.captureWidth,
@@ -944,6 +1141,13 @@ async function submitCommand(rawText: string): Promise<void> {
           : "IIVO answered inline. Start a session to save this context.";
     }
     state.operationDiagnostics = recordOperation(state.operationDiagnostics, "ask-iivo", "ok");
+    if (visualIntent && state.visualAskPayloadDiagnostics) {
+      mergeVisualAskDiagnostics({
+        phase: "idle",
+        serverResult: "success",
+        retentionResult: visualSavedToSession ? "saved_to_session" : "not_saved",
+      });
+    }
     state.visualAskPhase = "idle";
   } catch (err) {
     if (requestGeneration !== askRequestGeneration || signal.aborted || err instanceof GlassAskCancelledError) {
@@ -962,13 +1166,20 @@ async function submitCommand(rawText: string): Promise<void> {
       state.visualAskPhase = "optimizing";
       push();
 
+      const captureTarget = resolveCaptureDisplay(state.glassSettings.displayTarget);
       const aggressive = optimizeVisualAskImage(
         visualCaptureFull.imageDataUrl,
         { width: visualCaptureFull.width, height: visualCaptureFull.height },
-        { preset: "aggressive", prompt: text },
+        {
+          preset: "aggressive",
+          prompt: text,
+          retry: true,
+          displayId: captureTarget.id,
+          windowBounds: getCachedWindowContext().windowBounds,
+        },
       );
       latestScreenshot = applyOptimizedToPayload(latestScreenshot, aggressive);
-      state.visualAskPayloadDiagnostics = {
+      const retryDiag: VisualAskPayloadDiagnostics = {
         originalWidth: aggressive.originalWidth,
         originalHeight: aggressive.originalHeight,
         originalSizeBytes: aggressive.originalSizeBytes,
@@ -978,7 +1189,18 @@ async function submitCommand(rawText: string): Promise<void> {
         optimizedMimeType: aggressive.mimeType,
         compressionApplied: aggressive.compressionApplied,
         status: "retry",
+        visualFrameMode: aggressive.visualFrameMode,
+        cropBounds: aggressive.cropBounds,
+        qualityPreset: aggressive.qualityPreset,
       };
+      state.visualAskPayloadDiagnostics = retryDiag;
+      mergeVisualAskDiagnostics(
+        visualDiagnosticsFromPayload(retryDiag, {
+          retryUsed: true,
+          serverResult: "idle",
+          userMessage: `${GLASS_VISUAL_PAYLOAD_RETRY_MESSAGE} Optimized screen image to ${formatBytesShort(aggressive.optimizedSizeBytes)}.`,
+        }),
+      );
       state.visualAskPhase = "analyzing";
       push();
 
@@ -1020,6 +1242,7 @@ async function submitCommand(rawText: string): Promise<void> {
           });
         }
         state.visualAskPhase = "idle";
+        mergeVisualAskDiagnostics({ serverResult: "success", phase: "idle" });
         state.operationDiagnostics = recordOperation(state.operationDiagnostics, "ask-iivo", "ok");
         push();
         return;
@@ -1039,6 +1262,18 @@ async function submitCommand(rawText: string): Promise<void> {
     state.visualAskPayloadDiagnostics = state.visualAskPayloadDiagnostics
       ? { ...state.visualAskPayloadDiagnostics, status: "failed" }
       : null;
+    const serverResult = isGlassAskPayloadTooLargeError(err)
+      ? "413"
+      : /vision|not enabled|not configured/i.test(rawMessage)
+        ? "vision_unavailable"
+        : /fetch|network|econnrefused|unavailable/i.test(rawMessage)
+          ? "network_error"
+          : "error";
+    mergeVisualAskDiagnostics({
+      phase: "idle",
+      serverResult,
+      userMessage: message,
+    });
     state.visualAskPhase = "idle";
     state.askStatus = "error";
     pushFeed(

@@ -162,6 +162,7 @@ export interface GlassState {
   screenContextStatus?: GlassScreenContextStatus;
   visualAskRetention?: GlassVisualAskRetention | null;
   visualAskPayloadDiagnostics?: import("./glassScreenContext.ts").VisualAskPayloadDiagnostics | null;
+  visualAskDiagnostics?: import("./visualAskDiagnostics.ts").VisualAskDiagnostics | null;
   glassSettings: GlassUserSettings;
   availableDisplayIds: number[];
   connectedDisplays: ConnectedDisplaySnapshot[];

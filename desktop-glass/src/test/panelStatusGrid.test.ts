@@ -54,6 +54,37 @@ test("permissions card warns when accessibility needed", () => {
   assert.match(permissions?.status ?? "", /Screen Recording/);
 });
 
+test("screen context card includes visual ask diagnostics detail", () => {
+  const cards = buildPanelStatusCards({
+    sttStatus: "configured",
+    sttEndpoint: "server",
+    systemAudioStatus: "available",
+    windowContextStatus: "available",
+    screenContext: { kind: "ready", label: "Screen: ready" },
+    visualAskPayload: {
+      originalWidth: 1920,
+      originalHeight: 1080,
+      originalSizeBytes: 2_000_000,
+      optimizedWidth: 1280,
+      optimizedHeight: 720,
+      optimizedSizeBytes: 900_000,
+      optimizedMimeType: "image/jpeg",
+      compressionApplied: true,
+      status: "ok",
+      qualityPreset: "text",
+      visualFrameMode: "center_crop",
+    },
+    visualAskDiagnostics: {
+      phase: "idle",
+      serverResult: "success",
+      userMessage: "Optimized screen image to 878.9 KB.",
+    },
+  });
+  const screen = cards.find((c) => c.key === "screen_context");
+  assert.match(screen?.detail ?? "", /text/);
+  assert.match(screen?.detail ?? "", /center crop/);
+});
+
 test("session card reflects active session", () => {
   const cards = buildPanelStatusCards({
     sessionStatus: "active",

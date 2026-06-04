@@ -7,6 +7,10 @@ import { systemAudioStatusMessage } from "./systemAudioTypes.ts";
 import type { SttProviderStatus } from "./sttTypes.ts";
 import type { WindowContextStatus } from "./windowContextTypes.ts";
 import type { GlassScreenContextStatus, VisualAskPayloadDiagnostics } from "./glassScreenContext.ts";
+import {
+  formatVisualAskDiagnosticsDetail,
+  type VisualAskDiagnostics,
+} from "./visualAskDiagnostics.ts";
 
 export type PanelStatusLevel = "ok" | "warn" | "error" | "idle";
 
@@ -30,6 +34,7 @@ export interface PanelStatusGridInput {
   listening?: boolean;
   screenContext?: GlassScreenContextStatus;
   visualAskPayload?: VisualAskPayloadDiagnostics | null;
+  visualAskDiagnostics?: VisualAskDiagnostics | null;
 }
 
 export function buildPanelStatusCards(input: PanelStatusGridInput): PanelStatusCard[] {
@@ -67,16 +72,19 @@ function buildScreenContextCard(input: PanelStatusGridInput): PanelStatusCard {
   const payloadDetail =
     payload && payload.optimizedSizeBytes > 0
       ? `Visual payload: ${formatBytes(payload.optimizedSizeBytes)} JPEG (${payload.optimizedWidth}×${payload.optimizedHeight})${
+          payload.qualityPreset ? `, ${payload.qualityPreset}` : ""
+        }${payload.visualFrameMode ? `, ${payload.visualFrameMode.replace(/_/g, " ")}` : ""}${
           payload.compressionApplied ? ", compressed" : ""
         }${payload.status === "retry" ? ", retried smaller" : ""}`
       : undefined;
+  const diagDetail = formatVisualAskDiagnosticsDetail(input.visualAskDiagnostics);
 
   return {
     key: "screen_context",
     label: "Screen",
     level,
     status: sc.label.replace(/^Screen context:\s*/i, "").replace(/^Screen:\s*/i, ""),
-    detail: [sc.detail, payloadDetail].filter(Boolean).join(" · ") || undefined,
+    detail: [sc.detail, payloadDetail, diagDetail].filter(Boolean).join(" · ") || undefined,
   };
 }
 

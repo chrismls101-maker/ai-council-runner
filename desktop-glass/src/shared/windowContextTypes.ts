@@ -9,12 +9,21 @@ export type WindowContextStatus =
   | "unavailable"
   | "error";
 
+export type WindowBounds = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 export type WindowContext = {
   status: WindowContextStatus;
   appName?: string;
   windowTitle?: string;
   sourceName?: string;
   displayName?: string;
+  /** Front window bounds in screen coordinates (DIP), when detectable without extra permissions. */
+  windowBounds?: WindowBounds;
   reason?: string;
 };
 
