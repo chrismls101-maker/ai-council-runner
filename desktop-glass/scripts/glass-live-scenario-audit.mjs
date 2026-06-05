@@ -262,7 +262,9 @@ function main() {
       lines.push(`| Category | \`${sample.category}\` |`);
       lines.push(`| Test kind | \`${sample.testKind}\` |`);
       lines.push(`| routeUsed | ${sample.routeUsed ?? "—"} |`);
-      lines.push(`| model | ${sample.model ?? "—"} |`);
+      lines.push(`| model requested | ${sample.modelRequested ?? sample.model ?? "—"} |`);
+      lines.push(`| model used | ${sample.modelUsed ?? sample.model ?? "—"} |`);
+      lines.push(`| fallback used | ${sample.fallbackUsed ? "yes" : "no"} |`);
       lines.push(`| latency | ${sample.latencyMs}ms |`);
       lines.push(`| pass | ${sample.pass} |`);
       lines.push(`| capturedAt | ${sample.finishedAt} |`);
@@ -280,6 +282,14 @@ function main() {
       lines.push("```");
       lines.push(sample.shortAnswer || sample.answerPreview || "(missing)");
       lines.push("```");
+      if (sample.qualityFlags) {
+        lines.push("");
+        lines.push("**Quality flags:**");
+        lines.push("");
+        for (const [k, v] of Object.entries(sample.qualityFlags)) {
+          lines.push(`- ${k}: ${v}`);
+        }
+      }
       lines.push("");
     }
   }

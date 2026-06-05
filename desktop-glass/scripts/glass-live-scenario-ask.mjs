@@ -10,6 +10,7 @@ import { readFileSync, existsSync, appendFileSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getScenarioById, FIXTURE_PAGES } from "./qa-scenarios/iivo-glass-scenarios.mjs";
+import { scoreGlassAnswerQuality } from "./lib/glass-answer-quality.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const GLASS_ROOT = join(__dirname, "..");
@@ -122,19 +123,22 @@ try {
   data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    appendResult({
-      scenarioId,
-      category: scenario.category,
-      testKind: scenario.testKind,
-      promptPreview: sanitizeText(scenario.userPrompt, 200),
-      contextSummary: contextSummary(scenario),
-      routeUsed: data.routeUsed ?? null,
-      model: data.model ?? null,
-      latencyMs: Date.now() - started,
-      pass: false,
-      failReason: `HTTP ${res.status}`,
-      finishedAt: new Date().toISOString(),
-    });
+  appendResult({
+    scenarioId,
+    category: scenario.category,
+    testKind: scenario.testKind,
+    promptPreview: sanitizeText(scenario.userPrompt, 200),
+    contextSummary: contextSummary(scenario),
+    routeUsed: data.routeUsed ?? null,
+    model: data.modelUsed ?? data.model ?? null,
+    modelRequested: data.modelRequested ?? null,
+    modelUsed: data.modelUsed ?? data.model ?? null,
+    fallbackUsed: data.fallbackUsed ?? false,
+    latencyMs: Date.now() - started,
+    pass: false,
+    failReason: `HTTP ${res.status}`,
+    finishedAt: new Date().toISOString(),
+  });
     console.error(`FAIL HTTP ${res.status}`);
     process.exit(1);
   }
@@ -167,6 +171,13 @@ try {
 const ms = Date.now() - started;
 const answerPreview = sanitizeText(data.answer, 500);
 const shortAnswer = sanitizeText(data.shortAnswer ?? data.answer?.slice(0, 200), 200);
+const qualityFlags = scoreGlassAnswerQuality({
+  answer: data.answer,
+  contextSummary: contextSummary(scenario),
+  routeUsed: data.routeUsed,
+  expectedRoute: expectRoute,
+  contextKeywords: scenario.fixtureExpectedKeywords,
+});
 
 appendResult({
   scenarioId,
@@ -175,16 +186,20 @@ appendResult({
   promptPreview: sanitizeText(scenario.userPrompt, 200),
   contextSummary: contextSummary(scenario),
   routeUsed: data.routeUsed,
-  model: data.model ?? null,
+  model: data.modelUsed ?? data.model ?? null,
+  modelRequested: data.modelRequested ?? null,
+  modelUsed: data.modelUsed ?? data.model ?? null,
+  fallbackUsed: data.fallbackUsed ?? false,
   latencyMs: ms,
   answerPreview,
   shortAnswer,
+  qualityFlags,
   pass: true,
   finishedAt: new Date().toISOString(),
 });
 
 console.log(
-  `OK live scenario ${scenarioId} [${scenario.testKind}] · ${data.routeUsed} · ${data.model ?? "unknown-model"} · ${ms}ms · category=${scenario.category}`,
+  `OK live scenario ${scenarioId} [${scenario.testKind}] · ${data.routeUsed} · ${data.modelUsed ?? data.model ?? "unknown-model"}${data.fallbackUsed ? " (fallback)" : ""} · ${ms}ms · category=${scenario.category}`,
 );
 console.log(`answer: ${sanitizeText(shortAnswer || answerPreview, 160)}`);
 process.exit(0);

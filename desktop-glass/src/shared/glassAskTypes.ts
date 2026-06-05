@@ -52,12 +52,16 @@ export interface GlassAskRequest {
   latestScreenshot?: GlassAskLatestScreenshot;
   visualIntent?: boolean;
   responseStyle?: "overlay";
+  modelPurpose?: "default" | "semantic" | "diagnostic";
 }
 
 export interface GlassAskResponse {
   answer: string;
   shortAnswer?: string;
   model?: string;
+  modelRequested?: string;
+  modelUsed?: string;
+  fallbackUsed?: boolean;
   routeUsed: "glass_direct" | "glass_visual_direct";
   usedVision?: boolean;
   runId?: string;

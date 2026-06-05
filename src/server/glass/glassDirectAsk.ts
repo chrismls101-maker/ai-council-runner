@@ -2,9 +2,8 @@
  * IIVO Glass direct assistant — single OpenAI call, no Council/router.
  */
 
-import { MODELS } from "../config/models.js";
-import { callOpenAI, ProviderError } from "../providers/openai.js";
-import type { ProviderResult } from "../providers/types.js";
+import { GLASS_MODEL_FALLBACK, resolveGlassModelPrimary, type GlassModelPurpose } from "../config/glassModels.js";
+import { callOpenAIWithFallback, ProviderError } from "../providers/openai.js";
 import type { GlassAskRequestBody, GlassAskResponseBody, GlassAskSessionPayload } from "./glassAskTypes.js";
 
 export const GLASS_DIRECT_SYSTEM_PROMPT = `You are IIVO Glass, a fast conversational AI companion over the user's workspace. Answer naturally and directly, like ChatGPT. Use the provided session context only when relevant. Be concise unless the user asks for depth. Do not invent screen/audio details you were not given. Do not use council/report formatting.
@@ -24,10 +23,13 @@ export type GlassDirectAskCaller = (
   systemPrompt: string,
   userPrompt: string,
   signal?: AbortSignal,
-) => Promise<ProviderResult>;
+  purpose?: GlassModelPurpose,
+) => Promise<import("../providers/openai.js").OpenAICallWithFallbackResult>;
 
-const defaultCaller: GlassDirectAskCaller = (system, user, signal) =>
-  callOpenAI(system, user, signal, MODELS.openai.gpt4o, 900);
+const defaultCaller: GlassDirectAskCaller = (system, user, signal, purpose = "default") => {
+  const primary = resolveGlassModelPrimary("text", purpose);
+  return callOpenAIWithFallback(system, user, primary, signal, GLASS_MODEL_FALLBACK, 900);
+};
 
 export function buildGlassDirectUserPrompt(
   prompt: string,
@@ -116,8 +118,9 @@ export async function runGlassDirectAsk(
     throw new Error("prompt is required");
   }
 
+  const purpose = body.modelPurpose ?? "default";
   const userPrompt = buildGlassDirectUserPrompt(prompt, body.session);
-  const result = await caller(GLASS_DIRECT_SYSTEM_PROMPT, userPrompt, signal);
+  const result = await caller(GLASS_DIRECT_SYSTEM_PROMPT, userPrompt, signal, purpose);
   const formatted = formatGlassDirectAnswer(result.content);
 
   const title = prompt.length > 60 ? `${prompt.slice(0, 59)}…` : prompt;
@@ -126,6 +129,9 @@ export async function runGlassDirectAsk(
     answer: formatted.answer,
     shortAnswer: formatted.shortAnswer,
     model: result.model,
+    modelRequested: result.requestedModel,
+    modelUsed: result.model,
+    fallbackUsed: result.fallbackUsed,
     routeUsed: "glass_direct",
     title,
     warnings: formatted.warnings,

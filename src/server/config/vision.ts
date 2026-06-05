@@ -1,4 +1,8 @@
-import { MODELS } from "./models.js";
+import {
+  getConfiguredGlassVisionModel,
+  GLASS_MODEL_FALLBACK,
+  GLASS_VISION_MODEL_CANDIDATES,
+} from "./glassModels.js";
 
 export const VISION_IMAGE_ADDON_CREDITS = 2;
 
@@ -27,9 +31,9 @@ export function getImageVisionProvider(): string {
 }
 
 export function getImageVisionModel(): string {
-  const configured = process.env.IMAGE_VISION_MODEL?.trim();
+  const configured = getConfiguredGlassVisionModel();
   if (configured) return configured;
-  return MODELS.openai.gpt4o;
+  return GLASS_VISION_MODEL_CANDIDATES[0] ?? GLASS_MODEL_FALLBACK;
 }
 
 export function getImageVisionConfig(): ImageVisionConfig {

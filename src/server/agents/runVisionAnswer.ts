@@ -1,5 +1,10 @@
 import { getImageVisionConfig } from "../config/vision.js";
 import {
+  GLASS_MODEL_FALLBACK,
+  resolveGlassModelPrimary,
+  type GlassModelPurpose,
+} from "../config/glassModels.js";
+import {
   loadScreenshotForVision,
   ScreenshotLoaderError,
   type LoadedScreenshotImage,
@@ -9,8 +14,7 @@ import { sourceConfidenceLabel, sourceConfidenceFromType } from "../contextBridg
 import { getMaxOutputTokens } from "../config/tokenModes.js";
 import { normalizeTokenMode } from "../config/tokenModes.js";
 import { buildAgentCost } from "../pricing/calculateCost.js";
-import { callOpenAIVision } from "../providers/openai.js";
-import type { ProviderResult } from "../providers/types.js";
+import { callOpenAIVisionWithFallback } from "../providers/openai.js";
 import type { AgentCost, AgentMeta } from "../types/index.js";
 
 const VISION_ANSWER_SYSTEM = `You are IIVO — a sharp founder/operator assistant analyzing a screenshot the user explicitly captured and attached.
@@ -30,6 +34,8 @@ export interface VisionAnalysisTrace {
   visionEnabled: boolean;
   visionProvider?: string;
   visionModel?: string;
+  visionModelRequested?: string;
+  visionFallbackUsed?: boolean;
   screenshotTitle?: string;
   sourceUrl?: string;
   imageSizeBytes?: number;
@@ -92,6 +98,7 @@ export async function runVisionAnswer(input: {
   contextItem: ContextItem;
   tokenMode?: unknown;
   signal?: AbortSignal;
+  modelPurpose?: GlassModelPurpose;
 }): Promise<VisionAnswerResult> {
   const startedAt = new Date().toISOString();
   const config = getImageVisionConfig();
@@ -139,12 +146,15 @@ export async function runVisionAnswer(input: {
   const maxOutputTokens = getMaxOutputTokens("strategy", tokenMode);
 
   try {
-    const result: ProviderResult = await callOpenAIVision(
+    const purpose = input.modelPurpose ?? "default";
+    const primary = resolveGlassModelPrimary("vision", purpose);
+    const result = await callOpenAIVisionWithFallback(
       VISION_ANSWER_SYSTEM,
       userText,
       screenshot.imageDataUrl,
+      primary,
       input.signal,
-      config.model,
+      GLASS_MODEL_FALLBACK,
       maxOutputTokens,
     );
 
@@ -174,6 +184,8 @@ export async function runVisionAnswer(input: {
         visionEnabled: true,
         visionProvider: result.provider,
         visionModel: result.model,
+        visionModelRequested: result.requestedModel,
+        visionFallbackUsed: result.fallbackUsed,
         screenshotTitle: screenshot.title,
         sourceUrl: screenshot.sourceUrl,
         imageSizeBytes: screenshot.imageSizeBytes,

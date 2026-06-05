@@ -2348,6 +2348,7 @@ async function refineSessionTypeSemantic(): Promise<void> {
       prompt,
       session: buildGlassAskSessionPayload(),
       responseStyle: "overlay",
+      modelPurpose: "semantic",
     });
     const parsed = parseSemanticSessionTypeResponse(response.answer);
     if (parsed) {
@@ -2426,6 +2427,7 @@ async function runCopilotDiagnosis(resolution: CopilotResolution): Promise<void>
         latestScreenshot: latestScreenshotPayload,
         visualIntent: true,
         responseStyle: "overlay",
+        modelPurpose: "diagnostic",
       });
       result = parseDiagnosticAnalysisResponse(response.answer, id, createdAt);
     }

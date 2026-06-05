@@ -1,5 +1,6 @@
 import { logApiKeyStatus, logImageVisionStatus } from "./loadEnv.js";
 import { logConfiguredModels } from "./config/models.js";
+import { logGlassModelStatus } from "./config/glassModels.js";
 import {
   logConfiguredTokenModes,
 } from "./config/tokenModes.js";
@@ -48,6 +49,7 @@ import {
 import { importUrlContent } from "./contextBridge/urlImporter.js";
 import type { CreateContextItemInput } from "./contextBridge/types.js";
 import { getImageVisionConfig } from "./config/vision.js";
+import { getGlassModelsDiagnostics } from "./config/glassModels.js";
 import { runVisionAnswer } from "./agents/runVisionAnswer.js";
 import {
   appendAuditEvent,
@@ -143,6 +145,7 @@ app.use(express.json({ limit: "2mb" }));
 app.get("/api/health", (_req, res) => {
   const missing = validateApiKeys();
   const vision = getImageVisionConfig();
+  const glassModels = getGlassModelsDiagnostics();
   res.json({
     ok: missing.length === 0,
     missingKeys: missing,
@@ -157,7 +160,31 @@ app.get("/api/health", (_req, res) => {
     vision: {
       enabled: vision.enabled,
       configured: vision.configured,
+      model: vision.model,
       reason: vision.reason,
+    },
+    glassModels: {
+      fallback: glassModels.fallback,
+      text: {
+        configured: glassModels.text.configured,
+        primary: glassModels.text.primary,
+        envVar: glassModels.text.envVar,
+      },
+      vision: {
+        configured: glassModels.vision.configured,
+        primary: glassModels.vision.primary,
+        envVar: glassModels.vision.envVar,
+      },
+      diagnostic: {
+        configured: glassModels.diagnostic.configured,
+        primary: glassModels.diagnostic.primary,
+        envVar: glassModels.diagnostic.envVar,
+      },
+      semantic: {
+        configured: glassModels.semantic.configured,
+        primary: glassModels.semantic.primary,
+        envVar: glassModels.semantic.envVar,
+      },
     },
   });
 });
@@ -1180,6 +1207,7 @@ app.listen(PORT, () => {
   logApiKeyStatus();
   logImageVisionStatus();
   logConfiguredModels();
+  logGlassModelStatus();
   logConfiguredTokenModes();
   void appendAuditEvent({ eventType: "app_started" });
   const missing = validateApiKeys();

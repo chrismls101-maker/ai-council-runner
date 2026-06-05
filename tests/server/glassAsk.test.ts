@@ -78,6 +78,8 @@ for (const prompt of councilPrompts) {
         content: `Helpful answer for: ${prompt}`,
         provider: "openai",
         model: "gpt-4o",
+        requestedModel: "gpt-4.1",
+        fallbackUsed: true,
         usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, usageAvailable: true },
       }),
     );
@@ -109,6 +111,8 @@ await test("handleGlassAsk returns routeUsed glass_direct via mock caller", asyn
         content: "- You are editing IIVO Glass.\n- Command bar is direct-only.",
         provider: "openai",
         model: "gpt-4o",
+        requestedModel: "gpt-4.1",
+        fallbackUsed: false,
         usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, usageAvailable: true },
       }),
     );

@@ -228,10 +228,103 @@ export async function callOpenAIVision(
 
 function sanitizeError(body: string): string {
   try {
-    const parsed = JSON.parse(body) as { error?: { message?: string } };
-    return parsed.error?.message ?? body.slice(0, 200);
+    const parsed = JSON.parse(body) as { error?: { message?: string; code?: string } };
+    const code = parsed.error?.code;
+    const message = parsed.error?.message ?? body.slice(0, 200);
+    return code ? `${code}: ${message}` : message;
   } catch {
     return body.slice(0, 200);
+  }
+}
+
+/** True when OpenAI rejects the model id (safe to retry with fallback). */
+export function isOpenAiModelUnavailableError(err: unknown): boolean {
+  if (!(err instanceof ProviderError)) return false;
+  const msg = err.message.toLowerCase();
+  return (
+    msg.includes("model_not_found") ||
+    msg.includes("does not exist") ||
+    msg.includes("model_not_available") ||
+    (msg.includes("model") && msg.includes("not found")) ||
+    (msg.includes("404") && msg.includes("model"))
+  );
+}
+
+export type OpenAICallWithFallbackResult = ProviderResult & {
+  requestedModel: string;
+  fallbackUsed: boolean;
+};
+
+export async function callOpenAIWithFallback(
+  systemPrompt: string,
+  userPrompt: string,
+  primaryModel: string,
+  signal?: AbortSignal,
+  fallbackModel: string = MODELS.openai.gpt4o,
+  maxOutputTokens?: number,
+): Promise<OpenAICallWithFallbackResult> {
+  try {
+    const result = await callOpenAI(
+      systemPrompt,
+      userPrompt,
+      signal,
+      primaryModel,
+      maxOutputTokens,
+    );
+    return { ...result, requestedModel: primaryModel, fallbackUsed: false };
+  } catch (err) {
+    if (primaryModel === fallbackModel || !isOpenAiModelUnavailableError(err)) {
+      throw err;
+    }
+    console.warn(
+      `[glass-models] OpenAI text model "${primaryModel}" unavailable — falling back to "${fallbackModel}"`,
+    );
+    const result = await callOpenAI(
+      systemPrompt,
+      userPrompt,
+      signal,
+      fallbackModel,
+      maxOutputTokens,
+    );
+    return { ...result, requestedModel: primaryModel, fallbackUsed: true };
+  }
+}
+
+export async function callOpenAIVisionWithFallback(
+  systemPrompt: string,
+  userText: string,
+  imageDataUrl: string,
+  primaryModel: string,
+  signal?: AbortSignal,
+  fallbackModel: string = MODELS.openai.gpt4o,
+  maxOutputTokens?: number,
+): Promise<OpenAICallWithFallbackResult> {
+  try {
+    const result = await callOpenAIVision(
+      systemPrompt,
+      userText,
+      imageDataUrl,
+      signal,
+      primaryModel,
+      maxOutputTokens,
+    );
+    return { ...result, requestedModel: primaryModel, fallbackUsed: false };
+  } catch (err) {
+    if (primaryModel === fallbackModel || !isOpenAiModelUnavailableError(err)) {
+      throw err;
+    }
+    console.warn(
+      `[glass-models] OpenAI vision model "${primaryModel}" unavailable — falling back to "${fallbackModel}"`,
+    );
+    const result = await callOpenAIVision(
+      systemPrompt,
+      userText,
+      imageDataUrl,
+      signal,
+      fallbackModel,
+      maxOutputTokens,
+    );
+    return { ...result, requestedModel: primaryModel, fallbackUsed: true };
   }
 }
 

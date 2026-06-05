@@ -5,8 +5,13 @@
 import { getContextItem } from "../contextBridge/contextStore.js";
 import type { ContextItem } from "../contextBridge/types.js";
 import { getImageVisionConfig } from "../config/vision.js";
+import {
+  GLASS_MODEL_FALLBACK,
+  resolveGlassModelPrimary,
+  type GlassModelPurpose,
+} from "../config/glassModels.js";
 import { runVisionAnswer, type VisionAnswerResult } from "../agents/runVisionAnswer.js";
-import { callOpenAIVision } from "../providers/openai.js";
+import { callOpenAIVisionWithFallback } from "../providers/openai.js";
 import { getMaxOutputTokens } from "../config/tokenModes.js";
 import { formatGlassDirectAnswer } from "./glassDirectAsk.js";
 import type { GlassAskLatestScreenshot, GlassAskRequestBody, GlassAskResponseBody } from "./glassAskTypes.js";
@@ -41,11 +46,13 @@ async function runVisionFromContextItem(
   prompt: string,
   item: ContextItem,
   signal?: AbortSignal,
+  purpose: GlassModelPurpose = "default",
 ): Promise<VisionAnswerResult> {
   return runVisionAnswer({
     prompt: buildVisualUserPrompt(prompt, undefined),
     contextItem: item,
     signal,
+    modelPurpose: purpose,
   });
 }
 
@@ -54,6 +61,7 @@ async function runVisionFromDataUrl(
   imageDataUrl: string,
   meta: GlassAskLatestScreenshot | undefined,
   signal?: AbortSignal,
+  purpose: GlassModelPurpose = "default",
 ): Promise<VisionAnswerResult> {
   const config = getImageVisionConfig();
   const startedAt = new Date().toISOString();
@@ -78,12 +86,14 @@ async function runVisionFromDataUrl(
   }
 
   try {
-    const result = await callOpenAIVision(
+    const primary = resolveGlassModelPrimary("vision", purpose);
+    const result = await callOpenAIVisionWithFallback(
       GLASS_VISUAL_SYSTEM,
       buildVisualUserPrompt(prompt, meta),
       imageDataUrl,
+      primary,
       signal,
-      config.model,
+      GLASS_MODEL_FALLBACK,
       getMaxOutputTokens("strategy", "standard"),
     );
     const completedAt = new Date().toISOString();
@@ -102,6 +112,8 @@ async function runVisionFromDataUrl(
         visionEnabled: true,
         visionProvider: result.provider,
         visionModel: result.model,
+        visionModelRequested: result.requestedModel,
+        visionFallbackUsed: result.fallbackUsed,
       },
     };
   } catch (err) {
@@ -175,6 +187,9 @@ function mapVisionToGlassResponse(
     answer: formatted.answer,
     shortAnswer: formatted.shortAnswer,
     model: vision.visionTrace.visionModel,
+    modelRequested: vision.visionTrace.visionModelRequested,
+    modelUsed: vision.visionTrace.visionModel,
+    fallbackUsed: vision.visionTrace.visionFallbackUsed,
     routeUsed: "glass_visual_direct",
     usedVision: true,
     contextId,
@@ -189,6 +204,7 @@ export async function runGlassVisualDirectAsk(
 ): Promise<GlassAskResponseBody> {
   const prompt = body.prompt?.trim() ?? "";
   const shot = body.latestScreenshot;
+  const purpose = body.modelPurpose ?? "default";
 
   const inlineImage = resolveImageDataUrl(shot);
   if (!shot?.contextId && !inlineImage) {
@@ -206,7 +222,7 @@ export async function runGlassVisualDirectAsk(
     const item = await getContextItem(contextId);
     if (!item || item.type !== "screenshot") {
       if (inlineImage) {
-        vision = await runVisionFromDataUrl(prompt, inlineImage, shot, signal);
+        vision = await runVisionFromDataUrl(prompt, inlineImage, shot, signal, purpose);
       } else {
         return {
           answer: GLASS_CAPTURE_FIRST_MESSAGE,
@@ -215,10 +231,10 @@ export async function runGlassVisualDirectAsk(
         };
       }
     } else {
-      vision = await runVisionFromContextItem(prompt, item, signal);
+      vision = await runVisionFromContextItem(prompt, item, signal, purpose);
     }
   } else if (inlineImage) {
-    vision = await runVisionFromDataUrl(prompt, inlineImage, shot, signal);
+    vision = await runVisionFromDataUrl(prompt, inlineImage, shot, signal, purpose);
   } else {
     return {
       answer: GLASS_CAPTURE_FIRST_MESSAGE,

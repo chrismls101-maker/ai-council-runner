@@ -29,6 +29,8 @@
     "qa:copilot:stress": "node --experimental-strip-types scripts/glass-copilot-stress-qa.mjs",
     "qa:scenario:run": "node --experimental-strip-types scripts/glass-scenario-runner.mjs",
     "qa:scenario:live": "node scripts/glass-live-scenario-ask.mjs",
+    "qa:live-answers": "node scripts/glass-qa-live-answers.mjs",
+    "check:models": "node scripts/check-openai-models.mjs",
     "qa:overnight": "node scripts/glass-overnight-qa.mjs",
     "qa:overnight:quick": "node scripts/glass-overnight-qa.mjs --mode quick",
     "qa:smoke": "node --experimental-strip-types --test src/test/glassE2eSmoke.test.ts src/test/followMouseDisplay.test.ts src/test/glassHotkeySettings.test.ts",

@@ -53,12 +53,18 @@ export interface GlassAskRequestBody {
   latestScreenshot?: GlassAskLatestScreenshot;
   visualIntent?: boolean;
   responseStyle?: "overlay";
+  /** Selects env model slot: default text, semantic refine, or diagnostic. */
+  modelPurpose?: "default" | "semantic" | "diagnostic";
 }
 
 export interface GlassAskResponseBody {
   answer: string;
   shortAnswer?: string;
+  /** Model actually used (backward compatible). */
   model?: string;
+  modelRequested?: string;
+  modelUsed?: string;
+  fallbackUsed?: boolean;
   routeUsed: "glass_direct" | "glass_visual_direct";
   usedVision?: boolean;
   runId?: string;
