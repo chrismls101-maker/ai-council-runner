@@ -20,9 +20,46 @@ import {
   type GlassCopilotIntervention,
   type GlassCopilotInterventionKind,
 } from "./copilotTypes.ts";
+import type { GlassCopilotSessionType } from "./copilotSessionType.ts";
 import { isDuplicateText } from "./sessionIntelligence.ts";
 
 export const MIN_INTERVENTION_GAP_MS = 60_000;
+
+/** Context that flavors card copy/buttons by what the user is doing. */
+export interface InterventionBuildContext {
+  sessionType: GlassCopilotSessionType;
+  appName?: string;
+}
+
+const DEFAULT_BUILD_CONTEXT: InterventionBuildContext = {
+  sessionType: "general_workflow",
+};
+
+function appIsCursor(appName: string | undefined): boolean {
+  return (appName ?? "").toLowerCase().includes("cursor");
+}
+
+/** Human label for the primary "turn this into X" output, by session type. */
+function outputActionLabel(sessionType: GlassCopilotSessionType): string {
+  switch (sessionType) {
+    case "coding_building":
+      return "turn it into a prompt for your AI tool";
+    case "video_learning":
+      return "turn it into an action plan";
+    case "research":
+      return "save it as research notes";
+    case "meeting_call":
+      return "add it to your follow-ups";
+    case "business_strategy":
+      return "break it down into pros and cons";
+    case "sales_review":
+      return "draft an outreach angle";
+    case "studying":
+      return "make study notes from it";
+    default:
+      return "turn it into next steps";
+  }
+}
 
 /** Insight types eligible to surface as an overlay suggestion card. */
 export const INTERRUPTION_INSIGHT_TYPES = new Set<GlassCopilotInsightType>([
@@ -38,6 +75,11 @@ export interface InterruptionContext {
   lastInterventionMs?: number;
   /** Titles/texts of recently shown cards, for dedupe. */
   recentShownTexts: string[];
+  /**
+   * Effective minimum gap (ms) since the last intervention. The governor
+   * raises this above MIN_INTERVENTION_GAP_MS after repeated dismissals.
+   */
+  minGapMs?: number;
 }
 
 function modeAllowsCards(config: GlassCopilotConfig): boolean {
@@ -46,7 +88,7 @@ function modeAllowsCards(config: GlassCopilotConfig): boolean {
 
 function gapSatisfied(ctx: InterruptionContext): boolean {
   if (ctx.lastInterventionMs == null) return true;
-  return ctx.nowMs - ctx.lastInterventionMs >= MIN_INTERVENTION_GAP_MS;
+  return ctx.nowMs - ctx.lastInterventionMs >= (ctx.minGapMs ?? MIN_INTERVENTION_GAP_MS);
 }
 
 function recentlyShown(ctx: InterruptionContext, insight: GlassCopilotInsight): boolean {
@@ -111,14 +153,15 @@ interface CardCopy {
   buttons: GlassCopilotCardButton[];
 }
 
-function cardCopyFor(insight: GlassCopilotInsight): CardCopy {
+function cardCopyFor(insight: GlassCopilotInsight, ctx: InterventionBuildContext): CardCopy {
+  const promptLabel = appIsCursor(ctx.appName) ? "Create Cursor prompt" : "Create AI prompt";
   switch (insight.type) {
     case "cursor_prompt_candidate":
       return {
         title: "I found a useful idea.",
-        body: `Turn it into a Cursor prompt? “${insight.title}”`,
+        body: `Want a prompt for your AI tool? “${insight.title}”`,
         buttons: [
-          { action: "yes", label: "Yes", primary: true },
+          { action: "create-prompt", label: promptLabel, primary: true },
           { action: "later", label: "Later" },
           { action: "dismiss", label: "Dismiss" },
         ],
@@ -126,16 +169,20 @@ function cardCopyFor(insight: GlassCopilotInsight): CardCopy {
     case "action":
       return {
         title: "This sounds like an action item.",
-        body: `Save it? “${insight.title}”`,
+        body: `Want me to ${outputActionLabel(ctx.sessionType)}? “${insight.title}”`,
         buttons: [
-          { action: "save", label: "Save", primary: true },
+          { action: "turn-into-action", label: "Turn into action", primary: true },
+          { action: "save", label: "Save" },
           { action: "dismiss", label: "Dismiss" },
         ],
       };
     case "risk":
       return {
-        title: "You may be stuck on this.",
-        body: `Diagnose it? “${insight.title}”`,
+        title:
+          ctx.sessionType === "coding_building"
+            ? "You may be stuck on this."
+            : "This sounds like a risk.",
+        body: `Want me to diagnose it? “${insight.title}”`,
         buttons: [
           { action: "diagnose", label: "Diagnose", primary: true },
           { action: "dismiss", label: "Ignore" },
@@ -144,10 +191,10 @@ function cardCopyFor(insight: GlassCopilotInsight): CardCopy {
     case "opportunity":
       return {
         title: "I spotted an opportunity.",
-        body: `Capture it? “${insight.title}”`,
+        body: `Want me to ${outputActionLabel(ctx.sessionType)}? “${insight.title}”`,
         buttons: [
-          { action: "save", label: "Save", primary: true },
-          { action: "later", label: "Later" },
+          { action: "turn-into-action", label: "Turn into action", primary: true },
+          { action: "save", label: "Save" },
           { action: "dismiss", label: "Dismiss" },
         ],
       };
@@ -166,8 +213,9 @@ function cardCopyFor(insight: GlassCopilotInsight): CardCopy {
 export function buildInterventionForInsight(
   insight: GlassCopilotInsight,
   deps: { idFactory: () => string; clock: () => string },
+  buildContext: InterventionBuildContext = DEFAULT_BUILD_CONTEXT,
 ): GlassCopilotIntervention {
-  const copy = cardCopyFor(insight);
+  const copy = cardCopyFor(insight, buildContext);
   return {
     id: deps.idFactory(),
     insightId: insight.id,

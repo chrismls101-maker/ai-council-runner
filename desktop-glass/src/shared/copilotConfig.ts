@@ -9,9 +9,33 @@ import {
   DEFAULT_COPILOT_CONFIG,
   type GlassCopilotConfig,
   type GlassCopilotMode,
+  type GlassCopilotReportStyle,
 } from "./copilotTypes.ts";
+import type { GlassCopilotSessionTypeSetting } from "./copilotSessionType.ts";
 
 const VALID_MODES = new Set<GlassCopilotMode>(["off", "passive", "coaching", "diagnostic"]);
+
+const VALID_SESSION_TYPE_SETTINGS = new Set<GlassCopilotSessionTypeSetting>([
+  "auto",
+  "video_learning",
+  "meeting_call",
+  "research",
+  "coding_building",
+  "business_strategy",
+  "sales_review",
+  "studying",
+  "general_workflow",
+]);
+
+function parseSessionTypeSetting(value: unknown): GlassCopilotSessionTypeSetting {
+  return typeof value === "string" && VALID_SESSION_TYPE_SETTINGS.has(value as GlassCopilotSessionTypeSetting)
+    ? (value as GlassCopilotSessionTypeSetting)
+    : "auto";
+}
+
+function parseReportStyle(value: unknown): GlassCopilotReportStyle {
+  return value === "detailed" ? "detailed" : "concise";
+}
 
 export function isCopilotMode(value: unknown): value is GlassCopilotMode {
   return typeof value === "string" && VALID_MODES.has(value as GlassCopilotMode);
@@ -56,6 +80,8 @@ export function parseCopilotConfig(raw: unknown): GlassCopilotConfig {
     silenceTimeoutMin: clampMinutes(record.silenceTimeoutMin, DEFAULT_COPILOT_CONFIG.silenceTimeoutMin, 1, 60),
     maxListeningMin: clampMinutes(record.maxListeningMin, DEFAULT_COPILOT_CONFIG.maxListeningMin, 5, 480),
     muteSuggestions: parseBool(record.muteSuggestions, DEFAULT_COPILOT_CONFIG.muteSuggestions),
+    sessionType: parseSessionTypeSetting(record.sessionType),
+    reportStyle: parseReportStyle(record.reportStyle),
   };
 }
 

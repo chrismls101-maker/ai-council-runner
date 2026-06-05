@@ -9,7 +9,14 @@
  * All types here are pure data (no electron / fs) so they are unit-testable.
  */
 
+import type {
+  GlassCopilotSessionType,
+  GlassCopilotSessionTypeSetting,
+} from "./copilotSessionType.ts";
+
 export type GlassCopilotMode = "off" | "passive" | "coaching" | "diagnostic";
+
+export type GlassCopilotReportStyle = "concise" | "detailed";
 
 /**
  * Insight categories the deterministic engine can emit. Superset of the
@@ -61,6 +68,8 @@ export type GlassCopilotCardAction =
   | "save"
   | "diagnose"
   | "show-summary"
+  | "turn-into-action"
+  | "create-prompt"
   | "dismiss";
 
 export interface GlassCopilotCardButton {
@@ -103,6 +112,10 @@ export interface GlassCopilotConfig {
   maxListeningMin: number;
   /** When true, copilot never shows suggestion cards (still extracts). */
   muteSuggestions: boolean;
+  /** Pin a session type, or "auto" to detect from context. */
+  sessionType: GlassCopilotSessionTypeSetting;
+  /** Debrief verbosity. */
+  reportStyle: GlassCopilotReportStyle;
 }
 
 export interface GlassCopilotDebriefSection {
@@ -151,6 +164,12 @@ export interface GlassCopilotRuntimeState {
   offer?: GlassCopilotOffer | null;
   /** Set when system audio has been silent past the configured timeout. */
   systemAudioSilenceWarning: boolean;
+  /** The session type currently steering insights/cards/debrief. */
+  sessionType: GlassCopilotSessionType;
+  /** True once a debrief has been generated (panel shows "Debrief Ready"). */
+  debriefReady: boolean;
+  /** How many cards the user dismissed in a row (governor back-off). */
+  consecutiveDismissals: number;
 }
 
 export const COPILOT_INTERVAL_OPTIONS = [60, 90, 120] as const;
@@ -189,6 +208,8 @@ export const DEFAULT_COPILOT_CONFIG: GlassCopilotConfig = {
   silenceTimeoutMin: 5,
   maxListeningMin: 120,
   muteSuggestions: false,
+  sessionType: "auto",
+  reportStyle: "concise",
 };
 
 export function copilotModeIsActive(mode: GlassCopilotMode): boolean {

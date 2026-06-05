@@ -5,9 +5,25 @@ import {
   COPILOT_MODE_HINTS,
   COPILOT_MODE_LABELS,
   type GlassCopilotMode,
+  type GlassCopilotReportStyle,
 } from "../../shared/copilotTypes.ts";
+import {
+  SESSION_TYPE_LABELS,
+  SESSION_TYPE_SETTING_LABELS,
+  type GlassCopilotSessionTypeSetting,
+} from "../../shared/copilotSessionType.ts";
 
 const MODES: GlassCopilotMode[] = ["off", "passive", "coaching", "diagnostic"];
+
+const SESSION_TYPE_SETTINGS: GlassCopilotSessionTypeSetting[] = [
+  "auto",
+  "video_learning",
+  "meeting_call",
+  "research",
+  "coding_building",
+  "business_strategy",
+  "general_workflow",
+];
 
 /**
  * Compact Session Copilot row + Configure drawer. Only meaningful while a
@@ -18,7 +34,10 @@ export function CopilotConfigure({ sessionLive }: { sessionLive: boolean }): JSX
   const [expanded, setExpanded] = useState(false);
   const copilot = state.copilot;
   const config = copilot.config;
-  const statusLabel = COPILOT_MODE_LABELS[copilot.mode];
+  const statusLabel =
+    copilot.debriefReady && copilot.mode !== "off"
+      ? "Debrief Ready"
+      : COPILOT_MODE_LABELS[copilot.mode];
 
   return (
     <div className="copilot-config" data-testid="glass-copilot-config">
@@ -28,6 +47,7 @@ export function CopilotConfigure({ sessionLive }: { sessionLive: boolean }): JSX
           <strong>Session Copilot</strong>
           <span className="copilot-config__state">
             Status: {statusLabel}
+            {copilot.active ? ` · ${SESSION_TYPE_LABELS[copilot.sessionType]}` : ""}
             {copilot.active ? ` · ${copilot.insightCount} insight${copilot.insightCount === 1 ? "" : "s"}` : ""}
           </span>
         </div>
@@ -65,6 +85,25 @@ export function CopilotConfigure({ sessionLive }: { sessionLive: boolean }): JSX
             </select>
           </label>
           <p className="copilot-config__mode-hint">{COPILOT_MODE_HINTS[config.mode]}</p>
+
+          <label className="copilot-config__field">
+            <span>Session type</span>
+            <select
+              value={config.sessionType}
+              onChange={(e) =>
+                send({
+                  type: "copilot-set-config",
+                  patch: { sessionType: e.target.value as GlassCopilotSessionTypeSetting },
+                })
+              }
+            >
+              {SESSION_TYPE_SETTINGS.map((type) => (
+                <option key={type} value={type}>
+                  {SESSION_TYPE_SETTING_LABELS[type]}
+                </option>
+              ))}
+            </select>
+          </label>
 
           <label className="copilot-config__field">
             <span>Insight interval</span>
@@ -137,6 +176,22 @@ export function CopilotConfigure({ sessionLive }: { sessionLive: boolean }): JSX
                 send({ type: "copilot-set-config", patch: { maxListeningMin: Number(e.target.value) } })
               }
             />
+          </label>
+
+          <label className="copilot-config__field">
+            <span>Report style</span>
+            <select
+              value={config.reportStyle}
+              onChange={(e) =>
+                send({
+                  type: "copilot-set-config",
+                  patch: { reportStyle: e.target.value as GlassCopilotReportStyle },
+                })
+              }
+            >
+              <option value="concise">Concise</option>
+              <option value="detailed">Detailed</option>
+            </select>
           </label>
 
           {copilot.active ? (

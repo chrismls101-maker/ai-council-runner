@@ -24,7 +24,14 @@ import {
 } from "../shared/copilotEngine.ts";
 import { detectStuckSignal } from "../shared/copilotDiagnostic.ts";
 import { detectDebriefTrigger, buildSessionDebrief } from "../shared/copilotDebrief.ts";
-import { shouldShowOverlayCard } from "../shared/copilotInterruption.ts";
+import {
+  buildInterventionForInsight,
+  shouldShowOverlayCard,
+} from "../shared/copilotInterruption.ts";
+import {
+  detectSessionType,
+  resolveSessionType,
+} from "../shared/copilotSessionType.ts";
 import type { GlassSession, GlassSessionEvent } from "../shared/sessionTypes.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -352,7 +359,11 @@ test("buildSessionDebrief produces all required sections", () => {
     },
     deps,
   );
-  const debrief = buildSessionDebrief(session, insights, deps);
+  // General + detailed report keeps the full section set.
+  const debrief = buildSessionDebrief(session, insights, deps, {
+    sessionType: "general_workflow",
+    reportStyle: "detailed",
+  });
   const headings = debrief.sections.map((s) => s.heading);
   for (const required of [
     "What happened",
@@ -363,7 +374,7 @@ test("buildSessionDebrief produces all required sections", () => {
     "Opportunities",
     "What IIVO noticed",
     "Recommended next steps",
-    "Cursor prompts / follow-up prompts",
+    "Suggested prompts / follow-ups",
     "What to save to memory",
     "Open questions",
   ]) {
@@ -514,6 +525,7 @@ const COPILOT_SHARED_FILES = [
   "shared/copilotDiagnostic.ts",
   "shared/copilotDebrief.ts",
   "shared/copilotController.ts",
+  "shared/copilotSessionType.ts",
 ];
 
 test("no Council in the copilot loop", () => {
@@ -544,4 +556,256 @@ test("main stops the copilot loop on stop-everything and end-session", () => {
     source.includes("sessionIsLive() && copilotModeIsActive(copilot.getConfig().mode)"),
     "copilot loop must be guarded by a live session + active mode",
   );
+});
+
+// --- session type detection ----------------------------------------------
+
+test("detectSessionType classifies coding via app + keywords", () => {
+  assert.equal(
+    detectSessionType({ appName: "Cursor", transcript: "let's refactor this function and commit" }),
+    "coding_building",
+  );
+});
+
+test("detectSessionType classifies video learning via window title", () => {
+  assert.equal(
+    detectSessionType({ appName: "Google Chrome", windowTitle: "How to invest - YouTube" }),
+    "video_learning",
+  );
+});
+
+test("detectSessionType classifies meeting / research / sales / strategy", () => {
+  assert.equal(
+    detectSessionType({ appName: "Zoom", transcript: "let's discuss the agenda and action items" }),
+    "meeting_call",
+  );
+  assert.equal(
+    detectSessionType({ transcript: "according to the study, the evidence and findings suggest" }),
+    "research",
+  );
+  assert.equal(
+    detectSessionType({ transcript: "the prospect in our pipeline needs a demo before we close the deal" }),
+    "sales_review",
+  );
+  assert.equal(
+    detectSessionType({ transcript: "our go-to-market strategy depends on pricing and market positioning" }),
+    "business_strategy",
+  );
+});
+
+test("detectSessionType falls back to general workflow", () => {
+  assert.equal(detectSessionType({ transcript: "the weather is nice and the coffee is warm" }), "general_workflow");
+});
+
+test("resolveSessionType honors a pinned (non-auto) setting", () => {
+  assert.equal(
+    resolveSessionType("meeting_call", { appName: "Cursor", transcript: "refactor this function" }),
+    "meeting_call",
+  );
+  assert.equal(
+    resolveSessionType("auto", { appName: "Cursor", transcript: "refactor this function" }),
+    "coding_building",
+  );
+});
+
+test("controller exposes detected session type in runtime state", () => {
+  const deps = deterministicDeps();
+  const controller = new SessionCopilotController(deps, config({ mode: "passive" }));
+  controller.tick({
+    sessionLive: true,
+    session: makeSession([transcriptEvent("e1", "let's discuss the agenda and follow up next meeting")]),
+    transcript: "let's discuss the agenda and follow up next meeting",
+    recentCommands: [],
+    recentResponses: [],
+    systemAudioActive: false,
+    sourceApp: "zoom.us",
+  });
+  assert.equal(controller.getSessionType(), "meeting_call");
+  assert.equal(controller.runtimeState(true).sessionType, "meeting_call");
+});
+
+// --- context-aware cards (AI tool vs Cursor) -----------------------------
+
+test("cursor-prompt card says 'AI prompt' unless the app is Cursor", () => {
+  const deps = deterministicDeps();
+  const insight = {
+    id: "i1",
+    type: "cursor_prompt_candidate" as const,
+    title: "Add retry logic",
+    text: "Add retry logic to the fetch call.",
+    source: "transcript",
+    confidence: 0.8,
+    importance: "high" as const,
+    createdAt: "now",
+    relatedEventIds: [],
+    userDecision: "pending" as const,
+  };
+  const generic = buildInterventionForInsight(insight, deps, {
+    sessionType: "coding_building",
+    appName: "Google Chrome",
+  });
+  assert.ok(generic.buttons.some((b) => b.label === "Create AI prompt"));
+  assert.ok(!generic.buttons.some((b) => b.label === "Create Cursor prompt"));
+
+  const cursor = buildInterventionForInsight(insight, deps, {
+    sessionType: "coding_building",
+    appName: "Cursor",
+  });
+  assert.ok(cursor.buttons.some((b) => b.label === "Create Cursor prompt"));
+});
+
+test("coaching card copy adapts to session type for action insights", () => {
+  const deps = deterministicDeps();
+  const insight = {
+    id: "i2",
+    type: "action" as const,
+    title: "Follow up with the lead",
+    text: "We should follow up with the prospect tomorrow.",
+    source: "transcript",
+    confidence: 0.8,
+    importance: "high" as const,
+    createdAt: "now",
+    relatedEventIds: [],
+    userDecision: "pending" as const,
+  };
+  const sales = buildInterventionForInsight(insight, deps, { sessionType: "sales_review" });
+  assert.ok(sales.body.includes("outreach"), `expected outreach phrasing, got: ${sales.body}`);
+  const study = buildInterventionForInsight(insight, deps, { sessionType: "studying" });
+  assert.ok(study.body.includes("study notes"), `expected study phrasing, got: ${study.body}`);
+  // Action cards offer a "Turn into action" button across types.
+  assert.ok(sales.buttons.some((b) => b.action === "turn-into-action"));
+});
+
+// --- intervention governor: dismiss backoff + accept restore -------------
+
+test("governor backs off after 2 dismissals and restores on accept", () => {
+  const deps = deterministicDeps();
+  const controller = new SessionCopilotController(deps, config({ mode: "coaching" }));
+
+  // The controller tracks a transcript watermark and dedupes similar text, so
+  // accumulate clearly-distinct high-value sentences across ticks.
+  const events: GlassSessionEvent[] = [];
+  let transcript = "";
+  let n = 0;
+  const fire = (sentence: string, gapMs: number): ReturnType<SessionCopilotController["tick"]> => {
+    deps.advance(gapMs);
+    events.push(transcriptEvent(`e-${++n}`, sentence));
+    transcript += (transcript ? " " : "") + sentence;
+    return controller.tick({
+      sessionLive: true,
+      session: makeSession([...events]),
+      transcript,
+      recentCommands: [],
+      recentResponses: [],
+      systemAudioActive: false,
+    });
+  };
+
+  const c1 = fire("We must fix the broken deploy script now.", 90_000);
+  assert.ok(c1.intervention);
+  controller.resolveIntervention(c1.intervention!.id, "dismiss");
+  const c2 = fire("There is a critical security risk in the payment flow.", 90_000);
+  assert.ok(c2.intervention);
+  controller.resolveIntervention(c2.intervention!.id, "dismiss");
+  assert.equal(controller.runtimeState(true).consecutiveDismissals, 2);
+
+  // Now the effective gap is widened (3x = 180s); a 90s gap is no longer enough.
+  const c3 = fire("We need to migrate the database before the launch deadline.", 90_000);
+  assert.equal(c3.intervention, null, "after 2 dismissals the governor backs off");
+
+  // Once enough time passes a card surfaces again; accepting it restores normal frequency.
+  const c4 = fire("We must rotate the leaked API keys immediately.", 200_000);
+  assert.ok(c4.intervention);
+  controller.resolveIntervention(c4.intervention!.id, "save");
+  assert.equal(controller.runtimeState(true).consecutiveDismissals, 0, "accept resets the streak");
+});
+
+test("turn-into-action and create-prompt resolve to distinct effects", () => {
+  const deps = deterministicDeps();
+  const controller = new SessionCopilotController(deps, config({ mode: "coaching" }));
+  const tick = controller.tick({
+    sessionLive: true,
+    session: makeSession([transcriptEvent("e1", "We must fix the broken deploy script now.")]),
+    transcript: "We must fix the broken deploy script now.",
+    recentCommands: [],
+    recentResponses: [],
+    systemAudioActive: false,
+  });
+  assert.ok(tick.intervention);
+  const r = controller.resolveIntervention(tick.intervention!.id, "turn-into-action");
+  assert.equal(r.effect, "action_steps");
+  assert.equal(r.insight!.userDecision, "accepted");
+});
+
+// --- adaptive debrief templates ------------------------------------------
+
+test("debrief template adapts to session type", () => {
+  const deps = deterministicDeps();
+  const session = makeSession([
+    transcriptEvent("e1", "We must fix the broken deploy script now."),
+    transcriptEvent("e2", "We could automate the release to save time."),
+  ]);
+  const insights = extractCopilotInsights(
+    {
+      newTranscript:
+        "We must fix the broken deploy script now. We could automate the release to save time.",
+      newEvents: session.events,
+    },
+    deps,
+  );
+
+  const video = buildSessionDebrief(session, insights, deps, {
+    sessionType: "video_learning",
+    reportStyle: "detailed",
+  });
+  assert.ok(video.sections.some((s) => s.heading === "Key takeaways"));
+  assert.ok(video.sections.some((s) => s.heading === "Action steps"));
+
+  const meeting = buildSessionDebrief(session, insights, deps, {
+    sessionType: "meeting_call",
+    reportStyle: "detailed",
+  });
+  assert.ok(meeting.sections.some((s) => s.heading === "Meeting notes"));
+  assert.ok(meeting.sections.some((s) => s.heading === "Decisions"));
+});
+
+test("concise report drops empty sections; detailed keeps them", () => {
+  const deps = deterministicDeps();
+  const session = makeSession([transcriptEvent("e1", "We must fix the broken deploy script now.")]);
+  const insights = extractCopilotInsights(
+    { newTranscript: "We must fix the broken deploy script now.", newEvents: session.events },
+    deps,
+  );
+  const concise = buildSessionDebrief(session, insights, deps, {
+    sessionType: "general_workflow",
+    reportStyle: "concise",
+  });
+  const detailed = buildSessionDebrief(session, insights, deps, {
+    sessionType: "general_workflow",
+    reportStyle: "detailed",
+  });
+  assert.ok(
+    concise.sections.length < detailed.sections.length,
+    "concise should omit empty sections that detailed retains",
+  );
+});
+
+// --- config parsing for new fields ---------------------------------------
+
+test("config parses sessionType + reportStyle with safe defaults", () => {
+  const parsed = parseCopilotConfig({ sessionType: "video_learning", reportStyle: "detailed" });
+  assert.equal(parsed.sessionType, "video_learning");
+  assert.equal(parsed.reportStyle, "detailed");
+
+  const fallback = parseCopilotConfig({ sessionType: "bogus", reportStyle: "loud" });
+  assert.equal(fallback.sessionType, "auto");
+  assert.equal(fallback.reportStyle, "concise");
+});
+
+test("panel stays compact: CopilotConfigure has no full insight list", () => {
+  const source = readFileSync(join(SRC, "renderer", "panel", "CopilotConfigure.tsx"), "utf8");
+  // The panel shows a count + status, never iterates the insight history.
+  assert.ok(!source.includes(".insights.map"), "panel must not render the full insight list");
+  assert.ok(source.includes("Session type"), "panel exposes session type selector");
+  assert.ok(source.includes("Report style"), "panel exposes report style selector");
 });

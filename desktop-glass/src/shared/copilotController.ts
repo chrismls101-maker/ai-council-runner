@@ -22,13 +22,21 @@ import {
 } from "./copilotTypes.ts";
 import { extractCopilotInsights, dedupeCopilotInsights } from "./copilotEngine.ts";
 import {
+  MIN_INTERVENTION_GAP_MS,
   buildDiagnoseOfferIntervention,
   buildInterventionForInsight,
   pickInterventionInsight,
 } from "./copilotInterruption.ts";
 import { detectStuckSignal } from "./copilotDiagnostic.ts";
+import {
+  resolveSessionType,
+  type GlassCopilotSessionType,
+} from "./copilotSessionType.ts";
 
 const MAX_RECENT_SHOWN = 12;
+/** After this many dismissals in a row, the governor backs off (slows down). */
+const DISMISS_BACKOFF_THRESHOLD = 2;
+const DISMISS_BACKOFF_MULTIPLIER = 3;
 
 export interface CopilotControllerDeps {
   idFactory: () => string;
@@ -62,6 +70,7 @@ export interface CopilotTickResult {
 export type CopilotEffect =
   | "none"
   | "cursor_prompt"
+  | "action_steps"
   | "save"
   | "diagnose"
   | "show-summary"
@@ -90,6 +99,8 @@ export class SessionCopilotController {
   private recentShownTexts: string[] = [];
   private systemAudioSilenceWarning = false;
   private boundSessionId: string | null = null;
+  private consecutiveDismissals = 0;
+  private currentSessionType: GlassCopilotSessionType = "general_workflow";
 
   constructor(deps: CopilotControllerDeps, config: GlassCopilotConfig = DEFAULT_COPILOT_CONFIG) {
     this.deps = deps;
@@ -142,6 +153,19 @@ export class SessionCopilotController {
     this.lastRunAt = undefined;
     this.recentShownTexts = [];
     this.systemAudioSilenceWarning = false;
+    this.consecutiveDismissals = 0;
+    this.currentSessionType = "general_workflow";
+  }
+
+  /** Effective minimum gap, widened when the user keeps dismissing. */
+  private effectiveGapMs(): number {
+    return this.consecutiveDismissals >= DISMISS_BACKOFF_THRESHOLD
+      ? MIN_INTERVENTION_GAP_MS * DISMISS_BACKOFF_MULTIPLIER
+      : MIN_INTERVENTION_GAP_MS;
+  }
+
+  getSessionType(): GlassCopilotSessionType {
+    return this.currentSessionType;
   }
 
   /** Restore previously persisted copilot data for a session. */
@@ -197,6 +221,13 @@ export class SessionCopilotController {
 
     this.systemAudioSilenceWarning = this.silenceWarningActive(input);
 
+    this.currentSessionType = resolveSessionType(this.config.sessionType, {
+      appName: input.sourceApp,
+      windowTitle: input.sourceTitle,
+      transcript: input.transcript,
+      recentCommands: input.recentCommands,
+    });
+
     const newTranscript = input.transcript.slice(this.processedTranscriptLength);
     const newEvents = this.newEventsSince(input.session.events);
 
@@ -231,17 +262,21 @@ export class SessionCopilotController {
       nowMs: this.deps.now(),
       lastInterventionMs: this.lastInterventionMs,
       recentShownTexts: this.recentShownTexts,
+      minGapMs: this.effectiveGapMs(),
     };
     const picked = pickInterventionInsight(fresh, ctx);
     if (picked) {
-      intervention = buildInterventionForInsight(picked, this.deps);
+      intervention = buildInterventionForInsight(picked, this.deps, {
+        sessionType: this.currentSessionType,
+        appName: input.sourceApp,
+      });
       this.lastInterventionMs = this.deps.now();
       this.remember(picked.text);
     }
 
     // Diagnostic mode: offer a diagnosis on a stuck/error signal (if no card yet).
     if (!intervention && this.config.mode === "diagnostic" && !this.config.muteSuggestions && this.config.showOverlaySuggestions) {
-      const gapOk = this.lastInterventionMs == null || this.deps.now() - this.lastInterventionMs >= 60_000;
+      const gapOk = this.lastInterventionMs == null || this.deps.now() - this.lastInterventionMs >= this.effectiveGapMs();
       if (gapOk) {
         const signal = detectStuckSignal({
           events: newEvents,
@@ -284,6 +319,14 @@ export class SessionCopilotController {
         if (insight) insight.userDecision = "accepted";
         effect = intervention.kind === "cursor_prompt" ? "cursor_prompt" : "save";
         break;
+      case "create-prompt":
+        if (insight) insight.userDecision = "accepted";
+        effect = "cursor_prompt";
+        break;
+      case "turn-into-action":
+        if (insight) insight.userDecision = "accepted";
+        effect = "action_steps";
+        break;
       case "save":
         if (insight) insight.userDecision = "saved";
         effect = "save";
@@ -306,6 +349,19 @@ export class SessionCopilotController {
         break;
       default:
         effect = "none";
+    }
+
+    // Governor: track dismissal streak to back off; any acceptance restores.
+    if (action === "dismiss" || action === "no") {
+      this.consecutiveDismissals += 1;
+    } else if (
+      action === "yes" ||
+      action === "save" ||
+      action === "diagnose" ||
+      action === "create-prompt" ||
+      action === "turn-into-action"
+    ) {
+      this.consecutiveDismissals = 0;
     }
 
     return { intervention, insight, effect };
@@ -336,6 +392,9 @@ export class SessionCopilotController {
       debrief: this.debrief,
       offer: this.offer,
       systemAudioSilenceWarning: this.systemAudioSilenceWarning,
+      sessionType: this.currentSessionType,
+      debriefReady: this.debrief != null,
+      consecutiveDismissals: this.consecutiveDismissals,
     };
   }
 

@@ -14,7 +14,14 @@ import {
   type GlassCopilotDebriefSection,
   type GlassCopilotInsight,
   type GlassCopilotInsightType,
+  type GlassCopilotReportStyle,
 } from "./copilotTypes.ts";
+import type { GlassCopilotSessionType } from "./copilotSessionType.ts";
+
+export interface DebriefOptions {
+  sessionType?: GlassCopilotSessionType;
+  reportStyle?: GlassCopilotReportStyle;
+}
 
 const DEBRIEF_TRIGGER_PHRASES = [
   "i'm done",
@@ -96,31 +103,133 @@ function recommendedNextSteps(insights: GlassCopilotInsight[]): string[] {
   return dedupeStrings(steps, 6);
 }
 
-/** Build the structured debrief deterministically. */
+/** The full, general-purpose section set (used for general_workflow). */
+function generalSections(
+  session: GlassSession,
+  insights: GlassCopilotInsight[],
+  cap: number,
+): GlassCopilotDebriefSection[] {
+  return [
+    { heading: "What happened", items: whatHappened(session) },
+    { heading: "Key ideas", items: dedupeStrings(byType(insights, "key_idea"), cap) },
+    { heading: "Important quotes / transcript moments", items: quotesFrom(session, cap) },
+    { heading: "Actions", items: dedupeStrings(byType(insights, "action"), cap) },
+    { heading: "Risks / blockers", items: dedupeStrings(byType(insights, "risk"), cap) },
+    { heading: "Opportunities", items: dedupeStrings(byType(insights, "opportunity"), cap) },
+    {
+      heading: "What IIVO noticed",
+      items: dedupeStrings(byType(insights, "summary_note").concat(byType(insights, "hypothesis")), cap),
+    },
+    { heading: "Recommended next steps", items: recommendedNextSteps(insights) },
+    {
+      heading: "Suggested prompts / follow-ups",
+      items: dedupeStrings(byType(insights, "cursor_prompt_candidate"), cap),
+    },
+    { heading: "What to save to memory", items: dedupeStrings(byType(insights, "memory_candidate"), cap) },
+    { heading: "Open questions", items: dedupeStrings(byType(insights, "question"), cap) },
+  ];
+}
+
+/** Pick a section set tailored to the session type. */
+function sectionsForType(
+  sessionType: GlassCopilotSessionType,
+  session: GlassSession,
+  insights: GlassCopilotInsight[],
+  cap: number,
+): GlassCopilotDebriefSection[] {
+  const keyIdeas = dedupeStrings(byType(insights, "key_idea"), cap);
+  const actions = dedupeStrings(byType(insights, "action"), cap);
+  const risks = dedupeStrings(byType(insights, "risk"), cap);
+  const opportunities = dedupeStrings(byType(insights, "opportunity"), cap);
+  const questions = dedupeStrings(byType(insights, "question"), cap);
+  const memory = dedupeStrings(byType(insights, "memory_candidate"), cap);
+  const prompts = dedupeStrings(byType(insights, "cursor_prompt_candidate"), cap);
+  const quotes = quotesFrom(session, cap);
+
+  switch (sessionType) {
+    case "video_learning":
+      return [
+        { heading: "What happened", items: whatHappened(session) },
+        { heading: "Key takeaways", items: keyIdeas },
+        { heading: "Action steps", items: actions },
+        { heading: "Useful quotes", items: quotes },
+        { heading: "Application ideas", items: opportunities },
+        { heading: "Open questions", items: questions },
+        { heading: "Save to memory", items: memory },
+      ];
+    case "meeting_call":
+      return [
+        { heading: "Meeting notes", items: keyIdeas.length ? keyIdeas : whatHappened(session) },
+        { heading: "Decisions", items: dedupeStrings(byType(insights, "hypothesis").concat(keyIdeas), cap) },
+        { heading: "Action items / owners", items: actions },
+        { heading: "Follow-ups", items: recommendedNextSteps(insights) },
+        { heading: "Risks / blockers", items: risks },
+        { heading: "Open questions", items: questions },
+      ];
+    case "research":
+      return [
+        { heading: "Findings", items: keyIdeas },
+        { heading: "Notable claims / sources", items: quotes },
+        { heading: "Open questions", items: questions },
+        { heading: "Risks / caveats", items: risks },
+        { heading: "Next research", items: recommendedNextSteps(insights) },
+        { heading: "Save to memory", items: memory },
+      ];
+    case "coding_building":
+      return [
+        { heading: "What changed / happened", items: whatHappened(session) },
+        { heading: "Key decisions", items: keyIdeas },
+        { heading: "Blockers", items: risks },
+        { heading: "Action items", items: actions },
+        { heading: "Next prompts for your AI tool", items: prompts },
+        { heading: "Open questions", items: questions },
+      ];
+    case "business_strategy":
+      return [
+        { heading: "What happened", items: whatHappened(session) },
+        { heading: "Options", items: opportunities.concat(keyIdeas).slice(0, cap) },
+        { heading: "Risks", items: risks },
+        { heading: "Recommendation / next actions", items: recommendedNextSteps(insights) },
+        { heading: "Open questions", items: questions },
+        { heading: "Save to memory", items: memory },
+      ];
+    case "sales_review":
+      return [
+        { heading: "What happened", items: whatHappened(session) },
+        { heading: "Key signals", items: keyIdeas },
+        { heading: "Outreach angles / next actions", items: actions.concat(opportunities).slice(0, cap) },
+        { heading: "Risks / objections", items: risks },
+        { heading: "Open questions", items: questions },
+      ];
+    case "studying":
+      return [
+        { heading: "What happened", items: whatHappened(session) },
+        { heading: "Key concepts", items: keyIdeas },
+        { heading: "Study notes / action steps", items: actions },
+        { heading: "Quiz / open questions", items: questions },
+        { heading: "Save to memory", items: memory },
+      ];
+    default:
+      return generalSections(session, insights, cap);
+  }
+}
+
+/** Build the structured debrief deterministically, tailored to session type. */
 export function buildSessionDebrief(
   session: GlassSession,
   insights: GlassCopilotInsight[],
   deps: { idFactory: () => string; clock: () => string },
+  options: DebriefOptions = {},
 ): GlassCopilotDebrief {
-  const sections: GlassCopilotDebriefSection[] = [
-    { heading: "What happened", items: whatHappened(session) },
-    { heading: "Key ideas", items: dedupeStrings(byType(insights, "key_idea"), 8) },
-    { heading: "Important quotes / transcript moments", items: quotesFrom(session, 5) },
-    { heading: "Actions", items: dedupeStrings(byType(insights, "action"), 8) },
-    { heading: "Risks / blockers", items: dedupeStrings(byType(insights, "risk"), 8) },
-    { heading: "Opportunities", items: dedupeStrings(byType(insights, "opportunity"), 8) },
-    {
-      heading: "What IIVO noticed",
-      items: dedupeStrings(byType(insights, "summary_note").concat(byType(insights, "hypothesis")), 6),
-    },
-    { heading: "Recommended next steps", items: recommendedNextSteps(insights) },
-    {
-      heading: "Cursor prompts / follow-up prompts",
-      items: dedupeStrings(byType(insights, "cursor_prompt_candidate"), 6),
-    },
-    { heading: "What to save to memory", items: dedupeStrings(byType(insights, "memory_candidate"), 6) },
-    { heading: "Open questions", items: dedupeStrings(byType(insights, "question"), 8) },
-  ];
+  const sessionType = options.sessionType ?? "general_workflow";
+  const reportStyle = options.reportStyle ?? "concise";
+  const cap = reportStyle === "detailed" ? 10 : 4;
+
+  let sections = sectionsForType(sessionType, session, insights, cap);
+  // Concise reports drop empty sections (except the lead "what happened").
+  if (reportStyle === "concise") {
+    sections = sections.filter((section, index) => index === 0 || section.items.length > 0);
+  }
 
   const markdown = debriefToMarkdown(session.title, sections);
   return {
@@ -154,15 +263,19 @@ export function debriefToMarkdown(
 export function buildDebriefAiPrompt(
   session: GlassSession,
   insights: GlassCopilotInsight[],
+  options: DebriefOptions = {},
 ): string {
-  const deterministic = buildSessionDebrief(session, insights, {
-    idFactory: () => "draft",
-    clock: () => session.updatedAt,
-  });
+  const deterministic = buildSessionDebrief(
+    session,
+    insights,
+    { idFactory: () => "draft", clock: () => session.updatedAt },
+    options,
+  );
+  const styleHint = options.reportStyle === "detailed" ? "detailed" : "concise";
   return [
-    "You are IIVO debriefing a work/research session. Using the structured notes",
-    "below, write a concise, well-organized session debrief. Keep the same",
-    "section headings. Be specific and do not invent facts.",
+    `You are IIVO debriefing a work/research session. Write a ${styleHint},`,
+    "well-organized session debrief from the structured notes below. Keep the",
+    "same section headings. Be specific and do not invent facts.",
     "",
     deterministic.markdown,
   ].join("\n");
