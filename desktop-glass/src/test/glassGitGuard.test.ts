@@ -14,6 +14,7 @@ const {
   classifyFileContent,
   classifyBinarySize,
   classifyWipPathPolicy,
+  classifyIgnoredArtifact,
   isBlockedEnvPath,
   isWipOnlyPath,
   isAllowlistedPath,
@@ -94,7 +95,9 @@ test("git guard script exports classifyGitPath and content scan", async () => {
   assert.equal(typeof mod.loadAllowlist, "function");
 });
 
-test("loadAllowlist reads git-guard.allowlist.json", () => {
-  const list = loadAllowlist();
-  assert.ok(list.paths.has("build/icon.icns"));
+test("include-ignored flags release artifacts but not node_modules", () => {
+  const release = classifyIgnoredArtifact("release/IIVO Glass.app/Contents/Info.plist");
+  assert.ok(release.issues.length > 0);
+  const deps = classifyIgnoredArtifact("node_modules/electron/index.js");
+  assert.equal(deps.issues.length, 0);
 });

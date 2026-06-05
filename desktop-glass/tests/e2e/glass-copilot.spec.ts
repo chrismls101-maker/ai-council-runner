@@ -10,6 +10,7 @@ import {
   readGlassState,
   type LaunchedGlass,
 } from "./helpers/electronApp.ts";
+import { resetE2eSetupState } from "./helpers/e2eSetupReset.ts";
 
 let app: LaunchedGlass;
 let commandPage: import("@playwright/test").Page;
@@ -36,6 +37,10 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   if (app) await closeGlassApp(app);
+});
+
+test.beforeEach(async () => {
+  await resetE2eSetupState(commandPage);
 });
 
 test("Session Copilot is off on launch", async () => {

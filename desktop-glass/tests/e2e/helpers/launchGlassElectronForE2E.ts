@@ -219,8 +219,11 @@ export async function closeGlassElectronForE2E(app: LaunchedGlassElectron): Prom
   }
   try {
     app.electronProcess.kill("SIGTERM");
-    await new Promise((r) => setTimeout(r, 500));
-    if (!app.electronProcess.killed) {
+    const deadline = Date.now() + 2000;
+    while (Date.now() < deadline && app.electronProcess.exitCode == null) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    if (app.electronProcess.exitCode == null) {
       app.electronProcess.kill("SIGKILL");
     }
   } catch {

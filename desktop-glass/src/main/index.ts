@@ -2274,6 +2274,21 @@ async function handleCommand(
         push();
       }
       return;
+    case "e2e-reset-setup-state":
+      if (process.env.IIVO_GLASS_E2E === "1") {
+        state.micPermission = "not_requested";
+        state.screenCaptureProbe = "unknown";
+        state.screenCaptureDetail = undefined;
+        state.windowCaptureProbe = "unknown";
+        state.windowCaptureDetail = undefined;
+        state.systemAudioStatus = "not_tested";
+        state.systemAudioDetail = "System audio probe skipped.";
+        state.lastError = undefined;
+        refreshSetupCapabilities();
+        state.setupCheckSummary = formatSetupCheckSummary(state.setupCapabilities);
+        push();
+      }
+      return;
     default:
       if (await handleCopilotCommand(command)) return;
       await handleSessionCommand(command);

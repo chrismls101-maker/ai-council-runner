@@ -63,6 +63,7 @@ export const IPC = {
   e2eSimulateScreenEnumFail: "glass:e2e-simulate-screen-enum-fail",
   e2eSimulateSystemAudioEnumFail: "glass:e2e-simulate-system-audio-enum-fail",
   e2eSetCaptureProbes: "glass:e2e-set-capture-probes",
+  e2eResetSetupState: "glass:e2e-reset-setup-state",
 } as const;
 
 export type TranscriptionControlCommand =
@@ -158,6 +159,7 @@ export type GlassCommand =
       systemAudioStatus?: SystemAudioStatus;
       systemAudioDetail?: string;
     }
+  | { type: "e2e-reset-setup-state" }
   | { type: "session-start"; title?: string }
   | { type: "session-pause" }
   | { type: "session-resume" }
