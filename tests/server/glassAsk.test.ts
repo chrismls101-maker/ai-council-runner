@@ -137,6 +137,55 @@ await test("GLASS_DIRECT_SYSTEM_PROMPT forbids council formatting", () => {
 await test("promptRequestsGlassScreenVisual detects screen questions", () => {
   assert.equal(promptRequestsGlassScreenVisual("What's on my screen?"), true);
   assert.equal(promptRequestsGlassScreenVisual("Hello there"), false);
+  assert.equal(promptRequestsGlassScreenVisual("What matters here?"), false);
+  assert.equal(promptRequestsGlassScreenVisual("What should I do next?"), false);
+  assert.equal(promptRequestsGlassScreenVisual("Turn this into action steps."), false);
+  assert.equal(promptRequestsGlassScreenVisual("Create content hooks from this"), false);
+  assert.equal(promptRequestsGlassScreenVisual("What do you see on my screen?"), true);
+  assert.equal(promptRequestsGlassScreenVisual("Read this error"), true);
+});
+
+await test("text QA prompts use glass_direct not capture-first", async () => {
+  const previousKey = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "test-key";
+  const mockCaller = async () => ({
+    content: "Action steps based on your strategy doc.",
+    provider: "openai",
+    model: "gpt-5.5",
+    modelUsed: "gpt-5.5",
+    requestedModel: "gpt-5.5",
+    selectedModel: "gpt-5.5",
+    fallbackUsed: false,
+    usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, usageAvailable: true },
+  });
+  try {
+    for (const prompt of [
+      "What should I do next?",
+      "Turn this into action steps.",
+      "Create content hooks from this",
+      "What matters here?",
+    ]) {
+      const result = await handleGlassAsk({ prompt }, undefined, mockCaller);
+      assert.equal(result.routeUsed, "glass_direct", prompt);
+      assert.doesNotMatch(result.answer, /couldn't capture/i, prompt);
+    }
+  } finally {
+    if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previousKey;
+  }
+});
+
+await test("explicit screen question still routes to capture-first without screenshot", async () => {
+  const previousKey = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "test-key";
+  try {
+    const result = await handleGlassAsk({ prompt: "What do you see on my screen?" });
+    assert.equal(result.routeUsed, "glass_direct");
+    assert.match(result.answer, /capture/i);
+  } finally {
+    if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previousKey;
+  }
 });
 
 await test("visualIntent flag routes to visual path without screenshot", async () => {

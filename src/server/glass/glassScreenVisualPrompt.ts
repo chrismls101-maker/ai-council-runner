@@ -2,8 +2,6 @@
  * Screen/visual intent detection for IIVO Glass command-bar asks.
  */
 
-import { promptRequestsVisualAnalysis } from "../agents/visionRouting.js";
-
 const GLASS_SCREEN_VISUAL_PATTERNS = [
   /\bwhat'?s on (?:my |the )?screen\b/i,
   /\bwhat am i looking at\b/i,
@@ -29,8 +27,5 @@ const GLASS_SCREEN_VISUAL_PATTERNS = [
 export function promptRequestsGlassScreenVisual(prompt: string): boolean {
   const text = prompt.trim();
   if (!text) return false;
-  if (GLASS_SCREEN_VISUAL_PATTERNS.some((pattern) => pattern.test(text))) {
-    return true;
-  }
-  return promptRequestsVisualAnalysis(text);
+  return GLASS_SCREEN_VISUAL_PATTERNS.some((pattern) => pattern.test(text));
 }

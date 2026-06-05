@@ -10,7 +10,11 @@ import { readFileSync, existsSync, appendFileSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getScenarioById, FIXTURE_PAGES } from "./qa-scenarios/iivo-glass-scenarios.mjs";
-import { scoreGlassAnswerQuality } from "./lib/glass-answer-quality.mjs";
+import {
+  scoreGlassAnswerQuality,
+  visualFixtureFailReason,
+} from "./lib/glass-answer-quality.mjs";
+import { renderFixtureScreenshot } from "./lib/render-fixture-screenshot.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const GLASS_ROOT = join(__dirname, "..");
@@ -19,8 +23,6 @@ const RESULTS_JSONL = join(OUT, "live-scenario-results.jsonl");
 
 const STUB_CANARY = "IIVO Glass is working";
 const COUNCIL_MARKERS = ["Final Action Plan", "Decision Quality", "Sales Attack", "Product Decision", "Final Judge"];
-const TINY_PNG =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
 function parseArgs() {
   const i = process.argv.indexOf("--scenario-id");
@@ -84,6 +86,15 @@ function assertAnswer(answer) {
   }
 }
 
+function assertVisualFixtureAnswer(answer) {
+  assertAnswer(answer);
+  const reason = visualFixtureFailReason({
+    answer,
+    contextKeywords: scenario.fixtureExpectedKeywords,
+  });
+  if (reason) throw new Error(reason);
+}
+
 const prompt = `${scenario.userPrompt}\n\nContext: ${scenario.screenContextText}\n${scenario.transcriptChunks.join(" ")}`.slice(0, 2000);
 
 let body = { prompt, responseStyle: "overlay" };
@@ -93,15 +104,15 @@ if (scenario.testKind === "controlled_visual_fixture" && scenario.fixturePage) {
   const fix = FIXTURE_PAGES[scenario.fixturePage];
   const fixPath = join(GLASS_ROOT, fix.path);
   if (existsSync(fixPath)) {
-    const html = readFileSync(fixPath, "utf8");
+    const imageDataUrl = await renderFixtureScreenshot(fixPath);
     body = {
       prompt: `${scenario.userPrompt} What do you see on this screen?`,
       visualIntent: true,
       latestScreenshot: {
-        imageDataUrl: TINY_PNG,
+        imageDataUrl,
         label: `Fixture: ${fix.label}`,
         capturedAt: new Date().toISOString(),
-        fixtureText: html.replace(/<[^>]+>/g, " ").slice(0, 500),
+        fixturePage: scenario.fixturePage,
       },
       responseStyle: "overlay",
     };
@@ -117,7 +128,7 @@ try {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(60_000),
+    signal: AbortSignal.timeout(120_000),
   });
   httpStatus = res.status;
   data = await res.json().catch(() => ({}));
@@ -143,11 +154,22 @@ try {
     process.exit(1);
   }
 
-  assertAnswer(data.answer);
+  if (scenario.testKind === "controlled_visual_fixture") {
+    assertVisualFixtureAnswer(data.answer);
+  } else {
+    assertAnswer(data.answer);
+    if (/couldn't capture the screen/i.test(data.answer ?? "")) {
+      throw new Error("Accidental capture-first response for text scenario");
+    }
+  }
+
   if (data.routeUsed !== expectRoute && expectRoute === "glass_direct") {
     if (data.routeUsed !== "glass_visual_direct" && data.routeUsed !== "glass_direct") {
       throw new Error(`Bad route ${data.routeUsed}`);
     }
+  }
+  if (expectRoute === "glass_direct" && /couldn't capture/i.test(data.answer ?? "")) {
+    throw new Error("Text scenario routed to capture-first");
   }
 } catch (err) {
   const ms = Date.now() - started;

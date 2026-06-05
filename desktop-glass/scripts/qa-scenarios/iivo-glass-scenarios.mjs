@@ -121,7 +121,7 @@ export function shuffleWithSeed(items, seed) {
 }
 
 function scenario(base) {
-  return {
+  const merged = {
     requiresManual: false,
     testKind: "simulated",
     fixturePage: null,
@@ -129,6 +129,13 @@ function scenario(base) {
     copilotMode: "passive",
     ...base,
   };
+  if (
+    merged.fixturePage &&
+    (!merged.fixtureExpectedKeywords || merged.fixtureExpectedKeywords.length === 0)
+  ) {
+    merged.fixtureExpectedKeywords = FIXTURE_PAGES[merged.fixturePage]?.keywords ?? [];
+  }
+  return merged;
 }
 
 function buildCategoryScenarios(category, count, factory) {
@@ -164,7 +171,7 @@ function buildAllScenarios() {
         expectedInsightTypes: ["action", "risk", "opportunity"],
         expectedBehavior: i % 2 === 0 ? "coaching_card" : "passive_extract",
         passCriteria: ["session_type_match", "insight_extracted", "no_council", "no_silent_upload"],
-        liveAllowed: i <= 4,
+        liveAllowed: i <= 5,
         copilotMode: i % 3 === 0 ? "coaching" : "passive",
       }),
     ),
@@ -188,7 +195,7 @@ function buildAllScenarios() {
         expectedInsightTypes: ["risk", "action"],
         expectedBehavior: "debrief",
         passCriteria: ["session_type_match", "debrief_section", "no_council"],
-        liveAllowed: i <= 3,
+        liveAllowed: i <= 4,
         copilotMode: "passive",
         fixturePage: i === 1 ? "fake-dashboard.html" : null,
         fixtureExpectedKeywords: i === 1 ? FIXTURE_PAGES["fake-dashboard.html"].keywords : [],
@@ -215,7 +222,7 @@ function buildAllScenarios() {
         expectedInsightTypes: ["key_idea", "action"],
         expectedBehavior: "passive_extract",
         passCriteria: ["session_type_match", "insight_extracted", "simulated_not_real_audio"],
-        liveAllowed: i <= 2,
+        liveAllowed: i <= 3,
         copilotMode: "passive",
         fixturePage: i === 2 ? "fake-youtube-tutorial.html" : null,
         testKind: i === 2 ? "controlled_visual_fixture" : "simulated",
@@ -241,7 +248,7 @@ function buildAllScenarios() {
         expectedInsightTypes: ["action", "question"],
         expectedBehavior: "debrief",
         passCriteria: ["session_type_match", "debrief_section", "simulated_not_real_audio"],
-        liveAllowed: i <= 2,
+        liveAllowed: i <= 3,
         copilotMode: "passive",
         fixturePage: i === 1 ? "fake-meeting-notes.html" : null,
         testKind: i === 1 ? "controlled_visual_fixture" : "simulated",
@@ -267,7 +274,7 @@ function buildAllScenarios() {
         expectedInsightTypes: ["key_idea", "question"],
         expectedBehavior: "passive_extract",
         passCriteria: ["session_type_match", "insight_extracted"],
-        liveAllowed: i <= 4,
+        liveAllowed: i <= 5,
         copilotMode: "passive",
         fixturePage: i === 1 ? "fake-research-comparison.html" : null,
         testKind: i === 1 ? "controlled_visual_fixture" : "simulated",
@@ -293,7 +300,7 @@ function buildAllScenarios() {
         expectedInsightTypes: ["action", "risk"],
         expectedBehavior: i % 3 === 0 ? "coaching_card" : "passive_extract",
         passCriteria: ["session_type_match", "insight_extracted", "no_council"],
-        liveAllowed: i <= 3,
+        liveAllowed: i <= 4,
         copilotMode: i % 3 === 0 ? "coaching" : "passive",
         fixturePage: i === 1 ? "fake-error.html" : null,
         fixtureExpectedKeywords: i === 1 ? FIXTURE_PAGES["fake-error.html"].keywords : [],
@@ -320,7 +327,7 @@ function buildAllScenarios() {
         expectedInsightTypes: ["action", "opportunity"],
         expectedBehavior: "coaching_card",
         passCriteria: ["session_type_match", "insight_extracted"],
-        liveAllowed: i <= 3,
+        liveAllowed: i <= 4,
         copilotMode: "coaching",
         fixturePage: i === 1 ? "fake-sales-crm.html" : null,
         testKind: i === 1 ? "controlled_visual_fixture" : "simulated",
@@ -346,7 +353,7 @@ function buildAllScenarios() {
         expectedInsightTypes: ["key_idea", "action"],
         expectedBehavior: "passive_extract",
         passCriteria: ["session_type_match", "insight_extracted"],
-        liveAllowed: i <= 2,
+        liveAllowed: i <= 3,
         copilotMode: "passive",
         fixturePage: i === 1 ? "fake-study-lecture.html" : null,
         testKind: i === 1 ? "controlled_visual_fixture" : "simulated",
@@ -599,9 +606,35 @@ export const MODE_SCENARIO_LIMITS = {
 
 export function getOrderedScenarios(mode, seed) {
   const limits = MODE_SCENARIO_LIMITS[mode] ?? MODE_SCENARIO_LIMITS.quick;
-  const shuffled = shuffleWithSeed(SCENARIOS, seed);
-  if (limits.maxScenarios === Infinity) return shuffled;
-  return shuffled.slice(0, limits.maxScenarios);
+  /** @type {QaScenario[]} */
+  const selected = [];
+  const seen = new Set();
+
+  const add = (s) => {
+    if (!s || seen.has(s.id)) return;
+    seen.add(s.id);
+    selected.push(s);
+  };
+
+  // Standard/deep/overnight: one scenario per category first so coverage is guaranteed.
+  if (mode === "standard" || mode === "deep" || mode === "overnight") {
+    for (const cat of SCENARIO_CATEGORIES) {
+      const pool = SCENARIOS.filter((s) => s.category === cat && !s.requiresManual);
+      const pick =
+        pool.find((s) => s.liveAllowed && s.testKind === "simulated") ??
+        pool.find((s) => s.liveAllowed) ??
+        pool[0];
+      add(pick);
+    }
+  }
+
+  for (const s of shuffleWithSeed(SCENARIOS, seed)) {
+    if (limits.maxScenarios !== Infinity && selected.length >= limits.maxScenarios) break;
+    add(s);
+  }
+
+  if (limits.maxScenarios === Infinity) return selected;
+  return selected.slice(0, limits.maxScenarios);
 }
 
 export function getScenarioBatch(ordered, offset, count) {

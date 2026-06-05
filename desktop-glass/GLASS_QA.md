@@ -116,6 +116,22 @@ npm run glass:e2e:live     # Glass UI + real server (3 tests, ~1 min)
 
 Live checks fail if the answer contains stub text (`IIVO Glass is working`) or Council markers. System audio and macOS screen capture are **not** required for live API tests; real “what’s on my screen?” still needs Screen Recording (manual).
 
+**Live answer quality sample** (GPT-5.5 answer audit):
+
+```bash
+npm run glass:qa:live-answers -- --count 40 --seed 1234
+```
+
+Controlled visual fixtures render local HTML pages (`desktop-glass/tests/fixtures/visual-pages/`) to real PNG screenshots via Playwright before calling `glass_visual_direct`. Answers must mention fixture keywords and must not describe placeholder/red-screen or “can’t see” failures.
+
+**Post-GPT-5.5 endurance (optional — run manually after fixes):**
+
+```bash
+caffeinate -dimsu npm run glass:qa:overnight -- --mode overnight --hours 1 --seed 1234
+```
+
+Use this for long-horizon stability validation after E2E or model upgrades. Standard mode now prefixes one scenario per category before shuffle so all 16 categories are covered in deterministic batches.
+
 **Electron E2E** (`glass:e2e`) launches the real Glass desktop app with a stub IIVO server and verifies:
 
 - App launch and overlay / command bar / dock windows

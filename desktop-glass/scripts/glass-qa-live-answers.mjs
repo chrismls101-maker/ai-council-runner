@@ -15,7 +15,6 @@ import { fileURLToPath } from "node:url";
 import {
   SCENARIOS,
   shuffleWithSeed,
-  getScenarioById,
 } from "./qa-scenarios/iivo-glass-scenarios.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -23,6 +22,7 @@ const OUT = "/tmp/iivo-glass-overnight";
 const RESULTS_JSONL = join(OUT, "live-scenario-results.jsonl");
 const RUN_MARKER = join(OUT, "live-answers-run.json");
 
+/** Live-allowed categories targeted for live answer audit (≥10). */
 const REQUIRED_CATEGORIES = [
   "founder_strategy",
   "executive_review",
@@ -34,7 +34,11 @@ const REQUIRED_CATEGORIES = [
   "creator_content",
   "session_debrief",
   "visual_ask",
+  "video_learning",
+  "general_user",
 ];
+
+const MIN_VISUAL_FIXTURES = 5;
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -70,7 +74,7 @@ function buildSampleSet(count, seed) {
   };
 
   for (const cat of REQUIRED_CATEGORIES) {
-    const preferVisual = cat === "visual_ask";
+    const preferVisual = cat === "visual_ask" || cat === "studying";
     add(pickScenarioForCategory(cat, preferVisual));
   }
 
@@ -79,7 +83,7 @@ function buildSampleSet(count, seed) {
     (s) => s.liveAllowed && s.testKind === "controlled_visual_fixture",
   );
   for (const s of shuffleWithSeed(visualPool, seed + 99)) {
-    if (visualFixtures >= 5) break;
+    if (visualFixtures >= MIN_VISUAL_FIXTURES) break;
     if (add(s)) visualFixtures += 1;
   }
 
@@ -93,6 +97,20 @@ function buildSampleSet(count, seed) {
   }
 
   return selected.slice(0, count);
+}
+
+function validateCategoryCoverage(sample) {
+  const covered = new Set(sample.map((s) => s.category));
+  const missing = REQUIRED_CATEGORIES.filter((c) => !covered.has(c));
+  const visualCount = sample.filter((s) => s.testKind === "controlled_visual_fixture").length;
+  const errors = [];
+  if (missing.length > 0) {
+    errors.push(`Missing required categories: ${missing.join(", ")}`);
+  }
+  if (visualCount < MIN_VISUAL_FIXTURES) {
+    errors.push(`Need at least ${MIN_VISUAL_FIXTURES} visual fixtures, got ${visualCount}`);
+  }
+  return { missing, visualCount, errors };
 }
 
 async function checkServer() {
@@ -136,7 +154,14 @@ function main() {
       }
 
       const sample = buildSampleSet(count, seed);
-      console.log(`Selected ${sample.length} scenarios (${sample.filter((s) => s.testKind === "controlled_visual_fixture").length} visual fixtures)`);
+      const coverage = validateCategoryCoverage(sample);
+      console.log(
+        `Selected ${sample.length} scenarios (${coverage.visualCount} visual fixtures) · categories=${[...new Set(sample.map((s) => s.category))].sort().join(", ")}`,
+      );
+      if (coverage.errors.length > 0) {
+        for (const err of coverage.errors) console.error(`COVERAGE: ${err}`);
+        process.exit(1);
+      }
 
       let pass = 0;
       let fail = 0;
@@ -164,7 +189,9 @@ function main() {
             fail,
             scenarioIds: sample.map((s) => s.id),
             categories: [...new Set(sample.map((s) => s.category))].sort(),
-            visualFixtures: sample.filter((s) => s.testKind === "controlled_visual_fixture").length,
+            requiredCategories: REQUIRED_CATEGORIES,
+            missingCategories: coverage.missing,
+            visualFixtures: coverage.visualCount,
           },
           null,
           2,

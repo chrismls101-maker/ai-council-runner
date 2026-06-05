@@ -65,8 +65,19 @@ test("video_learning scenarios labeled simulated unless fixture", () => {
   assert.ok(sim.every((s) => s.transcriptChunks.length > 0));
 });
 
-test("visual_ask scenarios use controlled fixtures", () => {
-  const v = SCENARIOS.filter((s) => s.category === "visual_ask");
-  assert.ok(v.every((s) => s.testKind === "controlled_visual_fixture"));
-  assert.ok(v.every((s) => s.fixturePage));
+test("standard mode orders all categories before shuffle fill", () => {
+  const ordered = getOrderedScenarios("standard", 1234);
+  const firstIds = ordered.slice(0, SCENARIO_CATEGORIES.length).map((s) => s.category);
+  for (const cat of SCENARIO_CATEGORIES) {
+    assert.ok(firstIds.includes(cat), `standard missing category prefix: ${cat}`);
+  }
+  assert.equal(ordered.length, MODE_SCENARIO_LIMITS.standard.maxScenarios);
+});
+
+test("controlled visual fixtures inherit fixture keywords", () => {
+  const visual = SCENARIOS.filter((s) => s.testKind === "controlled_visual_fixture" && s.fixturePage);
+  assert.ok(visual.length >= 5);
+  for (const s of visual) {
+    assert.ok(s.fixtureExpectedKeywords?.length, `${s.id} missing fixtureExpectedKeywords`);
+  }
 });

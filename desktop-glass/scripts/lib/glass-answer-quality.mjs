@@ -32,9 +32,26 @@ const REFUSAL_PATTERNS = [
 const CANNOT_SEE_PATTERNS = [
   /i can't see/i,
   /i cannot see/i,
+  /i can't make out/i,
+  /i cannot make out/i,
+  /i can't clearly/i,
+  /i cannot clearly/i,
+  /i'm not seeing/i,
   /unable to view/i,
   /no image (was )?provided/i,
   /without (an )?image/i,
+  /appears essentially blank/i,
+  /appears blank/i,
+  /too small\/unclear/i,
+  /too low-resolution/i,
+];
+
+const PLACEHOLDER_VISUAL_PATTERNS = [
+  /solid red/i,
+  /\b1[\s×x]1\b/,
+  /single (red )?pixel/i,
+  /tiny red/i,
+  /placeholder (image|png|screenshot)/i,
 ];
 
 const ACTIONABLE_PATTERNS = [
@@ -63,6 +80,7 @@ export function scoreGlassAnswerQuality(input) {
     council_formatting: false,
     refusal: false,
     cannot_see_error: false,
+    placeholder_visual: false,
     missing_expected_context: false,
     useful_actionable: false,
   };
@@ -76,6 +94,9 @@ export function scoreGlassAnswerQuality(input) {
   }
   for (const re of CANNOT_SEE_PATTERNS) {
     if (re.test(answer)) flags.cannot_see_error = true;
+  }
+  for (const re of PLACEHOLDER_VISUAL_PATTERNS) {
+    if (re.test(answer)) flags.placeholder_visual = true;
   }
   for (const re of GENERIC_OPENERS) {
     if (re.test(answer)) flags.generic = true;
@@ -104,4 +125,30 @@ export function scoreGlassAnswerQuality(input) {
   if (flags.context_specific && flags.useful_actionable) flags.generic = false;
 
   return flags;
+}
+
+/**
+ * Hard fail reasons for controlled visual fixture live asks.
+ * @param {object} input
+ * @param {string} input.answer
+ * @param {string[]} [input.contextKeywords]
+ * @returns {string|null}
+ */
+export function visualFixtureFailReason(input) {
+  const answer = String(input.answer ?? "").trim();
+  if (!answer) return "Empty answer";
+
+  const flags = scoreGlassAnswerQuality({
+    answer,
+    contextKeywords: input.contextKeywords,
+  });
+
+  if (flags.stub_text) return "Stub text";
+  if (flags.council_formatting) return "Council formatting";
+  if (flags.placeholder_visual) return "Placeholder-only visual description";
+  if (flags.cannot_see_error) return "Cannot-see visual response";
+  if (flags.missing_expected_context) {
+    return `Missing fixture keywords (${(input.contextKeywords ?? []).slice(0, 3).join(", ")})`;
+  }
+  return null;
 }
