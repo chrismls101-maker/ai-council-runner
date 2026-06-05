@@ -15,6 +15,7 @@ import {
   parseDockOrientation,
   parseHotkeyPreset,
   parseSaveVisualAsksToSession,
+  parseCopilotSettings,
   type GlassUserSettings,
 } from "../shared/glassSettings.ts";
 
@@ -48,6 +49,7 @@ export async function loadGlassUserSettings(): Promise<GlassUserSettings> {
         parsed.selectedVirtualAudioDeviceId.trim()
           ? parsed.selectedVirtualAudioDeviceId.trim()
           : undefined,
+      copilot: parseCopilotSettings(parsed.copilot),
     };
   } catch {
     return { ...DEFAULT_GLASS_USER_SETTINGS };

@@ -116,12 +116,26 @@ export class GlassLayoutManager {
     return commandBarLayoutFromDisplay(this.getDisplay());
   }
 
-  getDockLayout(contentWidth?: number, contentHeight?: number): DockLayout {
-    return dockLayoutFromDisplay(this.getDisplay(), this.preset, contentWidth, contentHeight);
+  getDockLayout(
+    contentWidth?: number,
+    contentHeight?: number,
+    clampOptions?: import("../shared/glassLayoutMath.ts").DockClampOptions,
+  ): DockLayout {
+    return dockLayoutFromDisplay(
+      this.getDisplay(),
+      this.preset,
+      contentWidth,
+      contentHeight,
+      clampOptions,
+    );
   }
 
-  clampDockSize(width: number, height: number): { width: number; height: number } {
-    return clampDockSize(this.getDisplay(), width, height);
+  clampDockSize(
+    width: number,
+    height: number,
+    clampOptions?: import("../shared/glassLayoutMath.ts").DockClampOptions,
+  ): { width: number; height: number } {
+    return clampDockSize(this.getDisplay(), width, height, clampOptions);
   }
 
   repositionDock(current: Electron.Rectangle, nextWidth: number, nextHeight: number): Electron.Rectangle {

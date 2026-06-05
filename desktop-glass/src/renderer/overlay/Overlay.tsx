@@ -8,6 +8,7 @@ import {
   overlayCardFromEvent,
 } from "../../shared/overlayCards.ts";
 import { send, useGlassState } from "../useGlassState.ts";
+import { CopilotOverlay } from "./CopilotOverlay.tsx";
 
 const CARD_TTL_MS = 8_000;
 const FEED_CARD_TTL_MS = 12_000;
@@ -442,6 +443,12 @@ export function Overlay(): JSX.Element {
     >
       <OverlayPassiveLayer overlayMode={overlayMode} />
       <OverlayStatus state={state} />
+
+      <CopilotOverlay
+        state={state}
+        enterInteractive={enterInteractive}
+        leaveInteractive={leaveInteractive}
+      />
 
       {feedCards.length > 0 ? (
         <div className="overlay-feed">

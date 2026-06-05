@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   clampDockSize,
+  dockSizeLimits,
+  commandBarLayoutFromDisplay,
   dockLayoutFromDisplay,
   overlayLayoutFromDisplay,
   panelLayoutFromDisplay,
@@ -33,9 +35,14 @@ test("overlay uses selected display workArea", () => {
 
 test("panel uses workArea and responsive width", () => {
   const layout = panelLayoutFromDisplay(macBook13);
-  assert.equal(layout.width, 480);
+  assert.equal(layout.width, 1800);
   assert.equal(layout.height, macBook13.workArea.height - 40 - 24);
   assert.ok(layout.x + layout.width <= macBook13.workArea.x + macBook13.workArea.width);
+});
+
+test("panel uses most of external display width", () => {
+  const layout = panelLayoutFromDisplay(externalMonitor);
+  assert.equal(layout.width, 1498);
 });
 
 test("panel width scales down on narrow display", () => {
@@ -44,14 +51,15 @@ test("panel width scales down on narrow display", () => {
     workArea: { x: 0, y: 0, width: 900, height: 700 },
   };
   const layout = panelLayoutFromDisplay(narrow);
-  assert.equal(layout.width, 320);
+  assert.equal(layout.width, 720);
 });
 
-test("dock compact preset anchors to top workArea", () => {
+test("dock compact preset stacks flush above command bar left edge", () => {
+  const bar = commandBarLayoutFromDisplay(macBook13);
   const layout = dockLayoutFromDisplay(macBook13, "compact_dock");
-  assert.equal(layout.y, macBook13.workArea.y + 24);
+  assert.equal(layout.y + layout.height, bar.y);
+  assert.equal(layout.x, bar.x);
   assert.ok(layout.width <= 720);
-  assert.ok(layout.x >= macBook13.workArea.x);
 });
 
 test("dock floating preset anchors to bottom workArea", () => {
@@ -60,9 +68,17 @@ test("dock floating preset anchors to bottom workArea", () => {
 });
 
 test("clamp dock size respects workArea margins", () => {
+  const limits = dockSizeLimits(macBook13);
   const clamped = clampDockSize(macBook13, 9000, 9000);
   assert.equal(clamped.width, macBook13.workArea.width - 48);
-  assert.ok(clamped.height <= 220);
+  assert.ok(clamped.height <= limits.maxHeight);
+});
+
+test("vertical dock clamp allows full stacked-action height cap", () => {
+  const limits = dockSizeLimits(macBook13, { vertical: true });
+  const clamped = clampDockSize(macBook13, 140, 680, { vertical: true });
+  assert.equal(clamped.height, 680);
+  assert.ok(limits.maxHeight >= 720);
 });
 
 test("parse layout preset falls back safely", () => {

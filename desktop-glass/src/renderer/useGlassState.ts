@@ -4,6 +4,7 @@ import { emptyNotes } from "../shared/noteExtraction.ts";
 import { initialPrivacyState } from "../shared/privacyState.ts";
 import { DEFAULT_CONFIG } from "../shared/config.ts";
 import { DEFAULT_GLASS_USER_SETTINGS } from "../shared/glassSettings.ts";
+import { DEFAULT_COPILOT_CONFIG } from "../shared/copilotTypes.ts";
 import { INITIAL_OPERATION_DIAGNOSTICS } from "../shared/glassOperations.ts";
 import { WINDOW_CONTEXT_UNAVAILABLE_MESSAGE } from "../shared/windowContextTypes.ts";
 
@@ -54,6 +55,20 @@ const fallbackState: GlassState = {
   connectedDisplays: [],
   setupCapabilities: [],
   micPermission: "not_requested",
+  copilot: {
+    mode: "off",
+    config: { ...DEFAULT_COPILOT_CONFIG },
+    active: false,
+    muted: false,
+    pendingInterventions: [],
+    insightCount: 0,
+    debrief: null,
+    offer: null,
+    systemAudioSilenceWarning: false,
+    sessionType: "general_workflow",
+    debriefReady: false,
+    consecutiveDismissals: 0,
+  },
 };
 
 export function useGlassState(): GlassState {

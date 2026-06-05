@@ -1954,3 +1954,137 @@ html.glass-dock-window #root {
 .command-listen-status--error {
   color: #f87171;
 }
+
+/* ---------- Session Copilot overlay cards ---------- */
+.overlay-copilot {
+  position: fixed;
+  left: 24px;
+  bottom: 132px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: min(360px, calc(100vw - 48px));
+  pointer-events: none;
+  z-index: 5;
+}
+
+.overlay-copilot-card {
+  pointer-events: auto;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: linear-gradient(160deg, rgba(14, 18, 32, 0.94), rgba(10, 14, 24, 0.84));
+  border: 1px solid rgba(120, 235, 255, 0.3);
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45), 0 0 24px rgba(56, 225, 255, 0.12);
+  animation: overlay-card-in 0.24s ease-out;
+}
+
+.overlay-copilot-card__eyebrow {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--cyan);
+  margin-bottom: 4px;
+}
+
+.overlay-copilot-card__title {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.overlay-copilot-card__body {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--glass-text-dim);
+}
+
+.overlay-copilot-card__debrief-body {
+  margin: 0 0 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--glass-text-dim);
+  white-space: pre-wrap;
+  max-height: 280px;
+  overflow-y: auto;
+  font-family: inherit;
+}
+
+.overlay-copilot-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* ---------- Session Copilot panel row ---------- */
+.copilot-config {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.copilot-config__status-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.copilot-config__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.copilot-config__dot--on {
+  background: #41e0a3;
+  box-shadow: 0 0 8px rgba(65, 224, 163, 0.7);
+}
+
+.copilot-config__dot--off {
+  background: rgba(160, 170, 190, 0.5);
+}
+
+.copilot-config__summary {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+}
+
+.copilot-config__state {
+  font-size: 11px;
+  color: var(--glass-text-dim);
+}
+
+.copilot-config__hint,
+.copilot-config__mode-hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--glass-text-dim);
+}
+
+.copilot-config__drawer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.copilot-config__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.copilot-config__row-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}

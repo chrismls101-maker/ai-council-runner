@@ -171,7 +171,23 @@ export type GlassCommand =
   | { type: "session-open-in-iivo" }
   | { type: "session-analyze-now" }
   /** @deprecated use session-open-in-iivo */
-  | { type: "session-analyze-council" };
+  | { type: "session-analyze-council" }
+  // --- Session Copilot ---
+  | { type: "copilot-set-mode"; mode: import("./copilotTypes.ts").GlassCopilotMode }
+  | { type: "copilot-set-config"; patch: Partial<import("./copilotTypes.ts").GlassCopilotConfig> }
+  | { type: "copilot-set-muted"; muted: boolean }
+  | {
+      type: "copilot-card-action";
+      id: string;
+      action: import("./copilotTypes.ts").GlassCopilotCardAction;
+    }
+  | { type: "copilot-accept-offer"; mode: import("./copilotTypes.ts").GlassCopilotMode }
+  | { type: "copilot-dismiss-offer" }
+  | { type: "copilot-generate-debrief" }
+  | { type: "copilot-dismiss-debrief" }
+  | { type: "copilot-open-debrief-in-iivo" }
+  | { type: "copilot-dismiss-silence-warning" }
+  | { type: "copilot-pause-system-audio" };
 
 export interface GlassState {
   privacy: PrivacyState;
@@ -215,6 +231,7 @@ export interface GlassState {
   virtualAudioDevices?: import("./virtualAudioDevices.ts").VirtualAudioDeviceMatch[];
   selectedVirtualAudioDeviceId?: string;
   micPermission: import("./glassCapabilities.ts").MicPermissionReport;
+  copilot: import("./copilotTypes.ts").GlassCopilotRuntimeState;
 }
 
 export interface SttProcessChunkRequest {

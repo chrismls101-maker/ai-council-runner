@@ -113,6 +113,19 @@ import { resolveInitialSystemAudioStatus, darwinMajorFromRelease } from "../shar
 import type { SystemAudioStatus } from "../shared/systemAudioTypes.ts";
 import { buildGlassSttState, resolveSttConfig } from "../shared/sttTypes.ts";
 import { listeningCostWarningMessage } from "../shared/audioChunks.ts";
+import { SessionCopilotController } from "../shared/copilotController.ts";
+import {
+  copilotModeIsActive,
+  type GlassCopilotConfig,
+  type GlassCopilotMode,
+  type GlassCopilotRuntimeState,
+} from "../shared/copilotTypes.ts";
+import { shouldOfferCopilot, withCopilotConfig } from "../shared/copilotConfig.ts";
+import {
+  buildSessionDebrief,
+  buildDebriefAiPrompt,
+  detectDebriefTrigger,
+} from "../shared/copilotDebrief.ts";
 import { processSttChunk, type SttProcessChunkPayload } from "./sttChunkHandler.ts";
 import type { GlassSttState } from "../shared/ipc.ts";
 import {
@@ -325,6 +338,136 @@ function sessionIsLive(): boolean {
   return !!s && (s.status === "active" || s.status === "paused");
 }
 
+// --- Session Copilot ---------------------------------------------------------
+const copilot = new SessionCopilotController({
+  idFactory: () => {
+    try {
+      if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
+    } catch {
+      /* fall through */
+    }
+    return `copilot-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  },
+  clock: () => new Date().toISOString(),
+  now: () => Date.now(),
+});
+let copilotTimer: ReturnType<typeof setInterval> | null = null;
+let copilotBoundSessionId: string | null = null;
+let copilotOffered = false;
+let systemAudioLastSignalMs: number | undefined;
+let copilotVisualAskFailures = 0;
+const copilotRecentCommands: string[] = [];
+const copilotRecentResponses: string[] = [];
+
+function systemAudioActive(): boolean {
+  return state.privacy.listening && state.transcriptionMode === "system_audio";
+}
+
+function trackCopilotCommand(text: string): void {
+  copilotRecentCommands.push(text);
+  if (copilotRecentCommands.length > 12) copilotRecentCommands.shift();
+}
+
+function trackCopilotResponse(text: string): void {
+  copilotRecentResponses.push(text);
+  if (copilotRecentResponses.length > 12) copilotRecentResponses.shift();
+}
+
+/** Mirror live copilot state onto the current session for persistence. */
+function syncCopilotToSession(): void {
+  if (!sessions.current()) return;
+  sessions.setCopilotData(copilot.sessionData());
+}
+
+function copilotRuntime(): GlassCopilotRuntimeState {
+  return copilot.runtimeState(sessionIsLive());
+}
+
+/** Bind copilot to the active session (resets per-session state, hydrates persisted data). */
+function bindCopilotToSession(): void {
+  const session = sessions.current();
+  const id = session?.id ?? null;
+  if (copilotBoundSessionId === id) return;
+  copilotBoundSessionId = id;
+  copilotOffered = false;
+  copilotVisualAskFailures = 0;
+  copilotRecentCommands.length = 0;
+  copilotRecentResponses.length = 0;
+  copilot.bindSession(id);
+  if (session?.copilot) {
+    copilot.hydrate(session.id, session.copilot);
+  }
+}
+
+function startCopilotLoop(): void {
+  if (copilotTimer) return;
+  if (!sessionIsLive() || !copilotModeIsActive(copilot.getConfig().mode)) return;
+  const intervalMs = copilot.getConfig().intervalSec * 1000;
+  copilotTimer = setInterval(() => {
+    void runCopilotTick();
+  }, intervalMs);
+}
+
+function stopCopilotLoop(): void {
+  if (copilotTimer) {
+    clearInterval(copilotTimer);
+    copilotTimer = null;
+  }
+}
+
+/** Restart the loop (e.g. after interval or mode change). */
+function refreshCopilotLoop(): void {
+  stopCopilotLoop();
+  startCopilotLoop();
+}
+
+async function runCopilotTick(): Promise<void> {
+  const session = sessions.current();
+  const result = copilot.tick({
+    sessionLive: sessionIsLive(),
+    session,
+    transcript: state.transcript,
+    recentCommands: copilotRecentCommands,
+    recentResponses: copilotRecentResponses,
+    sourceApp: getCachedWindowContext().appName,
+    sourceTitle: getCachedWindowContext().windowTitle,
+    systemAudioActive: systemAudioActive(),
+    systemAudioLastSignalMs,
+    visualAskFailureCount: copilotVisualAskFailures,
+  });
+  if (!result.ran && !result.systemAudioSilenceWarning) return;
+  if (result.intervention) {
+    pushFeed(
+      createCommandFeedItem("response", result.intervention.body, {
+        title: `Copilot · ${result.intervention.title}`,
+      }),
+    );
+  } else if (copilot.getConfig().mode === "passive" && result.newInsights.length > 0) {
+    // Passive mode is near-silent: a tiny status, never a suggestion card.
+    const n = result.newInsights.length;
+    state.lastNotice = `Copilot captured ${n} idea${n === 1 ? "" : "s"}.`;
+  }
+  syncCopilotToSession();
+  await persistSessions(sessions);
+  push();
+}
+
+/** Offer to turn on Copilot when system audio starts inside a live session. */
+function maybeOfferCopilotForSystemAudio(): void {
+  if (!systemAudioActive()) return;
+  systemAudioLastSignalMs = Date.now();
+  const offer = shouldOfferCopilot({
+    mode: copilot.getConfig().mode,
+    sessionLive: sessionIsLive(),
+    systemAudioActive: systemAudioActive(),
+    alreadyOffered: copilotOffered,
+  });
+  if (offer) {
+    copilot.setOffer({ reason: "system_audio", createdAt: new Date().toISOString() });
+    copilotOffered = true;
+  }
+}
+
 function refreshAppIdentityState(): void {
   state.appIdentityReport = collectGlassAppIdentityReport();
   state.duplicateAppBundles = findDuplicateGlassAppBundles(process.execPath);
@@ -429,6 +572,7 @@ function snapshot(): GlassState {
     virtualAudioDevices: state.virtualAudioDevices,
     selectedVirtualAudioDeviceId: state.selectedVirtualAudioDeviceId,
     micPermission: state.micPermission,
+    copilot: copilotRuntime(),
   };
 }
 
@@ -978,6 +1122,16 @@ async function submitCommand(rawText: string): Promise<void> {
   const text = rawText.trim();
   if (!text || state.askInFlight) return;
 
+  // "I'm done" / debrief intents generate a Session Debrief instead of a direct ask.
+  if (detectDebriefTrigger(text) && sessionIsLive()) {
+    trackCopilotCommand(text);
+    pushFeed(createCommandFeedItem("command", text, { prompt: text }));
+    await generateCopilotDebrief();
+    await persistSessions(sessions);
+    push();
+    return;
+  }
+
   const requestGeneration = ++askRequestGeneration;
   askAbortController?.abort();
   askAbortController = new AbortController();
@@ -993,6 +1147,7 @@ async function submitCommand(rawText: string): Promise<void> {
   const live = sessionIsLive();
   const session = sessions.current();
 
+  trackCopilotCommand(text);
   if (live && session) {
     sessions.addEvent({
       kind: "iivo_command",
@@ -1245,6 +1400,7 @@ async function submitCommand(rawText: string): Promise<void> {
     state.askStatus = "done";
     const overlayAnswer = result.shortAnswer ?? result.answer;
     const fullAnswer = result.answer;
+    trackCopilotResponse(fullAnswer);
     state.lastAskResponse = {
       prompt: text,
       answer: overlayAnswer,
@@ -1320,6 +1476,7 @@ async function submitCommand(rawText: string): Promise<void> {
           : "IIVO answered inline. Start a session to save this context.";
     }
     state.operationDiagnostics = recordOperation(state.operationDiagnostics, "ask-iivo", "ok");
+    if (visualIntent) copilotVisualAskFailures = 0;
     if (visualIntent && state.visualAskPayloadDiagnostics) {
       mergeVisualAskDiagnostics({
         phase: "idle",
@@ -1332,6 +1489,8 @@ async function submitCommand(rawText: string): Promise<void> {
     if (requestGeneration !== askRequestGeneration || signal.aborted || err instanceof GlassAskCancelledError) {
       return;
     }
+
+    if (visualIntent) copilotVisualAskFailures += 1;
 
     if (
       visualIntent &&
@@ -1501,6 +1660,7 @@ async function handleCommand(
         state.transcriptionMode,
         state.stt,
       );
+      maybeOfferCopilotForSystemAudio();
       push();
       return;
     case "pause":
@@ -1526,6 +1686,8 @@ async function handleCommand(
       state.operationDiagnostics = stopped.diagnostics;
       state.lastNotice = stopped.lastNotice;
       state.lastError = stopped.lastError;
+      stopCopilotLoop();
+      systemAudioLastSignalMs = undefined;
       push();
       return;
     }
@@ -1536,6 +1698,9 @@ async function handleCommand(
     case "add-transcript-chunk": {
       const chunk = command.text.trim();
       if (!chunk) return;
+      if (command.tags?.includes("system_audio")) {
+        systemAudioLastSignalMs = Date.now();
+      }
       state.transcript = `${state.transcript}${state.transcript ? " " : ""}${chunk}`.trim();
       if (sessionIsLive() && sessions.current()?.status === "active") {
         const ctxFields = eventContextFields();
@@ -2001,8 +2166,230 @@ async function handleCommand(
       }
       return;
     default:
+      if (await handleCopilotCommand(command)) return;
       await handleSessionCommand(command);
       return;
+  }
+}
+
+function persistCopilotConfig(config: GlassCopilotConfig): void {
+  glassUserSettings = { ...glassUserSettings, copilot: config };
+  state.glassSettings = glassUserSettings;
+  copilot.setConfig(config);
+  void persistGlassUserSettings(glassUserSettings);
+}
+
+/** Build a deterministic debrief, optionally enriched by a direct (non-Council) AI pass. */
+async function generateCopilotDebrief(): Promise<void> {
+  const session = sessions.current();
+  if (!session) {
+    state.lastNotice = "No session to debrief.";
+    return;
+  }
+  const idFactory = () => {
+    try {
+      if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
+    } catch {
+      /* ignore */
+    }
+    return `debrief-${Date.now()}`;
+  };
+  const debriefOptions = {
+    sessionType: copilot.getSessionType(),
+    reportStyle: copilot.getConfig().reportStyle,
+  };
+  const debrief = buildSessionDebrief(
+    session,
+    copilot.getInsights(),
+    { idFactory, clock: () => new Date().toISOString() },
+    debriefOptions,
+  );
+
+  // Optional direct-AI enrichment (never Council). Best-effort; deterministic on
+  // failure. Skipped under E2E so the deterministic debrief stays assertable.
+  if (process.env.IIVO_GLASS_E2E !== "1") {
+    try {
+      const aiPrompt = buildDebriefAiPrompt(session, copilot.getInsights(), debriefOptions);
+      const response = await askIivoGlass(config, {
+        prompt: aiPrompt,
+        session: buildGlassAskSessionPayload(),
+        responseStyle: "overlay",
+      });
+      if (response.answer?.trim()) {
+        debrief.markdown = response.answer.trim();
+        debrief.aiEnhanced = true;
+      }
+    } catch {
+      // keep deterministic debrief
+    }
+  }
+
+  copilot.setDebrief(debrief);
+  syncCopilotToSession();
+  pushFeed(
+    createCommandFeedItem("response", debrief.markdown, {
+      title: "Session Debrief",
+      fullBody: debrief.markdown,
+    }),
+  );
+  state.lastNotice = "Session debrief ready.";
+}
+
+async function maybeAutoDebriefOnEnd(): Promise<void> {
+  const cfg = copilot.getConfig();
+  if (!cfg.autoDebriefOnEnd || !copilotModeIsActive(cfg.mode)) return;
+  await generateCopilotDebrief();
+}
+
+/** Handle copilot-* commands. Returns true when the command was a copilot command. */
+async function handleCopilotCommand(command: GlassCommand): Promise<boolean> {
+  switch (command.type) {
+    case "copilot-set-mode": {
+      const next = withCopilotConfig(copilot.getConfig(), { mode: command.mode });
+      persistCopilotConfig(next);
+      copilot.setOffer(null);
+      copilotOffered = true;
+      if (copilotModeIsActive(next.mode) && sessionIsLive()) {
+        bindCopilotToSession();
+        refreshCopilotLoop();
+      } else {
+        stopCopilotLoop();
+      }
+      push();
+      return true;
+    }
+    case "copilot-set-config": {
+      const next = withCopilotConfig(copilot.getConfig(), command.patch);
+      persistCopilotConfig(next);
+      refreshCopilotLoop();
+      push();
+      return true;
+    }
+    case "copilot-set-muted": {
+      const next = withCopilotConfig(copilot.getConfig(), { muteSuggestions: command.muted });
+      persistCopilotConfig(next);
+      push();
+      return true;
+    }
+    case "copilot-accept-offer": {
+      const next = withCopilotConfig(copilot.getConfig(), { mode: command.mode });
+      persistCopilotConfig(next);
+      copilot.setOffer(null);
+      copilotOffered = true;
+      if (sessionIsLive()) {
+        bindCopilotToSession();
+        refreshCopilotLoop();
+      }
+      push();
+      return true;
+    }
+    case "copilot-dismiss-offer": {
+      copilot.setOffer(null);
+      copilotOffered = true;
+      push();
+      return true;
+    }
+    case "copilot-card-action": {
+      const resolution = copilot.resolveIntervention(command.id, command.action);
+      await applyCopilotEffect(resolution);
+      copilot.clearIntervention(command.id);
+      syncCopilotToSession();
+      await persistSessions(sessions);
+      push();
+      return true;
+    }
+    case "copilot-generate-debrief":
+      await generateCopilotDebrief();
+      await persistSessions(sessions);
+      push();
+      return true;
+    case "copilot-dismiss-debrief":
+      copilot.setDebrief(null);
+      syncCopilotToSession();
+      await persistSessions(sessions);
+      push();
+      return true;
+    case "copilot-open-debrief-in-iivo": {
+      const debrief = copilot.getDebrief();
+      const session = sessions.current();
+      if (debrief && session) {
+        await sendSessionText(`IIVO Glass Session Debrief — ${session.title}`, debrief.markdown);
+      }
+      return true;
+    }
+    case "copilot-dismiss-silence-warning":
+      push();
+      return true;
+    case "copilot-pause-system-audio":
+      broadcastTranscriptionControl({ type: "stop" });
+      dispatchPrivacy({ type: "PAUSE", at: new Date().toISOString() });
+      systemAudioLastSignalMs = undefined;
+      state.lastNotice = "System listening paused.";
+      push();
+      return true;
+    default:
+      return false;
+  }
+}
+
+/** Execute the side effect of a resolved copilot card. */
+async function applyCopilotEffect(
+  resolution: import("../shared/copilotController.ts").CopilotResolution,
+): Promise<void> {
+  const { effect, insight } = resolution;
+  const windowCtx = getCachedWindowContext();
+  const usingCursor = `${windowCtx.appName ?? ""} ${windowCtx.windowTitle ?? ""}`
+    .toLowerCase()
+    .includes("cursor");
+  const promptNoun = usingCursor ? "Cursor prompt" : "AI prompt";
+  switch (effect) {
+    case "cursor_prompt":
+      if (insight) {
+        pushFeed(
+          createCommandFeedItem("response", insight.text, {
+            title: `${promptNoun} candidate`,
+            prompt: insight.text,
+            fullBody: insight.text,
+          }),
+        );
+        state.lastNotice = `Saved as a ${promptNoun} candidate.`;
+      }
+      break;
+    case "action_steps":
+      if (insight) {
+        const body = `Next steps from “${insight.title}”:\n${insight.text}`;
+        pushFeed(
+          createCommandFeedItem("response", body, {
+            title: "Action items",
+            fullBody: body,
+          }),
+        );
+        moments.add({ kind: "note", note: `Action: ${insight.text}` });
+        await persistMoments(moments);
+        if (sessionIsLive()) sessions.addEvent({ kind: "saved_moment", title: insight.title });
+        state.lastNotice = "Turned into action items.";
+      }
+      break;
+    case "save":
+      if (insight) {
+        moments.add({ kind: "note", note: insight.text });
+        await persistMoments(moments);
+        if (sessionIsLive()) sessions.addEvent({ kind: "saved_moment", title: insight.title });
+        state.lastNotice = "Saved to moments.";
+      }
+      break;
+    case "diagnose":
+      // Direct visual ask / direct AI diagnosis using current context (user-approved).
+      void submitCommand("What's going wrong on my screen? Diagnose the error I'm seeing.");
+      break;
+    case "show-summary":
+      await generateCopilotDebrief();
+      break;
+    case "later":
+    case "dismiss":
+    case "none":
+    default:
+      break;
   }
 }
 
@@ -2011,6 +2398,8 @@ async function handleSessionCommand(command: GlassCommand): Promise<void> {
   switch (command.type) {
     case "session-start":
       sessions.startSession(command.title);
+      bindCopilotToSession();
+      startCopilotLoop();
       state.lastNotice = "Session started — Glass is collecting events locally.";
       break;
     case "session-pause":
@@ -2021,11 +2410,15 @@ async function handleSessionCommand(command: GlassCommand): Promise<void> {
       break;
     case "session-end":
       sessions.endSession();
+      stopCopilotLoop();
+      await maybeAutoDebriefOnEnd();
       break;
     case "session-clear": {
       const session = sessions.current();
       if (session) await clearSessionScreenshotFolder(session.id);
       sessions.clearSession();
+      copilot.bindSession(session?.id ?? null);
+      copilotBoundSessionId = session?.id ?? null;
       state.latestScreenshot = null;
       state.pendingCaptureDataUrl = undefined;
       clearEphemeralVisualCapture();
@@ -2192,6 +2585,7 @@ async function handleSessionCommand(command: GlassCommand): Promise<void> {
     default:
       break;
   }
+  syncCopilotToSession();
   await persistSessions(sessions);
   push();
 }
@@ -2467,6 +2861,13 @@ app.whenReady().then(async () => {
   }
   state.glassSettings = glassUserSettings;
   state.selectedVirtualAudioDeviceId = glassUserSettings.selectedVirtualAudioDeviceId;
+  copilot.setConfig(glassUserSettings.copilot);
+  bindCopilotToSession();
+  // Copilot never auto-starts listening; only resume its loop if a session is
+  // already live (restored) and the user previously enabled an active mode.
+  if (sessionIsLive() && copilotModeIsActive(copilot.getConfig().mode)) {
+    startCopilotLoop();
+  }
   state.windowContext = await getCurrentWindowContext();
   setChromeLayoutPersistHandler((partial) => {
     glassUserSettings = { ...glassUserSettings, ...partial };

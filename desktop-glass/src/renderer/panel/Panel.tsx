@@ -31,6 +31,7 @@ import { useTranscriptionContext } from "../TranscriptionProvider.tsx";
 import { IivoAnalysisPanel } from "../components/IivoAnalysisPanel.tsx";
 import { ListeningControls, OperationDiagnosticsFooter } from "../components/ListeningControls.tsx";
 import { SetupSection } from "./SetupSection.tsx";
+import { CopilotConfigure } from "./CopilotConfigure.tsx";
 
 const TABS: { id: PanelTab; label: string }[] = [
   { id: "summary", label: "Summary" },
@@ -330,6 +331,10 @@ function SessionView({ session, state }: { session: GlassSession | null; state: 
       </div>
 
       <WindowContextDisplay state={state} />
+
+      <CopilotConfigure
+        sessionLive={session.status === "active" || session.status === "paused"}
+      />
 
       <div className="filter-row">
         {EVENT_FILTERS.map((f) => (

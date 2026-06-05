@@ -5,17 +5,21 @@
  * 3. Optional side panel (workArea, clickable when open)
  */
 
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrowserWindow, globalShortcut, shell } from "electron";
+import { BrowserWindow, globalShortcut, screen, shell, type WebContents } from "electron";
+import { GLASS_BOOT_SOUND_ENABLED } from "../shared/bootSound.ts";
 import type { GlassConfig } from "../shared/config.ts";
 import type { OverlayMode } from "../shared/glassWindowTypes.ts";
 import {
   GLASS_HOTKEY_PRESETS,
   hotkeyRegistrationMessage,
+  type ChromeOrigin,
   type GlassDisplayTarget,
   type GlassHotkeyPreset,
   type GlassUserSettings,
 } from "../shared/glassSettings.ts";
+import { resolveChromeWindowBounds } from "../shared/chromeLayout.ts";
 import {
   buildDisplayDiagnosticsSummary,
   listConnectedDisplaySnapshots,
@@ -37,7 +41,13 @@ import {
 const isDev = !!process.env.ELECTRON_RENDERER_URL;
 const preloadPath = join(__dirname, "../preload/index.mjs");
 
-type RendererPage = "index.html" | "panel.html" | "overlay.html" | "command.html";
+type RendererPage =
+  | "index.html"
+  | "panel.html"
+  | "overlay.html"
+  | "command.html"
+  | "splash.html"
+  | "splash-background.html";
 
 export interface GlassWindows {
   dock: BrowserWindow;
@@ -47,18 +57,36 @@ export interface GlassWindows {
 }
 
 let windows: GlassWindows | null = null;
+let splashWindow: BrowserWindow | null = null;
 let layoutManager: GlassLayoutManager | null = null;
 let overlayVisible = true;
 let overlayClickThrough = true;
 let commandBarClickThrough = false;
 let overlayMode: OverlayMode = "passive";
 let commandBarVisible = true;
+let chromeLayoutLocked = true;
+let dockCustomOrigin: ChromeOrigin | null = null;
+let commandBarCustomOrigin: ChromeOrigin | null = null;
+let chromeLayoutPersist: ((partial: Partial<GlassUserSettings>) => void) | null = null;
+let chromeMovePersistTimer: ReturnType<typeof setTimeout> | null = null;
+/** When true, dock/overlay/command bar stay hidden until {@link finishSplash} completes. */
+let glassBootPending = false;
 
-function loadRenderer(win: BrowserWindow, htmlFile: RendererPage): void {
+function loadRenderer(
+  win: BrowserWindow,
+  htmlFile: RendererPage,
+  query?: Record<string, string>,
+): void {
+  const qs =
+    query && Object.keys(query).length > 0
+      ? `?${new URLSearchParams(query).toString()}`
+      : "";
   if (isDev && process.env.ELECTRON_RENDERER_URL) {
-    void win.loadURL(`${process.env.ELECTRON_RENDERER_URL}/${htmlFile}`);
+    void win.loadURL(`${process.env.ELECTRON_RENDERER_URL}/${htmlFile}${qs}`);
   } else {
-    void win.loadFile(join(__dirname, `../renderer/${htmlFile}`));
+    void win.loadFile(join(__dirname, `../renderer/${htmlFile}`), {
+      query: query ?? {},
+    });
   }
 }
 
@@ -78,8 +106,78 @@ function applyOverlayClickThrough(overlay: BrowserWindow, enabled: boolean): voi
   }
 }
 
+function destroyGlassWindows(): void {
+  if (windows) {
+    for (const win of [windows.dock, windows.panel, windows.overlay, windows.commandBar]) {
+      if (!win.isDestroyed()) {
+        win.destroy();
+      }
+    }
+    windows = null;
+  }
+  destroyTrackedGlassWindows();
+}
+
+const GLASS_WINDOW_REGISTRY_KEY = "__iivoGlassWindowIds__";
+
+function trackedGlassWindowIds(): Set<number> {
+  const globalRef = globalThis as { __iivoGlassWindowIds__?: Set<number> };
+  if (!globalRef[GLASS_WINDOW_REGISTRY_KEY]) {
+    globalRef[GLASS_WINDOW_REGISTRY_KEY] = new Set();
+  }
+  return globalRef[GLASS_WINDOW_REGISTRY_KEY];
+}
+
+function trackGlassWindow(win: BrowserWindow): void {
+  trackedGlassWindowIds().add(win.id);
+  win.once("closed", () => {
+    trackedGlassWindowIds().delete(win.id);
+  });
+}
+
+function destroyTrackedGlassWindows(): void {
+  for (const id of trackedGlassWindowIds()) {
+    const win = BrowserWindow.fromId(id);
+    if (win && !win.isDestroyed()) {
+      win.destroy();
+    }
+  }
+  trackedGlassWindowIds().clear();
+}
+
+/** Keep Glass on the active Space, including when another app (e.g. browser) is fullscreen. */
+function ensureVisibleOnAllWorkspaces(): void {
+  if (!windows) return;
+  for (const win of [windows.dock, windows.panel, windows.overlay, windows.commandBar]) {
+    if (!win.isDestroyed()) {
+      win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    }
+  }
+}
+
+export function beginGlassBootSequence(): void {
+  glassBootPending = true;
+}
+
+/** Show dock, overlay, and command bar after the boot splash has finished. */
+function showPrimaryGlassWindows(): void {
+  if (!windows || !layoutManager) return;
+  if (overlayVisible && overlayMode !== "hidden" && !windows.overlay.isDestroyed()) {
+    windows.overlay.setBounds(layoutManager.getOverlayLayout());
+    windows.overlay.showInactive();
+    applyOverlayClickThrough(windows.overlay, true);
+  }
+  if (commandBarVisible && !windows.commandBar.isDestroyed()) {
+    windows.commandBar.setBounds(layoutManager.getCommandBarLayout());
+    windows.commandBar.showInactive();
+  }
+  stackGlassWindows(windows);
+  logDiagnostics();
+}
+
 /** Overlay above desktop apps; dock/panel stack above overlay via relativeLevel. */
 export function stackGlassWindows(w: GlassWindows): void {
+  if (glassBootPending) return;
   if (!w.overlay.isDestroyed() && overlayVisible) {
     w.overlay.setAlwaysOnTop(
       true,
@@ -125,7 +223,120 @@ function logDiagnostics(): void {
   logGlassWindowDiagnostics(line);
 }
 
-function relayoutAllWindows(): void {
+function applyDockLayout(resetPosition = false): void {
+  if (!windows?.dock || windows.dock.isDestroyed() || !layoutManager) return;
+  const current = windows.dock.getBounds();
+  const auto = layoutManager.getDockLayout(current.width, current.height);
+  const workArea = layoutManager.getDisplay().workArea;
+  let next = auto;
+  if (resetPosition) {
+    dockCustomOrigin = null;
+    next = auto;
+  } else if (dockCustomOrigin) {
+    next = resolveChromeWindowBounds(auto, dockCustomOrigin, workArea);
+  } else if (!chromeLayoutLocked) {
+    next = { ...auto, x: current.x, y: current.y };
+  }
+  if (
+    current.x === next.x &&
+    current.y === next.y &&
+    current.width === next.width &&
+    current.height === next.height
+  ) {
+    return;
+  }
+  windows.dock.setBounds(next);
+}
+
+function applyCommandBarLayout(resetPosition = false): void {
+  if (!windows?.commandBar || windows.commandBar.isDestroyed() || !layoutManager) return;
+  const current = windows.commandBar.getBounds();
+  const auto = layoutManager.getCommandBarLayout();
+  const workArea = layoutManager.getDisplay().workArea;
+  let next = auto;
+  if (resetPosition) {
+    commandBarCustomOrigin = null;
+    next = auto;
+  } else if (commandBarCustomOrigin) {
+    next = resolveChromeWindowBounds(auto, commandBarCustomOrigin, workArea);
+  } else if (!chromeLayoutLocked) {
+    next = { ...auto, x: current.x, y: current.y };
+  }
+  if (
+    current.x === next.x &&
+    current.y === next.y &&
+    current.width === next.width &&
+    current.height === next.height
+  ) {
+    return;
+  }
+  windows.commandBar.setBounds(next);
+}
+
+function captureChromeOriginsFromWindows(): void {
+  if (!windows) return;
+  if (!windows.dock.isDestroyed()) {
+    const b = windows.dock.getBounds();
+    dockCustomOrigin = { x: b.x, y: b.y };
+  }
+  if (!windows.commandBar.isDestroyed()) {
+    const b = windows.commandBar.getBounds();
+    commandBarCustomOrigin = { x: b.x, y: b.y };
+  }
+}
+
+function scheduleChromeLayoutPersist(): void {
+  if (chromeMovePersistTimer) clearTimeout(chromeMovePersistTimer);
+  chromeMovePersistTimer = setTimeout(() => {
+    chromeMovePersistTimer = null;
+    if (chromeLayoutLocked || !windows) return;
+    captureChromeOriginsFromWindows();
+    chromeLayoutPersist?.({
+      dockCustomOrigin,
+      commandBarCustomOrigin,
+    });
+  }, 120);
+}
+
+function applyChromeMovability(): void {
+  if (!windows) return;
+  const movable = !chromeLayoutLocked;
+  if (!windows.dock.isDestroyed()) windows.dock.setMovable(movable);
+  if (!windows.commandBar.isDestroyed()) windows.commandBar.setMovable(movable);
+}
+
+function wireChromeMoveListeners(w: GlassWindows): void {
+  const onMoved = (): void => {
+    if (chromeLayoutLocked) return;
+    captureChromeOriginsFromWindows();
+    scheduleChromeLayoutPersist();
+  };
+  w.dock.on("moved", onMoved);
+  w.commandBar.on("moved", onMoved);
+}
+
+export function setChromeLayoutPersistHandler(
+  handler: ((partial: Partial<GlassUserSettings>) => void) | null,
+): void {
+  chromeLayoutPersist = handler;
+}
+
+export function syncChromeLayoutFromSettings(
+  settings: GlassUserSettings,
+  options?: { clearCustomOrigins?: boolean },
+): void {
+  chromeLayoutLocked = settings.chromeLayoutLocked;
+  if (options?.clearCustomOrigins) {
+    dockCustomOrigin = null;
+    commandBarCustomOrigin = null;
+  } else {
+    dockCustomOrigin = settings.dockCustomOrigin;
+    commandBarCustomOrigin = settings.commandBarCustomOrigin;
+  }
+  applyChromeMovability();
+}
+
+function relayoutAllWindows(options?: { resetDock?: boolean }): void {
   if (!windows || !layoutManager) return;
 
   if (!windows.overlay.isDestroyed()) {
@@ -140,16 +351,12 @@ function relayoutAllWindows(): void {
   }
 
   if (!windows.commandBar.isDestroyed()) {
-    windows.commandBar.setBounds(layoutManager.getCommandBarLayout());
+    applyCommandBarLayout(options?.resetDock ?? false);
   }
 
-  if (!windows.dock.isDestroyed()) {
-    const current = windows.dock.getBounds();
-    windows.dock.setBounds(
-      layoutManager.repositionDock(current, current.width, current.height),
-    );
-  }
+  applyDockLayout(options?.resetDock ?? false);
 
+  ensureVisibleOnAllWorkspaces();
   stackGlassWindows(windows);
   logDiagnostics();
 }
@@ -194,6 +401,7 @@ function createOverlayWindow(): BrowserWindow {
   });
   overlay.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   loadRenderer(overlay, "overlay.html");
+  trackGlassWindow(overlay);
   return overlay;
 }
 
@@ -212,6 +420,7 @@ function createDockWindow(): BrowserWindow {
     skipTaskbar: true,
     hasShadow: false,
     fullscreenable: false,
+    show: false,
     backgroundColor: "#00000000",
     acceptFirstMouse: true,
     webPreferences: {
@@ -223,6 +432,7 @@ function createDockWindow(): BrowserWindow {
   });
   dock.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   loadRenderer(dock, "index.html");
+  trackGlassWindow(dock);
   return dock;
 }
 
@@ -253,6 +463,7 @@ function createPanelWindow(): BrowserWindow {
   });
   panel.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   loadRenderer(panel, "panel.html");
+  trackGlassWindow(panel);
   return panel;
 }
 
@@ -283,10 +494,12 @@ function createCommandBarWindow(): BrowserWindow {
   });
   commandBar.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   loadRenderer(commandBar, "command.html");
+  trackGlassWindow(commandBar);
   return commandBar;
 }
 
 export function createWindows(glassConfig: GlassConfig, displayTarget: GlassDisplayTarget = "primary"): GlassWindows {
+  destroyGlassWindows();
   layoutManager?.dispose();
   activeDisplayTarget = sanitizeDisplayTarget(displayTarget);
   layoutManager = new GlassLayoutManager(glassConfig.layoutPreset, activeDisplayTarget);
@@ -296,7 +509,16 @@ export function createWindows(glassConfig: GlassConfig, displayTarget: GlassDisp
       activeDisplayTarget = normalized;
       layoutManager?.setDisplayTarget(normalized);
     }
-    relayoutAllWindows();
+    relayoutAllWindows({ resetDock: true });
+    // macOS fullscreen Spaces can apply metrics slightly after the event.
+    if (process.platform === "darwin" && windows) {
+      const snapshot = windows;
+      setTimeout(() => {
+        if (windows !== snapshot) return;
+        ensureVisibleOnAllWorkspaces();
+        stackGlassWindows(snapshot);
+      }, 200);
+    }
   });
 
   overlayVisible = glassConfig.overlayEnabled;
@@ -318,20 +540,129 @@ export function createWindows(glassConfig: GlassConfig, displayTarget: GlassDisp
 
   windows = { dock, panel, overlay, commandBar };
 
-  if (overlayVisible && overlayMode !== "hidden") {
-    overlay.setBounds(layoutManager.getOverlayLayout());
-    overlay.showInactive();
-    applyOverlayClickThrough(overlay, true);
+  wireChromeMoveListeners(windows);
+  applyChromeMovability();
+
+  if (!glassBootPending) {
+    showPrimaryGlassWindows();
+  } else {
+    dock.hide();
+    commandBar.hide();
+    if (overlayVisible && overlayMode !== "hidden") overlay.hide();
   }
 
-  commandBar.setBounds(layoutManager.getCommandBarLayout());
-  commandBar.showInactive();
-
   wireWindowStacking(windows);
+  ensureVisibleOnAllWorkspaces();
   stackGlassWindows(windows);
   syncFollowMouseMode();
   logDiagnostics();
   return windows;
+}
+
+/**
+ * Full-screen cinematic boot splash shown before the Glass windows are ready.
+ * Created at the very start of app startup so it appears instantly; closed via
+ * {@link finishSplash} once the real windows have loaded.
+ */
+export function createSplashWindow(): BrowserWindow {
+  if (splashWindow && !splashWindow.isDestroyed()) return splashWindow;
+
+  const display = screen.getPrimaryDisplay();
+  // workArea keeps the boot frame above the macOS dock / menu bar
+  const { x, y, width, height } = display.workArea;
+  const splash = new BrowserWindow({
+    x,
+    y,
+    width,
+    height,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: false,
+    focusable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    hasShadow: false,
+    fullscreenable: false,
+    show: false,
+    backgroundColor: "#00000000",
+    ...(process.platform === "darwin" ? { type: "panel" as const } : {}),
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+  // Sit above every Glass window (overlay/dock/command/panel) while booting.
+  splash.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, 12);
+  splash.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  splash.setIgnoreMouseEvents(true);
+  splash.once("ready-to-show", () => {
+    if (!splash.isDestroyed()) splash.showInactive();
+  });
+  loadRenderer(splash, "splash.html", {
+    bootSound: GLASS_BOOT_SOUND_ENABLED ? "1" : "0",
+  });
+  splashWindow = splash;
+  return splash;
+}
+
+/** Resolve once all Glass windows have finished their initial load. */
+export function whenGlassWindowsReady(w: GlassWindows): Promise<void> {
+  const ready = (win: BrowserWindow): Promise<void> =>
+    new Promise((resolve) => {
+      if (win.isDestroyed() || !win.webContents.isLoading()) {
+        resolve();
+        return;
+      }
+      const done = (): void => resolve();
+      win.webContents.once("did-finish-load", done);
+      win.webContents.once("did-fail-load", done);
+    });
+  return Promise.all([w.dock, w.panel, w.overlay, w.commandBar].map(ready)).then(() => undefined);
+}
+
+function fadeOutWindow(win: BrowserWindow, durationMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    const steps = 14;
+    const stepMs = Math.max(8, durationMs / steps);
+    let i = 0;
+    const timer = setInterval(() => {
+      i += 1;
+      if (win.isDestroyed()) {
+        clearInterval(timer);
+        resolve();
+        return;
+      }
+      win.setOpacity(Math.max(0, 1 - i / steps));
+      if (i >= steps) {
+        clearInterval(timer);
+        resolve();
+      }
+    }, stepMs);
+  });
+}
+
+/** Snap the progress bar to 100%, fade the splash out, then close it. */
+export async function finishSplash(): Promise<void> {
+  const splash = splashWindow;
+  splashWindow = null;
+  if (!splash || splash.isDestroyed()) return;
+  try {
+    await splash.webContents.executeJavaScript(
+      `document.body?.classList.add('is-finishing');
+       document.querySelector('.glass-boot')?.classList.add('is-finishing');
+       globalThis.__iivoGlassBootSound?.playComplete?.();`,
+      true,
+    );
+  } catch {
+    // Renderer may not be ready; proceed to fade out regardless.
+  }
+  await new Promise((resolve) => setTimeout(resolve, 420));
+  await fadeOutWindow(splash, 380);
+  if (!splash.isDestroyed()) splash.close();
+  glassBootPending = false;
+  showPrimaryGlassWindows();
 }
 
 export function getWindows(): GlassWindows | null {
@@ -472,10 +803,28 @@ export function closePanel(): void {
   if (windows) stackGlassWindows(windows);
 }
 
-export function resizeDockWindow(width: number, height: number): void {
+export function resizeDockWindow(
+  width: number,
+  height: number,
+  options?: import("../shared/glassLayoutMath.ts").DockClampOptions,
+): void {
   if (!windows?.dock || windows.dock.isDestroyed() || !layoutManager) return;
-  const next = layoutManager.repositionDock(windows.dock.getBounds(), width, height);
+  const clamped = layoutManager.clampDockSize(width, height, options);
   const current = windows.dock.getBounds();
+  let next: Electron.Rectangle = {
+    x: current.x,
+    y: current.y,
+    width: clamped.width,
+    height: clamped.height,
+  };
+  if (dockCustomOrigin) {
+    const anchor = layoutManager.getDockLayout(clamped.width, clamped.height, options);
+    next = resolveChromeWindowBounds(
+      { ...anchor, width: clamped.width, height: clamped.height },
+      dockCustomOrigin,
+      layoutManager.getDisplay().workArea,
+    );
+  }
   if (
     current.width === next.width &&
     current.height === next.height &&
@@ -549,9 +898,9 @@ export function broadcast(channel: string, payload: unknown): void {
 
 export function disposeWindows(): void {
   stopFollowMouseTracking();
+  destroyGlassWindows();
   layoutManager?.dispose();
   layoutManager = null;
-  windows = null;
 }
 
 let commandBarHotkeyStatus = "Hotkey unavailable — command bar still clickable";
@@ -649,16 +998,89 @@ function syncFollowMouseMode(): void {
 }
 
 export function applyGlassUserSettings(settings: GlassUserSettings): void {
-  activeDisplayTarget = sanitizeDisplayTarget(settings.displayTarget);
+  const nextTarget = sanitizeDisplayTarget(settings.displayTarget);
+  const displayChanged = nextTarget !== activeDisplayTarget;
+  activeDisplayTarget = nextTarget;
+  syncChromeLayoutFromSettings(settings, { clearCustomOrigins: displayChanged });
   if (layoutManager) {
     layoutManager.setDisplayTarget(activeDisplayTarget);
-    relayoutAllWindows();
+    relayoutAllWindows({ resetDock: displayChanged });
   }
+  applyChromeMovability();
   syncFollowMouseMode();
   registerCommandBarHotkeys(settings.hotkeyPreset);
 }
 
+export function lockChromeLayout(): {
+  dockCustomOrigin: ChromeOrigin | null;
+  commandBarCustomOrigin: ChromeOrigin | null;
+} {
+  captureChromeOriginsFromWindows();
+  chromeLayoutLocked = true;
+  applyChromeMovability();
+  applyCommandBarClickThroughWhenLocked();
+  return getChromeLayoutOrigins();
+}
+
+export function unlockChromeLayout(): void {
+  chromeLayoutLocked = false;
+  applyChromeMovability();
+  if (windows?.commandBar && !windows.commandBar.isDestroyed()) {
+    commandBarClickThrough = false;
+    windows.commandBar.setIgnoreMouseEvents(false);
+  }
+}
+
+/** Move dock or command bar by screen delta while layout is unlocked (pointer drag). */
+export function nudgeChromeWindowFromWebContents(
+  sender: WebContents,
+  dx: number,
+  dy: number,
+): void {
+  if (chromeLayoutLocked || !windows || !layoutManager || (!dx && !dy)) return;
+  const win = BrowserWindow.fromWebContents(sender);
+  if (!win || win.isDestroyed()) return;
+  if (win.id !== windows.dock.id && win.id !== windows.commandBar.id) return;
+
+  const bounds = win.getBounds();
+  const workArea = layoutManager.getDisplay().workArea;
+  const x = Math.max(
+    workArea.x,
+    Math.min(workArea.x + workArea.width - bounds.width, bounds.x + dx),
+  );
+  const y = Math.max(
+    workArea.y,
+    Math.min(workArea.y + workArea.height - bounds.height, bounds.y + dy),
+  );
+  if (x === bounds.x && y === bounds.y) return;
+
+  win.setBounds({ x, y, width: bounds.width, height: bounds.height });
+  captureChromeOriginsFromWindows();
+  scheduleChromeLayoutPersist();
+}
+
+function applyCommandBarClickThroughWhenLocked(): void {
+  if (!windows?.commandBar || windows.commandBar.isDestroyed() || !chromeLayoutLocked) return;
+  commandBarClickThrough = true;
+  windows.commandBar.setIgnoreMouseEvents(true, { forward: true });
+}
+
+export function resetChromeLayoutOrigins(): void {
+  dockCustomOrigin = null;
+  commandBarCustomOrigin = null;
+  if (layoutManager && windows) {
+    relayoutAllWindows({ resetDock: true });
+  }
+}
+
+export function getChromeLayoutOrigins(): {
+  dockCustomOrigin: ChromeOrigin | null;
+  commandBarCustomOrigin: ChromeOrigin | null;
+} {
+  return { dockCustomOrigin, commandBarCustomOrigin };
+}
+
 export function refreshGlassDisplayLayout(): void {
-  relayoutAllWindows();
+  relayoutAllWindows({ resetDock: false });
   logDiagnostics();
 }

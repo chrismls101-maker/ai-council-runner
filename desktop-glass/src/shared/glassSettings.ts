@@ -2,6 +2,9 @@
  * IIVO Glass user settings (hotkey + display target).
  */
 
+import { DEFAULT_COPILOT_CONFIG, type GlassCopilotConfig } from "./copilotTypes.ts";
+import { parseCopilotConfig } from "./copilotConfig.ts";
+
 export type GlassHotkeyPreset =
   | "cmd-shift-space"
   | "alt-space"
@@ -37,6 +40,8 @@ export interface GlassUserSettings {
   micAutoSendAfterSilence: boolean;
   /** Virtual audio input (e.g. BlackHole 2ch) for system-audio fallback. */
   selectedVirtualAudioDeviceId?: string;
+  /** Session Copilot mode + behavior. Default off (no auto extraction). */
+  copilot: GlassCopilotConfig;
 }
 
 export const DEFAULT_GLASS_USER_SETTINGS: GlassUserSettings = {
@@ -50,7 +55,12 @@ export const DEFAULT_GLASS_USER_SETTINGS: GlassUserSettings = {
   saveVisualAsksToSession: true,
   autoUploadCapturesToContext: false,
   micAutoSendAfterSilence: false,
+  copilot: { ...DEFAULT_COPILOT_CONFIG },
 };
+
+export function parseCopilotSettings(value: unknown): GlassCopilotConfig {
+  return parseCopilotConfig(value);
+}
 
 export function parseBootSoundEnabled(value: unknown): boolean {
   return value !== false;
