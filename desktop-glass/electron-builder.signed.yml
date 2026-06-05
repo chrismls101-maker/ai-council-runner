@@ -33,6 +33,21 @@ asar: true
 
 mac:
   category: public.app-category.productivity
+  extendInfo:
+    CFBundleName: IIVO Glass
+    CFBundleDisplayName: IIVO Glass
+    NSMicrophoneUsageDescription: >-
+      IIVO Glass uses your microphone only when you tap the microphone button on the
+      command bar to dictate a question.
+    NSScreenCaptureUsageDescription: >-
+      IIVO Glass captures your screen only when you use Capture or ask a visual
+      question that needs to see your display.
+    NSAudioCaptureUsageDescription: >-
+      IIVO Glass captures system audio only when you choose System Audio and start
+      listening from the command bar.
+    NSCameraUsageDescription: >-
+      IIVO Glass does not use the camera. This description is required by macOS for
+      some media capture APIs.
   target:
     - dmg
     - zip

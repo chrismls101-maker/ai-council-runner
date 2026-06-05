@@ -1,0 +1,270 @@
+/**
+ * GlassEnergyProgressBar — IIVO Glass energy beam (reference HUD).
+ * Thin glass rail, plasma tail, lens-flare head, outer bloom.
+ */
+
+.glass-energy-progress {
+  --glass-energy-duration: 10s;
+  --glass-energy-target: 100%;
+
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 0;
+}
+
+/* Room for bloom + lens flare outside the rail */
+.glass-energy-progress__rail-wrap {
+  position: relative;
+  width: 100%;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  container-type: inline-size;
+}
+
+/* Dark translucent glass tube */
+.glass-energy-progress__track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 4px;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(6, 14, 26, 0.82) 0%, rgba(2, 6, 12, 0.72) 100%);
+  border: 1px solid rgba(40, 160, 220, 0.38);
+  box-shadow:
+    inset 0 2px 8px rgba(0, 0, 0, 0.75),
+    inset 0 0 14px rgba(0, 60, 120, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 0 8px rgba(0, 100, 180, 0.08);
+}
+
+.glass-energy-progress__track::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.07) 0%,
+    transparent 55%
+  );
+}
+
+/* Traveling energy beam (width grows; beam art is full-rail width) */
+.glass-energy-progress__fill {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  height: 4px;
+  width: 0;
+  min-width: 0;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  overflow: visible;
+  animation: glass-energy-progress-fill var(--glass-energy-duration) linear forwards;
+  z-index: 1;
+}
+
+.glass-energy-progress__bloom {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: min(120px, 40%);
+  height: 22px;
+  transform: translate(20%, -50%);
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 100% 80% at 85% 50%,
+    rgba(80, 200, 255, 0.55) 0%,
+    rgba(40, 140, 255, 0.28) 35%,
+    transparent 72%
+  );
+  filter: blur(7px);
+  z-index: 0;
+}
+
+.glass-energy-progress__beam {
+  display: block;
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 100cqw;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(4, 40, 95, 0.15) 4%,
+    rgba(8, 70, 160, 0.55) 12%,
+    rgba(18, 130, 230, 0.88) 28%,
+    rgba(55, 200, 255, 0.98) 52%,
+    rgba(160, 235, 255, 1) 72%,
+    rgba(255, 255, 255, 0.98) 88%,
+    rgba(255, 255, 255, 0.85) 94%,
+    transparent 100%
+  );
+  box-shadow:
+    0 0 8px rgba(40, 180, 255, 0.75),
+    0 0 18px rgba(30, 150, 255, 0.5),
+    0 0 32px rgba(20, 120, 255, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  filter: saturate(1.15);
+}
+
+/* Secondary glow pocket behind the head */
+.glass-energy-progress__flare-trail {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  width: 36px;
+  height: 14px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 90% 100% at 100% 50%,
+    rgba(100, 210, 255, 0.75) 0%,
+    rgba(50, 160, 255, 0.35) 45%,
+    transparent 75%
+  );
+  filter: blur(3px);
+  z-index: 3;
+}
+
+/* Lens-flare head — core orb + cross streaks */
+.glass-energy-progress__flare {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  width: 0;
+  height: 0;
+  transform: translateY(-50%);
+  z-index: 5;
+  animation: glass-energy-progress-flare-pulse 1.15s ease-in-out infinite;
+}
+
+.glass-energy-progress__flare-core {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 11px;
+  height: 11px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    #ffffff 0%,
+    #e8fcff 28%,
+    rgba(120, 220, 255, 0.85) 55%,
+    transparent 72%
+  );
+  box-shadow:
+    0 0 3px #ffffff,
+    0 0 10px #ffffff,
+    0 0 18px rgba(200, 245, 255, 1),
+    0 0 32px rgba(56, 225, 255, 0.9),
+    0 0 48px rgba(0, 150, 255, 0.55);
+}
+
+.glass-energy-progress__flare-streak {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.35) 18%,
+    #ffffff 50%,
+    rgba(255, 255, 255, 0.35) 82%,
+    transparent 100%
+  );
+}
+
+.glass-energy-progress__flare-streak--h {
+  width: 56px;
+  height: 2px;
+  filter: blur(0.4px);
+  box-shadow:
+    0 0 6px #ffffff,
+    0 0 14px rgba(180, 240, 255, 0.95),
+    0 0 26px rgba(56, 225, 255, 0.65);
+}
+
+.glass-energy-progress__flare-streak--v {
+  width: 2px;
+  height: 22px;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.4) 20%,
+    #ffffff 50%,
+    rgba(255, 255, 255, 0.4) 80%,
+    transparent 100%
+  );
+  filter: blur(0.35px);
+  box-shadow:
+    0 0 5px #ffffff,
+    0 0 12px rgba(180, 240, 255, 0.85);
+}
+
+.glass-energy-progress__pct {
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  font-variant-numeric: tabular-nums;
+  color: rgba(160, 215, 245, 0.74);
+  text-shadow: 0 0 14px rgba(56, 225, 255, 0.28);
+}
+
+@keyframes glass-energy-progress-fill {
+  0% {
+    width: 1%;
+  }
+  100% {
+    width: var(--glass-energy-target);
+  }
+}
+
+@keyframes glass-energy-progress-flare-pulse {
+  0%,
+  100% {
+    filter: brightness(1) saturate(1);
+  }
+  50% {
+    filter: brightness(1.35) saturate(1.1);
+  }
+}
+
+.glass-body--splash.is-finishing .glass-energy-progress__fill,
+.glass-boot.is-finishing .glass-energy-progress__fill {
+  animation: none;
+  width: 100%;
+  transition: width 0.45s ease;
+}
+
+@supports not (width: 1cqw) {
+  .glass-energy-progress__beam {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glass-energy-progress__fill,
+  .glass-energy-progress__flare {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+
+  .glass-energy-progress__fill {
+    width: var(--glass-energy-target);
+  }
+}

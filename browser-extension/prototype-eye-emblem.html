@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>IIVO Eye Emblem — SVG prototype</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        min-height: 100%;
+        background: #04060d;
+        color: rgba(200, 220, 240, 0.8);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      .stage {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        gap: 24px;
+        padding: 40px;
+        background:
+          radial-gradient(80% 60% at 50% 45%, rgba(16, 28, 50, 0.9), #04060d);
+      }
+      .compare {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 48px;
+        align-items: center;
+        justify-content: center;
+      }
+      .panel {
+        text-align: center;
+      }
+      .panel h2 {
+        font-size: 11px;
+        letter-spacing: 0.2em;
+        font-weight: 600;
+        margin: 0 0 16px;
+        color: rgba(150, 195, 225, 0.75);
+      }
+      .emblem {
+        width: min(380px, 70vw);
+        height: min(380px, 70vw);
+        filter: drop-shadow(0 8px 32px rgba(56, 225, 255, 0.45));
+      }
+      .emblem img,
+      .emblem svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+      .note {
+        max-width: 520px;
+        text-align: center;
+        font-size: 12px;
+        line-height: 1.5;
+        color: rgba(140, 170, 200, 0.65);
+      }
+      .note a { color: #38e1ff; }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <div class="compare">
+        <div class="panel">
+          <h2>SVG RECREATION</h2>
+          <div class="emblem">
+            <img src="assets/iivo-eye-emblem.svg" alt="IIVO eye SVG" />
+          </div>
+        </div>
+        <div class="panel">
+          <h2>PNG (previous)</h2>
+          <div class="emblem">
+            <img src="assets/icon-eye-orb-glass.png" alt="IIVO eye PNG" />
+          </div>
+        </div>
+      </div>
+      <p class="note">
+        Edit <code>assets/iivo-eye-emblem.svg</code> directly, refresh this tab.
+        When approved, we wire the SVG into
+        <a href="prototype-loading-screen.html">prototype-loading-screen.html</a>.
+      </p>
+    </div>
+  </body>
+</html>

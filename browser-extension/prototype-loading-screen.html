@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>IIVO Intelligence Glass — Boot Screen</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Michroma&family=Sora:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="loading-glass-background.css" />
+    <link rel="stylesheet" href="loading-boot-screen.css" />
+  </head>
+  <body class="glass-boot-preview">
+    <div class="glass-boot" id="glass-boot">
+      <div class="glass-boot__center-dim" aria-hidden="true"></div>
+
+      <div class="loading-glass-background" role="presentation">
+        <span class="loading-glass-background__sheen" aria-hidden="true"></span>
+        <span class="loading-glass-background__streak loading-glass-background__streak--a" aria-hidden="true"></span>
+        <span class="loading-glass-background__streak loading-glass-background__streak--b" aria-hidden="true"></span>
+        <span class="loading-glass-background__corner loading-glass-background__corner--tl" aria-hidden="true"></span>
+        <span class="loading-glass-background__corner loading-glass-background__corner--tr" aria-hidden="true"></span>
+        <span class="loading-glass-background__corner loading-glass-background__corner--bl" aria-hidden="true"></span>
+        <span class="loading-glass-background__corner loading-glass-background__corner--br" aria-hidden="true"></span>
+      </div>
+
+      <span class="glass-boot__pip glass-boot__pip--tl" aria-hidden="true"></span>
+      <span class="glass-boot__pip glass-boot__pip--tr" aria-hidden="true"></span>
+      <span class="glass-boot__pip glass-boot__pip--bl" aria-hidden="true"></span>
+      <span class="glass-boot__pip glass-boot__pip--br" aria-hidden="true"></span>
+
+      <main class="glass-boot__content">
+        <div class="glass-boot__emblem">
+          <span class="glass-boot__emblem-glow" aria-hidden="true"></span>
+          <img
+            class="glass-boot__emblem-img"
+            src="assets/iivo-glass-boot-eye.png"
+            srcset="assets/iivo-glass-boot-eye.png 1x, assets/iivo-glass-boot-eye@2x.png 2x"
+            sizes="(max-width: 1200px) 52vw, 520px"
+            alt=""
+            draggable="false"
+            decoding="async"
+          />
+        </div>
+
+        <h1 class="glass-boot__title">
+          <span class="glass-boot__title-chrome">
+            <span class="glass-boot__title-wordmark">IIVO</span>
+            <span class="glass-boot__title-rest"> INTELLIGENCE GLASS</span>
+          </span>
+        </h1>
+
+        <div class="glass-boot__loading-block">
+          <span class="glass-boot__loading-label"
+            >LOADING<span class="glass-boot__ellipsis" aria-hidden="true"></span
+          ></span>
+          <div
+            class="glass-energy-progress"
+            role="progressbar"
+            aria-label="Loading"
+            aria-valuemin="0"
+            aria-valuemax="100"
+          >
+            <div class="glass-energy-progress__rail-wrap">
+              <div class="glass-energy-progress__track" aria-hidden="true"></div>
+              <div class="glass-energy-progress__fill">
+                <span class="glass-energy-progress__bloom" aria-hidden="true"></span>
+                <span class="glass-energy-progress__beam" aria-hidden="true"></span>
+                <span class="glass-energy-progress__flare-trail" aria-hidden="true"></span>
+                <span class="glass-energy-progress__flare" aria-hidden="true">
+                  <span
+                    class="glass-energy-progress__flare-streak glass-energy-progress__flare-streak--h"
+                  ></span>
+                  <span
+                    class="glass-energy-progress__flare-streak glass-energy-progress__flare-streak--v"
+                  ></span>
+                  <span class="glass-energy-progress__flare-core"></span>
+                </span>
+              </div>
+            </div>
+            <span class="glass-energy-progress__pct" id="energy-pct">1%</span>
+          </div>
+        </div>
+
+        <p class="glass-boot__subtitle">
+          <span class="glass-boot__subtitle-inner">Initializing overlay intelligence</span>
+        </p>
+      </main>
+    </div>
+
+    <script>
+      (function () {
+        var pctEl = document.getElementById("energy-pct");
+        var bar = document.querySelector(".glass-energy-progress");
+        var start = performance.now();
+        var dur = 10000;
+        function bootPct(t) {
+          if (t <= 0) return 1;
+          if (t >= 1) return 100;
+          return Math.min(100, Math.max(1, Math.round(t * 99) + 1));
+        }
+        function tick(now) {
+          var t = Math.min(1, (now - start) / dur);
+          var v = bootPct(t);
+          if (pctEl) pctEl.textContent = v + "%";
+          if (bar) bar.setAttribute("aria-valuenow", String(v));
+          if (t < 1) requestAnimationFrame(tick);
+        }
+        requestAnimationFrame(tick);
+      })();
+      setTimeout(function () {
+        document.getElementById("glass-boot").classList.add("is-finishing");
+      }, 10000);
+    </script>
+  </body>
+</html>

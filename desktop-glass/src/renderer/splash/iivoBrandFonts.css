@@ -1,0 +1,17 @@
+/**
+ * IIVO brand typography — matches src/App.css (--font-wordmark / .iivo-wordmark).
+ * Fonts are bundled via @fontsource in LoadingBootScreen (splash CSP blocks Google Fonts CDN).
+ */
+
+:root {
+  --iivo-font-wordmark: "Michroma", "Sora", "IBM Plex Sans", system-ui, sans-serif;
+  --iivo-font-display: "Sora", "IBM Plex Sans", system-ui, sans-serif;
+}
+
+.iivo-wordmark {
+  font-family: var(--iivo-font-wordmark);
+  font-weight: 400;
+  font-style: normal;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}

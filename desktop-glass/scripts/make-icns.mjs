@@ -1,9 +1,9 @@
 /**
  * Build desktop-glass/build/icon.icns (and icon.png 1024 master) for IIVO Glass.
  *
- * Design: the IIVO eye/orb logo composited onto a dark "glass" rounded-square
- * background (vertical gradient + subtle cyan glow + edge highlight), with
- * anti-aliased corners. macOS-style padded icon look.
+ * Design: the same IIVO eye emblem as the Glass boot screen (iivo-glass-boot-eye),
+ * composited onto a dark "glass" rounded-square background (vertical gradient +
+ * subtle cyan glow + edge highlight). macOS-style padded icon look.
  *
  * Dependency-free: PNG decode/encode via Node zlib; the orb is high-quality
  * downscaled with macOS-native `sips`; final .icns assembled with `iconutil`.
@@ -18,12 +18,33 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 const REPO_ROOT = path.resolve(ROOT, "..");
-const SOURCE = path.join(REPO_ROOT, "browser-extension/assets/icon-source-crop.png");
 const BUILD_DIR = path.join(ROOT, "build");
+
+/** Same artwork as LoadingBootScreen (src/renderer/assets/iivo-glass-boot-eye*.png). */
+const SOURCE_CANDIDATES = [
+  path.join(ROOT, "src/renderer/assets/iivo-glass-boot-eye@2x.png"),
+  path.join(ROOT, "src/renderer/assets/iivo-glass-boot-eye.png"),
+  path.join(REPO_ROOT, "browser-extension/assets/iivo-glass-boot-eye@2x.png"),
+  path.join(REPO_ROOT, "browser-extension/assets/iivo-glass-boot-eye.png"),
+];
 
 const CANVAS = 1024; // master icon resolution
 const ALPHA_THRESHOLD = 8; // include the soft outer glow when trimming
-const ORB_WIDTH = 700; // orb target width on the 1024 canvas
+const ORB_WIDTH = 720; // emblem width on 1024 canvas (matches boot screen proportions)
+
+async function resolveSourcePath() {
+  for (const candidate of SOURCE_CANDIDATES) {
+    try {
+      await fs.access(candidate);
+      return candidate;
+    } catch {
+      // try next
+    }
+  }
+  throw new Error(
+    `Boot eye PNG not found. Expected one of:\n${SOURCE_CANDIDATES.map((p) => `  - ${p}`).join("\n")}`,
+  );
+}
 
 // ---------- PNG decode ----------
 function readChunks(buf) {
@@ -262,8 +283,11 @@ function compositeCentered(dst, src) {
 async function main() {
   await fs.mkdir(BUILD_DIR, { recursive: true });
 
+  const sourcePath = await resolveSourcePath();
+  console.log(`Using boot eye source: ${sourcePath}`);
+
   // 1) crop the orb to its alpha bounding box
-  const src = await fs.readFile(SOURCE);
+  const src = await fs.readFile(sourcePath);
   const img = decodeRGBA(src);
   const box = alphaBBox(img);
   const orbCrop = cropBBox(img, box);
