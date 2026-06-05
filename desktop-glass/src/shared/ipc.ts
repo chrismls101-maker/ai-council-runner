@@ -195,7 +195,11 @@ export type GlassCommand =
   | { type: "copilot-dismiss-silence-warning" }
   | { type: "copilot-pause-system-audio" }
   | { type: "copilot-listening-limit-continue" }
-  | { type: "copilot-listening-limit-stop" };
+  | { type: "copilot-listening-limit-stop" }
+  | { type: "copilot-refine-session-type" }
+  | { type: "copilot-dismiss-diagnostic-result" }
+  | { type: "copilot-open-diagnostic-in-iivo" }
+  | { type: "copilot-save-diagnostic-result" };
 
 export interface GlassState {
   privacy: PrivacyState;

@@ -26,7 +26,8 @@ export type GlassSessionEventKind =
   | "action_detected"
   | "risk_detected"
   | "app_context"
-  | "listening_limit_reached";
+  | "listening_limit_reached"
+  | "copilot_diagnostic_result";
 
 export type GlassSessionImportance = "low" | "medium" | "high";
 

@@ -58,10 +58,12 @@ npm run glass:validate:clean -- --strict
 ## Pre-commit guard (optional)
 
 ```bash
-npm run glass:git:guard
+npm run glass:git:guard          # staged files only
+npm run glass:git:guard:all      # staged + working tree (strict)
+npm run glass:wip:status         # branch context reminders
 ```
 
-Warns when staged paths look like release artifacts, session junk, or blocked directories.
+See [WIP_INTEGRATION_PLAN.md](./WIP_INTEGRATION_PLAN.md) for safe WIP integration.
 
 ## Partial WIP and typecheck
 

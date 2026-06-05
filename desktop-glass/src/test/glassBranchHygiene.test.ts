@@ -15,11 +15,25 @@ test("GLASS_BRANCH_HYGIENE documents stable vs WIP branches", () => {
   assert.ok(doc.includes("glass:validate:clean"));
 });
 
+test("WIP integration plan documents cherry-pick workflow", () => {
+  const doc = readFileSync(join(glassRoot, "WIP_INTEGRATION_PLAN.md"), "utf8");
+  assert.ok(doc.includes("wip/glass-splash-dock-audio-panel"));
+  assert.ok(doc.includes("cherry-pick"));
+  assert.ok(doc.includes("glass:git:guard:all"));
+});
+
+test("glass-wip-status script exists", () => {
+  const script = readFileSync(join(glassRoot, "scripts", "glass-wip-status.mjs"), "utf8");
+  assert.ok(script.includes("wip/glass-splash-dock-audio-panel"));
+  assert.ok(script.includes("Do NOT merge directly"));
+});
+
 test("glass-git-guard script exists and checks blocked paths", () => {
   const script = readFileSync(join(glassRoot, "scripts", "glass-git-guard.mjs"), "utf8");
   assert.ok(script.includes("release"));
   assert.ok(script.includes("dmg"));
-  assert.ok(script.includes("node_modules"));
+  assert.ok(script.includes("--working-tree"));
+  assert.ok(script.includes("--strict"));
 });
 
 test("glass-validate-clean script exists", () => {

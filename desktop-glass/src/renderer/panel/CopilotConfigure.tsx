@@ -105,6 +105,31 @@ export function CopilotConfigure({ sessionLive }: { sessionLive: boolean }): JSX
             </select>
           </label>
 
+          {copilot.sessionTypeRefineAvailable && config.sessionType === "auto" ? (
+            <div className="copilot-config__field" data-testid="glass-copilot-session-refine">
+              <span>{copilot.sessionTypeRefineLabel ?? "Refine session type?"}</span>
+              <button
+                type="button"
+                className="gbtn gbtn--ghost"
+                disabled={!sessionLive || copilot.sessionTypeRefining}
+                onClick={() => send({ type: "copilot-refine-session-type" })}
+              >
+                {copilot.sessionTypeRefining ? "Refining…" : "Refine session type"}
+              </button>
+            </div>
+          ) : null}
+
+          {copilot.semanticSessionType ? (
+            <p className="copilot-config__mode-hint">
+              Refined: {SESSION_TYPE_LABELS[copilot.semanticSessionType.primaryType]}
+              {copilot.semanticSessionType.secondaryType
+                ? ` + ${SESSION_TYPE_LABELS[copilot.semanticSessionType.secondaryType]}`
+                : ""}
+              {" · "}
+              {copilot.semanticSessionType.reason}
+            </p>
+          ) : null}
+
           <label className="copilot-config__field">
             <span>Insight interval</span>
             <select

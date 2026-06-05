@@ -33,6 +33,13 @@ import {
   type GlassCopilotSessionType,
   type SessionTypeDetectionResult,
 } from "./copilotSessionType.ts";
+import {
+  formatSessionTypeRefineLabel,
+  shouldOfferSemanticRefine,
+  type SemanticSessionClassification,
+  mergeSemanticIntoDetection,
+} from "./copilotSessionSemantic.ts";
+import type { GlassCopilotDiagnosticResult } from "./copilotDiagnosticAnalysis.ts";
 
 const MAX_RECENT_SHOWN = 12;
 /** After this many dismissals in a row, the governor backs off (slows down). */
@@ -125,6 +132,17 @@ export class SessionCopilotController {
     },
     competingTypes: [],
   };
+  private sessionTypeRefined = false;
+  private sessionTypeRefining = false;
+  private semanticClassification: SemanticSessionClassification | null = null;
+  private diagnosticResult: GlassCopilotDiagnosticResult | null = null;
+  private diagnosticAnalyzing = false;
+  private lastSessionSignals: {
+    appName?: string;
+    windowTitle?: string;
+    transcript?: string;
+    recentCommands?: string[];
+  } = {};
 
   constructor(deps: CopilotControllerDeps, config: GlassCopilotConfig = DEFAULT_COPILOT_CONFIG) {
     this.deps = deps;
@@ -197,6 +215,12 @@ export class SessionCopilotController {
       },
       competingTypes: [],
     };
+    this.sessionTypeRefined = false;
+    this.sessionTypeRefining = false;
+    this.semanticClassification = null;
+    this.diagnosticResult = null;
+    this.diagnosticAnalyzing = false;
+    this.lastSessionSignals = {};
   }
 
   /** Effective minimum gap, widened when the user keeps dismissing. */
@@ -214,16 +238,64 @@ export class SessionCopilotController {
     return this.currentSessionTypeDetection;
   }
 
+  getSemanticClassification(): SemanticSessionClassification | null {
+    return this.semanticClassification;
+  }
+
+  isSessionTypeRefined(): boolean {
+    return this.sessionTypeRefined;
+  }
+
+  applySemanticClassification(classification: SemanticSessionClassification): void {
+    this.semanticClassification = classification;
+    this.sessionTypeRefined = true;
+    this.currentSessionTypeDetection = mergeSemanticIntoDetection(
+      this.currentSessionTypeDetection,
+      classification,
+    );
+    this.currentSessionType = classification.primaryType;
+  }
+
+  setSessionTypeRefining(refining: boolean): void {
+    this.sessionTypeRefining = refining;
+  }
+
+  getDiagnosticResult(): GlassCopilotDiagnosticResult | null {
+    return this.diagnosticResult;
+  }
+
+  setDiagnosticResult(result: GlassCopilotDiagnosticResult | null): void {
+    this.diagnosticResult = result;
+  }
+
+  setDiagnosticAnalyzing(analyzing: boolean): void {
+    this.diagnosticAnalyzing = analyzing;
+  }
+
+  sessionTypeRefineAvailable(): boolean {
+    return shouldOfferSemanticRefine({
+      setting: this.config.sessionType,
+      detection: this.currentSessionTypeDetection,
+      mode: this.config.mode,
+      alreadyRefined: this.sessionTypeRefined,
+      signals: this.lastSessionSignals,
+    });
+  }
+
   /** Restore previously persisted copilot data for a session. */
   hydrate(sessionId: string, data: {
     insights?: GlassCopilotInsight[];
     interventions?: GlassCopilotIntervention[];
     debrief?: GlassCopilotDebrief | null;
+    semanticSessionType?: SemanticSessionClassification | null;
   }): void {
     this.boundSessionId = sessionId;
     this.insights = data.insights ?? [];
     this.interventions = data.interventions ?? [];
     this.debrief = data.debrief ?? null;
+    if (data.semanticSessionType) {
+      this.applySemanticClassification(data.semanticSessionType);
+    }
   }
 
   private newEventsSince(events: GlassSessionEvent[]): GlassSessionEvent[] {
@@ -273,7 +345,19 @@ export class SessionCopilotController {
       transcript: input.transcript,
       recentCommands: input.recentCommands,
     });
+    if (this.semanticClassification) {
+      this.currentSessionTypeDetection = mergeSemanticIntoDetection(
+        this.currentSessionTypeDetection,
+        this.semanticClassification,
+      );
+    }
     this.currentSessionType = this.currentSessionTypeDetection.primaryType;
+    this.lastSessionSignals = {
+      appName: input.sourceApp,
+      windowTitle: input.sourceTitle,
+      transcript: input.transcript,
+      recentCommands: input.recentCommands,
+    };
 
     const newTranscript = input.transcript.slice(this.processedTranscriptLength);
     const newEvents = this.newEventsSince(input.session.events);
@@ -484,15 +568,29 @@ export class SessionCopilotController {
       debriefReady: this.debrief != null,
       consecutiveDismissals: this.consecutiveDismissals,
       listeningLimitReached: false,
+      sessionTypeRefineLabel: this.sessionTypeRefineAvailable()
+        ? formatSessionTypeRefineLabel(this.currentSessionTypeDetection)
+        : undefined,
+      sessionTypeRefineAvailable: this.sessionTypeRefineAvailable(),
+      sessionTypeRefining: this.sessionTypeRefining,
+      semanticSessionType: this.semanticClassification,
+      diagnosticResult: this.diagnosticResult,
+      diagnosticAnalyzing: this.diagnosticAnalyzing,
     };
   }
 
   /** Snapshot for persistence onto the session. */
-  sessionData(): { insights: GlassCopilotInsight[]; interventions: GlassCopilotIntervention[]; debrief: GlassCopilotDebrief | null } {
+  sessionData(): {
+    insights: GlassCopilotInsight[];
+    interventions: GlassCopilotIntervention[];
+    debrief: GlassCopilotDebrief | null;
+    semanticSessionType: SemanticSessionClassification | null;
+  } {
     return {
       insights: this.insights,
       interventions: this.interventions,
       debrief: this.debrief,
+      semanticSessionType: this.semanticClassification,
     };
   }
 }

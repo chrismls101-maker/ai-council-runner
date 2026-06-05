@@ -4,7 +4,7 @@
  *
  * Usage:
  *   node scripts/glass-validate-clean.mjs
- *   node scripts/glass-validate-clean.mjs --strict   # exit 1 if tree is dirty
+ *   node scripts/glass-validate-clean.mjs --strict   # exit 1 if tree is dirty + git guard
  */
 import { spawnSync } from "node:child_process";
 import path from "node:path";
@@ -44,6 +44,12 @@ if (dirty.length) {
   console.warn(`${msg} Continuing (use --strict to fail).`);
 } else {
   console.log("[glass-validate-clean] working tree is clean.");
+}
+
+if (strict) {
+  const guardArgs = ["scripts/glass-git-guard.mjs", "--working-tree", "--strict"];
+  const guardCode = run("node", guardArgs);
+  if (guardCode !== 0) process.exit(guardCode);
 }
 
 const steps = [

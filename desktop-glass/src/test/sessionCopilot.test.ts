@@ -962,8 +962,8 @@ test("dismissed diagnostics increase backoff gap", () => {
   });
   assert.ok(tick1.intervention);
   controller.resolveIntervention(tick1.intervention!.id, "dismiss");
-  const state = controller.runtimeState(true);
-  assert.equal(state.consecutiveDismissals, 1);
+  const runtime = controller.runtimeState(true);
+  assert.equal(runtime.consecutiveDismissals, 1);
 });
 
 test("diagnostic card includes extended action buttons", () => {

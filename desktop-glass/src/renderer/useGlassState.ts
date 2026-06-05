@@ -69,6 +69,11 @@ const fallbackState: GlassState = {
     debriefReady: false,
     consecutiveDismissals: 0,
     listeningLimitReached: false,
+    sessionTypeRefineAvailable: false,
+    sessionTypeRefining: false,
+    semanticSessionType: null,
+    diagnosticResult: null,
+    diagnosticAnalyzing: false,
   },
 };
 
