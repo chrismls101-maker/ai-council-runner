@@ -116,6 +116,18 @@ import { listeningCostWarningMessage } from "../shared/audioChunks.ts";
 import { MIC_PAUSED_AUTO_MESSAGE } from "../shared/commandBarMic.ts";
 import { SessionCopilotController } from "../shared/copilotController.ts";
 import {
+  buildDeterministicDiagnosticFallback,
+  buildDiagnosticAnalysisPrompt,
+  parseDiagnosticAnalysisResponse,
+} from "../shared/copilotDiagnosticAnalysis.ts";
+import {
+  buildSemanticSessionTypePrompt,
+  canSemanticRefineOnDebrief,
+  parseSemanticSessionTypeResponse,
+} from "../shared/copilotSessionSemantic.ts";
+import { SESSION_TYPE_LABELS } from "../shared/copilotSessionType.ts";
+import type { CopilotResolution } from "../shared/copilotController.ts";
+import {
   copilotModeIsActive,
   type GlassCopilotConfig,
   type GlassCopilotMode,
@@ -2276,7 +2288,166 @@ function persistCopilotConfig(config: GlassCopilotConfig): void {
 }
 
 /** Build a deterministic debrief, optionally enriched by a direct (non-Council) AI pass. */
+async function maybeSemanticRefineForDebrief(): Promise<void> {
+  if (copilot.isSessionTypeRefined()) return;
+  const windowCtx = getCachedWindowContext();
+  const signals = {
+    appName: windowCtx.appName,
+    windowTitle: windowCtx.windowTitle,
+    transcript: state.transcript,
+    recentCommands: copilotRecentCommands,
+  };
+  if (
+    !canSemanticRefineOnDebrief({
+      setting: copilot.getConfig().sessionType,
+      detection: copilot.getSessionTypeDetection(),
+      alreadyRefined: copilot.isSessionTypeRefined(),
+      signals,
+    })
+  ) {
+    return;
+  }
+  await refineSessionTypeSemantic();
+}
+
+async function refineSessionTypeSemantic(): Promise<void> {
+  if (!sessionIsLive()) return;
+  const windowCtx = getCachedWindowContext();
+  const signals = {
+    appName: windowCtx.appName,
+    windowTitle: windowCtx.windowTitle,
+    transcript: state.transcript,
+    recentCommands: copilotRecentCommands,
+  };
+  const detection = copilot.getSessionTypeDetection();
+  copilot.setSessionTypeRefining(true);
+  push();
+  try {
+    if (process.env.IIVO_GLASS_E2E === "1") {
+      state.lastNotice = "Session type refine skipped in E2E.";
+      return;
+    }
+    const prompt = buildSemanticSessionTypePrompt(signals, detection);
+    const response = await askIivoGlass(config, {
+      prompt,
+      session: buildGlassAskSessionPayload(),
+      responseStyle: "overlay",
+    });
+    const parsed = parseSemanticSessionTypeResponse(response.answer);
+    if (parsed) {
+      copilot.applySemanticClassification(parsed);
+      state.lastNotice = `Session type refined: ${SESSION_TYPE_LABELS[parsed.primaryType]}.`;
+    } else {
+      state.lastNotice = "Could not refine session type — keeping auto detection.";
+    }
+  } catch {
+    state.lastNotice = "Session type refine unavailable — keeping auto detection.";
+  } finally {
+    copilot.setSessionTypeRefining(false);
+    syncCopilotToSession();
+    await persistSessions(sessions);
+    push();
+  }
+}
+
+async function runCopilotDiagnosis(resolution: CopilotResolution): Promise<void> {
+  const packet = resolution.intervention?.diagnosticPacket;
+  if (!packet) {
+    state.lastNotice = "No diagnostic context available.";
+    return;
+  }
+  const idFactory = () => {
+    try {
+      if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
+    } catch {
+      /* ignore */
+    }
+    return `diag-${Date.now()}`;
+  };
+  const id = idFactory();
+  const createdAt = new Date().toISOString();
+  const windowCtx = getCachedWindowContext();
+  const analysisContext = {
+    transcript: state.transcript,
+    recentCommands: [...copilotRecentCommands],
+    recentResponses: [...copilotRecentResponses],
+    sourceApp: windowCtx.appName,
+    sourceTitle: windowCtx.windowTitle,
+  };
+
+  copilot.setDiagnosticAnalyzing(true);
+  push();
+
+  let result;
+  try {
+    if (process.env.IIVO_GLASS_E2E === "1") {
+      result = buildDeterministicDiagnosticFallback(packet, id, createdAt);
+    } else {
+      const prompt = buildDiagnosticAnalysisPrompt(packet, analysisContext);
+      let latestScreenshotPayload: import("../shared/glassAskTypes.ts").GlassAskLatestScreenshot | undefined;
+      try {
+        const captureOutcome = await resolveScreenshotForVisualAsk({
+          config,
+          glassSettings: state.glassSettings,
+          sessions,
+          sessionIsLive,
+          latestScreenshot: state.latestScreenshot,
+          pendingCaptureDataUrl: state.pendingCaptureDataUrl,
+          resolveCaptureTarget: () => resolveCaptureDisplay(state.glassSettings.displayTarget),
+          eventContextFields,
+          prompt,
+        });
+        if (captureOutcome.ok) {
+          latestScreenshotPayload = captureOutcome.payload;
+          state.latestScreenshot = captureOutcome.latestState;
+        }
+      } catch {
+        /* screenshot optional */
+      }
+      const response = await askIivoGlass(config, {
+        prompt,
+        session: buildGlassAskSessionPayload(),
+        latestScreenshot: latestScreenshotPayload,
+        visualIntent: true,
+        responseStyle: "overlay",
+      });
+      result = parseDiagnosticAnalysisResponse(response.answer, id, createdAt);
+    }
+  } catch {
+    result = buildDeterministicDiagnosticFallback(packet, id, createdAt);
+  }
+
+  copilot.setDiagnosticResult(result);
+  copilot.setDiagnosticAnalyzing(false);
+
+  if (sessionIsLive()) {
+    sessions.addEvent({
+      kind: "copilot_diagnostic_result",
+      title: result.rootCauseSummary,
+      text: result.fullMarkdown,
+      ...eventContextFields(),
+      metadata: {
+        diagnosticId: result.id,
+        aiEnhanced: result.aiEnhanced,
+        probableRootCause: result.probableRootCause,
+      },
+    });
+    pushFeed(
+      createCommandFeedItem("response", result.rootCauseSummary, {
+        title: "Diagnostic result",
+        fullBody: result.fullMarkdown,
+      }),
+    );
+  }
+  syncCopilotToSession();
+  await persistSessions(sessions);
+  state.lastNotice = result.aiEnhanced ? "Diagnostic complete." : "Diagnostic summary (offline fallback).";
+  push();
+}
+
+/** Build a deterministic debrief, optionally enriched by a direct (non-Council) AI pass. */
 async function generateCopilotDebrief(): Promise<void> {
+  await maybeSemanticRefineForDebrief();
   const session = sessions.current();
   if (!session) {
     state.lastNotice = "No session to debrief.";
@@ -2292,6 +2463,7 @@ async function generateCopilotDebrief(): Promise<void> {
   };
   const debriefOptions = {
     sessionType: copilot.getSessionType(),
+    sessionTypeDetection: copilot.getSessionTypeDetection(),
     reportStyle: copilot.getConfig().reportStyle,
   };
   const debrief = buildSessionDebrief(
@@ -2432,6 +2604,39 @@ async function handleCopilotCommand(command: GlassCommand): Promise<boolean> {
     case "copilot-listening-limit-stop":
       await stopListeningFromLimit("user");
       return true;
+    case "copilot-refine-session-type":
+      await refineSessionTypeSemantic();
+      return true;
+    case "copilot-dismiss-diagnostic-result":
+      copilot.setDiagnosticResult(null);
+      syncCopilotToSession();
+      push();
+      return true;
+    case "copilot-open-diagnostic-in-iivo": {
+      const diagnostic = copilot.getDiagnosticResult();
+      if (diagnostic) {
+        await sendSessionText("IIVO Glass Diagnostic", diagnostic.fullMarkdown);
+      }
+      return true;
+    }
+    case "copilot-save-diagnostic-result": {
+      const diagnostic = copilot.getDiagnosticResult();
+      if (diagnostic) {
+        moments.add({ kind: "note", note: diagnostic.fullMarkdown });
+        await persistMoments(moments);
+        if (sessionIsLive()) {
+          sessions.addEvent({
+            kind: "saved_moment",
+            title: "Saved diagnostic",
+            text: diagnostic.rootCauseSummary,
+          });
+        }
+        state.lastNotice = "Saved diagnostic to moments.";
+        await persistSessions(sessions);
+        push();
+      }
+      return true;
+    }
     default:
       return false;
   }
@@ -2484,8 +2689,7 @@ async function applyCopilotEffect(
       }
       break;
     case "diagnose":
-      // Direct visual ask / direct AI diagnosis using current context (user-approved).
-      void submitCommand("What's going wrong on my screen? Diagnose the error I'm seeing.");
+      await runCopilotDiagnosis(resolution);
       break;
     case "summarize-blocker":
       void submitCommand("Summarize what's blocking me right now and the main friction.");

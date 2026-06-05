@@ -13,6 +13,9 @@ import type {
   GlassCopilotSessionType,
   GlassCopilotSessionTypeSetting,
 } from "./copilotSessionType.ts";
+import type { DiagnosticPacket } from "./copilotDiagnostic.ts";
+import type { GlassCopilotDiagnosticResult } from "./copilotDiagnosticAnalysis.ts";
+import type { SemanticSessionClassification } from "./copilotSessionSemantic.ts";
 
 export type GlassCopilotMode = "off" | "passive" | "coaching" | "diagnostic";
 
@@ -99,6 +102,8 @@ export interface GlassCopilotIntervention {
   createdAt: string;
   resolvedAt?: string;
   resolvedAction?: GlassCopilotCardAction;
+  /** Structured pattern summary for user-approved diagnosis. */
+  diagnosticPacket?: DiagnosticPacket;
 }
 
 export interface GlassCopilotConfig {
@@ -144,6 +149,7 @@ export interface GlassCopilotSessionData {
   insights: GlassCopilotInsight[];
   interventions: GlassCopilotIntervention[];
   debrief?: GlassCopilotDebrief | null;
+  semanticSessionType?: SemanticSessionClassification | null;
 }
 
 /** Offer shown when the user starts system audio in a live session. */
@@ -175,6 +181,14 @@ export interface GlassCopilotRuntimeState {
   consecutiveDismissals: number;
   /** True when max listening duration was reached and the overlay card is showing. */
   listeningLimitReached: boolean;
+  /** UI label when semantic refine is available, e.g. "Auto-detected as Research + Strategy. Refine?" */
+  sessionTypeRefineLabel?: string;
+  /** True when user may request optional semantic session-type refine. */
+  sessionTypeRefineAvailable?: boolean;
+  sessionTypeRefining?: boolean;
+  semanticSessionType?: SemanticSessionClassification | null;
+  diagnosticResult?: GlassCopilotDiagnosticResult | null;
+  diagnosticAnalyzing?: boolean;
 }
 
 export const COPILOT_INTERVAL_OPTIONS = [60, 90, 120] as const;

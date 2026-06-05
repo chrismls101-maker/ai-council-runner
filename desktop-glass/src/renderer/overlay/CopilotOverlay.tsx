@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { send } from "../useGlassState.ts";
 import type { GlassState } from "../../shared/ipc.ts";
 import type {
   GlassCopilotCardButton,
   GlassCopilotIntervention,
 } from "../../shared/copilotTypes.ts";
+import type { GlassCopilotDiagnosticResult } from "../../shared/copilotDiagnosticAnalysis.ts";
 
 /**
  * Session Copilot overlay — small, non-blocking interaction cards.
@@ -26,9 +28,19 @@ export function CopilotOverlay({
   const showListeningLimit = copilot.listeningLimitReached;
   const showSilence = copilot.systemAudioSilenceWarning;
   const debrief = copilot.debrief ?? null;
+  const diagnosticResult = copilot.diagnosticResult ?? null;
+  const diagnosticAnalyzing = copilot.diagnosticAnalyzing ?? false;
   const interventions = copilot.pendingInterventions;
 
-  if (!showOffer && !showListeningLimit && !showSilence && !debrief && interventions.length === 0) {
+  if (
+    !showOffer &&
+    !showListeningLimit &&
+    !showSilence &&
+    !debrief &&
+    !diagnosticResult &&
+    !diagnosticAnalyzing &&
+    interventions.length === 0
+  ) {
     return null;
   }
 
@@ -145,10 +157,67 @@ export function CopilotOverlay({
         </article>
       ) : null}
 
+      {diagnosticAnalyzing ? (
+        <article className="overlay-copilot-card" data-testid="glass-copilot-diagnostic-loading">
+          <div className="overlay-copilot-card__eyebrow">Diagnostic</div>
+          <div className="overlay-copilot-card__title">Analyzing the issue…</div>
+          <p className="overlay-copilot-card__body">Direct AI diagnosis in progress (not Council).</p>
+        </article>
+      ) : null}
+
+      {diagnosticResult ? (
+        <DiagnosticResultCard result={diagnosticResult} />
+      ) : null}
+
       {interventions.map((iv) => (
         <CopilotInterventionCard key={iv.id} intervention={iv} />
       ))}
     </div>
+  );
+}
+
+function DiagnosticResultCard({ result }: { result: GlassCopilotDiagnosticResult }): JSX.Element {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <article className="overlay-copilot-card" data-testid="glass-copilot-diagnostic-result">
+      <div className="overlay-copilot-card__eyebrow">Diagnostic</div>
+      <div className="overlay-copilot-card__title">{result.rootCauseSummary}</div>
+      {expanded ? (
+        <pre className="overlay-copilot-card__debrief-body">{result.fullMarkdown}</pre>
+      ) : (
+        <p className="overlay-copilot-card__body">{result.probableRootCause}</p>
+      )}
+      <div className="overlay-copilot-card__actions">
+        <button
+          type="button"
+          className="gbtn gbtn--ghost"
+          onClick={() => setExpanded((v) => !v)}
+        >
+          {expanded ? "Hide details" : "View details"}
+        </button>
+        <button
+          type="button"
+          className="gbtn"
+          onClick={() => send({ type: "copilot-save-diagnostic-result" })}
+        >
+          Save
+        </button>
+        <button
+          type="button"
+          className="gbtn gbtn--primary"
+          onClick={() => send({ type: "copilot-open-diagnostic-in-iivo" })}
+        >
+          Open in IIVO
+        </button>
+        <button
+          type="button"
+          className="gbtn gbtn--ghost"
+          onClick={() => send({ type: "copilot-dismiss-diagnostic-result" })}
+        >
+          Dismiss
+        </button>
+      </div>
+    </article>
   );
 }
 

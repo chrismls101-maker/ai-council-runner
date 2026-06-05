@@ -22,7 +22,7 @@ import {
   extractCopilotInsights,
   hasNewCopilotContext,
 } from "../shared/copilotEngine.ts";
-import { detectStuckSignal, isLikelyDiagnosticSpam } from "../shared/copilotDiagnostic.ts";
+import { detectStuckSignal, isLikelyDiagnosticSpam, buildDiagnosticPacket } from "../shared/copilotDiagnostic.ts";
 import { detectDebriefTrigger, buildSessionDebrief } from "../shared/copilotDebrief.ts";
 import {
   buildInterventionForInsight,
@@ -841,14 +841,6 @@ test("session type detects student, founder, sales, creator, and developer workf
   );
 });
 
-test("mixed close scores fall back to general_workflow", () => {
-  const result = detectSessionTypeDetailed({
-    transcript: "agenda for the meeting and refactor the deploy script",
-  });
-  assert.equal(result.type, "general_workflow");
-  assert.equal(result.mixed, true);
-});
-
 test("research workflow detected for comparison and sources", () => {
   assert.equal(
     detectSessionType({
@@ -857,6 +849,138 @@ test("research workflow detected for comparison and sources", () => {
     }),
     "research",
   );
+});
+
+test("mixed close scores expose primary and secondary types", () => {
+  const result = detectSessionTypeDetailed({
+    transcript: "agenda for the meeting and refactor the deploy script",
+  });
+  assert.equal(result.mixed, true);
+  assert.ok(result.primaryType === "meeting_call" || result.primaryType === "coding_building");
+  assert.ok(result.secondaryType);
+  assert.ok(result.competingTypes.length >= 2);
+  assert.ok(result.confidence > 0 && result.confidence <= 1);
+});
+
+test("mixed session debrief adds cross-cutting section", () => {
+  const session = makeSession([transcriptEvent("e1", "meeting and deploy discussion")]);
+  const detection = detectSessionTypeDetailed({
+    transcript: "agenda for the meeting and refactor the deploy script",
+  });
+  assert.equal(detection.mixed, true);
+  const debrief = buildSessionDebrief(
+    session,
+    [],
+    { idFactory: () => "d1", clock: () => "2026-01-01T00:00:00.000Z" },
+    { sessionType: detection.primaryType, sessionTypeDetection: detection },
+  );
+  const headings = debrief.sections.map((s) => s.heading);
+  assert.ok(headings.includes("Session blend"));
+  assert.ok(headings.some((h) => h.includes("Cross-cutting") || h.includes("Apply") || h.includes("Findings")));
+});
+
+test("founder strategy and executive review signals detected", () => {
+  const founder = detectSessionTypeDetailed({
+    transcript: "our go-to-market strategy pricing roadmap and investor update",
+  });
+  assert.equal(founder.primaryType, "business_strategy");
+  assert.ok(founder.confidence > 0);
+
+  const exec = detectSessionTypeDetailed({
+    appName: "Google Sheets",
+    transcript: "quarterly review dashboard kpi okr board deck priorities",
+  });
+  assert.equal(exec.primaryType, "business_strategy");
+});
+
+test("creator content planning detected without Cursor overfit", () => {
+  const result = detectSessionType({
+    appName: "Notion",
+    transcript: "content calendar thumbnail script draft for the next episode",
+  });
+  assert.notEqual(result, "coding_building");
+  assert.ok(result === "business_strategy" || result === "video_learning");
+});
+
+test("diagnostic packet builds structured handoff fields", () => {
+  const input = {
+    events: [
+      transcriptEvent("e1", "Error: permission denied for microphone"),
+      transcriptEvent("e2", "Toggled permission but still failing"),
+    ],
+    recentCommands: ["why is mic permission still denied"],
+    sourceApp: "IIVO Glass",
+  };
+  const signal = detectStuckSignal(input);
+  const packet = buildDiagnosticPacket(input, signal);
+  assert.ok(packet);
+  assert.ok(packet!.observedSymptoms.length >= 1);
+  assert.equal(packet!.likelyCategory, "setup_loop");
+  assert.ok(packet!.suggestedQuestion.length > 10);
+  assert.ok(packet!.timeline.length >= 1);
+});
+
+test("diagnose action returns direct prompt only after approval", () => {
+  const deps = deterministicDeps();
+  const controller = new SessionCopilotController(deps, config({ mode: "diagnostic" }));
+  const tick = controller.tick({
+    sessionLive: true,
+    session: makeSession([]),
+    transcript: "",
+    recentCommands: [
+      "why is this not opening",
+      "why is this not opening",
+      "why is this not opening",
+    ],
+    recentResponses: [],
+    systemAudioActive: false,
+  });
+  assert.ok(tick.intervention);
+  assert.equal(tick.intervention!.kind, "diagnose");
+  assert.equal(tick.intervention!.title, "I see a repeated issue. Diagnose it?");
+  assert.ok(tick.intervention!.diagnosticPacket);
+  const resolution = controller.resolveIntervention(tick.intervention!.id, "diagnose");
+  assert.equal(resolution.effect, "diagnose");
+  assert.ok(resolution.diagnosticPrompt?.includes("root-cause"));
+  assert.ok(resolution.diagnosticPrompt?.includes("Do not invoke Council"));
+});
+
+test("dismissed diagnostics increase backoff gap", () => {
+  const deps = deterministicDeps(0);
+  const controller = new SessionCopilotController(deps, config({ mode: "diagnostic" }));
+  const session = makeSession([
+    transcriptEvent("e1", "Error: failed"),
+    transcriptEvent("e2", "Error: failed again"),
+  ]);
+  const tick1 = controller.tick({
+    sessionLive: true,
+    session,
+    transcript: "",
+    recentCommands: ["why error", "why error"],
+    recentResponses: [],
+    systemAudioActive: false,
+  });
+  assert.ok(tick1.intervention);
+  controller.resolveIntervention(tick1.intervention!.id, "dismiss");
+  const runtime = controller.runtimeState(true);
+  assert.equal(runtime.consecutiveDismissals, 1);
+});
+
+test("diagnostic card includes extended action buttons", () => {
+  const card = buildDiagnoseOfferIntervention("test", { idFactory: () => "id-1", clock: () => new Date().toISOString() });
+  assert.equal(card.title, "I see a repeated issue. Diagnose it?");
+  const actions = card.buttons.map((b) => b.action);
+  assert.ok(actions.includes("summarize-blocker"));
+  assert.ok(actions.includes("create-fix-plan"));
+  assert.ok(actions.includes("save-issue"));
+});
+
+test("panel stays compact: CopilotConfigure has no full insight list", () => {
+  const source = readFileSync(join(SRC, "renderer", "panel", "CopilotConfigure.tsx"), "utf8");
+  // The panel shows a count + status, never iterates the insight history.
+  assert.ok(!source.includes(".insights.map"), "panel must not render the full insight list");
+  assert.ok(source.includes("Session type"), "panel exposes session type selector");
+  assert.ok(source.includes("Report style"), "panel exposes report style selector");
 });
 
 // --- diagnostic depth ----------------------------------------------------
@@ -904,18 +1028,4 @@ test("normal repeated neutral topic is not diagnostic spam candidate", () => {
   );
 });
 
-test("diagnostic card includes extended action buttons", () => {
-  const card = buildDiagnoseOfferIntervention("test", { idFactory: () => "id-1", clock: () => new Date().toISOString() });
-  const actions = card.buttons.map((b) => b.action);
-  assert.ok(actions.includes("summarize-blocker"));
-  assert.ok(actions.includes("create-fix-plan"));
-  assert.ok(actions.includes("save-issue"));
-});
-
-test("panel stays compact: CopilotConfigure has no full insight list", () => {
-  const source = readFileSync(join(SRC, "renderer", "panel", "CopilotConfigure.tsx"), "utf8");
-  // The panel shows a count + status, never iterates the insight history.
-  assert.ok(!source.includes(".insights.map"), "panel must not render the full insight list");
-  assert.ok(source.includes("Session type"), "panel exposes session type selector");
-  assert.ok(source.includes("Report style"), "panel exposes report style selector");
-});
+// --- end diagnostic depth ---
