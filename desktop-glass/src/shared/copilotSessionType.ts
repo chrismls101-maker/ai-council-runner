@@ -51,12 +51,20 @@ export interface SessionTypeSignals {
 }
 
 export interface SessionTypeDetectionResult {
+  /** Primary resolved type (used for debrief steering). */
   type: GlassCopilotSessionType;
+  primaryType: GlassCopilotSessionType;
+  secondaryType?: GlassCopilotSessionType;
   /** Winning score (0 when general fallback). */
   score: number;
-  /** True when top two types are close — prefer general fallback. */
+  secondaryScore?: number;
+  /** Normalized confidence 0..1 from score gap and magnitude. */
+  confidence: number;
+  /** True when top two types are close — both are exposed. */
   mixed: boolean;
   scores: Record<GlassCopilotSessionType, number>;
+  /** Top competing types sorted by score (excluding general_workflow). */
+  competingTypes: { type: GlassCopilotSessionType; score: number }[];
 }
 
 const APP_HINTS: { type: GlassCopilotSessionType; apps: string[] }[] = [
@@ -88,11 +96,15 @@ const APP_HINTS: { type: GlassCopilotSessionType; apps: string[] }[] = [
   },
   {
     type: "video_learning",
-    apps: ["youtube", "vimeo", "udemy", "coursera", "podcasts", "spotify", "quicktime player"],
+    apps: ["youtube", "vimeo", "udemy", "coursera", "podcasts", "spotify", "quicktime player", "descript", "capcut"],
+  },
+  {
+    type: "business_strategy",
+    apps: ["figma", "miro", "notion", "airtable", "linear", "tableau", "looker", "google sheets", "excel"],
   },
   {
     type: "research",
-    apps: ["perplexity", "arxiv", "notion", "obsidian", "zotero", "mendeley"],
+    apps: ["perplexity", "arxiv", "obsidian", "zotero", "mendeley"],
   },
   {
     type: "sales_review",
@@ -184,6 +196,9 @@ const KEYWORD_HINTS: { type: GlassCopilotSessionType; words: string[] }[] = [
       "lecture",
       "lesson",
       "podcast",
+      "content outline",
+      "thumbnail",
+      "script draft",
     ],
   },
   {
@@ -226,6 +241,15 @@ const KEYWORD_HINTS: { type: GlassCopilotSessionType; words: string[] }[] = [
       "product vision",
       "executive",
       "priorities",
+      "dashboard",
+      "kpi",
+      "okr",
+      "board deck",
+      "quarterly review",
+      "founder",
+      "content plan",
+      "content calendar",
+      "audience growth",
     ],
   },
   {
@@ -330,28 +354,49 @@ export function detectSessionTypeDetailed(signals: SessionTypeSignals): SessionT
     .filter(([type]) => type !== "general_workflow")
     .sort((a, b) => b[1] - a[1]);
 
+  const competingTypes = ranked
+    .filter(([, s]) => s > 0)
+    .slice(0, 3)
+    .map(([type, score]) => ({ type, score }));
+
   const [bestType, bestScore] = ranked[0] ?? ["general_workflow", 0];
-  const secondScore = ranked[1]?.[1] ?? 0;
+  const [secondType, secondScore] = ranked[1] ?? [undefined, 0];
   const mixed = bestScore > 0 && secondScore > 0 && bestScore - secondScore <= 1;
 
-  if (bestScore <= 0 || mixed) {
+  if (bestScore <= 0) {
     return {
       type: "general_workflow",
+      primaryType: "general_workflow",
       score: 0,
-      mixed: mixed && bestScore > 0,
+      confidence: 0,
+      mixed: false,
       scores,
+      competingTypes,
     };
   }
 
+  const gap = Math.max(0, bestScore - secondScore);
+  const confidence = mixed
+    ? Math.min(0.55, bestScore / (bestScore + secondScore + 1))
+    : Math.min(1, 0.4 + gap * 0.15 + bestScore * 0.05);
+
+  const primaryType = bestType;
+  const secondaryType = mixed && secondType ? secondType : undefined;
+
   return {
-    type: bestType,
+    type: primaryType,
+    primaryType,
+    secondaryType,
     score: bestScore,
-    mixed: false,
+    secondaryScore: mixed ? secondScore : undefined,
+    confidence,
+    mixed,
     scores,
+    competingTypes,
   };
 }
 
-/** Deterministically detect the session type from signals. */
+/** Deterministically detect the session type from signals (primary when mixed). */
 export function detectSessionType(signals: SessionTypeSignals): GlassCopilotSessionType {
   return detectSessionTypeDetailed(signals).type;
 }
@@ -362,5 +407,24 @@ export function resolveSessionType(
   signals: SessionTypeSignals,
 ): GlassCopilotSessionType {
   if (setting && setting !== "auto") return setting;
-  return detectSessionType(signals);
+  return detectSessionTypeDetailed(signals).primaryType;
+}
+
+/** Full detection result for debrief / UI (respects pinned setting). */
+export function resolveSessionTypeDetailed(
+  setting: GlassCopilotSessionTypeSetting,
+  signals: SessionTypeSignals,
+): SessionTypeDetectionResult {
+  if (setting && setting !== "auto") {
+    return {
+      type: setting,
+      primaryType: setting,
+      score: 1,
+      confidence: 1,
+      mixed: false,
+      scores: { ...emptyScores(), [setting]: 1 },
+      competingTypes: [{ type: setting, score: 1 }],
+    };
+  }
+  return detectSessionTypeDetailed(signals);
 }

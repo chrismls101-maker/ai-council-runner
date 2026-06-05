@@ -21,6 +21,7 @@ import {
   type GlassCopilotInterventionKind,
 } from "./copilotTypes.ts";
 import type { DiagnosticCategory } from "./copilotDiagnostic.ts";
+import type { DiagnosticPacket } from "./copilotDiagnostic.ts";
 import type { GlassCopilotSessionType } from "./copilotSessionType.ts";
 import { isDuplicateText } from "./sessionIntelligence.ts";
 
@@ -251,12 +252,14 @@ export function buildDiagnoseOfferIntervention(
   reason: string,
   deps: { idFactory: () => string; clock: () => string },
   _category?: DiagnosticCategory,
+  diagnosticPacket?: DiagnosticPacket,
 ): GlassCopilotIntervention {
   return {
     id: deps.idFactory(),
     kind: "diagnose",
-    title: "Want me to diagnose what's going wrong?",
+    title: "I see a repeated issue. Diagnose it?",
     body: reason,
+    diagnosticPacket,
     buttons: [
       { action: "diagnose", label: "Diagnose", primary: true },
       { action: "summarize-blocker", label: "Summarize blocker" },

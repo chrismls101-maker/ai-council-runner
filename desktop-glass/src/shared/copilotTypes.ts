@@ -13,6 +13,7 @@ import type {
   GlassCopilotSessionType,
   GlassCopilotSessionTypeSetting,
 } from "./copilotSessionType.ts";
+import type { DiagnosticPacket } from "./copilotDiagnostic.ts";
 
 export type GlassCopilotMode = "off" | "passive" | "coaching" | "diagnostic";
 
@@ -99,6 +100,8 @@ export interface GlassCopilotIntervention {
   createdAt: string;
   resolvedAt?: string;
   resolvedAction?: GlassCopilotCardAction;
+  /** Structured pattern summary for user-approved diagnosis. */
+  diagnosticPacket?: DiagnosticPacket;
 }
 
 export interface GlassCopilotConfig {

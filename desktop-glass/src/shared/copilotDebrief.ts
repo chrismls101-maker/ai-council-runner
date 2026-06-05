@@ -16,10 +16,12 @@ import {
   type GlassCopilotInsightType,
   type GlassCopilotReportStyle,
 } from "./copilotTypes.ts";
-import type { GlassCopilotSessionType } from "./copilotSessionType.ts";
+import type { GlassCopilotSessionType, SessionTypeDetectionResult } from "./copilotSessionType.ts";
+import { SESSION_TYPE_LABELS } from "./copilotSessionType.ts";
 
 export interface DebriefOptions {
   sessionType?: GlassCopilotSessionType;
+  sessionTypeDetection?: SessionTypeDetectionResult;
   reportStyle?: GlassCopilotReportStyle;
 }
 
@@ -214,6 +216,80 @@ function sectionsForType(
   }
 }
 
+type MixedPair = `${GlassCopilotSessionType}+${GlassCopilotSessionType}`;
+
+function mixedCrossSection(
+  primary: GlassCopilotSessionType,
+  secondary: GlassCopilotSessionType,
+  insights: GlassCopilotInsight[],
+  cap: number,
+): GlassCopilotDebriefSection {
+  const pairKey = `${primary}+${secondary}` as MixedPair;
+  const actions = dedupeStrings(byType(insights, "action"), cap);
+  const keyIdeas = dedupeStrings(byType(insights, "key_idea"), cap);
+  const opportunities = dedupeStrings(byType(insights, "opportunity"), cap);
+
+  const PAIR_SECTIONS: Partial<Record<MixedPair, GlassCopilotDebriefSection>> = {
+    "video_learning+coding_building": {
+      heading: "Apply what you learned",
+      items: actions.length ? actions : opportunities,
+    },
+    "coding_building+video_learning": {
+      heading: "Apply what you learned",
+      items: actions.length ? actions : opportunities,
+    },
+    "research+business_strategy": {
+      heading: "Findings → decisions",
+      items: keyIdeas.length ? keyIdeas : recommendedNextSteps(insights),
+    },
+    "business_strategy+research": {
+      heading: "Findings → decisions",
+      items: keyIdeas.length ? keyIdeas : recommendedNextSteps(insights),
+    },
+    "meeting_call+sales_review": {
+      heading: "Follow-ups & pipeline",
+      items: actions.concat(opportunities).slice(0, cap),
+    },
+    "sales_review+meeting_call": {
+      heading: "Follow-ups & pipeline",
+      items: actions.concat(opportunities).slice(0, cap),
+    },
+  };
+
+  return (
+    PAIR_SECTIONS[pairKey] ?? {
+      heading: "Cross-cutting themes",
+      items: dedupeStrings(
+        [
+          `Working across ${SESSION_TYPE_LABELS[primary]} and ${SESSION_TYPE_LABELS[secondary]}.`,
+          ...keyIdeas,
+          ...actions,
+        ],
+        cap,
+      ),
+    }
+  );
+}
+
+function sectionsForMixed(
+  detection: SessionTypeDetectionResult,
+  session: GlassSession,
+  insights: GlassCopilotInsight[],
+  cap: number,
+): GlassCopilotDebriefSection[] {
+  const primary = detection.primaryType;
+  const secondary = detection.secondaryType ?? "general_workflow";
+  const primarySections = sectionsForType(primary, session, insights, cap);
+  const cross = mixedCrossSection(primary, secondary, insights, cap);
+  const lead: GlassCopilotDebriefSection = {
+    heading: "Session blend",
+    items: [
+      `Mixed session: ${SESSION_TYPE_LABELS[primary]} + ${SESSION_TYPE_LABELS[secondary]}.`,
+    ],
+  };
+  return [lead, ...primarySections, cross];
+}
+
 /** Build the structured debrief deterministically, tailored to session type. */
 export function buildSessionDebrief(
   session: GlassSession,
@@ -222,10 +298,14 @@ export function buildSessionDebrief(
   options: DebriefOptions = {},
 ): GlassCopilotDebrief {
   const sessionType = options.sessionType ?? "general_workflow";
+  const detection = options.sessionTypeDetection;
   const reportStyle = options.reportStyle ?? "concise";
   const cap = reportStyle === "detailed" ? 10 : 4;
 
-  let sections = sectionsForType(sessionType, session, insights, cap);
+  let sections =
+    detection?.mixed && detection.secondaryType
+      ? sectionsForMixed(detection, session, insights, cap)
+      : sectionsForType(sessionType, session, insights, cap);
   // Concise reports drop empty sections (except the lead "what happened").
   if (reportStyle === "concise") {
     sections = sections.filter((section, index) => index === 0 || section.items.length > 0);

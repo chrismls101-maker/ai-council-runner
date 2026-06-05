@@ -27,10 +27,11 @@ import {
   buildInterventionForInsight,
   pickInterventionInsight,
 } from "./copilotInterruption.ts";
-import { detectStuckSignal, isLikelyDiagnosticSpam } from "./copilotDiagnostic.ts";
+import { detectStuckSignal, isLikelyDiagnosticSpam, buildDiagnosticPacket, buildDiagnosticPrompt } from "./copilotDiagnostic.ts";
 import {
-  resolveSessionType,
+  resolveSessionTypeDetailed,
   type GlassCopilotSessionType,
+  type SessionTypeDetectionResult,
 } from "./copilotSessionType.ts";
 
 const MAX_RECENT_SHOWN = 12;
@@ -84,6 +85,8 @@ export interface CopilotResolution {
   intervention: GlassCopilotIntervention | null;
   insight: GlassCopilotInsight | null;
   effect: CopilotEffect;
+  /** Direct-AI prompt when user approves diagnosis (never auto-sent). */
+  diagnosticPrompt?: string;
 }
 
 export class SessionCopilotController {
@@ -104,6 +107,24 @@ export class SessionCopilotController {
   private boundSessionId: string | null = null;
   private consecutiveDismissals = 0;
   private currentSessionType: GlassCopilotSessionType = "general_workflow";
+  private currentSessionTypeDetection: SessionTypeDetectionResult = {
+    type: "general_workflow",
+    primaryType: "general_workflow",
+    score: 0,
+    confidence: 0,
+    mixed: false,
+    scores: {
+      video_learning: 0,
+      meeting_call: 0,
+      research: 0,
+      coding_building: 0,
+      business_strategy: 0,
+      sales_review: 0,
+      studying: 0,
+      general_workflow: 0,
+    },
+    competingTypes: [],
+  };
 
   constructor(deps: CopilotControllerDeps, config: GlassCopilotConfig = DEFAULT_COPILOT_CONFIG) {
     this.deps = deps;
@@ -158,6 +179,24 @@ export class SessionCopilotController {
     this.systemAudioSilenceWarning = false;
     this.consecutiveDismissals = 0;
     this.currentSessionType = "general_workflow";
+    this.currentSessionTypeDetection = {
+      type: "general_workflow",
+      primaryType: "general_workflow",
+      score: 0,
+      confidence: 0,
+      mixed: false,
+      scores: {
+        video_learning: 0,
+        meeting_call: 0,
+        research: 0,
+        coding_building: 0,
+        business_strategy: 0,
+        sales_review: 0,
+        studying: 0,
+        general_workflow: 0,
+      },
+      competingTypes: [],
+    };
   }
 
   /** Effective minimum gap, widened when the user keeps dismissing. */
@@ -169,6 +208,10 @@ export class SessionCopilotController {
 
   getSessionType(): GlassCopilotSessionType {
     return this.currentSessionType;
+  }
+
+  getSessionTypeDetection(): SessionTypeDetectionResult {
+    return this.currentSessionTypeDetection;
   }
 
   /** Restore previously persisted copilot data for a session. */
@@ -224,12 +267,13 @@ export class SessionCopilotController {
 
     this.systemAudioSilenceWarning = this.silenceWarningActive(input);
 
-    this.currentSessionType = resolveSessionType(this.config.sessionType, {
+    this.currentSessionTypeDetection = resolveSessionTypeDetailed(this.config.sessionType, {
       appName: input.sourceApp,
       windowTitle: input.sourceTitle,
       transcript: input.transcript,
       recentCommands: input.recentCommands,
     });
+    this.currentSessionType = this.currentSessionTypeDetection.primaryType;
 
     const newTranscript = input.transcript.slice(this.processedTranscriptLength);
     const newEvents = this.newEventsSince(input.session.events);
@@ -299,7 +343,20 @@ export class SessionCopilotController {
           }) &&
           !this.recentShownTexts.some((t) => t === signal.reason)
         ) {
-          intervention = buildDiagnoseOfferIntervention(signal.reason, this.deps, signal.category);
+          const diagnosticInput = {
+            events: newEvents,
+            recentCommands: input.recentCommands,
+            visualAskFailureCount: input.visualAskFailureCount,
+            sourceApp: input.sourceApp,
+            sourceTitle: input.sourceTitle,
+          };
+          const packet = buildDiagnosticPacket(diagnosticInput, signal);
+          intervention = buildDiagnoseOfferIntervention(
+            signal.reason,
+            this.deps,
+            signal.category,
+            packet ?? undefined,
+          );
           this.lastInterventionMs = this.deps.now();
           this.remember(signal.reason);
         }
@@ -329,6 +386,7 @@ export class SessionCopilotController {
       : null;
 
     let effect: CopilotEffect = "none";
+    let diagnosticPrompt: string | undefined;
     switch (action) {
       case "yes":
         if (insight) insight.userDecision = "accepted";
@@ -349,6 +407,9 @@ export class SessionCopilotController {
       case "diagnose":
         if (insight) insight.userDecision = "accepted";
         effect = "diagnose";
+        if (intervention?.diagnosticPacket) {
+          diagnosticPrompt = buildDiagnosticPrompt(intervention.diagnosticPacket);
+        }
         break;
       case "summarize-blocker":
         effect = "summarize-blocker";
@@ -391,7 +452,7 @@ export class SessionCopilotController {
       this.consecutiveDismissals = 0;
     }
 
-    return { intervention, insight, effect };
+    return { intervention, insight, effect, diagnosticPrompt };
   }
 
   /** Remove an intervention from the pending list (after it is resolved/expired). */

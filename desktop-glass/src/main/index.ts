@@ -115,6 +115,7 @@ import { buildGlassSttState, resolveSttConfig } from "../shared/sttTypes.ts";
 import { listeningCostWarningMessage } from "../shared/audioChunks.ts";
 import { MIC_PAUSED_AUTO_MESSAGE } from "../shared/commandBarMic.ts";
 import { SessionCopilotController } from "../shared/copilotController.ts";
+import { buildDiagnosticPrompt } from "../shared/copilotDiagnostic.ts";
 import {
   copilotModeIsActive,
   type GlassCopilotConfig,
@@ -2292,6 +2293,7 @@ async function generateCopilotDebrief(): Promise<void> {
   };
   const debriefOptions = {
     sessionType: copilot.getSessionType(),
+    sessionTypeDetection: copilot.getSessionTypeDetection(),
     reportStyle: copilot.getConfig().reportStyle,
   };
   const debrief = buildSessionDebrief(
@@ -2483,10 +2485,22 @@ async function applyCopilotEffect(
         state.lastNotice = "Saved to moments.";
       }
       break;
-    case "diagnose":
-      // Direct visual ask / direct AI diagnosis using current context (user-approved).
-      void submitCommand("What's going wrong on my screen? Diagnose the error I'm seeing.");
+    case "diagnose": {
+      // Direct visual ask / direct AI diagnosis — only after user approval.
+      const diagCtx = getCachedWindowContext();
+      let prompt =
+        resolution.diagnosticPrompt ??
+        "Diagnose what's going wrong on my screen. Give a root-cause hypothesis and next steps.";
+      if (resolution.intervention?.diagnosticPacket) {
+        prompt = buildDiagnosticPrompt(resolution.intervention.diagnosticPacket, {
+          transcript: state.transcript,
+          sourceApp: diagCtx.appName,
+          sourceTitle: diagCtx.windowTitle,
+        });
+      }
+      void submitCommand(prompt);
       break;
+    }
     case "summarize-blocker":
       void submitCommand("Summarize what's blocking me right now and the main friction.");
       break;
