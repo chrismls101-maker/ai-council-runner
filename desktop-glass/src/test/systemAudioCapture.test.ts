@@ -51,6 +51,8 @@ test("stop listening clears stream state", () => {
 
 test("can attempt capture when permission may be grantable", () => {
   assert.equal(canAttemptSystemAudioCapture("requires_permission"), true);
+  assert.equal(canAttemptSystemAudioCapture("source_enumeration_failed"), true);
+  assert.equal(canAttemptSystemAudioCapture("not_tested"), true);
   assert.equal(canAttemptSystemAudioCapture("unsupported"), false);
   assert.equal(canAttemptSystemAudioCapture("requires_virtual_device"), false);
 });

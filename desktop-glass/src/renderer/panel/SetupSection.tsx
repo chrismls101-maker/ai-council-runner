@@ -56,7 +56,21 @@ export function SetupSection(): JSX.Element {
               <span className="setup-section__status">{row.label}</span>
               {row.detail ? <span className="setup-section__detail">{row.detail}</span> : null}
             </div>
-            {row.actionLabel && row.actionCommand ? (
+            {row.actions?.length ? (
+              <div className="setup-section__actions">
+                {row.actions.map((action) => (
+                  <button
+                    key={action.command}
+                    type="button"
+                    className="gbtn gbtn--small"
+                    data-testid={`glass-setup-action-${row.id}-${action.command}`}
+                    onClick={() => sendSetupAction(action.command)}
+                  >
+                    {action.label}
+                  </button>
+                ))}
+              </div>
+            ) : row.actionLabel && row.actionCommand ? (
               <button
                 type="button"
                 className="gbtn gbtn--small"

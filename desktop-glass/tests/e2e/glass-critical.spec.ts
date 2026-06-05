@@ -298,7 +298,9 @@ test.describe("IIVO Glass Electron E2E", () => {
     const sys = state.setupCapabilities?.find((r) => r.id === "systemAudio");
     expect(mic?.status).toBe("permission_denied");
     expect(sys?.status).toBe("requires_virtual_device");
-    await expect(panel.locator('[data-testid="glass-setup-action-systemAudio"]')).toBeVisible();
+    await expect(
+      panel.getByTestId("glass-setup-action-systemAudio-show-virtual-audio-help"),
+    ).toBeVisible();
   });
 
   test("11 — stub vision disabled shows setup row", async () => {

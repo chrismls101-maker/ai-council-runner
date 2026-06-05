@@ -14,7 +14,7 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "node --experimental-strip-types --test src/test/config.test.ts src/test/glassLayoutManager.test.ts src/test/glassWindowLayout.test.ts src/test/glassOperations.test.ts src/test/glassAskTypes.test.ts src/test/glassScreenContext.test.ts src/test/glassVisualIntent.test.ts src/test/glassScreenshotRetention.test.ts src/test/visualImageOptimizerConfig.test.ts src/test/visualAskQuality.test.ts src/test/visualImageCrop.test.ts src/test/visualAskPreflight.test.ts src/test/visualAskDiagnostics.test.ts src/test/cgWindowCoordinates.test.ts src/test/glassBrowserHandoff.test.ts src/test/glassCapabilities.test.ts src/test/commandBarMic.test.ts src/test/glassAskClientPayload.test.ts src/test/glassLatestScreenshot.test.ts src/test/glassAskClient.test.ts src/test/glassAskTiming.test.ts src/test/glassSettings.test.ts src/test/chromeLayout.test.ts src/test/glassHotkeySettings.test.ts src/test/followMouseDisplay.test.ts src/test/multiDisplay.test.ts src/test/panelStatusGrid.test.ts src/test/glassE2eSmoke.test.ts src/test/commandFeed.test.ts src/test/contextPayload.test.ts src/test/noteExtraction.test.ts src/test/savedMoments.test.ts src/test/privacyState.test.ts src/test/sessionStore.test.ts src/test/sessionIntelligence.test.ts src/test/sessionSummary.test.ts src/test/sessionPayload.test.ts src/test/sessionScreenshotPaths.test.ts src/test/transcriptionTypes.test.ts src/test/windowContext.test.ts src/test/iivoAnalysisClient.test.ts src/test/systemAudioCapture.test.ts src/test/sttTypes.test.ts src/test/sttOpenAI.test.ts src/test/sttServer.test.ts src/test/systemAudioFixHints.test.ts src/test/audioPersistence.test.ts src/test/audioChunks.test.ts src/test/overlayCards.test.ts",
+    "test": "node --experimental-strip-types --test src/test/config.test.ts src/test/glassLayoutManager.test.ts src/test/glassWindowLayout.test.ts src/test/glassOperations.test.ts src/test/glassAskTypes.test.ts src/test/glassScreenContext.test.ts src/test/glassVisualIntent.test.ts src/test/glassScreenshotRetention.test.ts src/test/visualImageOptimizerConfig.test.ts src/test/visualAskQuality.test.ts src/test/visualImageCrop.test.ts src/test/visualAskPreflight.test.ts src/test/visualAskDiagnostics.test.ts src/test/cgWindowCoordinates.test.ts src/test/glassBrowserHandoff.test.ts src/test/glassCapabilities.test.ts src/test/systemAudioProbe.test.ts src/test/glassAppIdentity.test.ts src/test/commandBarMic.test.ts src/test/glassAskClientPayload.test.ts src/test/glassLatestScreenshot.test.ts src/test/glassAskClient.test.ts src/test/glassAskTiming.test.ts src/test/glassSettings.test.ts src/test/chromeLayout.test.ts src/test/glassHotkeySettings.test.ts src/test/followMouseDisplay.test.ts src/test/multiDisplay.test.ts src/test/panelStatusGrid.test.ts src/test/glassE2eSmoke.test.ts src/test/commandFeed.test.ts src/test/contextPayload.test.ts src/test/noteExtraction.test.ts src/test/savedMoments.test.ts src/test/privacyState.test.ts src/test/sessionStore.test.ts src/test/sessionIntelligence.test.ts src/test/sessionSummary.test.ts src/test/sessionPayload.test.ts src/test/sessionScreenshotPaths.test.ts src/test/transcriptionTypes.test.ts src/test/windowContext.test.ts src/test/iivoAnalysisClient.test.ts src/test/systemAudioCapture.test.ts src/test/sttTypes.test.ts src/test/sttOpenAI.test.ts src/test/sttServer.test.ts src/test/systemAudioFixHints.test.ts src/test/audioPersistence.test.ts src/test/audioChunks.test.ts src/test/overlayCards.test.ts",
     "qa:auto": "node scripts/glass-qa-auto.mjs",
     "qa:smoke": "node --experimental-strip-types --test src/test/glassE2eSmoke.test.ts src/test/followMouseDisplay.test.ts src/test/glassHotkeySettings.test.ts",
     "display:diag": "env -u ELECTRON_RUN_AS_NODE electron scripts/glass-display-diagnostic.cjs",
@@ -34,9 +34,13 @@
     "package:mac:x64": "npm run build && electron-builder --mac --x64",
     "package:mac:universal": "npm run build && electron-builder --mac --universal",
     "package:mac:signed": "npm run build && electron-builder --mac --config electron-builder.signed.yml",
+    "package:verify": "node scripts/verify-mac-package-metadata.mjs",
+    "open:packaged": "node scripts/open-packaged-glass.mjs",
     "dist": "npm run build && electron-builder --mac dmg zip"
   },
   "dependencies": {
+    "@fontsource/michroma": "^5.2.8",
+    "@fontsource/sora": "^5.2.8",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

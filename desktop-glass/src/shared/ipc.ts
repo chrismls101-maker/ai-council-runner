@@ -123,6 +123,8 @@ export type GlassCommand =
   | { type: "open-audio-midi-setup" }
   | { type: "show-virtual-audio-help" }
   | { type: "retry-capture-permission" }
+  | { type: "retry-capture" }
+  | { type: "retry-system-audio" }
   | { type: "test-microphone" }
   | { type: "test-system-audio" }
   | {

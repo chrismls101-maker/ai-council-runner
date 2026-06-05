@@ -187,8 +187,10 @@ import {
 } from "../shared/glassCapabilities.ts";
 import { runGlassSetupCheck } from "./glassSetupCheck.ts";
 import { openGlassSystemSettings } from "./glassSystemSettings.ts";
+import { glassMenuAppName } from "../shared/glassAppIdentity.ts";
 
 loadGlassEnv();
+app.setName(glassMenuAppName(app.isPackaged));
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 installDefaultGlassHandoffOpener();
 installGlassE2eHooks();
@@ -1461,6 +1463,7 @@ async function handleCommand(
     case "system-audio-set-status":
       state.systemAudioStatus = command.status;
       state.systemAudioDetail = command.detail;
+      refreshSetupCapabilities();
       push();
       return;
     case "stt-listening-timer":
@@ -1715,7 +1718,8 @@ async function handleCommand(
       refreshSetupCapabilities();
       push();
       return;
-    case "run-setup-check": {
+    case "run-setup-check":
+    case "retry-system-audio": {
       const result = await runGlassSetupCheck({
         config,
         displayTarget: state.glassSettings.displayTarget,
@@ -1725,9 +1729,16 @@ async function handleCommand(
       state.serverHealthForSetup = result.serverHealth;
       state.screenCaptureProbe = result.screenCaptureProbe;
       state.screenCaptureDetail = result.screenCaptureDetail;
+      if (!state.privacy.listening && process.env.IIVO_GLASS_E2E !== "1") {
+        state.systemAudioStatus = result.systemAudioStatus;
+        state.systemAudioDetail = result.systemAudioDetail;
+      }
       refreshSetupCapabilities();
       state.setupCheckSummary = formatSetupCheckSummary(state.setupCapabilities);
-      state.lastNotice = state.setupCheckSummary;
+      state.lastNotice =
+        command.type === "retry-system-audio"
+          ? `System audio probe: ${result.systemAudioStatus}${result.systemAudioDiagnostics ? ` (${result.systemAudioDiagnostics})` : ""}`
+          : state.setupCheckSummary;
       push();
       return;
     }
@@ -1759,6 +1770,7 @@ async function handleCommand(
       state.lastNotice = VIRTUAL_AUDIO_HELP_DETAIL;
       push();
       return;
+    case "retry-capture":
     case "retry-capture-permission": {
       const target = resolveCaptureDisplay(state.glassSettings.displayTarget);
       const probe = await import("./capture.ts").then((m) =>

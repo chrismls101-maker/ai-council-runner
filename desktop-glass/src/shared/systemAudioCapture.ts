@@ -7,6 +7,10 @@ import {
   SYSTEM_AUDIO_CAPTURE_ACTIVE_MESSAGE,
   systemAudioStatusMessage,
 } from "./systemAudioTypes.ts";
+import {
+  isSourceEnumerationFailedMessage,
+  buildSystemAudioProbeDetail,
+} from "./systemAudioProbe.ts";
 
 /** Darwin 22 ≈ macOS 13 — first macOS with loopback APIs Chromium uses. */
 const MACOS_LOOPBACK_MIN_DARWIN = 22;
@@ -41,6 +45,15 @@ export function mapSystemAudioCaptureError(
   if (name === "NotAllowedError" || /not allowed|permission|denied/i.test(lower)) {
     return { status: "requires_permission", detail: message };
   }
+  if (isSourceEnumerationFailedMessage(message)) {
+    return {
+      status: "source_enumeration_failed",
+      detail: buildSystemAudioProbeDetail("source_enumeration_failed", {
+        screenCaptureReady: false,
+        errorMessage: message,
+      }),
+    };
+  }
   if (/virtual|loopback|no audio|audio track/i.test(lower) && platform === "darwin") {
     return { status: "requires_virtual_device", detail: message };
   }
@@ -62,6 +75,8 @@ export function canAttemptSystemAudioCapture(status: SystemAudioStatus): boolean
   return (
     status === "available" ||
     status === "requires_permission" ||
+    status === "source_enumeration_failed" ||
+    status === "not_tested" ||
     status === "error"
   );
 }

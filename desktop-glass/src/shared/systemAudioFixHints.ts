@@ -4,21 +4,30 @@
 
 import type { SystemAudioStatus } from "./systemAudioTypes.ts";
 import { SYSTEM_AUDIO_STATUS_MESSAGES } from "./systemAudioTypes.ts";
+import {
+  MACOS_RESTART_ONCE_HINT,
+  PERMISSION_JUST_GRANTED_RESTART_HINT,
+  VIRTUAL_DEVICE_AFTER_PERMISSIONS_HINT,
+} from "./systemAudioProbe.ts";
 import type { SttProviderStatus } from "./sttTypes.ts";
 import { STT_MISSING_KEY_MESSAGE, STT_SERVER_UNAVAILABLE_MESSAGE } from "./sttTypes.ts";
 
 export function systemAudioFixHint(status: SystemAudioStatus): string {
   switch (status) {
     case "requires_permission":
-      return "How to fix: grant Screen Recording (and audio capture) for IIVO Glass in System Settings, then restart Glass.";
+      return `How to fix: grant Screen Recording (and audio capture) for IIVO Glass in System Settings. ${PERMISSION_JUST_GRANTED_RESTART_HINT}`;
+    case "source_enumeration_failed":
+      return `How to fix: ${PERMISSION_JUST_GRANTED_RESTART_HINT} ${MACOS_RESTART_ONCE_HINT}`;
     case "requires_virtual_device":
-      return "How to fix: route system audio through a virtual device (e.g. BlackHole), or use Microphone mode or manual transcript.";
+      return `How to fix: ${VIRTUAL_DEVICE_AFTER_PERMISSIONS_HINT} Or use Microphone mode / manual transcript.`;
+    case "not_tested":
+      return "How to fix: tap Retry System Audio in Setup to verify loopback after permissions are granted.";
     case "unsupported":
       return "How to fix: use Microphone mode or paste transcript manually on this OS.";
     case "available":
       return "System audio loopback is active. Transcription uses OpenAI when configured.";
     case "error":
-      return "How to fix: try Stop Listening, restart Glass, or paste transcript manually.";
+      return "How to fix: try Retry System Audio, quit and reopen Glass, or paste transcript manually.";
     default:
       return "";
   }

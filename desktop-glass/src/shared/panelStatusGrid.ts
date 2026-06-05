@@ -35,6 +35,7 @@ export interface PanelStatusGridInput {
   captureStatus?: string;
   capturing?: boolean;
   systemAudioStatus: SystemAudioStatus;
+  systemAudioDetail?: string;
   windowContextStatus: WindowContextStatus;
   listening?: boolean;
   transcriptionMode?: string;
@@ -209,6 +210,21 @@ function buildAudioCard(input: PanelStatusGridInput): PanelStatusCard {
         level: "warn",
         status: "Virtual device needed",
         detail: systemAudioStatusMessage("requires_virtual_device"),
+      };
+    case "source_enumeration_failed":
+      return {
+        key: "audio",
+        label: "Audio",
+        level: "warn",
+        status: "Enumeration failed",
+        detail: input.systemAudioDetail,
+      };
+    case "not_tested":
+      return {
+        key: "audio",
+        label: "Audio",
+        level: "idle",
+        status: "Not verified",
       };
     case "unsupported":
       return {

@@ -1505,61 +1505,62 @@ html.glass-dock-window #root {
   gap: 12px;
 }
 
-.command-voice {
+.command-bar__trailing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Microphone — same icon treatment as IIVO web composer (ChatComposer) */
+.command-mic-btn {
+  -webkit-app-region: no-drag;
   flex: 0 0 auto;
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
-  border: 1px solid rgba(120, 235, 255, 0.3);
-  background: rgba(56, 225, 255, 0.08);
-  color: var(--cyan);
-  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s ease;
-}
-.command-voice:hover {
-  background: rgba(56, 225, 255, 0.16);
-}
-.command-voice--active {
-  border-color: rgba(74, 222, 128, 0.5);
-  background: rgba(74, 222, 128, 0.16);
-  color: var(--ok);
-}
-
-.command-voice__bars {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  height: 18px;
-}
-.command-voice__bars i {
-  width: 3px;
-  height: 7px;
-  border-radius: 2px;
-  background: currentColor;
-}
-.command-voice--active .command-voice__bars i {
-  animation: command-eq 0.9s ease-in-out infinite;
-}
-.command-voice--active .command-voice__bars i:nth-child(2) {
-  animation-delay: 0.15s;
-}
-.command-voice--active .command-voice__bars i:nth-child(3) {
-  animation-delay: 0.3s;
-}
-.command-voice--active .command-voice__bars i:nth-child(4) {
-  animation-delay: 0.45s;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid rgba(120, 235, 255, 0.28);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(200, 220, 245, 0.88);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
-@keyframes command-eq {
+.command-mic-btn:hover:not(:disabled) {
+  background: rgba(56, 225, 255, 0.12);
+  border-color: rgba(120, 235, 255, 0.45);
+  color: var(--glass-text);
+}
+
+.command-mic-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.command-mic-btn--listening {
+  border-color: rgba(248, 113, 113, 0.55);
+  background: rgba(239, 68, 68, 0.14);
+  color: #f87171;
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.25);
+  animation: command-mic-pulse 1.4s ease-in-out infinite;
+}
+
+.command-mic-btn__icon {
+  display: block;
+  pointer-events: none;
+}
+
+@keyframes command-mic-pulse {
   0%,
   100% {
-    height: 6px;
+    opacity: 1;
   }
   50% {
-    height: 16px;
+    opacity: 0.72;
   }
 }
 
@@ -1574,6 +1575,7 @@ html.glass-dock-window #root {
 }
 
 .command-input {
+  -webkit-app-region: no-drag;
   flex: 1 1 auto;
   min-width: 0;
   height: 44px;
@@ -1615,6 +1617,7 @@ html.glass-dock-window #root {
 }
 
 .command-ask {
+  -webkit-app-region: no-drag;
   flex: 0 0 auto;
   height: 44px;
   padding: 0 20px;
@@ -1843,6 +1846,13 @@ html.glass-dock-window #root {
   font-size: 11px;
   color: var(--glass-text-dim);
   line-height: 1.35;
+}
+.setup-section__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 .command-listen-status--error {

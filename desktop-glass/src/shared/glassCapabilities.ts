@@ -4,6 +4,10 @@
 
 import type { SystemAudioStatus } from "./systemAudioTypes.ts";
 import { systemAudioStatusMessage } from "./systemAudioTypes.ts";
+import {
+  PERMISSION_JUST_GRANTED_RESTART_HINT,
+  shouldShowVirtualDeviceGuidance,
+} from "./systemAudioProbe.ts";
 import type { SttProviderStatus } from "./sttTypes.ts";
 export type GlassCapabilityStatus =
   | "ready"
@@ -33,9 +37,15 @@ export type GlassSetupActionType =
   | "open-audio-midi-setup"
   | "show-virtual-audio-help"
   | "retry-capture"
+  | "retry-system-audio"
   | "test-microphone"
   | "test-system-audio"
   | "run-setup-check";
+
+export interface GlassSetupAction {
+  label: string;
+  command: GlassSetupActionType;
+}
 
 export interface GlassCapabilityRow {
   id: GlassCapabilityId;
@@ -44,6 +54,7 @@ export interface GlassCapabilityRow {
   detail?: string;
   actionLabel?: string;
   actionCommand?: GlassSetupActionType;
+  actions?: GlassSetupAction[];
   severity: GlassCapabilitySeverity;
 }
 
@@ -232,36 +243,95 @@ export function buildMicrophoneCapability(input: GlassSetupCapabilitiesInput): G
   };
 }
 
+const SYSTEM_AUDIO_RETRY_ACTIONS: GlassSetupAction[] = [
+  { label: "Retry System Audio", command: "retry-system-audio" },
+  { label: "Open Privacy & Security", command: "open-privacy-settings" },
+  { label: "Open Audio MIDI Setup", command: "open-audio-midi-setup" },
+  { label: "Virtual audio setup", command: "show-virtual-audio-help" },
+];
+
+function systemAudioActions(
+  primary: GlassSetupAction,
+  includeVirtual = false,
+): GlassSetupAction[] {
+  const extras = SYSTEM_AUDIO_RETRY_ACTIONS.filter(
+    (a) => includeVirtual || a.command !== "show-virtual-audio-help",
+  );
+  return [primary, ...extras.filter((a) => a.command !== primary.command)];
+}
+
 export function buildSystemAudioCapability(input: GlassSetupCapabilitiesInput): GlassCapabilityRow {
   const status = input.systemAudioStatus;
+  const screenReady = input.screenCaptureProbe === "ready";
   if (status === "available") {
     return {
       id: "systemAudio",
       status: "ready",
       label: "System audio ready",
-      detail: "Native loopback capture is available.",
+      detail: input.systemAudioDetail ?? "Native loopback capture is available.",
       severity: "ok",
     };
   }
+  if (status === "not_tested") {
+    return {
+      id: "systemAudio",
+      status: "not_requested",
+      label: "Not verified",
+      detail:
+        input.systemAudioDetail ??
+        "Screen sources enumerated. Tap Retry System Audio to verify loopback.",
+      actionLabel: "Retry System Audio",
+      actionCommand: "retry-system-audio",
+      actions: systemAudioActions({ label: "Retry System Audio", command: "retry-system-audio" }),
+      severity: "idle",
+    };
+  }
   if (status === "requires_permission") {
+    const detail = [input.systemAudioDetail, PERMISSION_JUST_GRANTED_RESTART_HINT]
+      .filter(Boolean)
+      .join(" ");
     return {
       id: "systemAudio",
       status: "permission_required",
       label: "Permission needed",
-      detail: systemAudioStatusMessage("requires_permission", input.systemAudioDetail),
-      actionLabel: "Open Screen Recording Settings",
-      actionCommand: "open-screen-recording-settings",
+      detail: detail || systemAudioStatusMessage("requires_permission"),
+      actionLabel: "Open Privacy & Security",
+      actionCommand: "open-privacy-settings",
+      actions: systemAudioActions(
+        { label: "Open Privacy & Security", command: "open-privacy-settings" },
+      ),
       severity: "warn",
     };
   }
+  if (status === "source_enumeration_failed") {
+    const detail =
+      input.systemAudioDetail ?? systemAudioStatusMessage("source_enumeration_failed");
+    return {
+      id: "systemAudio",
+      status: "error",
+      label: "Source enumeration failed",
+      detail,
+      actionLabel: "Retry System Audio",
+      actionCommand: "retry-system-audio",
+      actions: systemAudioActions({ label: "Retry System Audio", command: "retry-system-audio" }),
+      severity: screenReady ? "warn" : "error",
+    };
+  }
   if (status === "requires_virtual_device") {
+    const detail = shouldShowVirtualDeviceGuidance(status, screenReady)
+      ? [input.systemAudioDetail, VIRTUAL_AUDIO_HELP_DETAIL].filter(Boolean).join(" ")
+      : (input.systemAudioDetail ?? VIRTUAL_AUDIO_HELP_DETAIL);
     return {
       id: "systemAudio",
       status: "requires_virtual_device",
       label: "Virtual device may be required",
-      detail: VIRTUAL_AUDIO_HELP_DETAIL,
-      actionLabel: "Learn setup",
+      detail,
+      actionLabel: "Virtual audio setup",
       actionCommand: "show-virtual-audio-help",
+      actions: systemAudioActions(
+        { label: "Virtual audio setup", command: "show-virtual-audio-help" },
+        true,
+      ),
       severity: "warn",
     };
   }
@@ -278,10 +348,11 @@ export function buildSystemAudioCapability(input: GlassSetupCapabilitiesInput): 
     return {
       id: "systemAudio",
       status: "error",
-      label: "Error",
+      label: "Failed",
       detail: input.systemAudioDetail ?? systemAudioStatusMessage("error"),
-      actionLabel: "Test System Audio",
-      actionCommand: "test-system-audio",
+      actionLabel: "Retry System Audio",
+      actionCommand: "retry-system-audio",
+      actions: systemAudioActions({ label: "Retry System Audio", command: "retry-system-audio" }),
       severity: "error",
     };
   }
@@ -292,6 +363,7 @@ export function buildSystemAudioCapability(input: GlassSetupCapabilitiesInput): 
     detail: "Choose System Audio and tap Test System Audio when you want to verify loopback.",
     actionLabel: "Test System Audio",
     actionCommand: "test-system-audio",
+    actions: systemAudioActions({ label: "Test System Audio", command: "test-system-audio" }),
     severity: "idle",
   };
 }
@@ -467,6 +539,9 @@ export function permissionsSummaryFromSetup(rows: GlassCapabilityRow[]): {
     needed.push("Microphone");
   }
   if (sys?.status === "requires_virtual_device") needed.push("Virtual audio");
+  if (sys?.status === "error" && sys.label === "Source enumeration failed") {
+    needed.push("System audio");
+  }
   if (sys?.status === "permission_required" && !needed.includes("Screen Recording")) {
     needed.push("Screen Recording");
   }
@@ -477,9 +552,25 @@ export function permissionsSummaryFromSetup(rows: GlassCapabilityRow[]): {
 }
 
 export function formatSetupCheckSummary(rows: GlassCapabilityRow[]): string {
-  const issues = rows.filter(
-    (r) => r.severity === "warn" || r.severity === "error",
-  );
+  const issues = rows.filter((r) => {
+    if (r.severity !== "warn" && r.severity !== "error") return false;
+    if (r.id === "systemAudio" && r.label === "Not verified") return false;
+    return true;
+  });
+  const screen = rows.find((r) => r.id === "screenRecording");
+  const sys = rows.find((r) => r.id === "systemAudio");
+  if (
+    screen?.status === "ready" &&
+    sys &&
+    (sys.label === "Source enumeration failed" || sys.status === "requires_virtual_device")
+  ) {
+    const parts = [`screenRecording (${screen.label})`, `systemAudio (${sys.label})`];
+    const other = issues.filter((r) => r.id !== "screenRecording" && r.id !== "systemAudio");
+    for (const row of other) {
+      parts.push(`${row.id} (${row.label})`);
+    }
+    return `Setup check: ${parts.join(", ")}. Capture can still work when only system audio fails.`;
+  }
   if (issues.length === 0) {
     return "Setup check complete — all capabilities look ready.";
   }
