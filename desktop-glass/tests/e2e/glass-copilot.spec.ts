@@ -93,3 +93,56 @@ test("Stop Everything stops listening (copilot loop halts with it)", async () =>
   await commandPage.evaluate(() => window.glass.send({ type: "copilot-set-mode", mode: "off" }));
   await commandPage.evaluate(() => window.glass.send({ type: "session-end" }));
 });
+
+test("max listening duration shows overlay card and Stop Listening halts streams", async () => {
+  await commandPage.evaluate(() => window.glass.send({ type: "session-start" }));
+  await commandPage.evaluate(() =>
+    window.glass.send({ type: "copilot-set-config", patch: { maxListeningMin: 5 } }),
+  );
+  await commandPage.evaluate(() => window.glass.send({ type: "start-listening" }));
+  await commandPage.evaluate(() =>
+    window.glass.send({ type: "stt-listening-timer", elapsedMs: 5 * 60 * 1000 }),
+  );
+
+  await expect
+    .poll(async () => (await readGlassState(commandPage)).copilot.listeningLimitReached, { timeout: 5_000 })
+    .toBe(true);
+
+  let state = await readGlassState(commandPage);
+  expect(state.session?.status).toBe("active");
+  expect(state.privacy.listening).toBe(true);
+
+  await commandPage.evaluate(() => window.glass.send({ type: "copilot-listening-limit-stop" }));
+  state = await readGlassState(commandPage);
+  expect(state.privacy.listening).toBe(false);
+  expect(state.copilot.listeningLimitReached).toBe(false);
+  expect(state.session?.status).toBe("active");
+
+  await commandPage.evaluate(() => window.glass.send({ type: "copilot-set-mode", mode: "off" }));
+  await commandPage.evaluate(() => window.glass.send({ type: "session-end" }));
+});
+
+test("Continue 15 min extends listening limit and clears the card", async () => {
+  await commandPage.evaluate(() => window.glass.send({ type: "session-start" }));
+  await commandPage.evaluate(() =>
+    window.glass.send({ type: "copilot-set-config", patch: { maxListeningMin: 5 } }),
+  );
+  await commandPage.evaluate(() => window.glass.send({ type: "start-listening" }));
+  await commandPage.evaluate(() =>
+    window.glass.send({ type: "stt-listening-timer", elapsedMs: 5 * 60 * 1000 }),
+  );
+
+  await expect
+    .poll(async () => (await readGlassState(commandPage)).copilot.listeningLimitReached, { timeout: 5_000 })
+    .toBe(true);
+
+  await commandPage.evaluate(() => window.glass.send({ type: "copilot-listening-limit-continue" }));
+  const state = await readGlassState(commandPage);
+  expect(state.copilot.listeningLimitReached).toBe(false);
+  expect(state.privacy.listening).toBe(true);
+  expect(state.session?.status).toBe("active");
+
+  await commandPage.evaluate(() => window.glass.send({ type: "stop-everything" }));
+  await commandPage.evaluate(() => window.glass.send({ type: "copilot-set-mode", mode: "off" }));
+  await commandPage.evaluate(() => window.glass.send({ type: "session-end" }));
+});

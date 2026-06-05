@@ -170,6 +170,8 @@ export interface GlassCopilotRuntimeState {
   debriefReady: boolean;
   /** How many cards the user dismissed in a row (governor back-off). */
   consecutiveDismissals: number;
+  /** True when max listening duration was reached and the overlay card is showing. */
+  listeningLimitReached: boolean;
 }
 
 export const COPILOT_INTERVAL_OPTIONS = [60, 90, 120] as const;

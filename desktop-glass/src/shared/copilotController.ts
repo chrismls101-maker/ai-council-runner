@@ -395,6 +395,7 @@ export class SessionCopilotController {
       sessionType: this.currentSessionType,
       debriefReady: this.debrief != null,
       consecutiveDismissals: this.consecutiveDismissals,
+      listeningLimitReached: false,
     };
   }
 

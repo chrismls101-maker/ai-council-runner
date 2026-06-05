@@ -26,7 +26,7 @@ const fallbackState: GlassState = {
   transcript: "",
   notes: emptyNotes(),
   moments: [],
-  panelTab: "summary",
+  panelTab: "audio",
   config: DEFAULT_CONFIG,
   session: null,
   sessionSummary: "",
@@ -68,6 +68,7 @@ const fallbackState: GlassState = {
     sessionType: "general_workflow",
     debriefReady: false,
     consecutiveDismissals: 0,
+    listeningLimitReached: false,
   },
 };
 

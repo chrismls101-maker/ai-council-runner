@@ -23,11 +23,12 @@ export function CopilotOverlay({
 }): JSX.Element | null {
   const copilot = state.copilot;
   const showOffer = !!copilot.offer;
+  const showListeningLimit = copilot.listeningLimitReached;
   const showSilence = copilot.systemAudioSilenceWarning;
   const debrief = copilot.debrief ?? null;
   const interventions = copilot.pendingInterventions;
 
-  if (!showOffer && !showSilence && !debrief && interventions.length === 0) {
+  if (!showOffer && !showListeningLimit && !showSilence && !debrief && interventions.length === 0) {
     return null;
   }
 
@@ -66,6 +67,32 @@ export function CopilotOverlay({
               onClick={() => send({ type: "copilot-dismiss-offer" })}
             >
               No
+            </button>
+          </div>
+        </article>
+      ) : null}
+
+      {showListeningLimit ? (
+        <article className="overlay-copilot-card" data-testid="glass-listening-limit">
+          <div className="overlay-copilot-card__eyebrow">Listening</div>
+          <div className="overlay-copilot-card__title">Listening limit reached. Continue?</div>
+          <p className="overlay-copilot-card__body">
+            You reached the max listening duration. Continue for 15 more minutes or stop now.
+          </p>
+          <div className="overlay-copilot-card__actions">
+            <button
+              type="button"
+              className="gbtn gbtn--primary"
+              onClick={() => send({ type: "copilot-listening-limit-continue" })}
+            >
+              Continue 15 min
+            </button>
+            <button
+              type="button"
+              className="gbtn gbtn--ghost"
+              onClick={() => send({ type: "copilot-listening-limit-stop" })}
+            >
+              Stop Listening
             </button>
           </div>
         </article>

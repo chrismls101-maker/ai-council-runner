@@ -65,6 +65,12 @@ function clampMinutes(value: unknown, fallback: number, min: number, max: number
   return Math.min(max, Math.max(min, n));
 }
 
+/** 0 or "off" disables max listening duration enforcement. */
+export function parseMaxListeningMin(value: unknown): number {
+  if (value === "off" || value === 0) return 0;
+  return clampMinutes(value, DEFAULT_COPILOT_CONFIG.maxListeningMin, 5, 480);
+}
+
 function parseBool(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
 }
@@ -78,7 +84,7 @@ export function parseCopilotConfig(raw: unknown): GlassCopilotConfig {
     showOverlaySuggestions: parseBool(record.showOverlaySuggestions, DEFAULT_COPILOT_CONFIG.showOverlaySuggestions),
     autoDebriefOnEnd: parseBool(record.autoDebriefOnEnd, DEFAULT_COPILOT_CONFIG.autoDebriefOnEnd),
     silenceTimeoutMin: clampMinutes(record.silenceTimeoutMin, DEFAULT_COPILOT_CONFIG.silenceTimeoutMin, 1, 60),
-    maxListeningMin: clampMinutes(record.maxListeningMin, DEFAULT_COPILOT_CONFIG.maxListeningMin, 5, 480),
+    maxListeningMin: parseMaxListeningMin(record.maxListeningMin),
     muteSuggestions: parseBool(record.muteSuggestions, DEFAULT_COPILOT_CONFIG.muteSuggestions),
     sessionType: parseSessionTypeSetting(record.sessionType),
     reportStyle: parseReportStyle(record.reportStyle),

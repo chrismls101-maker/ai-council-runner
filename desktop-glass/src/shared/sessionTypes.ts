@@ -25,7 +25,8 @@ export type GlassSessionEventKind =
   | "hypothesis_detected"
   | "action_detected"
   | "risk_detected"
-  | "app_context";
+  | "app_context"
+  | "listening_limit_reached";
 
 export type GlassSessionImportance = "low" | "medium" | "high";
 

@@ -70,6 +70,7 @@ export type TranscriptionControlCommand =
   | { type: "stop" }
   | { type: "probe-microphone" }
   | { type: "probe-virtual-audio-devices" }
+  | { type: "startup-audio-restore" }
   | { type: "test-system-audio" }
   | { type: "test-blackhole" };
 
@@ -77,7 +78,7 @@ export type GlassCommand =
   | { type: "capture-screen" }
   | { type: "capture-screen-only" }
   | { type: "start-listening" }
-  | { type: "pause" }
+  | { type: "pause"; reason?: "user" | "auto" }
   | { type: "stop" }
   | { type: "stop-everything" }
   | { type: "request-start-listening" }
@@ -123,8 +124,11 @@ export type GlassCommand =
   | { type: "toggle-overlay" }
   | { type: "set-overlay-mode"; mode: OverlayMode }
   | { type: "window-context-refresh" }
-  | { type: "run-setup-check" }
+  | { type: "run-setup-check"; silent?: boolean }
   | { type: "run-capture-diagnostics" }
+  | { type: "clear-last-notice" }
+  | { type: "clear-last-error" }
+  | { type: "clear-capture-diagnostics-report" }
   | { type: "report-mic-permission"; status: import("./glassCapabilities.ts").MicPermissionReport }
   | { type: "open-screen-recording-settings" }
   | { type: "open-microphone-settings" }
@@ -134,6 +138,8 @@ export type GlassCommand =
   | { type: "show-virtual-audio-help" }
   | { type: "show-blackhole-setup" }
   | { type: "detect-audio-devices" }
+  | { type: "verify-system-audio" }
+  | { type: "focus-audio-setup" }
   | { type: "test-blackhole" }
   | { type: "retry-capture-permission" }
   | { type: "retry-capture" }
@@ -187,7 +193,9 @@ export type GlassCommand =
   | { type: "copilot-dismiss-debrief" }
   | { type: "copilot-open-debrief-in-iivo" }
   | { type: "copilot-dismiss-silence-warning" }
-  | { type: "copilot-pause-system-audio" };
+  | { type: "copilot-pause-system-audio" }
+  | { type: "copilot-listening-limit-continue" }
+  | { type: "copilot-listening-limit-stop" };
 
 export interface GlassState {
   privacy: PrivacyState;

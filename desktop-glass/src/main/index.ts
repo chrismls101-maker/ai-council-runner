@@ -113,6 +113,7 @@ import { resolveInitialSystemAudioStatus, darwinMajorFromRelease } from "../shar
 import type { SystemAudioStatus } from "../shared/systemAudioTypes.ts";
 import { buildGlassSttState, resolveSttConfig } from "../shared/sttTypes.ts";
 import { listeningCostWarningMessage } from "../shared/audioChunks.ts";
+import { MIC_PAUSED_AUTO_MESSAGE } from "../shared/commandBarMic.ts";
 import { SessionCopilotController } from "../shared/copilotController.ts";
 import {
   copilotModeIsActive,
@@ -126,12 +127,24 @@ import {
   buildDebriefAiPrompt,
   detectDebriefTrigger,
 } from "../shared/copilotDebrief.ts";
+import { buildSummaryReadyIntervention } from "../shared/copilotInterruption.ts";
+import {
+  createListeningLimitState,
+  extendListeningLimit,
+  LISTENING_LIMIT_RESPONSE_TIMEOUT_MS,
+  markListeningLimitReached,
+  resetListeningLimitState,
+  shouldAutoStopListeningLimit,
+  shouldTriggerListeningLimit,
+  type ListeningLimitState,
+} from "../shared/listeningLimit.ts";
 import { processSttChunk, type SttProcessChunkPayload } from "./sttChunkHandler.ts";
 import type { GlassSttState } from "../shared/ipc.ts";
 import {
   CAPTURE_NO_SESSION_HINT,
   CAPTURE_SESSION_SUCCESS_MESSAGE,
   CAPTURE_SUCCESS_MESSAGE,
+  LISTENING_STOPPED_MESSAGE,
   captureErrorMessage,
   createInitialOperationDiagnostics,
   diagnosticsForCapture,
@@ -188,6 +201,16 @@ import {
   type GlassUserSettings,
 } from "../shared/glassSettings.ts";
 import { loadGlassUserSettings, persistGlassUserSettings } from "./glassSettingsPersistence.ts";
+import { resolveDefaultPanelTab } from "../shared/glassSettings.ts";
+import {
+  isSystemAudioArmed,
+  isSystemAudioRoutingReady,
+} from "../shared/audioRoutingReady.ts";
+import { getCurrentMacOutputDeviceName } from "./macAudioOutput.ts";
+import {
+  broadcastStartupAudioRestore,
+  restoreMacOutputFromSettings,
+} from "./startupAudioRestore.ts";
 import {
   buildGlassSetupCapabilities,
   formatSetupCheckSummary,
@@ -299,7 +322,7 @@ let glassUserSettings: GlassUserSettings = { ...DEFAULT_GLASS_USER_SETTINGS };
 const state: AppState = {
   privacy: { ...initialPrivacyState },
   transcript: "",
-  panelTab: "summary",
+  panelTab: "audio",
   sessionActionStatus: "idle",
   transcriptionMode: "manual",
   systemAudioStatus: resolveInitialSystemAudioStatus(
@@ -359,6 +382,81 @@ let copilotVisualAskFailures = 0;
 const copilotRecentCommands: string[] = [];
 const copilotRecentResponses: string[] = [];
 
+// --- Max listening duration --------------------------------------------------
+let listeningLimitState: ListeningLimitState = createListeningLimitState();
+let listeningLimitAutoStopTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearListeningLimitAutoStopTimer(): void {
+  if (listeningLimitAutoStopTimer) {
+    clearTimeout(listeningLimitAutoStopTimer);
+    listeningLimitAutoStopTimer = null;
+  }
+}
+
+function resetListeningLimitTracking(): void {
+  listeningLimitState = resetListeningLimitState();
+  clearListeningLimitAutoStopTimer();
+}
+
+function scheduleListeningLimitAutoStop(): void {
+  clearListeningLimitAutoStopTimer();
+  listeningLimitAutoStopTimer = setTimeout(() => {
+    if (
+      shouldAutoStopListeningLimit(listeningLimitState, Date.now()) &&
+      state.privacy.listening
+    ) {
+      void stopListeningFromLimit("auto");
+    }
+  }, LISTENING_LIMIT_RESPONSE_TIMEOUT_MS);
+}
+
+async function recordListeningLimitReachedEvent(): Promise<void> {
+  if (!sessionIsLive()) return;
+  const maxMin = copilot.getConfig().maxListeningMin;
+  sessions.addEvent({
+    kind: "listening_limit_reached",
+    title: "Listening limit reached",
+    text: `Max listening duration (${maxMin} min) reached.`,
+    importance: "medium",
+    ...eventContextFields(),
+  });
+  await persistSessions(sessions);
+}
+
+async function triggerListeningLimitReached(): Promise<void> {
+  listeningLimitState = markListeningLimitReached(listeningLimitState, Date.now());
+  await recordListeningLimitReachedEvent();
+  scheduleListeningLimitAutoStop();
+  push();
+}
+
+function checkListeningLimit(elapsedMs: number): void {
+  if (
+    shouldTriggerListeningLimit({
+      elapsedMs,
+      maxListeningMin: copilot.getConfig().maxListeningMin,
+      extensionMs: listeningLimitState.extensionMs,
+      limitReached: listeningLimitState.limitReached,
+      listening: state.privacy.listening,
+    })
+  ) {
+    void triggerListeningLimitReached();
+  }
+}
+
+async function stopListeningFromLimit(reason: "user" | "auto"): Promise<void> {
+  broadcastTranscriptionControl({ type: "stop" });
+  dispatchPrivacy({ type: "PAUSE", at: new Date().toISOString() });
+  state.stt = { ...state.stt, listeningElapsedMs: 0 };
+  state.operationDiagnostics = recordOperation(state.operationDiagnostics, "pause", "ok");
+  resetListeningLimitTracking();
+  state.lastNotice =
+    reason === "auto"
+      ? "Listening stopped — limit reached with no response."
+      : LISTENING_STOPPED_MESSAGE;
+  push();
+}
+
 function systemAudioActive(): boolean {
   return state.privacy.listening && state.transcriptionMode === "system_audio";
 }
@@ -380,7 +478,10 @@ function syncCopilotToSession(): void {
 }
 
 function copilotRuntime(): GlassCopilotRuntimeState {
-  return copilot.runtimeState(sessionIsLive());
+  return {
+    ...copilot.runtimeState(sessionIsLive()),
+    listeningLimitReached: listeningLimitState.limitReached,
+  };
 }
 
 /** Bind copilot to the active session (resets per-session state, hydrates persisted data). */
@@ -498,6 +599,79 @@ function visualAskProbeDiagnostics(
     packagingVariant: id?.packagingVariantLabel,
     lastPreflightIssue: formatScreenCaptureProbeDebug(screenProbe),
   };
+}
+
+async function persistAudioRoutingSuccess(): Promise<void> {
+  const outputName = await getCurrentMacOutputDeviceName();
+  glassUserSettings = {
+    ...glassUserSettings,
+    audioRoutingConfigured: true,
+    ...(outputName ? { savedMacOutputDeviceName: outputName } : {}),
+  };
+  state.glassSettings = glassUserSettings;
+  await persistGlassUserSettings(glassUserSettings);
+}
+
+async function runAutomaticStartupSetup(silent = true): Promise<void> {
+  if (process.env.IIVO_GLASS_E2E === "1" || state.privacy.listening) return;
+  const result = await runGlassSetupCheck({
+    config,
+    displayTarget: state.glassSettings.displayTarget,
+  });
+  state.serverHealthForSetup = result.serverHealth;
+  state.screenCaptureProbe = result.screenCaptureProbe;
+  state.screenCaptureDetail = result.screenCaptureDetail;
+  state.windowCaptureProbe = result.windowCaptureProbe;
+  state.windowCaptureDetail = result.windowCaptureDetail;
+  const audioVerified = isSystemAudioRoutingReady(
+    state.systemAudioStatus,
+    state.systemAudioDetail,
+  );
+  const blackholeConfigured =
+    !!state.selectedVirtualAudioDeviceId ||
+    (state.virtualAudioDevices ?? []).some((d) => d.kind === "blackhole");
+  if (!audioVerified) {
+    if (!(blackholeConfigured && result.systemAudioStatus === "requires_virtual_device")) {
+      state.systemAudioStatus = result.systemAudioStatus;
+      state.systemAudioDetail = result.systemAudioDetail;
+    }
+  }
+  refreshSetupCapabilities();
+  state.setupCheckSummary = formatSetupCheckSummary(state.setupCapabilities);
+  if (!silent) {
+    state.lastNotice = state.setupCheckSummary;
+  }
+  push();
+}
+
+function broadcastStartupAudioRestoreWithRetry(attempts = 5, intervalMs = 800): void {
+  let count = 0;
+  const tick = (): void => {
+    broadcastStartupAudioRestore();
+    count += 1;
+    if (count < attempts) {
+      window.setTimeout(tick, intervalMs);
+    }
+  };
+  tick();
+}
+
+async function runMainStartupAudioRestore(): Promise<void> {
+  if (process.env.IIVO_GLASS_E2E === "1") return;
+  const output = await restoreMacOutputFromSettings(glassUserSettings);
+  if (!output.restoredOutput && glassUserSettings.savedMacOutputDeviceName) {
+    state.lastNotice =
+      output.outputMessage ??
+      "Could not auto-restore Mac sound output. Open Sound settings and select your Multi-Output Device.";
+    push();
+  }
+  // Wait for renderer + transcription provider, then restore audio routing silently.
+  window.setTimeout(() => {
+    broadcastStartupAudioRestoreWithRetry();
+    window.setTimeout(() => {
+      void runAutomaticStartupSetup(true);
+    }, 9000);
+  }, 1500);
 }
 
 function refreshSetupCapabilities(): void {
@@ -1646,7 +1820,7 @@ async function handleCommand(
       }
       return;
     case "request-start-listening":
-      state.panelTab = "context";
+      state.panelTab = "diagnostics";
       if (!isPanelVisible()) togglePanel();
       state.operationDiagnostics = recordOperation(state.operationDiagnostics, "request-start-listening", "pending");
       push();
@@ -1655,6 +1829,7 @@ async function handleCommand(
     case "start-listening":
       dispatchPrivacy({ type: "START_LISTENING", at: new Date().toISOString() });
       state.stt = { ...state.stt, listeningElapsedMs: 0, lastError: undefined };
+      resetListeningLimitTracking();
       state.operationDiagnostics = diagnosticsForListening(
         recordOperation(state.operationDiagnostics, "start-listening", "ok"),
         state.transcriptionMode,
@@ -1667,8 +1842,11 @@ async function handleCommand(
       broadcastTranscriptionControl({ type: "stop" });
       dispatchPrivacy({ type: "PAUSE", at: new Date().toISOString() });
       state.stt = { ...state.stt, listeningElapsedMs: 0 };
+      resetListeningLimitTracking();
       state.operationDiagnostics = recordOperation(state.operationDiagnostics, "pause", "ok");
-      state.lastNotice = "Listening stopped.";
+      if (command.reason !== "user") {
+        state.lastNotice = MIC_PAUSED_AUTO_MESSAGE;
+      }
       push();
       return;
     case "stop":
@@ -1687,6 +1865,7 @@ async function handleCommand(
       state.lastNotice = stopped.lastNotice;
       state.lastError = stopped.lastError;
       stopCopilotLoop();
+      resetListeningLimitTracking();
       systemAudioLastSignalMs = undefined;
       push();
       return;
@@ -1728,6 +1907,12 @@ async function handleCommand(
       if (command.status === "requires_virtual_device" || command.status === "available") {
         state.nativeLoopbackTested = true;
       }
+      if (
+        isSystemAudioRoutingReady(command.status, command.detail) ||
+        isSystemAudioArmed(command.detail)
+      ) {
+        void persistAudioRoutingSuccess();
+      }
       refreshSetupCapabilities();
       push();
       return;
@@ -1760,6 +1945,7 @@ async function handleCommand(
     }
     case "stt-listening-timer":
       state.stt = { ...state.stt, listeningElapsedMs: command.elapsedMs };
+      checkListeningLimit(command.elapsedMs);
       push();
       return;
     case "stt-cost-warning":
@@ -2010,7 +2196,42 @@ async function handleCommand(
       refreshSetupCapabilities();
       push();
       return;
-    case "run-setup-check":
+    case "run-setup-check": {
+      const silent = command.silent === true;
+      const result = await runGlassSetupCheck({
+        config,
+        displayTarget: state.glassSettings.displayTarget,
+        skipCaptureProbe:
+          process.env.IIVO_GLASS_E2E === "1" && process.env.IIVO_GLASS_E2E_CAPTURE_FAIL !== "1",
+      });
+      state.serverHealthForSetup = result.serverHealth;
+      state.screenCaptureProbe = result.screenCaptureProbe;
+      state.screenCaptureDetail = result.screenCaptureDetail;
+      state.windowCaptureProbe = result.windowCaptureProbe;
+      state.windowCaptureDetail = result.windowCaptureDetail;
+      if (!state.privacy.listening && process.env.IIVO_GLASS_E2E !== "1") {
+        const audioVerified = isSystemAudioRoutingReady(
+          state.systemAudioStatus,
+          state.systemAudioDetail,
+        );
+        const blackholeConfigured =
+          !!state.selectedVirtualAudioDeviceId ||
+          (state.virtualAudioDevices ?? []).some((d) => d.kind === "blackhole");
+        if (!audioVerified) {
+          if (!(blackholeConfigured && result.systemAudioStatus === "requires_virtual_device")) {
+            state.systemAudioStatus = result.systemAudioStatus;
+            state.systemAudioDetail = result.systemAudioDetail;
+          }
+        }
+      }
+      refreshSetupCapabilities();
+      state.setupCheckSummary = formatSetupCheckSummary(state.setupCapabilities);
+      if (!silent) {
+        state.lastNotice = state.setupCheckSummary;
+      }
+      push();
+      return;
+    }
     case "retry-system-audio": {
       const result = await runGlassSetupCheck({
         config,
@@ -2057,10 +2278,22 @@ async function handleCommand(
       }
       refreshSetupCapabilities();
       state.setupCheckSummary = formatSetupCheckSummary(state.setupCapabilities);
-      state.lastNotice = report.lines.join("\n");
+      state.lastNotice = "Capture diagnostics complete — review the report in Setup (close it when done).";
       push();
       return;
     }
+    case "clear-last-notice":
+      state.lastNotice = undefined;
+      push();
+      return;
+    case "clear-last-error":
+      state.lastError = undefined;
+      push();
+      return;
+    case "clear-capture-diagnostics-report":
+      state.captureDiagnosticsReport = undefined;
+      push();
+      return;
     case "open-screen-recording-settings": {
       const opened = await openGlassSystemSettings("screenRecording");
       state.lastNotice = opened.message;
@@ -2086,12 +2319,27 @@ async function handleCommand(
       return;
     }
     case "show-virtual-audio-help":
-      state.lastNotice = VIRTUAL_AUDIO_HELP_DETAIL;
+      state.panelTab = "audio";
+      if (!isPanelVisible()) togglePanel();
+      state.lastNotice = `${VIRTUAL_AUDIO_HELP_DETAIL} Open Audio → Configure for step-by-step routing.`;
       push();
       return;
     case "show-blackhole-setup":
-      state.lastNotice = BLACKHOLE_SETUP_INSTRUCTIONS;
+      state.panelTab = "audio";
+      if (!isPanelVisible()) togglePanel();
+      state.lastNotice =
+        "Routing help: create a Multi-Output Device with BlackHole 2ch plus your speakers or TV, set Mac output to it, then Test Audio.";
       push();
+      return;
+    case "focus-audio-setup":
+      state.panelTab = "audio";
+      if (!isPanelVisible()) togglePanel();
+      state.lastNotice =
+        "Choose BlackHole 2ch as System Audio Source, then set Mac sound output to a Multi-Output Device.";
+      push();
+      return;
+    case "verify-system-audio":
+      broadcastTranscriptionControl({ type: "startup-audio-restore" });
       return;
     case "detect-audio-devices":
       broadcastTranscriptionControl({ type: "probe-virtual-audio-devices" });
@@ -2129,18 +2377,18 @@ async function handleCommand(
       return;
     }
     case "test-microphone":
-      state.panelTab = "context";
+      state.panelTab = "audio";
       if (!isPanelVisible()) togglePanel();
       broadcastTranscriptionControl({ type: "probe-microphone" });
       state.lastNotice = "Testing microphone — approve the macOS prompt if shown.";
       push();
       return;
     case "test-system-audio":
-      state.panelTab = "context";
+      state.panelTab = "audio";
       if (!isPanelVisible()) togglePanel();
       broadcastTranscriptionControl({ type: "test-system-audio" });
       state.lastNotice =
-        "Testing system audio — choose the screen in the picker if prompted.";
+        "Testing system audio — play a YouTube video now and watch the level meter in the Audio tab.";
       push();
       return;
     case "e2e-set-server-health":
@@ -2324,8 +2572,17 @@ async function handleCopilotCommand(command: GlassCommand): Promise<boolean> {
       broadcastTranscriptionControl({ type: "stop" });
       dispatchPrivacy({ type: "PAUSE", at: new Date().toISOString() });
       systemAudioLastSignalMs = undefined;
+      resetListeningLimitTracking();
       state.lastNotice = "System listening paused.";
       push();
+      return true;
+    case "copilot-listening-limit-continue":
+      listeningLimitState = extendListeningLimit(listeningLimitState);
+      clearListeningLimitAutoStopTimer();
+      push();
+      return true;
+    case "copilot-listening-limit-stop":
+      await stopListeningFromLimit("user");
       return true;
     default:
       return false;
@@ -2868,6 +3125,7 @@ app.whenReady().then(async () => {
   if (sessionIsLive() && copilotModeIsActive(copilot.getConfig().mode)) {
     startCopilotLoop();
   }
+  state.panelTab = resolveDefaultPanelTab(glassUserSettings);
   state.windowContext = await getCurrentWindowContext();
   setChromeLayoutPersistHandler((partial) => {
     glassUserSettings = { ...glassUserSettings, ...partial };
@@ -2883,7 +3141,12 @@ app.whenReady().then(async () => {
   if (showSplash) {
     const readyWindows = getWindows();
     const windowsReady = readyWindows ? whenGlassWindowsReady(readyWindows) : Promise.resolve();
-    void Promise.all([windowsReady, splashMinDisplay]).then(() => finishSplash());
+    void Promise.all([windowsReady, splashMinDisplay]).then(async () => {
+      await finishSplash();
+      void runMainStartupAudioRestore();
+    });
+  } else {
+    void runMainStartupAudioRestore();
   }
 
   app.on("activate", () => {

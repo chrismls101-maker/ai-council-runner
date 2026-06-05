@@ -167,15 +167,25 @@ export function CopilotConfigure({ sessionLive }: { sessionLive: boolean }): JSX
 
           <label className="copilot-config__field">
             <span>Max listening (min)</span>
-            <input
-              type="number"
-              min={5}
-              max={480}
-              value={config.maxListeningMin}
-              onChange={(e) =>
-                send({ type: "copilot-set-config", patch: { maxListeningMin: Number(e.target.value) } })
-              }
-            />
+            <select
+              value={config.maxListeningMin === 0 ? "off" : String(config.maxListeningMin)}
+              onChange={(e) => {
+                const raw = e.target.value;
+                send({
+                  type: "copilot-set-config",
+                  patch: { maxListeningMin: raw === "off" ? 0 : Number(raw) },
+                });
+              }}
+            >
+              <option value="off">Off (no limit)</option>
+              <option value="30">30</option>
+              <option value="60">60</option>
+              <option value="90">90</option>
+              <option value="120">120</option>
+              <option value="180">180</option>
+              <option value="240">240</option>
+              <option value="480">480</option>
+            </select>
           </label>
 
           <label className="copilot-config__field">
