@@ -45,6 +45,15 @@ export type QaScenario = {
   fixturePage: string | null;
   fixtureExpectedKeywords?: string[];
   copilotMode?: string;
+  // --- Optional meeting-intelligence anchors (used by meeting QA + audits) ---
+  participants?: string[];
+  decisions?: string[];
+  actionItems?: string[];
+  owners?: string[];
+  deadlines?: string[];
+  blockers?: string[];
+  /** Substrings a strong answer is expected to surface (facts or missing-field call-outs). */
+  expectedAnchors?: string[];
 };
 
 export type QaModeName = "quick" | "standard" | "deep" | "overnight";

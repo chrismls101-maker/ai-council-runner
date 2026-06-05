@@ -44,11 +44,30 @@ function parseArgs() {
   const args = process.argv.slice(2);
   let count = 30;
   let seed = 1234;
+  let category = null;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--count" && args[i + 1]) count = Math.max(1, Number(args[++i]) || 30);
     if (args[i] === "--seed" && args[i + 1]) seed = Number(args[++i]) || 1234;
+    if (args[i] === "--category" && args[i + 1]) category = String(args[++i]).trim();
   }
-  return { count: Math.min(Math.max(count, 25), 50), seed };
+  // Category mode runs only that category and skips the 25-floor / 50-cap.
+  if (category) return { count: Math.max(1, count), seed, category };
+  return { count: Math.min(Math.max(count, 25), 50), seed, category: null };
+}
+
+function buildCategorySampleSet(category, count, seed) {
+  // Focused category audits grade transcript-driven answers; skip visual fixtures.
+  const pool = shuffleWithSeed(
+    SCENARIOS.filter(
+      (s) =>
+        s.category === category &&
+        s.liveAllowed &&
+        !s.requiresManual &&
+        s.testKind === "simulated",
+    ),
+    seed,
+  );
+  return pool.slice(0, count);
 }
 
 function pickScenarioForCategory(category, preferVisual = false) {
@@ -137,11 +156,13 @@ function runScenarioAsk(scenarioId) {
 }
 
 function main() {
-  const { count, seed } = parseArgs();
+  const { count, seed, category } = parseArgs();
   mkdirSync(OUT, { recursive: true });
 
   const startedAt = new Date().toISOString();
-  console.log(`IIVO Glass live answer sample · count=${count} · seed=${seed}`);
+  console.log(
+    `IIVO Glass live answer sample · count=${count} · seed=${seed}${category ? ` · category=${category}` : ""}`,
+  );
 
   checkServer()
     .then((server) => {
@@ -153,14 +174,25 @@ function main() {
         );
       }
 
-      const sample = buildSampleSet(count, seed);
-      const coverage = validateCategoryCoverage(sample);
-      console.log(
-        `Selected ${sample.length} scenarios (${coverage.visualCount} visual fixtures) · categories=${[...new Set(sample.map((s) => s.category))].sort().join(", ")}`,
-      );
-      if (coverage.errors.length > 0) {
-        for (const err of coverage.errors) console.error(`COVERAGE: ${err}`);
-        process.exit(1);
+      const sample = category
+        ? buildCategorySampleSet(category, count, seed)
+        : buildSampleSet(count, seed);
+
+      if (category) {
+        if (sample.length === 0) {
+          console.error(`No live-allowed scenarios for category ${category}`);
+          process.exit(1);
+        }
+        console.log(`Selected ${sample.length} ${category} scenarios for focused audit.`);
+      } else {
+        const coverage = validateCategoryCoverage(sample);
+        console.log(
+          `Selected ${sample.length} scenarios (${coverage.visualCount} visual fixtures) · categories=${[...new Set(sample.map((s) => s.category))].sort().join(", ")}`,
+        );
+        if (coverage.errors.length > 0) {
+          for (const err of coverage.errors) console.error(`COVERAGE: ${err}`);
+          process.exit(1);
+        }
       }
 
       let pass = 0;
@@ -171,9 +203,11 @@ function main() {
         else fail += 1;
       }
 
+      const auditScript =
+        category === "meeting_call" ? "glass-qa-meeting-audit.mjs" : "glass-live-scenario-audit.mjs";
       const audit = spawnSync(
         process.execPath,
-        [join(__dirname, "glass-live-scenario-audit.mjs"), "--run-since", startedAt],
+        [join(__dirname, auditScript), "--run-since", startedAt],
         { stdio: "inherit", env: process.env },
       );
 
@@ -189,9 +223,10 @@ function main() {
             fail,
             scenarioIds: sample.map((s) => s.id),
             categories: [...new Set(sample.map((s) => s.category))].sort(),
-            requiredCategories: REQUIRED_CATEGORIES,
-            missingCategories: coverage.missing,
-            visualFixtures: coverage.visualCount,
+            requiredCategories: category ? [category] : REQUIRED_CATEGORIES,
+            categoryFilter: category ?? null,
+            missingCategories: category ? [] : validateCategoryCoverage(sample).missing,
+            visualFixtures: sample.filter((s) => s.testKind === "controlled_visual_fixture").length,
           },
           null,
           2,

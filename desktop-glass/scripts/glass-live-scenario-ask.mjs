@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { getScenarioById, FIXTURE_PAGES } from "./qa-scenarios/iivo-glass-scenarios.mjs";
 import {
   scoreGlassAnswerQuality,
+  scoreMeetingAnswer,
   visualFixtureFailReason,
 } from "./lib/glass-answer-quality.mjs";
 import { renderFixtureScreenshot } from "./lib/render-fixture-screenshot.mjs";
@@ -201,6 +202,11 @@ const qualityFlags = scoreGlassAnswerQuality({
   contextKeywords: scenario.fixtureExpectedKeywords,
 });
 
+const meeting =
+  scenario.category === "meeting_call"
+    ? scoreMeetingAnswer({ answer: data.answer, scenario })
+    : null;
+
 appendResult({
   scenarioId,
   category: scenario.category,
@@ -216,6 +222,15 @@ appendResult({
   answerPreview,
   shortAnswer,
   qualityFlags,
+  ...(meeting
+    ? {
+        meetingVerdict: meeting.verdict,
+        meetingMissingFields: meeting.missingFields,
+        meetingMissingCalledOut: meeting.missingCalledOut,
+        meetingHallucinatedOwner: meeting.hallucinatedOwner,
+        meetingMentionedAnchors: meeting.mentionedAnchors,
+      }
+    : {}),
   pass: true,
   finishedAt: new Date().toISOString(),
 });

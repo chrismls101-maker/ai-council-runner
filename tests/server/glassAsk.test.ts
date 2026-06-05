@@ -4,10 +4,14 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
   buildGlassDirectUserPrompt,
+  buildGlassDirectRetryPrompt,
+  buildMeetingAnswerGuidance,
   extractSessionAnchors,
   formatGlassDirectAnswer,
   GLASS_DIRECT_SYSTEM_PROMPT,
   GLASS_WEAK_ANCHOR_INSTRUCTION,
+  looksLikeMeeting,
+  meetingWantsFullReport,
   runGlassDirectAsk,
   answersTooSimilar,
   sessionAnchorStrength,
@@ -493,6 +497,53 @@ await test("rich context does not append the weak-anchor instruction", () => {
 await test("buildGlassDirectUserPrompt with no session never nags for context", () => {
   const prompt = buildGlassDirectUserPrompt("What is a closure in JS?");
   assert.doesNotMatch(prompt, /I need more specific context/i);
+});
+
+// --- meeting intelligence (server prompt routing) ---
+
+await test("looksLikeMeeting detects meeting prompts/context", () => {
+  assert.equal(
+    looksLikeMeeting("Who owns what?\n\nContext: Sprint 14 planning with action items and blockers."),
+    true,
+  );
+  assert.equal(
+    looksLikeMeeting("What are the action items?", { currentSource: { appName: "Zoom" } }),
+    true,
+  );
+  // Generic coding question is not a meeting.
+  assert.equal(looksLikeMeeting("Explain this closure bug in my code."), false);
+});
+
+await test("meetingWantsFullReport distinguishes debrief vs quick", () => {
+  assert.equal(meetingWantsFullReport("Give me the report."), true);
+  assert.equal(meetingWantsFullReport("Summarize the session."), true);
+  assert.equal(meetingWantsFullReport("Who owns what?"), false);
+});
+
+await test("buildMeetingAnswerGuidance forbids invention and calls out missing fields", () => {
+  const full = buildMeetingAnswerGuidance(true);
+  assert.match(full, /Never invent owners/i);
+  assert.match(full, /Action items/i);
+  assert.match(full, /Follow-up message draft/i);
+  assert.match(full, /Next meeting agenda/i);
+  const quick = buildMeetingAnswerGuidance(false);
+  assert.match(quick, /no owner given|No owner given/i);
+  assert.doesNotMatch(quick, /Next meeting agenda/i);
+});
+
+await test("meeting prompt injects meeting guidance into user prompt", () => {
+  const prompt = buildGlassDirectUserPrompt("Who owns what?", {
+    summary: "Sprint 14 planning with Maria and Tom; action items and blockers discussed.",
+    currentSource: { appName: "Zoom", windowTitle: "Sprint 14" },
+  });
+  assert.match(prompt, /meeting\/call session/i);
+  assert.match(prompt, /Never invent owners/i);
+});
+
+await test("retry prompt demands distinct facts or explicit missing fields", () => {
+  const retry = buildGlassDirectRetryPrompt("Summarize the session.");
+  assert.match(retry, /too similar\/generic/i);
+  assert.match(retry, /list the missing fields/i);
 });
 
 console.log("glassAsk.test.ts: all assertions passed");

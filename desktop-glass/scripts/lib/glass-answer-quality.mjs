@@ -127,6 +127,95 @@ export function scoreGlassAnswerQuality(input) {
   return flags;
 }
 
+/** Jaccard-like token overlap (0–1) used to detect template-similar answers. */
+export function answerSimilarity(a, b) {
+  const tok = (s) =>
+    new Set(
+      String(s ?? "")
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, " ")
+        .split(/\s+/)
+        .filter((w) => w.length > 3),
+    );
+  const setA = tok(a);
+  const setB = tok(b);
+  if (setA.size < 6 || setB.size < 6) return 0;
+  let overlap = 0;
+  for (const t of setA) if (setB.has(t)) overlap += 1;
+  return overlap / Math.max(setA.size, setB.size);
+}
+
+/**
+ * Grade a meeting answer against scenario facts. Mirrors the TS
+ * meetingAnswerVerdict logic (kept in JS so the live audit stays dependency-free).
+ *
+ * @param {object} input
+ * @param {string} input.answer
+ * @param {import('../qa-scenarios/iivo-glass-scenarios.mjs').QaScenario} input.scenario
+ */
+export function scoreMeetingAnswer(input) {
+  const answer = String(input.answer ?? "");
+  const text = answer.toLowerCase();
+  const s = input.scenario ?? {};
+
+  const factAnchors = (s.expectedAnchors ?? []).filter((a) => !/^no\s|^not\s/i.test(a));
+  const callOutAnchors = (s.expectedAnchors ?? []).filter((a) => /^no\s|^not\s/i.test(a));
+  const mentionedAnchors = factAnchors.filter((a) => text.includes(String(a).toLowerCase()));
+
+  const missingFields = [];
+  if ((s.actionItems ?? []).length === 0) missingFields.push("action_item");
+  if ((s.owners ?? []).length === 0) missingFields.push("owner");
+  if ((s.deadlines ?? []).length === 0) missingFields.push("deadline");
+  if ((s.decisions ?? []).length === 0) missingFields.push("decision");
+  if ((s.blockers ?? []).length === 0) missingFields.push("blocker");
+
+  // The "strong" gate centers on accountability fields (owner/deadline/action).
+  const criticalMissing = missingFields.filter(
+    (m) => m === "owner" || m === "deadline" || m === "action_item",
+  );
+  const missingCalledOut =
+    criticalMissing.length === 0 ||
+    /(no owner|not specified|no deadline|not given|unspecified|none (given|recorded|specified)|isn'?t (an )?owner|wasn'?t (a )?deadline|nobody (was )?assigned|no (one|specific) owner|no action items?|no concrete|tbd|to be (decided|determined|confirmed|assigned)|not (a |an )?(formal |final )?decision|no (design |formal |final )?decision|not yet (decided|determined|set|assigned)|yet to be|pending (user |further )?(research|review|decision)|blocked until|status update, not)/i.test(
+      answer,
+    );
+
+  const NON_OWNER_WORDS = new Set([
+    "given", "is", "was", "specified", "assigned", "listed", "named", "here",
+    "none", "no", "not", "unknown", "tbd", "missing", "unspecified", "nobody",
+    "unclear", "pending", "the", "a", "an",
+  ]);
+  let hallucinatedOwner = false;
+  if ((s.owners ?? []).length === 0) {
+    const claimed = /\bowner[:\s]+([A-Za-z]+)/i.exec(answer);
+    if (claimed && !NON_OWNER_WORDS.has(claimed[1].toLowerCase()) && /^[A-Z][a-z]+$/.test(claimed[1])) {
+      hallucinatedOwner = true;
+    }
+  }
+
+  const extractsDecisions = (s.decisions ?? []).length === 0 || /decid|agreed|approved|decision|go with|chose/i.test(text);
+  const extractsActions = /action|next step|to-?do|will |follow up|owner|deadline|by /i.test(text);
+  const extractsBlockers = (s.blockers ?? []).length === 0 || /block|risk|waiting on|stuck|dependency/i.test(text);
+  const extractsCore = extractsDecisions && extractsActions && extractsBlockers;
+  const hasFacts = mentionedAnchors.length > 0;
+  const isGeneric = !hasFacts && !extractsCore;
+
+  let verdict;
+  if (hallucinatedOwner || isGeneric || (!extractsCore && !missingCalledOut)) verdict = "weak";
+  else if (hasFacts && extractsCore && missingCalledOut) verdict = "strong";
+  else if (missingCalledOut || hasFacts) verdict = "acceptable";
+  else verdict = "weak";
+
+  return {
+    verdict,
+    mentionedAnchors,
+    expectedFactAnchors: factAnchors,
+    expectedCallOuts: callOutAnchors,
+    missingFields,
+    missingCalledOut,
+    hallucinatedOwner,
+  };
+}
+
 /**
  * Hard fail reasons for controlled visual fixture live asks.
  * @param {object} input

@@ -18,6 +18,13 @@ import {
 } from "./copilotTypes.ts";
 import type { GlassCopilotSessionType, SessionTypeDetectionResult } from "./copilotSessionType.ts";
 import { SESSION_TYPE_LABELS } from "./copilotSessionType.ts";
+import {
+  buildBusinessMeetingDebrief,
+  detectMissingMeetingFields,
+  extractMeetingIntelligence,
+  MEETING_MISSING_LABELS,
+  type MeetingIntelligence,
+} from "./meetingIntelligence.ts";
 
 export interface DebriefOptions {
   sessionType?: GlassCopilotSessionType;
@@ -47,6 +54,26 @@ export function detectDebriefTrigger(text: string): boolean {
 
 function eventText(event: GlassSessionEvent): string {
   return (event.text ?? event.title).replace(/\s+/g, " ").trim();
+}
+
+/** Concatenate transcript/note/screen text for meeting extraction. */
+function meetingTextFromSession(session: GlassSession): string {
+  const parts: string[] = [];
+  for (const e of session.events) {
+    if (e.kind === "transcript_note" || e.kind === "manual_note" || e.kind === "screen_capture") {
+      parts.push(e.text ?? e.title ?? "");
+    }
+  }
+  return parts.filter(Boolean).join("\n");
+}
+
+export function meetingIntelligenceForSession(session: GlassSession): MeetingIntelligence {
+  return extractMeetingIntelligence(meetingTextFromSession(session), { topic: session.title });
+}
+
+/** Items + explicit "missing" call-outs, never invented. */
+function withMissing(items: string[], missingLabel: string): string[] {
+  return items.length ? items : [missingLabel];
 }
 
 function dedupeStrings(values: string[], max: number): string[] {
@@ -159,15 +186,24 @@ function sectionsForType(
         { heading: "Open questions", items: questions },
         { heading: "Save to memory", items: memory },
       ];
-    case "meeting_call":
+    case "meeting_call": {
+      const intel = meetingIntelligenceForSession(session);
+      const decisions = dedupeStrings(intel.decisions.concat(byType(insights, "hypothesis")), cap);
+      const actionItems = dedupeStrings(intel.actionItems.concat(actions), cap);
+      const blockers = dedupeStrings(intel.blockers.concat(risks), cap);
+      const meetingQuestions = dedupeStrings(intel.openQuestions.concat(questions), cap);
+      const followUps = dedupeStrings(intel.followUps.concat(recommendedNextSteps(insights)), cap);
       return [
         { heading: "Meeting notes", items: keyIdeas.length ? keyIdeas : whatHappened(session) },
-        { heading: "Decisions", items: dedupeStrings(byType(insights, "hypothesis").concat(keyIdeas), cap) },
-        { heading: "Action items / owners", items: actions },
-        { heading: "Follow-ups", items: recommendedNextSteps(insights) },
-        { heading: "Risks / blockers", items: risks },
-        { heading: "Open questions", items: questions },
+        { heading: "Decisions", items: withMissing(decisions, MEETING_MISSING_LABELS.decision) },
+        { heading: "Action items", items: withMissing(actionItems, MEETING_MISSING_LABELS.action_item) },
+        { heading: "Owners", items: withMissing(intel.owners, MEETING_MISSING_LABELS.owner) },
+        { heading: "Deadlines", items: withMissing(intel.deadlines, MEETING_MISSING_LABELS.deadline) },
+        { heading: "Blockers / risks", items: withMissing(blockers, MEETING_MISSING_LABELS.blocker) },
+        { heading: "Open questions", items: meetingQuestions },
+        { heading: "Follow-ups", items: followUps },
       ];
+    }
     case "research":
       return [
         { heading: "Findings", items: keyIdeas },
@@ -311,7 +347,13 @@ export function buildSessionDebrief(
     sections = sections.filter((section, index) => index === 0 || section.items.length > 0);
   }
 
-  const markdown = debriefToMarkdown(session.title, sections);
+  const isMeeting = sessionType === "meeting_call" && !(detection?.mixed && detection.secondaryType);
+  const markdown = isMeeting
+    ? buildBusinessMeetingDebrief(meetingIntelligenceForSession(session), {
+        title: session.title,
+        summary: whatHappened(session)[0],
+      })
+    : debriefToMarkdown(session.title, sections);
   return {
     id: deps.idFactory(),
     sessionId: session.id,
@@ -352,15 +394,32 @@ export function buildDebriefAiPrompt(
     options,
   );
   const styleHint = options.reportStyle === "detailed" ? "detailed" : "concise";
-  return [
+  const lines = [
     `You are IIVO debriefing a work/research session. Write a ${styleHint},`,
     "well-organized session debrief from the structured notes below. Keep the",
     "same section headings. Be specific and do not invent facts.",
     "Do not reuse the same debrief structure across similar sessions. Mention",
-    "specific names, metrics, env vars, errors, agenda items, lesson topics,",
-    "prospect names, objections, and concrete next steps from this session.",
-    "If context is thin, say what is missing instead of producing a generic template.",
-    "",
-    deterministic.markdown,
-  ].join("\n");
+    "specific names, numbers, owners, dates, sprint numbers, customer names,",
+    "metrics, env vars, errors, agenda items, lesson topics, prospect names,",
+    "objections, decisions, and concrete next steps — or differences from this session.",
+    "If context is thin, say exactly what is missing instead of producing a generic template.",
+  ];
+  if (options.sessionType === "meeting_call") {
+    const missing = detectMissingMeetingFields(meetingIntelligenceForSession(session));
+    lines.push(
+      "",
+      "This is a meeting/call. Extract decisions, action items, owners, deadlines,",
+      "blockers, risks, open questions, attendee/customer names, and metrics. For any",
+      "missing field write the explicit call-out (e.g. \"No owner given\"). Never invent",
+      "owners, deadlines, names, or decisions. Include a ready-to-send follow-up draft",
+      "and a short next-meeting agenda.",
+    );
+    if (missing.length > 0) {
+      lines.push(
+        `Missing fields detected in notes: ${missing.map((m) => MEETING_MISSING_LABELS[m]).join("; ")}.`,
+      );
+    }
+  }
+  lines.push("", deterministic.markdown);
+  return lines.join("\n");
 }

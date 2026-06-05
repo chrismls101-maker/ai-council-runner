@@ -13,7 +13,7 @@ import type { GlassAskRequestBody, GlassAskResponseBody, GlassAskSessionPayload 
 
 export const GLASS_DIRECT_SYSTEM_PROMPT = `You are IIVO Glass, a fast conversational AI companion over the user's workspace. Answer naturally and directly, like ChatGPT. Use the provided session context only when relevant. Be concise unless the user asks for depth. Do not invent screen/audio details you were not given. Do not use council/report formatting.
 
-Do not reuse the same answer structure across similar sessions. Mention specific names, numbers, topics, decisions, objections, lesson details, metrics, env vars, agenda items, or prospect names from this session. If context is thin, say what is missing instead of producing a generic template.
+Do not reuse the same answer structure across similar sessions. Mention specific names, numbers, topics, decisions, objections, lesson details, owners, dates, sprint numbers, customer names, metrics, env vars, agenda items, or prospect names — or differences from this session. If context is thin, say exactly what is missing instead of producing a generic template.
 
 If the user asks for deep analysis, strategic council review, or multi-agent deliberation, briefly answer what you can and suggest they use Analyze Now in IIVO Glass for a deeper session analysis. Do not switch into council mode yourself.
 
@@ -22,6 +22,96 @@ Style:
 - conversational and practical
 - no heavy markdown, no ## headers
 - no Final Action Plan, Decision Quality, Risk Flags, Recommended Action, Score, Sales Attack, Product Decision, or agent/council language`;
+
+const MEETING_PROMPT_PATTERNS = [
+  /\baction items?\b/i,
+  /\bwho owns?\b/i,
+  /\bowns? what\b/i,
+  /\bblockers?\b/i,
+  /\bdecisions?\b/i,
+  /\bnext meeting\b/i,
+  /\bagenda\b/i,
+  /\bfollow[- ]?ups?\b/i,
+  /\bdebrief\b/i,
+  /\bwhat did i miss\b/i,
+];
+
+const MEETING_CONTEXT_PATTERNS = [
+  /\bsprint\b/i,
+  /\bstand[- ]?up\b/i,
+  /\bagenda\b/i,
+  /\battendees?\b/i,
+  /\bparticipants?\b/i,
+  /\baction items?\b/i,
+  /\bblockers?\b/i,
+  /\bowner\b/i,
+  /\bdeadline\b/i,
+  /\b(zoom|google meet|microsoft teams|webex|huddle)\b/i,
+  /\b(kickoff|retro|retrospective|1:1|sync|standup|discovery call|demo|stakeholder|escalation|incident review|interview debrief|investor update)\b/i,
+];
+
+const MEETING_FULL_REPORT_PATTERNS = [
+  /\bgive me the report\b/i,
+  /\bdebrief\b/i,
+  /\bsummari[sz]e (the )?(session|meeting|call)\b/i,
+  /\bwhat happened\b/i,
+  /\bfull (report|summary|debrief)\b/i,
+];
+
+/** True when the prompt or session context looks meeting/call-shaped. */
+export function looksLikeMeeting(prompt: string, session?: GlassAskSessionPayload): boolean {
+  const text = prompt.toLowerCase();
+  const app = session?.currentSource?.appName?.toLowerCase() ?? "";
+  if (/(zoom|google meet|microsoft teams|webex|slack huddle)/.test(app)) return true;
+  const promptHit = MEETING_PROMPT_PATTERNS.some((re) => re.test(text));
+  const contextHit = MEETING_CONTEXT_PATTERNS.some((re) => re.test(text));
+  // A meeting prompt alone (action items / who owns what / blockers) counts; a
+  // generic prompt only counts when meeting context signals are present.
+  return promptHit && contextHit ? true : contextHit && MEETING_CONTEXT_PATTERNS.filter((re) => re.test(text)).length >= 2;
+}
+
+/** Whether a meeting prompt wants the full debrief vs. a quick answer. */
+export function meetingWantsFullReport(prompt: string): boolean {
+  return MEETING_FULL_REPORT_PATTERNS.some((re) => re.test(prompt));
+}
+
+/**
+ * Meeting-specific answer guidance. Forces extraction of decisions, action
+ * items, owners, deadlines, blockers, and explicit call-outs for missing
+ * fields — without inventing owners/deadlines/names.
+ */
+export function buildMeetingAnswerGuidance(fullReport: boolean): string {
+  const shared =
+    "This is a meeting/call session. Extract real specifics — decisions, action items, owners, deadlines, blockers, risks, open questions, attendee/customer names, sprint numbers, and metrics. " +
+    "If a field is absent, say so explicitly (e.g. \"No owner given\", \"No deadline given\", \"No decision recorded\", \"No customer name visible\"). Never invent owners, deadlines, names, or decisions.";
+  if (fullReport) {
+    return [
+      shared,
+      "",
+      "Structure the full debrief as:",
+      "- Meeting summary (specific to this session)",
+      "- Decisions made",
+      "- Action items (action — owner — deadline)",
+      "- Owners (flag any action with no owner)",
+      "- Deadlines (flag any action with no date)",
+      "- Blockers / risks",
+      "- Open questions",
+      "- Follow-up message draft (ready to send)",
+      "- Next meeting agenda",
+    ].join("\n");
+  }
+  return [
+    shared,
+    "",
+    "Give a quick, specific answer covering:",
+    "- Decision / main point",
+    "- Action items",
+    "- Owners (or 'no owner given')",
+    "- Deadlines (or 'no deadline given')",
+    "- Risks / blockers",
+    "- Next step",
+  ].join("\n");
+}
 
 const COUNCIL_FORMAT_MARKERS =
   /\b(Final Action Plan|Decision Quality|Risk Flags|Recommended Action|Sales Attack|Product Decision|Final Judge|Strategist complete)\b/i;
@@ -239,8 +329,11 @@ export function buildGlassDirectUserPrompt(
   if (anchorBlock.length > 0) {
     lines.push(...anchorBlock);
   }
-  // Only nudge toward "need more context" when we have a session but it is thin.
-  if (session && sessionAnchorStrength(anchors) < 2) {
+
+  if (looksLikeMeeting(prompt, session)) {
+    lines.push("", buildMeetingAnswerGuidance(meetingWantsFullReport(prompt)));
+  } else if (session && sessionAnchorStrength(anchors) < 2) {
+    // Only nudge toward "need more context" when we have a non-meeting thin session.
     lines.push("", GLASS_WEAK_ANCHOR_INSTRUCTION);
   }
 
@@ -271,7 +364,7 @@ export function answersTooSimilar(current: string, previous: string): boolean {
 }
 
 export function buildGlassDirectRetryPrompt(userPrompt: string): string {
-  return `${userPrompt}\n\nYour draft was too similar to the previous answer in this session. Rewrite with session-specific names, numbers, topics, metrics, and differences. Avoid repeating the same structure or headings.`;
+  return `${userPrompt}\n\nYour previous answer was too similar/generic to another answer in this session. Rewrite using only the distinct facts from THIS session — specific names, owners, dates, sprint numbers, decisions, metrics, customer names, and blockers. If distinct facts are missing, list the missing fields explicitly instead of filling with generic advice. Do not repeat the same structure or headings.`;
 }
 
 /** Strip council-style formatting and cap overlay length. */
