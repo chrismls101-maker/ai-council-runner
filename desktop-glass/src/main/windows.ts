@@ -159,6 +159,21 @@ export function beginGlassBootSequence(): void {
   glassBootPending = true;
 }
 
+/** Abort boot splash when the page fails to load — show Glass windows immediately. */
+export function abortGlassBootSequence(reason?: string): void {
+  if (!glassBootPending) return;
+  if (reason) {
+    console.warn(`[IIVO Glass] boot splash aborted: ${reason}`);
+  }
+  glassBootPending = false;
+  const splash = splashWindow;
+  splashWindow = null;
+  if (splash && !splash.isDestroyed()) {
+    splash.close();
+  }
+  showPrimaryGlassWindows();
+}
+
 /** Show dock, overlay, and command bar after the boot splash has finished. */
 function showPrimaryGlassWindows(): void {
   if (!windows || !layoutManager) return;
@@ -599,6 +614,12 @@ export function createSplashWindow(): BrowserWindow {
   splash.setIgnoreMouseEvents(true);
   splash.once("ready-to-show", () => {
     if (!splash.isDestroyed()) splash.showInactive();
+  });
+  splash.webContents.once("did-fail-load", (_event, code, description, url) => {
+    abortGlassBootSequence(`did-fail-load ${code} ${description} (${url})`);
+  });
+  splash.webContents.once("render-process-gone", (_event, details) => {
+    abortGlassBootSequence(`render-process-gone ${details.reason}`);
   });
   loadRenderer(splash, "splash.html", {
     bootSound: GLASS_BOOT_SOUND_ENABLED ? "1" : "0",

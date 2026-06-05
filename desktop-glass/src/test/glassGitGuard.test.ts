@@ -36,13 +36,13 @@ test("git guard classifies blocked release and session paths", () => {
 
 test("secret-like content fails content scan", () => {
   const { issues } = classifyFileContent("OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz123456", "secrets.txt");
-  assert.ok(issues.some((i) => i.includes("openai-env-key")));
+  assert.ok(issues.some((i: string) => i.includes("openai-env-key")));
 });
 
 test("base64 screenshot content fails content scan", () => {
   const snippet = 'const img = "data:image/png;base64,iVBORw0KGgo=";';
   const { issues } = classifyFileContent(snippet, "leak.ts");
-  assert.ok(issues.some((i) => i.includes("data-image")));
+  assert.ok(issues.some((i: string) => i.includes("data-image")));
 });
 
 test(".env fails but .env.example passes path policy", () => {
@@ -82,7 +82,7 @@ test("WIP path fails on stable branch policy but warns on wip branch", () => {
 });
 
 test("content block patterns cover session artifact names", () => {
-  const ids = new Set(CONTENT_BLOCK_PATTERNS.map((p) => p.id));
+  const ids = new Set(CONTENT_BLOCK_PATTERNS.map((p: { id: string }) => p.id));
   assert.ok(ids.has("glass-sessions"));
   assert.ok(ids.has("session-screenshots"));
 });

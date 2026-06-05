@@ -13,6 +13,7 @@ import { getGlassE2eWindowMetadata } from "./e2eWindowMetadata.ts";
 import { join } from "node:path";
 import { app, BrowserWindow, ipcMain, protocol, shell, type WebContents } from "electron";
 import { GLASS_BOOT_DURATION_MS } from "../shared/bootTiming.ts";
+import { isBootSplashBundlePresent } from "../shared/bootSplash.ts";
 import { DOCK_MIN_WIDTH_VERTICAL } from "../shared/glassLayoutMath.ts";
 import { resolveConfig, buildIivoChatUrl, buildLensAskUrl, buildRunHistoryUrl } from "../shared/config.ts";
 import {
@@ -3161,15 +3162,15 @@ app.whenReady().then(async () => {
 
   refreshAppIdentityState();
 
-  // Show the cinematic boot splash immediately, before any async startup work.
-  const showSplash = process.env.IIVO_GLASS_E2E !== "1";
+  const showSplash =
+    process.env.IIVO_GLASS_E2E !== "1" && isBootSplashBundlePresent(__dirname);
   if (showSplash) {
-    const settingsPath = join(app.getPath("userData"), "glass-settings.json");
     beginGlassBootSequence();
     createSplashWindow();
   }
-  // Hybrid timing: never close the splash before its animation has played fully.
-  const splashMinDisplay = new Promise<void>((resolve) => setTimeout(resolve, GLASS_BOOT_DURATION_MS));
+  const splashMinDisplay = showSplash
+    ? new Promise<void>((resolve) => setTimeout(resolve, GLASS_BOOT_DURATION_MS))
+    : Promise.resolve();
 
   registerScreenshotProtocol();
   registerSystemAudioHandler();
