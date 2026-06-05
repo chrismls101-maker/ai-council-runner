@@ -115,7 +115,7 @@ test("virtual device guidance only when status is requires_virtual_device and sc
     systemAudioStatus: "requires_virtual_device",
     systemAudioDetail: "No audio track from display media.",
   });
-  assert.match(rowVirtual.detail ?? "", /virtual audio device/i);
+  assert.match(rowVirtual.detail ?? "", /BlackHole 2ch or Loopback/i);
 });
 
 test("diagnostic-style summary preserves failed to get sources in system audio detail", () => {
@@ -150,6 +150,6 @@ test("no audio track after permission maps to requires_virtual_device not not_te
     platform: "darwin",
   });
   assert.equal(resolved.status, "requires_virtual_device");
-  assert.match(resolved.detail, /Native system audio is not available/i);
+  assert.match(resolved.detail, /Native macOS system audio is not available/i);
   assert.notEqual(resolved.status, "not_tested");
 });

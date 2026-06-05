@@ -41,13 +41,13 @@ export interface VirtualAudioDeviceMatch {
 }
 
 export const NATIVE_SYSTEM_AUDIO_UNAVAILABLE_MESSAGE =
-  "Native system audio is not available on this Mac. Use a virtual audio device such as BlackHole or Loopback.";
+  "Native macOS system audio is not available on this Mac. Use BlackHole 2ch or Loopback.";
 
 export const VIRTUAL_AUDIO_DEVICE_DETECTED_MESSAGE =
   "Virtual audio device detected — select it for system audio.";
 
 export const VIRTUAL_AUDIO_SETUP_INSTRUCTIONS =
-  "Install a virtual audio driver (BlackHole or Loopback recommended), open Audio MIDI Setup, create a Multi-Output Device that includes your speakers and the virtual device, set it as system output, then choose the virtual device input in Glass.";
+  "Install BlackHole 2ch, create a Multi-Output Device, route Mac audio to it, then select BlackHole in IIVO Glass.";
 
 export function detectVirtualAudioDevices(
   inputs: { deviceId: string; label: string }[],
@@ -90,7 +90,12 @@ export function buildSystemAudioVirtualDeviceDetail(input: {
   }
 
   if (input.virtualDevices.length > 0) {
-    parts.push(VIRTUAL_AUDIO_DEVICE_DETECTED_MESSAGE);
+    const blackhole = input.virtualDevices.find((d) => d.kind === "blackhole");
+    if (blackhole) {
+      parts.push("BlackHole detected");
+    } else {
+      parts.push(VIRTUAL_AUDIO_DEVICE_DETECTED_MESSAGE);
+    }
     const selected = input.virtualDevices.find((d) => d.deviceId === input.selectedDeviceId);
     if (selected) {
       parts.push(`Selected: ${selected.label}`);

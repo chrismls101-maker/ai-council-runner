@@ -12,6 +12,7 @@ import {
   buildSystemAudioVirtualDeviceDetail,
   type VirtualAudioDeviceMatch,
 } from "./virtualAudioDevices.ts";
+import { NATIVE_SYSTEM_AUDIO_UNAVAILABLE_LABEL } from "./virtualAudioCapture.ts";
 import type { SttProviderStatus } from "./sttTypes.ts";
 import {
   mapEnumerationErrorToScreenCaptureStatus,
@@ -48,7 +49,11 @@ export type GlassSetupActionType =
   | "open-microphone-settings"
   | "open-privacy-settings"
   | "open-audio-midi-setup"
+  | "open-sound-settings"
   | "show-virtual-audio-help"
+  | "show-blackhole-setup"
+  | "detect-audio-devices"
+  | "test-blackhole"
   | "retry-capture"
   | "retry-system-audio"
   | "test-microphone"
@@ -331,6 +336,14 @@ export function buildMicrophoneCapability(input: GlassSetupCapabilitiesInput): G
   };
 }
 
+const SYSTEM_AUDIO_VIRTUAL_FALLBACK_ACTIONS: GlassSetupAction[] = [
+  { label: "Detect Audio Devices", command: "detect-audio-devices" },
+  { label: "Test BlackHole", command: "test-blackhole" },
+  { label: "Open Audio MIDI Setup", command: "open-audio-midi-setup" },
+  { label: "Open Sound Settings", command: "open-sound-settings" },
+  { label: "Show BlackHole Setup", command: "show-blackhole-setup" },
+];
+
 const SYSTEM_AUDIO_RETRY_ACTIONS: GlassSetupAction[] = [
   { label: "Retry System Audio", command: "retry-system-audio" },
   { label: "Open Privacy & Security", command: "open-privacy-settings" },
@@ -417,17 +430,17 @@ export function buildSystemAudioCapability(input: GlassSetupCapabilitiesInput): 
       extraDetail: input.systemAudioDetail,
     });
     const hasVirtual = (input.virtualAudioDevices?.length ?? 0) > 0;
+    const primary = hasVirtual
+      ? { label: "Test BlackHole", command: "test-blackhole" as const }
+      : { label: "Show BlackHole Setup", command: "show-blackhole-setup" as const };
     return {
       id: "systemAudio",
       status: "requires_virtual_device",
-      label: hasVirtual ? "Virtual device detected" : "Virtual device needed",
+      label: NATIVE_SYSTEM_AUDIO_UNAVAILABLE_LABEL,
       detail,
-      actionLabel: hasVirtual ? "Virtual audio setup" : "Virtual audio setup",
-      actionCommand: "show-virtual-audio-help",
-      actions: systemAudioActions(
-        { label: "Virtual audio setup", command: "show-virtual-audio-help" },
-        true,
-      ),
+      actionLabel: primary.label,
+      actionCommand: primary.command,
+      actions: [primary, ...SYSTEM_AUDIO_VIRTUAL_FALLBACK_ACTIONS.filter((a) => a.command !== primary.command)],
       severity: "warn",
     };
   }

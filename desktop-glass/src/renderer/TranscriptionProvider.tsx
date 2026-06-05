@@ -14,6 +14,12 @@ export function TranscriptionProvider({ children }: { children: ReactNode }): JS
         tx.stopListeningLocal();
       } else if (command.type === "probe-microphone") {
         void tx.probeMicrophone();
+      } else if (command.type === "probe-virtual-audio-devices") {
+        void tx.probeVirtualAudioDevices();
+      } else if (command.type === "test-system-audio") {
+        void tx.testSystemAudio();
+      } else if (command.type === "test-blackhole") {
+        void tx.testBlackHole();
       }
     });
     return unsubscribe;

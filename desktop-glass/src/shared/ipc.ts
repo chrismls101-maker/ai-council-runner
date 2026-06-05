@@ -68,7 +68,10 @@ export const IPC = {
 export type TranscriptionControlCommand =
   | { type: "start" }
   | { type: "stop" }
-  | { type: "probe-microphone" };
+  | { type: "probe-microphone" }
+  | { type: "probe-virtual-audio-devices" }
+  | { type: "test-system-audio" }
+  | { type: "test-blackhole" };
 
 export type GlassCommand =
   | { type: "capture-screen" }
@@ -127,7 +130,11 @@ export type GlassCommand =
   | { type: "open-microphone-settings" }
   | { type: "open-privacy-settings" }
   | { type: "open-audio-midi-setup" }
+  | { type: "open-sound-settings" }
   | { type: "show-virtual-audio-help" }
+  | { type: "show-blackhole-setup" }
+  | { type: "detect-audio-devices" }
+  | { type: "test-blackhole" }
   | { type: "retry-capture-permission" }
   | { type: "retry-capture" }
   | { type: "retry-system-audio" }

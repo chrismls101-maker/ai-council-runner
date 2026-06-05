@@ -203,6 +203,7 @@ import {
   formatScreenCaptureProbeDebug,
 } from "../shared/screenCaptureProbe.ts";
 import { detectVirtualAudioDevices } from "../shared/virtualAudioDevices.ts";
+import { BLACKHOLE_SETUP_INSTRUCTIONS } from "../shared/virtualAudioCapture.ts";
 import type { VirtualAudioDeviceMatch } from "../shared/virtualAudioDevices.ts";
 
 loadGlassEnv();
@@ -1572,15 +1573,26 @@ async function handleCommand(
         !state.virtualAudioDevices.some((d) => d.deviceId === state.selectedVirtualAudioDeviceId)
       ) {
         state.selectedVirtualAudioDeviceId = undefined;
+        glassUserSettings = {
+          ...glassUserSettings,
+          selectedVirtualAudioDeviceId: undefined,
+        };
+        state.glassSettings = glassUserSettings;
+        void persistGlassUserSettings(glassUserSettings);
       }
       refreshSetupCapabilities();
       push();
       return;
-    case "set-selected-virtual-audio-device":
-      state.selectedVirtualAudioDeviceId = command.deviceId;
+    case "set-selected-virtual-audio-device": {
+      const deviceId = command.deviceId.trim() || undefined;
+      state.selectedVirtualAudioDeviceId = deviceId;
+      glassUserSettings = { ...glassUserSettings, selectedVirtualAudioDeviceId: deviceId };
+      state.glassSettings = glassUserSettings;
+      await persistGlassUserSettings(glassUserSettings);
       refreshSetupCapabilities();
       push();
       return;
+    }
     case "stt-listening-timer":
       state.stt = { ...state.stt, listeningElapsedMs: command.elapsedMs };
       push();
@@ -1912,6 +1924,26 @@ async function handleCommand(
       state.lastNotice = VIRTUAL_AUDIO_HELP_DETAIL;
       push();
       return;
+    case "show-blackhole-setup":
+      state.lastNotice = BLACKHOLE_SETUP_INSTRUCTIONS;
+      push();
+      return;
+    case "detect-audio-devices":
+      broadcastTranscriptionControl({ type: "probe-virtual-audio-devices" });
+      state.lastNotice = "Scanning for virtual audio devices (BlackHole, Loopback, etc.)…";
+      push();
+      return;
+    case "test-blackhole":
+      broadcastTranscriptionControl({ type: "test-blackhole" });
+      state.lastNotice = "Testing BlackHole input — play audio on your Mac while the test runs.";
+      push();
+      return;
+    case "open-sound-settings": {
+      const opened = await openGlassSystemSettings("sound");
+      state.lastNotice = opened.message;
+      push();
+      return;
+    }
     case "retry-capture":
     case "retry-capture-permission": {
       const target = resolveCaptureDisplay(state.glassSettings.displayTarget);
@@ -1939,13 +1971,11 @@ async function handleCommand(
       push();
       return;
     case "test-system-audio":
-      state.transcriptionMode = "system_audio";
       state.panelTab = "context";
       if (!isPanelVisible()) togglePanel();
-      push();
-      broadcastTranscriptionControl({ type: "start" });
+      broadcastTranscriptionControl({ type: "test-system-audio" });
       state.lastNotice =
-        "Testing system audio — choose the screen in the picker. Stop listening when finished.";
+        "Testing system audio — choose the screen in the picker if prompted.";
       push();
       return;
     case "e2e-set-server-health":
@@ -2436,6 +2466,7 @@ app.whenReady().then(async () => {
     glassUserSettings = { ...glassUserSettings, hotkeyPreset: "disabled" };
   }
   state.glassSettings = glassUserSettings;
+  state.selectedVirtualAudioDeviceId = glassUserSettings.selectedVirtualAudioDeviceId;
   state.windowContext = await getCurrentWindowContext();
   setChromeLayoutPersistHandler((partial) => {
     glassUserSettings = { ...glassUserSettings, ...partial };

@@ -43,6 +43,11 @@ export async function loadGlassUserSettings(): Promise<GlassUserSettings> {
         parsed.autoUploadCapturesToContext,
       ),
       micAutoSendAfterSilence: parseMicAutoSendAfterSilence(parsed.micAutoSendAfterSilence),
+      selectedVirtualAudioDeviceId:
+        typeof parsed.selectedVirtualAudioDeviceId === "string" &&
+        parsed.selectedVirtualAudioDeviceId.trim()
+          ? parsed.selectedVirtualAudioDeviceId.trim()
+          : undefined,
     };
   } catch {
     return { ...DEFAULT_GLASS_USER_SETTINGS };

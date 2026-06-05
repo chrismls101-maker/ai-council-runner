@@ -35,6 +35,8 @@ export interface GlassUserSettings {
   autoUploadCapturesToContext: boolean;
   /** After mic pause, auto-send command bar text to IIVO (default off). */
   micAutoSendAfterSilence: boolean;
+  /** Virtual audio input (e.g. BlackHole 2ch) for system-audio fallback. */
+  selectedVirtualAudioDeviceId?: string;
 }
 
 export const DEFAULT_GLASS_USER_SETTINGS: GlassUserSettings = {

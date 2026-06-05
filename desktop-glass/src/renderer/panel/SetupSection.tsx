@@ -1,9 +1,10 @@
-import { useCallback, useEffect } from "react";
+import { useCallback } from "react";
 import { send, useGlassState } from "../useGlassState.ts";
 import type { GlassCommand } from "../../shared/ipc.ts";
 import type { GlassCapabilityRow, GlassSetupActionType } from "../../shared/glassCapabilities.ts";
 import { mapPermissionsApiToMic } from "../../shared/glassCapabilities.ts";
 import { formatVirtualAudioDeviceOption } from "../../shared/virtualAudioDevices.ts";
+import { BLACKHOLE_NOT_DETECTED_GUIDANCE } from "../../shared/virtualAudioCapture.ts";
 import { reportVirtualAudioDevices } from "./virtualAudioScan.ts";
 
 function severityClass(severity: GlassCapabilityRow["severity"]): string {
@@ -32,10 +33,6 @@ async function queryMicPermissionWithoutPrompt(): Promise<void> {
 export function SetupSection(): JSX.Element {
   const state = useGlassState();
   const rows = state.setupCapabilities ?? [];
-
-  useEffect(() => {
-    void reportVirtualAudioDevices();
-  }, []);
 
   const runSetupCheck = useCallback(async () => {
     await queryMicPermissionWithoutPrompt();
@@ -133,17 +130,14 @@ function VirtualAudioDevicePanel(): JSX.Element | null {
         data-testid="glass-virtual-audio-setup"
       >
         <p className="setup-section__virtual-audio-title">Virtual audio setup</p>
-        <p className="hint setup-section__virtual-audio-hint">
-          No virtual audio input detected. Install BlackHole or Loopback, route system output
-          through it in Audio MIDI Setup, then rescan.
-        </p>
+        <p className="hint setup-section__virtual-audio-hint">{BLACKHOLE_NOT_DETECTED_GUIDANCE}</p>
         <button
           type="button"
           className="gbtn gbtn--small"
-          data-testid="glass-rescan-virtual-audio"
-          onClick={() => void reportVirtualAudioDevices()}
+          data-testid="glass-detect-audio-devices"
+          onClick={() => send({ type: "detect-audio-devices" })}
         >
-          Rescan devices
+          Detect Audio Devices
         </button>
       </div>
     );
@@ -156,7 +150,9 @@ function VirtualAudioDevicePanel(): JSX.Element | null {
     >
       <p className="setup-section__virtual-audio-title">Virtual audio device</p>
       <p className="hint setup-section__virtual-audio-hint">
-        Virtual audio device detected — select it for system audio.
+        {devices.some((d) => d.kind === "blackhole")
+          ? "BlackHole detected — select it for system audio."
+          : "Virtual audio device detected — select it for system audio."}
       </p>
       <label className="setup-section__virtual-audio-label">
         <span className="sr-only">Virtual audio input</span>
@@ -164,9 +160,9 @@ function VirtualAudioDevicePanel(): JSX.Element | null {
           className="setup-section__virtual-audio-select"
           data-testid="glass-virtual-audio-select"
           value={selectedId}
-          onChange={(e) =>
-            send({ type: "set-selected-virtual-audio-device", deviceId: e.target.value })
-          }
+          onChange={(e) => {
+            send({ type: "set-selected-virtual-audio-device", deviceId: e.target.value });
+          }}
         >
           <option value="">Choose a device…</option>
           {devices.map((device) => (
@@ -176,14 +172,24 @@ function VirtualAudioDevicePanel(): JSX.Element | null {
           ))}
         </select>
       </label>
-      <button
-        type="button"
-        className="gbtn gbtn--small"
-        data-testid="glass-rescan-virtual-audio"
-        onClick={() => void reportVirtualAudioDevices()}
-      >
-        Rescan devices
-      </button>
+      <div className="setup-section__virtual-audio-actions">
+        <button
+          type="button"
+          className="gbtn gbtn--small"
+          data-testid="glass-detect-audio-devices"
+          onClick={() => send({ type: "detect-audio-devices" })}
+        >
+          Detect Audio Devices
+        </button>
+        <button
+          type="button"
+          className="gbtn gbtn--small"
+          data-testid="glass-test-blackhole"
+          onClick={() => send({ type: "test-blackhole" })}
+        >
+          Test BlackHole
+        </button>
+      </div>
     </div>
   );
 }

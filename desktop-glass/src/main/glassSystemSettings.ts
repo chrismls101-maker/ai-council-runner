@@ -8,7 +8,8 @@ export type GlassSystemSettingsTarget =
   | "screenRecording"
   | "microphone"
   | "privacy"
-  | "audioMidi";
+  | "audioMidi"
+  | "sound";
 
 const MACOS_URLS: Record<GlassSystemSettingsTarget, string[]> = {
   screenRecording: [
@@ -24,6 +25,10 @@ const MACOS_URLS: Record<GlassSystemSettingsTarget, string[]> = {
     "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension",
   ],
   audioMidi: ["file:///System/Applications/Utilities/Audio%20MIDI%20Setup.app/"],
+  sound: [
+    "x-apple.systempreferences:com.apple.preference.sound",
+    "x-apple.systempreferences:com.apple.Sound-Settings.extension",
+  ],
 };
 
 export async function openGlassSystemSettings(
@@ -49,6 +54,9 @@ export async function openGlassSystemSettings(
       }
       if (target === "audioMidi") {
         return { ok: true, message: "Opened Audio MIDI Setup." };
+      }
+      if (target === "sound") {
+        return { ok: true, message: "Opened Sound settings." };
       }
       return { ok: true, message: "Opened Privacy & Security." };
     } catch {

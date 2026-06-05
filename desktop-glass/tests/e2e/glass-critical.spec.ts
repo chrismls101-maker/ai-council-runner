@@ -299,7 +299,7 @@ test.describe("IIVO Glass Electron E2E", () => {
     expect(mic?.status).toBe("permission_denied");
     expect(sys?.status).toBe("requires_virtual_device");
     await expect(
-      panel.getByTestId("glass-setup-action-systemAudio-show-virtual-audio-help"),
+      panel.getByTestId("glass-setup-action-systemAudio-test-blackhole"),
     ).toBeVisible();
   });
 

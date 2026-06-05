@@ -32,6 +32,16 @@ import {
 } from "../shared/systemAudioCapture.ts";
 import { reportVirtualAudioDevices } from "./panel/virtualAudioScan.ts";
 import {
+  openVirtualAudioInputStream,
+  probeNativeDisplayMediaAudio,
+  probeVirtualAudioInput,
+} from "./panel/virtualAudioProbe.ts";
+import {
+  BLACKHOLE_NOT_DETECTED_GUIDANCE,
+  pickPreferredVirtualAudioDevice,
+  shouldUseVirtualSystemAudioCapture,
+} from "../shared/virtualAudioCapture.ts";
+import {
   initialTranscriptionState,
   transcriptionReducer,
 } from "../shared/transcriptionTypes.ts";
@@ -112,6 +122,9 @@ export interface TranscriptionController {
   transcribeLastChunk: () => void;
   addChunkToSession: () => void;
   probeMicrophone: () => Promise<void>;
+  probeVirtualAudioDevices: () => Promise<void>;
+  testSystemAudio: () => Promise<void>;
+  testBlackHole: () => Promise<void>;
 }
 
 export function useTranscription(): TranscriptionController {
@@ -436,29 +449,81 @@ export function useTranscription(): TranscriptionController {
     }
   }, [snapshot, startChunkRecorder]);
 
-  const startSystemAudio = useCallback(async () => {
-    if (!navigator.mediaDevices?.getDisplayMedia) {
-      const status: SystemAudioStatus = "unsupported";
+  const applySystemAudioProbeResult = useCallback(
+    (status: SystemAudioStatus, detail?: string) => {
       setSystemAudioStatus(status);
-      syncSystemAudioStatus(status);
-      return;
-    }
+      setSystemAudioDetail(detail);
+      syncSystemAudioStatus(status, detail);
+    },
+    [],
+  );
+
+  const resolveVirtualDeviceId = useCallback((): string | undefined => {
+    const selected = glassState.selectedVirtualAudioDeviceId?.trim();
+    if (selected) return selected;
+    const preferred = pickPreferredVirtualAudioDevice(glassState.virtualAudioDevices ?? []);
+    return preferred?.deviceId;
+  }, [glassState.selectedVirtualAudioDeviceId, glassState.virtualAudioDevices]);
+
+  const captureVirtualSystemAudioStream = useCallback(async (): Promise<MediaStream | null> => {
+    const deviceId = resolveVirtualDeviceId();
+    if (!deviceId) return null;
+    return openVirtualAudioInputStream(deviceId);
+  }, [resolveVirtualDeviceId]);
+
+  const startSystemAudio = useCallback(async () => {
+    const useVirtual = shouldUseVirtualSystemAudioCapture({
+      systemAudioStatus,
+      selectedVirtualAudioDeviceId: glassState.selectedVirtualAudioDeviceId,
+    });
+
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
-        audio: true,
-      });
+      if (useVirtual) {
+        const stream = await captureVirtualSystemAudioStream();
+        if (!stream || stream.getAudioTracks().length === 0) {
+          applySystemAudioProbeResult("requires_virtual_device", BLACKHOLE_NOT_DETECTED_GUIDANCE);
+          void reportVirtualAudioDevices();
+          dispatch({
+            type: "SET_ERROR",
+            message: BLACKHOLE_NOT_DETECTED_GUIDANCE,
+          });
+          return;
+        }
+        mediaStreamRef.current = stream;
+        applySystemAudioProbeResult("available", "Virtual system audio input active.");
+        startChunkRecorder(stream, "system_audio");
+        return;
+      }
+
+      if (!navigator.mediaDevices?.getDisplayMedia) {
+        const virtualStream = await captureVirtualSystemAudioStream();
+        if (virtualStream && virtualStream.getAudioTracks().length > 0) {
+          mediaStreamRef.current = virtualStream;
+          applySystemAudioProbeResult("available", "Virtual system audio input active.");
+          startChunkRecorder(virtualStream, "system_audio");
+          return;
+        }
+        applySystemAudioProbeResult("unsupported", "Display media capture is not available.");
+        return;
+      }
+
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
       for (const track of stream.getVideoTracks()) {
         track.stop();
         stream.removeTrack(track);
       }
       const audioTracks = stream.getAudioTracks();
-      const mapped = mapSystemAudioStreamResultDetail(audioTracks.length);
       if (audioTracks.length === 0) {
         stopMediaStreamState(stream.getTracks());
-        setSystemAudioStatus(mapped.status);
-        setSystemAudioDetail(mapped.detail);
-        syncSystemAudioStatus(mapped.status, mapped.detail);
+        const virtualStream = await captureVirtualSystemAudioStream();
+        if (virtualStream && virtualStream.getAudioTracks().length > 0) {
+          mediaStreamRef.current = virtualStream;
+          applySystemAudioProbeResult("available", "Virtual system audio input active.");
+          startChunkRecorder(virtualStream, "system_audio");
+          return;
+        }
+        const mapped = mapSystemAudioStreamResultDetail(0);
+        applySystemAudioProbeResult(mapped.status, mapped.detail);
         void reportVirtualAudioDevices();
         dispatch({
           type: "SET_ERROR",
@@ -471,15 +536,11 @@ export function useTranscription(): TranscriptionController {
         return;
       }
       mediaStreamRef.current = stream;
-      setSystemAudioStatus("available");
-      setSystemAudioDetail(undefined);
-      syncSystemAudioStatus("available");
+      applySystemAudioProbeResult("available", "Native loopback audio track detected.");
       startChunkRecorder(stream, "system_audio");
     } catch (err) {
       const mapped = mapSystemAudioCaptureError(err);
-      setSystemAudioStatus(mapped.status);
-      setSystemAudioDetail(mapped.detail);
-      syncSystemAudioStatus(mapped.status, mapped.detail);
+      applySystemAudioProbeResult(mapped.status, mapped.detail);
       dispatch({
         type: "SET_ERROR",
         message: modeStatusMessage("system_audio", {
@@ -489,7 +550,77 @@ export function useTranscription(): TranscriptionController {
         }),
       });
     }
-  }, [snapshot, startChunkRecorder]);
+  }, [
+    systemAudioStatus,
+    glassState.selectedVirtualAudioDeviceId,
+    captureVirtualSystemAudioStream,
+    applySystemAudioProbeResult,
+    snapshot,
+    startChunkRecorder,
+  ]);
+
+  const probeVirtualAudioDevices = useCallback(async () => {
+    await reportVirtualAudioDevices();
+  }, []);
+
+  const testSystemAudio = useCallback(async () => {
+    try {
+      const native = await probeNativeDisplayMediaAudio();
+      if (native.trackCount > 0) {
+        applySystemAudioProbeResult(native.status, native.detail);
+        dispatch({ type: "SET_ERROR", message: undefined });
+        return;
+      }
+      await reportVirtualAudioDevices();
+      const deviceId = resolveVirtualDeviceId();
+      if (!deviceId) {
+        applySystemAudioProbeResult(native.status, native.detail);
+        return;
+      }
+      const device = (glassState.virtualAudioDevices ?? []).find((d) => d.deviceId === deviceId);
+      const virtual = await probeVirtualAudioInput(deviceId, device?.label);
+      applySystemAudioProbeResult(virtual.status, virtual.detail);
+      dispatch({
+        type: "SET_ERROR",
+        message: virtual.hasActivity ? undefined : virtual.detail,
+      });
+    } catch (err) {
+      const mapped = mapSystemAudioCaptureError(err);
+      applySystemAudioProbeResult(mapped.status, mapped.detail);
+      dispatch({ type: "SET_ERROR", message: mapped.detail });
+    }
+  }, [
+    applySystemAudioProbeResult,
+    resolveVirtualDeviceId,
+    glassState.virtualAudioDevices,
+  ]);
+
+  const testBlackHole = useCallback(async () => {
+    await reportVirtualAudioDevices();
+    const deviceId = resolveVirtualDeviceId();
+    if (!deviceId) {
+      applySystemAudioProbeResult("requires_virtual_device", BLACKHOLE_NOT_DETECTED_GUIDANCE);
+      dispatch({ type: "SET_ERROR", message: BLACKHOLE_NOT_DETECTED_GUIDANCE });
+      return;
+    }
+    try {
+      const device = (glassState.virtualAudioDevices ?? []).find((d) => d.deviceId === deviceId);
+      const virtual = await probeVirtualAudioInput(deviceId, device?.label);
+      applySystemAudioProbeResult(virtual.status, virtual.detail);
+      dispatch({
+        type: "SET_ERROR",
+        message: virtual.hasActivity ? undefined : virtual.detail,
+      });
+    } catch (err) {
+      const mapped = mapSystemAudioCaptureError(err);
+      applySystemAudioProbeResult(mapped.status, mapped.detail);
+      dispatch({ type: "SET_ERROR", message: mapped.detail });
+    }
+  }, [
+    applySystemAudioProbeResult,
+    resolveVirtualDeviceId,
+    glassState.virtualAudioDevices,
+  ]);
 
   const startSystemAudioListening = useCallback(() => {
     if (state.status === "listening") return;
@@ -714,5 +845,8 @@ export function useTranscription(): TranscriptionController {
     transcribeLastChunk,
     addChunkToSession,
     probeMicrophone,
+    probeVirtualAudioDevices,
+    testSystemAudio,
+    testBlackHole,
   };
 }

@@ -93,8 +93,8 @@ test("virtual device detected shows selectable guidance", () => {
     ...baseInput,
     virtualAudioDevices: devices,
   });
-  assert.equal(row.label, "Virtual device detected");
-  assert.match(row.detail ?? "", new RegExp(VIRTUAL_AUDIO_DEVICE_DETECTED_MESSAGE));
+  assert.equal(row.label, "Native system audio unavailable");
+  assert.match(row.detail ?? "", /BlackHole detected/i);
   assert.match(row.detail ?? "", /BlackHole 2ch/);
 });
 
@@ -104,12 +104,12 @@ test("no virtual device shows setup instructions", () => {
     nativeUnavailable: true,
   });
   assert.match(detail, new RegExp(NATIVE_SYSTEM_AUDIO_UNAVAILABLE_MESSAGE.replace(/\./g, "\\.")));
-  assert.match(detail, /Install a virtual audio driver/i);
+  assert.match(detail, /Install BlackHole 2ch/i);
 
   const row = buildSystemAudioCapability({
     ...baseInput,
     virtualAudioDevices: [],
   });
-  assert.equal(row.label, "Virtual device needed");
-  assert.match(row.detail ?? "", /Install a virtual audio driver/i);
+  assert.equal(row.label, "Native system audio unavailable");
+  assert.match(row.detail ?? "", /Install BlackHole 2ch/i);
 });
