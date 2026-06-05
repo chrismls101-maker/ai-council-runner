@@ -3,14 +3,18 @@
 // as text context when scenario has controlled_visual_fixture.
 //
 // Usage: node scripts/glass-live-scenario-ask.mjs --scenario-id founder_strategy_01
+//
+// Sanitized answer samples append to /tmp/iivo-glass-overnight/live-scenario-results.jsonl
 
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, appendFileSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getScenarioById, FIXTURE_PAGES } from "./qa-scenarios/iivo-glass-scenarios.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const GLASS_ROOT = join(__dirname, "..");
+const OUT = "/tmp/iivo-glass-overnight";
+const RESULTS_JSONL = join(OUT, "live-scenario-results.jsonl");
 
 const STUB_CANARY = "IIVO Glass is working";
 const COUNCIL_MARKERS = ["Final Action Plan", "Decision Quality", "Sales Attack", "Product Decision", "Final Judge"];
@@ -20,6 +24,36 @@ const TINY_PNG =
 function parseArgs() {
   const i = process.argv.indexOf("--scenario-id");
   return i >= 0 ? process.argv[i + 1] : null;
+}
+
+/** @param {string} text @param {number} [maxLen] */
+function sanitizeText(text, maxLen = 500) {
+  if (!text) return "";
+  let s = String(text)
+    .replace(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/gi, "[redacted-image]")
+    .replace(/\b(sk-[A-Za-z0-9_-]{8,})\b/g, "[redacted-key]")
+    .replace(/\b(Bearer\s+)[A-Za-z0-9._-]+/gi, "$1[redacted-token]")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (s.length > maxLen) s = `${s.slice(0, maxLen)}…`;
+  return s;
+}
+
+/** @param {import('./qa-scenarios/iivo-glass-scenarios.mjs').QaScenario} scenario */
+function contextSummary(scenario) {
+  const parts = [];
+  if (scenario.screenContextText) parts.push(scenario.screenContextText.slice(0, 160));
+  if (scenario.transcriptChunks?.length) {
+    parts.push(`transcript(${scenario.transcriptChunks.length} chunks)`);
+  }
+  if (scenario.fixturePage) parts.push(`fixture:${scenario.fixturePage}`);
+  if (scenario.appName) parts.push(`app:${scenario.appName}`);
+  return parts.join(" · ") || "(none)";
+}
+
+function appendResult(record) {
+  mkdirSync(OUT, { recursive: true });
+  appendFileSync(RESULTS_JSONL, `${JSON.stringify(record)}\n`);
 }
 
 const scenarioId = parseArgs();
@@ -75,34 +109,82 @@ if (scenario.testKind === "controlled_visual_fixture" && scenario.fixturePage) {
 }
 
 const started = Date.now();
-const res = await fetch(`${apiUrl}/api/glass/ask`, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify(body),
-  signal: AbortSignal.timeout(60_000),
-});
-const ms = Date.now() - started;
-const data = await res.json().catch(() => ({}));
-
-if (!res.ok) {
-  console.error(`FAIL HTTP ${res.status}`);
-  process.exit(1);
-}
-
+let data = {};
+let httpStatus = 0;
 try {
+  const res = await fetch(`${apiUrl}/api/glass/ask`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(60_000),
+  });
+  httpStatus = res.status;
+  data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    appendResult({
+      scenarioId,
+      category: scenario.category,
+      testKind: scenario.testKind,
+      promptPreview: sanitizeText(scenario.userPrompt, 200),
+      contextSummary: contextSummary(scenario),
+      routeUsed: data.routeUsed ?? null,
+      model: data.model ?? null,
+      latencyMs: Date.now() - started,
+      pass: false,
+      failReason: `HTTP ${res.status}`,
+      finishedAt: new Date().toISOString(),
+    });
+    console.error(`FAIL HTTP ${res.status}`);
+    process.exit(1);
+  }
+
   assertAnswer(data.answer);
   if (data.routeUsed !== expectRoute && expectRoute === "glass_direct") {
-    // visual route may fall back to direct if vision disabled
     if (data.routeUsed !== "glass_visual_direct" && data.routeUsed !== "glass_direct") {
       throw new Error(`Bad route ${data.routeUsed}`);
     }
   }
 } catch (err) {
-  console.error(`FAIL ${scenarioId}: ${err.message}`);
+  const ms = Date.now() - started;
+  appendResult({
+    scenarioId,
+    category: scenario.category,
+    testKind: scenario.testKind,
+    promptPreview: sanitizeText(scenario.userPrompt, 200),
+    contextSummary: contextSummary(scenario),
+    routeUsed: data.routeUsed ?? null,
+    model: data.model ?? null,
+    latencyMs: ms,
+    pass: false,
+    failReason: err instanceof Error ? err.message : String(err),
+    finishedAt: new Date().toISOString(),
+  });
+  console.error(`FAIL ${scenarioId}: ${err instanceof Error ? err.message : err}`);
   process.exit(1);
 }
 
+const ms = Date.now() - started;
+const answerPreview = sanitizeText(data.answer, 500);
+const shortAnswer = sanitizeText(data.shortAnswer ?? data.answer?.slice(0, 200), 200);
+
+appendResult({
+  scenarioId,
+  category: scenario.category,
+  testKind: scenario.testKind,
+  promptPreview: sanitizeText(scenario.userPrompt, 200),
+  contextSummary: contextSummary(scenario),
+  routeUsed: data.routeUsed,
+  model: data.model ?? null,
+  latencyMs: ms,
+  answerPreview,
+  shortAnswer,
+  pass: true,
+  finishedAt: new Date().toISOString(),
+});
+
 console.log(
-  `OK live scenario ${scenarioId} [${scenario.testKind}] · ${data.routeUsed} · ${ms}ms · category=${scenario.category}`,
+  `OK live scenario ${scenarioId} [${scenario.testKind}] · ${data.routeUsed} · ${data.model ?? "unknown-model"} · ${ms}ms · category=${scenario.category}`,
 );
+console.log(`answer: ${sanitizeText(shortAnswer || answerPreview, 160)}`);
 process.exit(0);
