@@ -65,6 +65,8 @@
     "glass:qa:manual": "npm run qa:manual --prefix desktop-glass",
     "glass:qa:manual-report": "npm run glass:qa:manual-report --prefix desktop-glass",
     "glass:qa:auto": "npm run qa:auto --prefix desktop-glass",
+    "glass:qa:live": "npm run qa:live --prefix desktop-glass",
+    "glass:e2e:live": "npm run e2e:live --prefix desktop-glass",
     "glass:qa:smoke": "npm run qa:smoke --prefix desktop-glass",
     "glass:e2e": "npm run e2e --prefix desktop-glass",
     "glass:e2e:repeat": "npm run e2e:repeat --prefix desktop-glass",

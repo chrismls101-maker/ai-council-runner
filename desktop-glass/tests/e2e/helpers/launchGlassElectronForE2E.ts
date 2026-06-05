@@ -13,6 +13,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium, type Browser } from "@playwright/test";
 import { startStubServer, type StubServerHandle } from "./stubServer.ts";
+import {
+  assertLiveServerReachable,
+  createLiveE2eHandle,
+  resolveLiveApiUrls,
+} from "./liveE2eServer.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const GLASS_ROOT = path.resolve(__dirname, "../../..");
@@ -161,13 +166,23 @@ export async function launchGlassElectronForE2E(): Promise<LaunchedGlassElectron
     killStaleProcessesOnCdpPort();
   }
 
-  const stub = await startStubServer();
+  const liveMode = process.env.IIVO_GLASS_LIVE_E2E === "1";
+  let stub: StubServerHandle;
+
+  if (liveMode) {
+    const { apiUrl, webUrl } = resolveLiveApiUrls();
+    await assertLiveServerReachable(apiUrl);
+    stub = createLiveE2eHandle(apiUrl);
+    process.stderr.write(`[glass-e2e-live] using real IIVO API ${apiUrl} (web ${webUrl})\n`);
+  } else {
+    stub = await startStubServer();
+  }
 
   const env: Record<string, string | undefined> = {
     ...process.env,
     IIVO_GLASS_E2E: "1",
-    IIVO_API_URL: stub.baseUrl,
-    IIVO_WEB_URL: stub.baseUrl,
+    IIVO_API_URL: liveMode ? resolveLiveApiUrls().apiUrl : stub.baseUrl,
+    IIVO_WEB_URL: liveMode ? resolveLiveApiUrls().webUrl : stub.baseUrl,
   };
   delete env.ELECTRON_RUN_AS_NODE;
 

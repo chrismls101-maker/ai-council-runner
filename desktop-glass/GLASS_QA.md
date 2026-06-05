@@ -102,6 +102,20 @@ See `desktop-glass/GLASS_LIMITATIONS.md` for what E2E covers vs manual QA.
 
 `glass:qa:auto` prints a JSON report covering layout/config/direct-ask guards.
 
+### Live QA (real IIVO server — not the E2E stub)
+
+**Stub E2E** (`glass:e2e`) proves UI wiring with a fake server. **Live QA** proves your real stack:
+
+1. Terminal A: `npm run dev` (IIVO API + web)
+2. Terminal B:
+
+```bash
+npm run glass:qa:live      # POST /api/glass/ask — real OpenAI answers
+npm run glass:e2e:live     # Glass UI + real server (3 tests, ~1 min)
+```
+
+Live checks fail if the answer contains stub text (`IIVO Glass is working`) or Council markers. System audio and macOS screen capture are **not** required for live API tests; real “what’s on my screen?” still needs Screen Recording (manual).
+
 **Electron E2E** (`glass:e2e`) launches the real Glass desktop app with a stub IIVO server and verifies:
 
 - App launch and overlay / command bar / dock windows
