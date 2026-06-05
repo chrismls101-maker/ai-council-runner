@@ -5,12 +5,12 @@
 import type { GlassConfig } from "../shared/config.ts";
 import type { GlassServerHealthForSetup } from "../shared/glassCapabilities.ts";
 import {
-  deriveScreenCaptureStatusFromProbe,
   deriveWindowCaptureStatusFromProbe,
   type ScreenCaptureProbeStatus,
   type WindowCaptureProbeStatus,
 } from "../shared/captureSourceEnumeration.ts";
 import { probeDesktopCaptureSources } from "./captureSourceProbe.ts";
+import { runScreenCaptureProbe } from "./screenCaptureProbe.ts";
 import { fetchGlassServerHealth } from "./glassVisualAskPreflight.ts";
 import { resolveCaptureDisplay } from "./displayRegistry.ts";
 import type { GlassDisplayTarget } from "../shared/glassSettings.ts";
@@ -72,29 +72,24 @@ export async function runGlassSetupCheck(input: {
 
   const target = resolveCaptureDisplay(input.displayTarget);
 
-  const screenEnum = await probeDesktopCaptureSources({
-    kind: "screen",
-    types: ["screen"],
-    displayId: target.id,
-  });
+  const screenSnapshot = await runScreenCaptureProbe(target.id);
   const windowEnum = await probeDesktopCaptureSources({
     kind: "window",
     types: ["window"],
     displayId: target.id,
   });
 
-  const screenDerived = deriveScreenCaptureStatusFromProbe(screenEnum);
   const windowDerived = deriveWindowCaptureStatusFromProbe(windowEnum);
 
   const audioProbe = await probeSystemAudioEnumeration(
     target.id,
-    screenDerived.status,
+    screenSnapshot.status,
   );
 
   return {
     serverHealth,
-    screenCaptureProbe: screenDerived.status,
-    screenCaptureDetail: screenDerived.detail,
+    screenCaptureProbe: screenSnapshot.status,
+    screenCaptureDetail: screenSnapshot.detail,
     windowCaptureProbe: windowDerived.status,
     windowCaptureDetail: windowDerived.detail,
     systemAudioStatus: audioProbe.status,

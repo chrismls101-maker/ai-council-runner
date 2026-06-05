@@ -54,6 +54,12 @@ export function SetupSection(): JSX.Element {
           </button>
         </div>
       </div>
+      <AppIdentityPanel />
+      {state.duplicateAppWarning ? (
+        <p className="setup-section__warning" data-testid="glass-duplicate-app-warning">
+          {state.duplicateAppWarning}
+        </p>
+      ) : null}
       {state.setupCheckSummary ? (
         <p className="hint setup-section__summary">{state.setupCheckSummary}</p>
       ) : null}
@@ -101,6 +107,44 @@ export function SetupSection(): JSX.Element {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+function AppIdentityPanel(): JSX.Element | null {
+  const state = useGlassState();
+  const id = state.appIdentityReport;
+  if (!id) return null;
+  return (
+    <div className="setup-section__identity" data-testid="glass-app-identity">
+      <p className="setup-section__identity-title">Running app</p>
+      <ul className="setup-section__identity-list">
+        <li>
+          <strong>Mode:</strong> {id.runningMode} · <strong>Build:</strong> {id.packagingVariantLabel}
+        </li>
+        <li>
+          <strong>Bundle id:</strong> {id.bundleIdentifier ?? "(unknown)"} (expected {id.expectedBundleId})
+        </li>
+        <li>
+          <strong>App path:</strong> <span className="setup-section__path">{id.bundlePath ?? id.execPath}</span>
+        </li>
+        <li>
+          <strong>Privacy list:</strong> {id.privacySettingsLabel}
+        </li>
+      </ul>
+      {state.duplicateAppBundles && state.duplicateAppBundles.length > 1 ? (
+        <div className="setup-section__duplicate-bundles" data-testid="glass-duplicate-app-list">
+          <strong>Other IIVO Glass.app copies found:</strong>
+          <ul>
+            {state.duplicateAppBundles.map((bundle) => (
+              <li key={bundle.path} className="setup-section__path">
+                {bundle.path}
+                {bundle.path === id.bundlePath ? " (running)" : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </div>
   );
 }

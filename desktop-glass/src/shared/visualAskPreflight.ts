@@ -2,6 +2,8 @@
  * Visual ask preflight issue codes and user messages (shared).
  */
 
+import type { ScreenCaptureProbeSnapshot } from "./screenCaptureProbe.ts";
+
 export type VisualAskPreflightCode =
   | "capture_permission"
   | "vision_disabled"
@@ -14,9 +16,12 @@ export interface VisualAskPreflightFailure {
   ok: false;
   code: VisualAskPreflightCode;
   message: string;
+  screenProbe?: ScreenCaptureProbeSnapshot;
 }
 
-export type VisualAskPreflightResult = { ok: true } | VisualAskPreflightFailure;
+export type VisualAskPreflightResult =
+  | { ok: true; screenProbe: ScreenCaptureProbeSnapshot }
+  | VisualAskPreflightFailure;
 
 export const VISUAL_PREFLIGHT_MESSAGES: Record<VisualAskPreflightCode, string> = {
   capture_permission: "Screen Recording permission needed.",
@@ -31,8 +36,14 @@ export const VISUAL_PREFLIGHT_MESSAGES: Record<VisualAskPreflightCode, string> =
 export function preflightFailure(
   code: VisualAskPreflightCode,
   message?: string,
+  screenProbe?: ScreenCaptureProbeSnapshot,
 ): VisualAskPreflightFailure {
-  return { ok: false, code, message: message ?? VISUAL_PREFLIGHT_MESSAGES[code] };
+  return {
+    ok: false,
+    code,
+    message: message ?? VISUAL_PREFLIGHT_MESSAGES[code],
+    screenProbe,
+  };
 }
 
 /** Map preflight codes to panel server-result labels. */

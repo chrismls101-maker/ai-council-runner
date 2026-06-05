@@ -3,6 +3,11 @@
  */
 
 import { GLASS_BUNDLE_ID, GLASS_PRODUCT_NAME, glassPrivacySettingsAppLabel } from "./glassAppIdentity.ts";
+import {
+  detectGlassPackagingVariant,
+  formatPackagingVariantLabel,
+  type GlassPackagingVariant,
+} from "./glassPackagingVariant.ts";
 
 export type GlassRunningMode = "packaged" | "dev";
 
@@ -11,6 +16,8 @@ export interface GlassAppIdentityReport {
   version: string;
   isPackaged: boolean;
   runningMode: GlassRunningMode;
+  packagingVariant: GlassPackagingVariant;
+  packagingVariantLabel: string;
   defaultApp: boolean;
   execPath: string;
   exePath: string;

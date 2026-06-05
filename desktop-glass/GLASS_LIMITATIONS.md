@@ -47,6 +47,27 @@ The Glass panel includes a **Setup** section with green/yellow/red status rows:
 
 Glass does **not** bypass macOS security, auto-capture on launch, or enable recording without explicit user action.
 
+### macOS app identity (dev vs packaged)
+
+| Mode | Privacy & Security list | Bundle id |
+|------|-------------------------|-----------|
+| `npm run glass:dev` | **Electron** (not IIVO Glass) | Electron dev binary |
+| Packaged `IIVO Glass.app` | **IIVO Glass** | `com.iivo.glass` |
+
+Grant Screen Recording, Microphone, and System Audio against the **packaged** app you actually launch:
+
+```bash
+npm run glass:package:mac:arm64   # Apple Silicon: use arm64 only for permission testing
+npm run glass:package:verify
+npm run glass:open:packaged
+```
+
+Use **one** `.app` build at a time. Do not alternate `mac-arm64` and `mac-universal` — macOS may grant Screen Recording to a different copy than the one you open. The Setup panel shows the running path and warns when multiple `IIVO Glass.app` bundles exist.
+
+If you switched builds: `npm run glass:permissions:reset`, then re-grant on a single app path.
+
+See `GLASS_QA.md` § macOS permissions (packaged app) for full steps.
+
 ## Commands
 
 ```bash
@@ -71,7 +92,7 @@ See also `GLASS_QA.md` for the full manual checklist.
 |------------|--------|
 | **Capture-on-ask** | Implemented — screen is captured only when you send a visual-intent prompt from the command bar. |
 | **Focused crop + quality presets** | Text/error prompts prefer active-window crop (System Events or workspace CGWindow bounds without Accessibility) or center crop; general prompts use whole-screen JPEG optimization. |
-| **Preflight** | Before capture, Glass checks server health, vision config, display target, and a lightweight Screen Recording probe. |
+| **Preflight** | Before capture, Glass checks server health, vision config, display target, and the **same** 64×64 Screen Recording probe as Setup / Capture Diagnostics (non-empty thumbnail = pass). Visual ask does **not** open System Settings when the probe passes. |
 | **Periodic Live Vision** | **Not implemented (by design).** Deferred for privacy, API cost, and performance. A future mode must include a clear ON indicator, stop control, capture frequency setting, and the same retention policy as manual capture. |
 
 Run `npm run glass:qa:manual-report` before manual QA for server/vision/STT status and a short step list.

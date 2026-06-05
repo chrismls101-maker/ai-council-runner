@@ -12,10 +12,10 @@ first** — it never captures or sends anything without an explicit click.
 3. Start Glass (from repo root): `npm run glass:dev`
    - Optional config: `IIVO_WEB_URL` and `IIVO_API_URL` env vars.
 3. macOS only: Screen Recording and Microphone are **OS requirements**, not Glass bugs.
-   Use the panel **Setup** section and **Run Setup Check** — see `GLASS_LIMITATIONS.md`
-   for step-by-step grant instructions. Microphone is requested only when you start
-   listening with Microphone; system audio may need a virtual device only if native
-   loopback fails.
+   **`npm run glass:dev` is not enough for macOS permissions** — Privacy lists the stock
+   **Electron** app, not **IIVO Glass**. For Screen Recording / Microphone / System Audio,
+   build and run the **packaged app** (see [macOS permissions (packaged app)](#macos-permissions-packaged-app)).
+   Use the panel **Setup** section for live status; see `GLASS_LIMITATIONS.md` for details.
 
 ## Setup & permissions (panel)
 
@@ -612,6 +612,87 @@ No duplicate transcript events when both paths could apply — Web Speech takes 
 - Copy shown in panel: Glass captures screen/audio only when you start it. Session data
   stays local until you send or analyze.
 
+## macOS permissions (packaged app)
+
+macOS ties Screen Recording, Microphone, and System Audio Recording to the **app bundle**
+(`com.iivo.glass`), not the window title. Only the **packaged** `IIVO Glass.app` appears
+correctly in **System Settings → Privacy & Security**.
+
+| Mode | What macOS shows | Use for permissions? |
+|------|------------------|----------------------|
+| `npm run glass:dev` | **Electron** (stock dev binary) | No — unstable / wrong entry |
+| Packaged `IIVO Glass.app` | **IIVO Glass** | **Yes** |
+
+### One packaged app only (arm64 vs universal)
+
+Building both `release/mac-arm64/IIVO Glass.app` and `release/mac-universal/IIVO Glass.app`
+creates **two separate apps on disk**. macOS Screen Recording often lists **each path**
+separately. Granting permission to **universal** while launching **arm64** (or vice versa)
+looks like “permission is on but capture fails” or makes System Settings open during visual ask.
+
+**For Apple Silicon local testing, use only `mac-arm64`:**
+
+```bash
+npm run glass:package:mac:arm64
+npm run glass:open:packaged
+```
+
+Do **not** switch between universal and arm64 while testing permissions. If you switched builds:
+
+```bash
+npm run glass:permissions:reset    # prompts before running tccutil
+```
+
+Then quit Glass, open **one** `.app`, grant Screen Recording to **that path**, quit/reopen, and run **Setup → Capture Diagnostics**.
+
+The Setup panel shows **Running app** (path, bundle id, build variant) and warns when multiple copies exist.
+
+### Install / run packaged IIVO Glass for permissions
+
+From repo root:
+
+```bash
+# 1. Build (Apple Silicon: mac-arm64 only for daily permission testing)
+npm run glass:package:mac:arm64
+
+# 2. Verify bundle id, display name, and usage strings in Info.plist
+npm run glass:package:verify
+
+# 3. Open the packaged app (not glass:dev)
+npm run glass:open:packaged
+
+# 4. Optional CLI diagnostic (after rebuild)
+npm run glass:diagnose:permissions:packaged
+```
+
+Then in **IIVO Glass** (packaged):
+
+1. Trigger **Capture**, command-bar **microphone**, or **System Audio** once so macOS can prompt.
+2. Grant prompts when they appear.
+3. If a toggle is missing, open **System Settings → Privacy & Security** and enable **IIVO Glass** for:
+   - Screen Recording (also used for some system-audio paths)
+   - Microphone
+   - System Audio Recording (macOS 14+ when listed)
+4. **Quit and reopen IIVO Glass** after granting Screen Recording (macOS often requires this).
+5. Use panel **Setup → Run Setup Check** to confirm status.
+
+First launch of an **unsigned** local build: right-click `IIVO Glass.app` → **Open** once if Gatekeeper blocks it (see Packaging § Gatekeeper).
+
+### Troubleshooting (macOS permissions)
+
+- **IIVO Glass does not appear in Privacy lists** — You are probably still on `glass:dev`. Build and run the packaged app (`npm run glass:open:packaged`), then trigger Capture or microphone again.
+- **Only “Electron” appears** — Dev mode. Switch to packaged **IIVO Glass.app**.
+- **Permission granted but capture still fails** — Check Setup **Running app** path matches the toggle you enabled. If multiple `.app` copies are listed, grant the one you launch or run `npm run glass:permissions:reset` and start over with a single build.
+- **Capture Diagnostics says Ready but visual ask fails** — Same probe is used; if capture still fails, you likely granted a different `.app` copy. Read visual ask diagnostics (Probe / Thumb empty / App path) in the panel status area.
+- **Stuck / wrong permission state (last resort)** — `npm run glass:permissions:reset` (or manual `tccutil reset ScreenCapture com.iivo.glass` and Microphone). Quit, reopen **one** packaged app, grant again. Do not use reset as a normal step.
+
+Packaged metadata (verified by `npm run glass:package:verify`):
+
+- `productName` / `CFBundleName` / `CFBundleDisplayName`: **IIVO Glass**
+- `appId` / `CFBundleIdentifier`: **com.iivo.glass**
+- `NSMicrophoneUsageDescription`, `NSScreenCaptureUsageDescription`, `NSAudioCaptureUsageDescription` in Info.plist
+- Icon: `desktop-glass/build/icon.icns`
+
 ## Packaging
 
 All commands below are run from the repo root. Glass packaging is fully isolated
@@ -622,6 +703,9 @@ or AI Council.
 ```bash
 npm run glass:dev
 ```
+Runs the stock **Electron** binary — menu may show **IIVO Glass (Dev)**; macOS Privacy
+still lists **Electron**. Use packaged app for permission setup (above).
+
 Needs the real Electron binary. If Glass was installed with
 `ELECTRON_SKIP_BINARY_DOWNLOAD=1`, run once:
 ```bash
@@ -639,14 +723,33 @@ Developer credentials required.
 
 ### 3. Architecture-specific builds
 ```bash
-npm run glass:package:mac:arm64       # Apple Silicon
+npm run glass:package:mac:arm64       # Apple Silicon (recommended on M-series Macs)
 npm run glass:package:mac:x64         # Intel
 npm run glass:package:mac:universal   # universal (arm64 + x64)
+npm run glass:package:verify          # after build — checks Info.plist + bundle id
+npm run glass:open:packaged           # opens latest release/.../IIVO Glass.app
 ```
 Glass has no native Node modules, so the universal build is just two JS bundles
 merged into one app — no extra native rebuild config needed.
 
-### 4. Where files appear
+### 4. Dev vs packaged — they are not the same binary
+`npm run glass:dev` runs **live source** from the repo (hot reload, window title
+**Electron** in Privacy). A `.app` under `desktop-glass/release/` is a **snapshot**
+from the last time you ran `glass:package:mac:*`. UI changes (dock, boot splash,
+command bar, icon) only appear in the packaged app after you **rebuild** the arch
+you actually open.
+
+Each package target has its **own** folder and timestamp — rebuilding arm64 does
+**not** refresh `mac-universal/`. If the universal app looks like an old prototype,
+rebuild universal and open that bundle (or replace any copy in `/Applications`):
+
+```bash
+npm run glass:package:mac:universal
+open desktop-glass/release/mac-universal/IIVO\ Glass.app
+# or: npm run glass:open:packaged   # opens newest release/mac-*/IIVO Glass.app by mtime
+```
+
+### 5. Where files appear
 Artifact names include the architecture (`${arch}`) so arm64, x64, and universal
 builds never overwrite each other:
 ```text
@@ -662,14 +765,14 @@ desktop-glass/release/
 ```
 (Only the artifacts for the arch you build are produced.)
 
-### 5. Gatekeeper warning (unsigned builds)
+### 6. Gatekeeper warning (unsigned builds)
 Because local builds are unsigned, macOS Gatekeeper may block first launch
 ("can't be opened because it is from an unidentified developer"):
 1. Right-click the app → **Open**
 2. Confirm **Open** in the dialog.
 This is expected for unsigned dev builds and only needs to be done once.
 
-### 6. Distribution signing / notarization
+### 7. Distribution signing / notarization
 Public distribution (no Gatekeeper prompt) requires a paid Apple Developer
 account and:
 - a **Developer ID Application** certificate,
@@ -691,7 +794,7 @@ npm run glass:package:mac:signed
 Without those credentials this command will fail at the signing/notarization
 step — that is intentional.
 
-### 7. Git warning — do NOT commit build artifacts
+### 8. Git warning — do NOT commit build artifacts
 Never commit (all ignored by `desktop-glass/.gitignore`):
 - `desktop-glass/release/`
 - `desktop-glass/out/`

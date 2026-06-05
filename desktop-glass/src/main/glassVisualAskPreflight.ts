@@ -7,7 +7,8 @@ import {
   preflightFailure,
   type VisualAskPreflightResult,
 } from "../shared/visualAskPreflight.ts";
-import { probeScreenCapturePermission } from "./capture.ts";
+import { isScreenCaptureProbeReady } from "../shared/screenCaptureProbe.ts";
+import { runScreenCaptureProbe } from "./screenCaptureProbe.ts";
 
 export interface GlassServerHealthSnapshot {
   ok: boolean;
@@ -83,12 +84,32 @@ export async function runVisualAskPreflight(
     );
   }
 
-  if (!input.skipCaptureProbe) {
-    const probe = await probeScreenCapturePermission(input.displayId);
-    if (!probe.ok) {
-      return preflightFailure("capture_permission", probe.error);
-    }
+  if (input.skipCaptureProbe) {
+    return {
+      ok: true,
+      screenProbe: {
+        displayId: input.displayId,
+        probe: {
+          kind: "screen",
+          types: ["screen"],
+          ok: true,
+          sourceCount: 1,
+          sources: [],
+          thumbnailEmpty: false,
+        },
+        status: "ready",
+        ready: true,
+      },
+    };
   }
 
-  return { ok: true };
+  const screenProbe = await runScreenCaptureProbe(input.displayId);
+  if (!isScreenCaptureProbeReady(screenProbe)) {
+    return preflightFailure(
+      "capture_permission",
+      screenProbe.detail ?? "Screen capture permission probe failed.",
+      screenProbe,
+    );
+  }
+  return { ok: true, screenProbe };
 }

@@ -122,6 +122,7 @@ export function formatCaptureDiagnosticsReport(
   const lines: string[] = [
     `Running mode: ${report.runningMode}`,
     `App: ${id.appName} v${id.version}`,
+    `You are running: ${id.packagingVariantLabel}`,
     `Packaged: ${id.isPackaged} | defaultApp: ${id.defaultApp}`,
     `Bundle id: ${id.bundleIdentifier ?? "(unknown)"} (expected ${id.expectedBundleId})`,
     `Exec: ${id.execPath}`,

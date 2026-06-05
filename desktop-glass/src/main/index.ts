@@ -188,9 +188,20 @@ import {
 } from "../shared/glassCapabilities.ts";
 import type { CaptureDiagnosticsReport } from "../shared/captureDiagnostics.ts";
 import { runCaptureDiagnosticsReport } from "./captureDiagnostics.ts";
+import {
+  collectGlassAppIdentityReport,
+  findDuplicateGlassAppBundles,
+} from "./glassAppIdentityDiagnostic.ts";
 import { runGlassSetupCheck } from "./glassSetupCheck.ts";
 import { openGlassSystemSettings } from "./glassSystemSettings.ts";
 import { glassMenuAppName } from "../shared/glassAppIdentity.ts";
+import type { GlassAppIdentityReport, DuplicateGlassAppBundle } from "../shared/glassAppIdentityReport.ts";
+import { buildDuplicateAppWarning } from "../shared/glassPackagingVariant.ts";
+import type { ScreenCaptureProbeSnapshot } from "../shared/screenCaptureProbe.ts";
+import {
+  DUPLICATE_APP_CAPTURE_FAILURE_MESSAGE,
+  formatScreenCaptureProbeDebug,
+} from "../shared/screenCaptureProbe.ts";
 
 loadGlassEnv();
 app.setName(glassMenuAppName(app.isPackaged));
@@ -255,6 +266,9 @@ interface AppState {
   setupCapabilities: GlassCapabilityRow[];
   setupCheckSummary?: string;
   captureDiagnosticsReport?: CaptureDiagnosticsReport;
+  appIdentityReport?: GlassAppIdentityReport;
+  duplicateAppBundles: DuplicateGlassAppBundle[];
+  duplicateAppWarning?: string;
 }
 
 let askAbortController: AbortController | null = null;
@@ -292,6 +306,7 @@ const state: AppState = {
   micPermission: "not_requested",
   serverHealthForSetup: null,
   setupCapabilities: [],
+  duplicateAppBundles: [],
 };
 
 let moments = new SavedMomentsStore();
@@ -300,6 +315,38 @@ let sessions = new GlassSessionStore();
 function sessionIsLive(): boolean {
   const s = sessions.current();
   return !!s && (s.status === "active" || s.status === "paused");
+}
+
+function refreshAppIdentityState(): void {
+  state.appIdentityReport = collectGlassAppIdentityReport();
+  state.duplicateAppBundles = findDuplicateGlassAppBundles(process.execPath);
+  state.duplicateAppWarning = buildDuplicateAppWarning(
+    state.duplicateAppBundles,
+    state.appIdentityReport.bundlePath,
+  );
+}
+
+function visualAskProbeDiagnostics(
+  screenProbe: ScreenCaptureProbeSnapshot | undefined,
+): Partial<import("../shared/visualAskDiagnostics.ts").VisualAskDiagnostics> {
+  const id = state.appIdentityReport;
+  if (!screenProbe) {
+    return {
+      runningAppPath: id?.bundlePath ?? id?.execPath,
+      runningBundleId: id?.bundleIdentifier,
+      packagingVariant: id?.packagingVariantLabel,
+    };
+  }
+  return {
+    preflightProbeResult: screenProbe.status,
+    preflightThumbnailEmpty: screenProbe.probe.thumbnailEmpty ?? false,
+    preflightSourceCount: screenProbe.probe.sourceCount,
+    preflightDisplayId: screenProbe.displayId,
+    runningAppPath: id?.bundlePath ?? id?.execPath,
+    runningBundleId: id?.bundleIdentifier,
+    packagingVariant: id?.packagingVariantLabel,
+    lastPreflightIssue: formatScreenCaptureProbeDebug(screenProbe),
+  };
 }
 
 function refreshSetupCapabilities(): void {
@@ -366,6 +413,9 @@ function snapshot(): GlassState {
     setupCapabilities: state.setupCapabilities,
     setupCheckSummary: state.setupCheckSummary,
     captureDiagnosticsReport: state.captureDiagnosticsReport,
+    appIdentityReport: state.appIdentityReport,
+    duplicateAppBundles: state.duplicateAppBundles,
+    duplicateAppWarning: state.duplicateAppWarning,
     micPermission: state.micPermission,
   };
 }
@@ -971,23 +1021,28 @@ async function submitCommand(rawText: string): Promise<void> {
     });
 
     if (!preflight.ok) {
-      if (preflight.code === "capture_permission") {
-        state.screenCaptureProbe = "permission_required";
+      if (preflight.code === "capture_permission" && preflight.screenProbe) {
+        state.screenCaptureProbe = preflight.screenProbe.status;
         state.screenCaptureDetail = preflight.message;
       }
       state.askInFlight = false;
       state.askStatus = "error";
       state.visualAskPhase = "idle";
+      const userMessage =
+        preflight.code === "capture_permission" && state.duplicateAppWarning
+          ? `${preflight.message} ${state.duplicateAppWarning}`
+          : preflight.message;
       mergeVisualAskDiagnostics({
         phase: "idle",
         displayLabel: captureTarget.label,
         displayId: captureTarget.id,
         serverResult: preflightCodeToServerResult(preflight.code),
         lastPreflightIssue: preflight.message,
-        userMessage: preflight.message,
+        userMessage,
+        ...visualAskProbeDiagnostics(preflight.screenProbe),
       });
-      pushFeed(createCommandFeedItem("error", preflight.message, { prompt: text }));
-      state.lastError = preflight.message;
+      pushFeed(createCommandFeedItem("error", userMessage, { prompt: text }));
+      state.lastError = userMessage;
       state.operationDiagnostics = recordOperation(
         state.operationDiagnostics,
         "ask-iivo",
@@ -997,6 +1052,10 @@ async function submitCommand(rawText: string): Promise<void> {
       push();
       return;
     }
+
+    state.screenCaptureProbe = preflight.screenProbe.status;
+    state.screenCaptureDetail = undefined;
+    const visualAskScreenProbe = preflight.screenProbe;
 
     const qualityPreset = chooseVisualQualityPreset(text);
     mergeVisualAskDiagnostics({
@@ -1010,6 +1069,7 @@ async function submitCommand(rawText: string): Promise<void> {
       ]
         .filter(Boolean)
         .join(" "),
+      ...visualAskProbeDiagnostics(visualAskScreenProbe),
     });
 
     state.visualAskPhase = "looking";
@@ -1051,14 +1111,29 @@ async function submitCommand(rawText: string): Promise<void> {
       removeLookingFeedItems();
       state.askInFlight = false;
       state.askStatus = "error";
-      pushFeed(createCommandFeedItem("error", captureOutcome.error, { prompt: text }));
-      state.lastError = captureOutcome.error;
+      const captureError =
+        visualAskScreenProbe.ready
+          ? DUPLICATE_APP_CAPTURE_FAILURE_MESSAGE
+          : captureOutcome.error;
+      if (!visualAskScreenProbe.ready) {
+        state.screenCaptureProbe = mapCaptureErrorToScreenCaptureStatus(captureOutcome.error);
+        state.screenCaptureDetail = captureOutcome.error;
+      }
+      mergeVisualAskDiagnostics({
+        phase: "idle",
+        serverResult: visualAskScreenProbe.ready ? "error" : "capture_permission",
+        userMessage: captureError,
+        ...visualAskProbeDiagnostics(visualAskScreenProbe),
+      });
+      pushFeed(createCommandFeedItem("error", captureError, { prompt: text }));
+      state.lastError = captureError;
       state.operationDiagnostics = recordOperation(
         state.operationDiagnostics,
         "ask-iivo",
         "error",
         "capture_failed",
       );
+      refreshSetupCapabilities();
       push();
       return;
     }
@@ -1755,10 +1830,16 @@ async function handleCommand(
       return;
     }
     case "run-capture-diagnostics": {
+      refreshAppIdentityState();
       const report = await runCaptureDiagnosticsReport({
         displayTarget: state.glassSettings.displayTarget,
       });
       state.captureDiagnosticsReport = report;
+      state.duplicateAppBundles = report.duplicateAppBundles;
+      state.duplicateAppWarning = buildDuplicateAppWarning(
+        report.duplicateAppBundles,
+        report.appIdentity.bundlePath,
+      );
       state.screenCaptureProbe = report.screenCaptureProbe;
       state.screenCaptureDetail = report.screenCaptureDetail;
       state.windowCaptureProbe = report.windowCaptureProbe;
@@ -2290,6 +2371,7 @@ function registerGlobalHotkeys(): void {
 app.whenReady().then(async () => {
   if (process.env.IIVO_GLASS_DIAGNOSE === "1") {
     glassUserSettings = await loadGlassUserSettings();
+    refreshAppIdentityState();
     const report = await runCaptureDiagnosticsReport({
       displayTarget: glassUserSettings.displayTarget,
     });
@@ -2297,6 +2379,8 @@ app.whenReady().then(async () => {
     app.quit();
     return;
   }
+
+  refreshAppIdentityState();
 
   // Show the cinematic boot splash immediately, before any async startup work.
   const showSplash = process.env.IIVO_GLASS_E2E !== "1";

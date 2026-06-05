@@ -82,7 +82,8 @@
     "glass:package:verify": "npm run package:verify --prefix desktop-glass",
     "glass:open:packaged": "npm run open:packaged --prefix desktop-glass",
     "glass:diagnose:permissions": "npm run diagnose:permissions --prefix desktop-glass",
-    "glass:diagnose:permissions:packaged": "npm run diagnose:permissions:packaged --prefix desktop-glass"
+    "glass:diagnose:permissions:packaged": "npm run diagnose:permissions:packaged --prefix desktop-glass",
+    "glass:permissions:reset": "npm run permissions:reset --prefix desktop-glass"
   },
   "dependencies": {
     "cors": "^2.8.5",

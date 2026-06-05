@@ -38,6 +38,13 @@ export interface VisualAskDiagnostics {
   userMessage?: string;
   lastPreflightIssue?: string;
   handoffUrl?: string;
+  preflightProbeResult?: string;
+  preflightThumbnailEmpty?: boolean;
+  preflightSourceCount?: number;
+  preflightDisplayId?: number;
+  runningAppPath?: string;
+  runningBundleId?: string;
+  packagingVariant?: string;
 }
 
 export function formatBytesShort(bytes: number): string {
@@ -61,6 +68,13 @@ export function formatVisualAskDiagnosticsDetail(diag: VisualAskDiagnostics | nu
   if (diag.serverResult && diag.serverResult !== "idle") parts.push(`Result: ${diag.serverResult}`);
   if (diag.retentionResult) parts.push(`Retention: ${diag.retentionResult.replace(/_/g, " ")}`);
   if (diag.userMessage) parts.push(diag.userMessage);
+  if (diag.preflightProbeResult) parts.push(`Probe: ${diag.preflightProbeResult}`);
+  if (diag.preflightThumbnailEmpty != null) {
+    parts.push(`Thumb empty: ${diag.preflightThumbnailEmpty ? "yes" : "no"}`);
+  }
+  if (diag.preflightSourceCount != null) parts.push(`Sources: ${diag.preflightSourceCount}`);
+  if (diag.packagingVariant) parts.push(`Build: ${diag.packagingVariant}`);
+  if (diag.runningAppPath) parts.push(`App: ${diag.runningAppPath}`);
   return parts.length ? parts.join(" · ") : undefined;
 }
 

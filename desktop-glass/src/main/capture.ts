@@ -8,8 +8,7 @@
  */
 
 import { desktopCapturer, screen } from "electron";
-import { deriveScreenCaptureStatusFromProbe } from "../shared/captureSourceEnumeration.ts";
-import { probeDesktopCaptureSources } from "./captureSourceProbe.ts";
+import { runScreenCaptureProbe } from "./screenCaptureProbe.ts";
 
 /** 1×1 PNG for Electron E2E (no Screen Recording permission required). */
 const E2E_STUB_IMAGE_DATA_URL =
@@ -42,8 +41,12 @@ export async function captureDisplayById(
   const display =
     screen.getAllDisplays().find((d) => d.id === displayId) ?? screen.getPrimaryDisplay();
   const scale = display.scaleFactor || 1;
-  const width = Math.round(display.size.width * scale);
-  const height = Math.round(display.size.height * scale);
+  const nativeWidth = Math.round(display.size.width * scale);
+  const nativeHeight = Math.round(display.size.height * scale);
+  const maxEdge = 1920;
+  const scaleDown = Math.min(1, maxEdge / Math.max(nativeWidth, nativeHeight, 1));
+  const width = Math.max(1, Math.round(nativeWidth * scaleDown));
+  const height = Math.max(1, Math.round(nativeHeight * scaleDown));
 
   const sources = await desktopCapturer.getSources({
     types: ["screen"],
@@ -81,18 +84,13 @@ export async function captureDisplayById(
 export async function probeScreenCapturePermission(
   displayId: number,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const probe = await probeDesktopCaptureSources({
-    kind: "screen",
-    types: ["screen"],
-    displayId,
-  });
-  const derived = deriveScreenCaptureStatusFromProbe(probe);
-  if (derived.status === "ready") {
+  const snapshot = await runScreenCaptureProbe(displayId);
+  if (snapshot.ready) {
     return { ok: true };
   }
   return {
     ok: false,
-    error: derived.detail ?? probe.errorMessage ?? "Screen capture permission probe failed.",
+    error: snapshot.detail ?? snapshot.probe.errorMessage ?? "Screen capture permission probe failed.",
   };
 }
 

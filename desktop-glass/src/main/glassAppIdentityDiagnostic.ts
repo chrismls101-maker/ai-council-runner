@@ -7,6 +7,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { app } from "electron";
 import { GLASS_BUNDLE_ID, glassPrivacySettingsAppLabel } from "../shared/glassAppIdentity.ts";
+import {
+  detectGlassPackagingVariant,
+  formatPackagingVariantLabel,
+} from "../shared/glassPackagingVariant.ts";
 import type {
   DuplicateGlassAppBundle,
   GlassAppIdentityReport,
@@ -70,11 +74,14 @@ export function collectGlassAppIdentityReport(): GlassAppIdentityReport {
   const bundlePath = macOSAppBundlePath(execPath);
   const bundleIdentifier = bundlePath ? readBundleIdentifier(bundlePath) : undefined;
 
+  const packagingVariant = detectGlassPackagingVariant(execPath, isPackaged);
   const base: GlassAppIdentityReport = {
     appName: app.getName(),
     version: app.getVersion(),
     isPackaged,
     runningMode: isPackaged ? "packaged" : "dev",
+    packagingVariant,
+    packagingVariantLabel: formatPackagingVariantLabel(packagingVariant),
     defaultApp: process.defaultApp ?? false,
     execPath,
     exePath: app.getPath("exe"),

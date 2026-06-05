@@ -9,11 +9,9 @@ import {
   buildSuggestedNextAction,
 } from "../shared/captureDiagnostics.ts";
 import type { CaptureDiagnosticsReport } from "../shared/captureDiagnostics.ts";
-import {
-  deriveScreenCaptureStatusFromProbe,
-  deriveWindowCaptureStatusFromProbe,
-} from "../shared/captureSourceEnumeration.ts";
+import { deriveWindowCaptureStatusFromProbe } from "../shared/captureSourceEnumeration.ts";
 import { probeDesktopCaptureSources } from "./captureSourceProbe.ts";
+import { runScreenCaptureProbe } from "./screenCaptureProbe.ts";
 import {
   collectGlassAppIdentityReport,
   findDuplicateGlassAppBundles,
@@ -29,11 +27,8 @@ export async function runCaptureDiagnosticsReport(input: {
   const appIdentity = collectGlassAppIdentityReport();
   const duplicateAppBundles = findDuplicateGlassAppBundles(process.execPath);
 
-  const screenProbe = await probeDesktopCaptureSources({
-    kind: "screen",
-    types: ["screen"],
-    displayId: target.id,
-  });
+  const screenSnapshot = await runScreenCaptureProbe(target.id);
+  const screenProbe = screenSnapshot.probe;
   const windowProbe = await probeDesktopCaptureSources({
     kind: "window",
     types: ["window"],
@@ -50,23 +45,22 @@ export async function runCaptureDiagnosticsReport(input: {
     displayId: target.id,
   });
 
-  const screenDerived = deriveScreenCaptureStatusFromProbe(screenProbe);
   const windowDerived = deriveWindowCaptureStatusFromProbe(windowProbe);
 
   const audioProbe = await probeSystemAudioEnumeration(
     target.id,
-    screenDerived.status,
+    screenSnapshot.status,
   );
 
   const screenEnumFailed =
-    !screenProbe.ok || screenDerived.status === "source_enumeration_failed";
+    !screenProbe.ok || screenSnapshot.status === "source_enumeration_failed";
   const exactError =
     screenProbe.errorMessage ??
     systemAudioScreenProbe.errorMessage ??
     audioProbe.diagnostics.errorMessage;
 
   const suggestedNextAction = buildSuggestedNextAction({
-    screenProbe: screenDerived.status,
+    screenProbe: screenSnapshot.status,
     windowProbe: windowDerived.status,
     systemStatus: audioProbe.status,
     identityOk: appIdentity.identityOk,
@@ -81,16 +75,16 @@ export async function runCaptureDiagnosticsReport(input: {
     selectedDisplayId: target.id,
     selectedDisplayLabel: target.label,
     probes: [screenProbe, windowProbe, combinedProbe, systemAudioScreenProbe],
-    screenCaptureProbe: screenDerived.status,
-    screenCaptureDetail: screenDerived.detail,
+    screenCaptureProbe: screenSnapshot.status,
+    screenCaptureDetail: screenSnapshot.detail,
     windowCaptureProbe: windowDerived.status,
     windowCaptureDetail: windowDerived.detail,
     systemAudioStatus: audioProbe.status,
     systemAudioDetail: audioProbe.detail,
-    screenRecordingGuess: guessScreenRecordingStatus(screenDerived.status, screenProbe),
+    screenRecordingGuess: guessScreenRecordingStatus(screenSnapshot.status, screenProbe),
     systemAudioGuess: guessSystemAudioStatus(
       audioProbe.status,
-      screenDerived.status === "ready",
+      screenSnapshot.status === "ready",
       systemAudioScreenProbe,
     ),
     exactError,

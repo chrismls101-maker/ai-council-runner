@@ -14,6 +14,8 @@ const packagedIdentity: GlassAppIdentityReport = {
   version: "0.1.0",
   isPackaged: true,
   runningMode: "packaged",
+  packagingVariant: "applications",
+  packagingVariantLabel: "Installed (/Applications)",
   defaultApp: false,
   execPath: "/Applications/IIVO Glass.app/Contents/MacOS/IIVO Glass",
   exePath: "/Applications/IIVO Glass.app/Contents/MacOS/IIVO Glass",

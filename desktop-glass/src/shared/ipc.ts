@@ -200,6 +200,9 @@ export interface GlassState {
   setupCapabilities: import("./glassCapabilities.ts").GlassCapabilityRow[];
   setupCheckSummary?: string;
   captureDiagnosticsReport?: import("./captureDiagnostics.ts").CaptureDiagnosticsReport;
+  appIdentityReport?: import("./glassAppIdentityReport.ts").GlassAppIdentityReport;
+  duplicateAppBundles?: import("./glassAppIdentityReport.ts").DuplicateGlassAppBundle[];
+  duplicateAppWarning?: string;
   micPermission: import("./glassCapabilities.ts").MicPermissionReport;
 }
 
