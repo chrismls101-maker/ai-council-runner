@@ -298,9 +298,9 @@ test.describe("IIVO Glass Electron E2E", () => {
     const sys = state.setupCapabilities?.find((r) => r.id === "systemAudio");
     expect(mic?.status).toBe("permission_denied");
     expect(sys?.status).toBe("requires_virtual_device");
-    await expect(
-      panel.getByTestId("glass-setup-action-systemAudio-test-blackhole"),
-    ).toBeVisible();
+    await expect(panel.getByTestId("glass-system-audio-configure")).toBeVisible();
+    await panel.getByTestId("glass-system-audio-configure-toggle").click();
+    await expect(panel.getByTestId("glass-system-audio-source-select")).toBeVisible();
   });
 
   test("11 — stub vision disabled shows setup row", async () => {
@@ -433,9 +433,10 @@ test.describe("IIVO Glass Electron E2E", () => {
     const sys = state.setupCapabilities?.find((r) => r.id === "systemAudio");
     expect(screen?.label).toBe("Ready");
     expect(sys?.label).toBe("Source enumeration failed");
-    await expect(panel.locator('[data-testid="glass-setup-row-systemAudio"]')).toContainText(
-      /Source enumeration failed|Failed to get sources/i,
+    await expect(panel.locator('[data-testid="glass-system-audio-configure"]')).toContainText(
+      /Enumeration failed|Source enumeration failed/i,
     );
+    await expect(panel.locator('[data-testid="glass-setup-row-systemAudio"]')).toHaveCount(0);
     await expect(panel.locator('[data-testid="glass-setup-row-screenRecording"]')).toContainText(
       /Ready/i,
     );

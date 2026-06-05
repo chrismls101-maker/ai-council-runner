@@ -93,9 +93,8 @@ test("virtual device detected shows selectable guidance", () => {
     ...baseInput,
     virtualAudioDevices: devices,
   });
-  assert.equal(row.label, "Native system audio unavailable");
-  assert.match(row.detail ?? "", /BlackHole detected/i);
-  assert.match(row.detail ?? "", /BlackHole 2ch/);
+  assert.equal(row.label, "BlackHole detected");
+  assert.equal(row.detail, undefined);
 });
 
 test("no virtual device shows setup instructions", () => {
@@ -110,6 +109,6 @@ test("no virtual device shows setup instructions", () => {
     ...baseInput,
     virtualAudioDevices: [],
   });
-  assert.equal(row.label, "Native system audio unavailable");
-  assert.match(row.detail ?? "", /Install BlackHole 2ch/i);
+  assert.equal(row.label, "Native unavailable");
+  assert.equal(row.detail, undefined);
 });

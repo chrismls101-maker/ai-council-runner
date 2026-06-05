@@ -65,8 +65,8 @@ test("system audio no track maps to requires_virtual_device", () => {
   });
   assert.equal(row.status, "requires_virtual_device");
   assert.notEqual(row.label, "Not verified");
-  assert.match(row.detail ?? "", /Native macOS system audio is not available/i);
-  assert.equal(row.actionCommand, "show-blackhole-setup");
+  assert.equal(row.detail, undefined);
+  assert.equal(row.actions, undefined);
 });
 
 test("vision disabled maps to missing_config", () => {

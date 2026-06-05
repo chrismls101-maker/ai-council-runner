@@ -8,11 +8,8 @@ import {
   PERMISSION_JUST_GRANTED_RESTART_HINT,
   isSourceEnumerationFailedMessage,
 } from "./systemAudioProbe.ts";
-import {
-  buildSystemAudioVirtualDeviceDetail,
-  type VirtualAudioDeviceMatch,
-} from "./virtualAudioDevices.ts";
-import { NATIVE_SYSTEM_AUDIO_UNAVAILABLE_LABEL } from "./virtualAudioCapture.ts";
+import type { VirtualAudioDeviceMatch } from "./virtualAudioDevices.ts";
+import { resolveSystemAudioRowStatus } from "./systemAudioUi.ts";
 import type { SttProviderStatus } from "./sttTypes.ts";
 import {
   mapEnumerationErrorToScreenCaptureStatus,
@@ -336,14 +333,6 @@ export function buildMicrophoneCapability(input: GlassSetupCapabilitiesInput): G
   };
 }
 
-const SYSTEM_AUDIO_VIRTUAL_FALLBACK_ACTIONS: GlassSetupAction[] = [
-  { label: "Detect Audio Devices", command: "detect-audio-devices" },
-  { label: "Test BlackHole", command: "test-blackhole" },
-  { label: "Open Audio MIDI Setup", command: "open-audio-midi-setup" },
-  { label: "Open Sound Settings", command: "open-sound-settings" },
-  { label: "Show BlackHole Setup", command: "show-blackhole-setup" },
-];
-
 const SYSTEM_AUDIO_RETRY_ACTIONS: GlassSetupAction[] = [
   { label: "Retry System Audio", command: "retry-system-audio" },
   { label: "Open Privacy & Security", command: "open-privacy-settings" },
@@ -368,8 +357,11 @@ export function buildSystemAudioCapability(input: GlassSetupCapabilitiesInput): 
     return {
       id: "systemAudio",
       status: "ready",
-      label: "System audio ready",
-      detail: input.systemAudioDetail ?? "Native loopback capture is available.",
+      label: resolveSystemAudioRowStatus({
+        systemAudioStatus: status,
+        virtualDevices: input.virtualAudioDevices ?? [],
+        selectedVirtualAudioDeviceId: input.selectedVirtualAudioDeviceId,
+      }),
       severity: "ok",
     };
   }
@@ -423,24 +415,14 @@ export function buildSystemAudioCapability(input: GlassSetupCapabilitiesInput): 
     };
   }
   if (status === "requires_virtual_device") {
-    const detail = buildSystemAudioVirtualDeviceDetail({
-      virtualDevices: input.virtualAudioDevices ?? [],
-      selectedDeviceId: input.selectedVirtualAudioDeviceId,
-      nativeUnavailable: true,
-      extraDetail: input.systemAudioDetail,
-    });
-    const hasVirtual = (input.virtualAudioDevices?.length ?? 0) > 0;
-    const primary = hasVirtual
-      ? { label: "Test BlackHole", command: "test-blackhole" as const }
-      : { label: "Show BlackHole Setup", command: "show-blackhole-setup" as const };
     return {
       id: "systemAudio",
       status: "requires_virtual_device",
-      label: NATIVE_SYSTEM_AUDIO_UNAVAILABLE_LABEL,
-      detail,
-      actionLabel: primary.label,
-      actionCommand: primary.command,
-      actions: [primary, ...SYSTEM_AUDIO_VIRTUAL_FALLBACK_ACTIONS.filter((a) => a.command !== primary.command)],
+      label: resolveSystemAudioRowStatus({
+        systemAudioStatus: status,
+        virtualDevices: input.virtualAudioDevices ?? [],
+        selectedVirtualAudioDeviceId: input.selectedVirtualAudioDeviceId,
+      }),
       severity: "warn",
     };
   }

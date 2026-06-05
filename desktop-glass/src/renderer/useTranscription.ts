@@ -473,7 +473,6 @@ export function useTranscription(): TranscriptionController {
 
   const startSystemAudio = useCallback(async () => {
     const useVirtual = shouldUseVirtualSystemAudioCapture({
-      systemAudioStatus,
       selectedVirtualAudioDeviceId: glassState.selectedVirtualAudioDeviceId,
     });
 
@@ -565,6 +564,21 @@ export function useTranscription(): TranscriptionController {
 
   const testSystemAudio = useCallback(async () => {
     try {
+      const selectedId = glassState.selectedVirtualAudioDeviceId?.trim();
+      if (selectedId) {
+        await reportVirtualAudioDevices();
+        const device = (glassState.virtualAudioDevices ?? []).find(
+          (d) => d.deviceId === selectedId,
+        );
+        const virtual = await probeVirtualAudioInput(selectedId, device?.label);
+        applySystemAudioProbeResult(virtual.status, virtual.detail);
+        dispatch({
+          type: "SET_ERROR",
+          message: virtual.hasActivity ? undefined : virtual.detail,
+        });
+        return;
+      }
+
       const native = await probeNativeDisplayMediaAudio();
       if (native.trackCount > 0) {
         applySystemAudioProbeResult(native.status, native.detail);
@@ -592,6 +606,7 @@ export function useTranscription(): TranscriptionController {
   }, [
     applySystemAudioProbeResult,
     resolveVirtualDeviceId,
+    glassState.selectedVirtualAudioDeviceId,
     glassState.virtualAudioDevices,
   ]);
 

@@ -42,14 +42,12 @@ test("pickPreferredVirtualAudioDevice prefers BlackHole 2ch", () => {
 test("shouldUseVirtualSystemAudioCapture when virtual device selected", () => {
   assert.equal(
     shouldUseVirtualSystemAudioCapture({
-      systemAudioStatus: "requires_virtual_device",
       selectedVirtualAudioDeviceId: "bh2",
     }),
     true,
   );
   assert.equal(
     shouldUseVirtualSystemAudioCapture({
-      systemAudioStatus: "requires_virtual_device",
       selectedVirtualAudioDeviceId: undefined,
     }),
     false,
@@ -65,7 +63,7 @@ test("evaluateVirtualAudioProbe marks track without activity as available with s
   assert.equal(result.status, "available");
   assert.equal(result.trackCount, 1);
   assert.equal(result.hasActivity, false);
-  assert.equal(result.detail, BLACKHOLE_SILENT_INPUT_MESSAGE);
+  assert.match(result.detail, /no audio signal is detected/i);
 });
 
 test("evaluateVirtualAudioProbe marks active track as available", () => {
@@ -89,9 +87,8 @@ test("BlackHole detected is selectable in setup capability row", () => {
     virtualAudioDevices: devices,
     selectedVirtualAudioDeviceId: "bh2",
   });
-  assert.match(row.detail ?? "", /BlackHole detected/i);
-  assert.match(row.detail ?? "", /Selected: BlackHole 2ch/i);
-  assert.equal(row.actionCommand, "test-blackhole");
+  assert.equal(row.label, "BlackHole selected");
+  assert.equal(row.detail, undefined);
 });
 
 test("no BlackHole shows setup guidance", () => {
@@ -99,8 +96,8 @@ test("no BlackHole shows setup guidance", () => {
     ...baseInput,
     virtualAudioDevices: [],
   });
-  assert.match(row.detail ?? "", new RegExp(BLACKHOLE_NOT_DETECTED_GUIDANCE.slice(0, 30)));
-  assert.equal(row.actionCommand, "show-blackhole-setup");
+  assert.equal(row.label, "Native unavailable");
+  assert.equal(row.detail, undefined);
 });
 
 test("microphone flow remains separate from system audio virtual fallback", () => {
@@ -119,7 +116,7 @@ test("screen capture stays ready when system audio needs BlackHole", () => {
     virtualAudioDevices: detectVirtualAudioDevices([{ deviceId: "bh2", label: "BlackHole 2ch" }]),
   });
   assert.equal(rows.find((r) => r.id === "screenRecording")?.status, "ready");
-  assert.equal(rows.find((r) => r.id === "systemAudio")?.label, "Native system audio unavailable");
+  assert.equal(rows.find((r) => r.id === "systemAudio")?.label, "BlackHole detected");
 });
 
 test("glass settings shape includes selected virtual audio device id", () => {

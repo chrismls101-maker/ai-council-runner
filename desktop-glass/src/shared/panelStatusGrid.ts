@@ -208,8 +208,7 @@ function buildAudioCard(input: PanelStatusGridInput): PanelStatusCard {
         key: "audio",
         label: "Audio",
         level: "warn",
-        status: "Virtual device needed",
-        detail: systemAudioStatusMessage("requires_virtual_device"),
+        status: "Configure system audio",
       };
     case "source_enumeration_failed":
       return {

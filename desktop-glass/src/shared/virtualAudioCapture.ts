@@ -16,7 +16,7 @@ export const BLACKHOLE_NOT_DETECTED_GUIDANCE =
   "Install BlackHole 2ch, create a Multi-Output Device, route Mac audio to it, then select BlackHole in IIVO Glass.";
 
 export const BLACKHOLE_SILENT_INPUT_MESSAGE =
-  "BlackHole input is available, but no audio is detected. Make sure Mac output is set to the Multi-Output Device and audio is playing.";
+  "BlackHole is selected, but no audio signal is detected. Make sure Mac output is routed to a Multi-Output Device that includes BlackHole.";
 
 export const BLACKHOLE_SETUP_INSTRUCTIONS = [
   "Open Audio MIDI Setup.",
@@ -124,11 +124,7 @@ export function evaluateVirtualAudioProbe(input: {
 }
 
 export function shouldUseVirtualSystemAudioCapture(input: {
-  systemAudioStatus: SystemAudioStatus;
   selectedVirtualAudioDeviceId?: string;
 }): boolean {
-  return (
-    input.systemAudioStatus === "requires_virtual_device" &&
-    !!input.selectedVirtualAudioDeviceId?.trim()
-  );
+  return !!input.selectedVirtualAudioDeviceId?.trim();
 }

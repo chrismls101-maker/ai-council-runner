@@ -115,7 +115,8 @@ test("virtual device guidance only when status is requires_virtual_device and sc
     systemAudioStatus: "requires_virtual_device",
     systemAudioDetail: "No audio track from display media.",
   });
-  assert.match(rowVirtual.detail ?? "", /BlackHole 2ch or Loopback/i);
+  assert.equal(rowVirtual.label, "Native unavailable");
+  assert.equal(rowVirtual.detail, undefined);
 });
 
 test("diagnostic-style summary preserves failed to get sources in system audio detail", () => {
