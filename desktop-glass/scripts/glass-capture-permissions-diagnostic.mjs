@@ -46,8 +46,17 @@ function findDevElectron() {
   if (!fs.existsSync(electronPkg)) {
     throw new Error("Install desktop-glass deps: npm run glass:install");
   }
-  const { main: electronMain } = JSON.parse(fs.readFileSync(electronPkg, "utf8"));
-  const electronBin = path.join(GLASS_ROOT, "node_modules/electron", electronMain);
+  if (process.platform === "darwin") {
+    const electronBin = path.join(
+      GLASS_ROOT,
+      "node_modules/electron/dist/Electron.app/Contents/MacOS/Electron",
+    );
+    if (fs.existsSync(electronBin)) return { electronBin };
+  }
+  const electronBin = path.join(GLASS_ROOT, "node_modules/.bin/electron");
+  if (!fs.existsSync(electronBin)) {
+    throw new Error("Electron binary not found. Run: npm run glass:install");
+  }
   return { electronBin };
 }
 
@@ -55,12 +64,11 @@ function main() {
   const usePackaged = process.argv.includes("--packaged");
   const useDev = process.argv.includes("--dev") || !usePackaged;
 
+  const { ELECTRON_RUN_AS_NODE: _stripNodeShim, ...baseEnv } = process.env;
   const env = {
-    ...process.env,
+    ...baseEnv,
     IIVO_GLASS_DIAGNOSE: "1",
-    ELECTRON_RUN_AS_NODE: undefined,
   };
-  delete env.ELECTRON_RUN_AS_NODE;
 
   let cmd;
   let args;
@@ -80,7 +88,7 @@ function main() {
 
   const result = spawnSync(cmd, args, {
     cwd,
-    env: { ...env, ELECTRON_RUN_AS_NODE: undefined },
+    env,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
   });
