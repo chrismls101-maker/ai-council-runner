@@ -216,6 +216,93 @@ export function scoreMeetingAnswer(input) {
   };
 }
 
+const CATEGORY_GENERIC_PHRASES = {
+  video_learning: [
+    /diversif/i,
+    /dollar[- ]cost/i,
+    /\bdca\b/i,
+    /rebalance/i,
+    /timing the market/i,
+    /keep (an open mind|learning)/i,
+  ],
+  creator_content: [
+    /strong hook/i,
+    /clear (call to action|cta)/i,
+    /know your audience/i,
+    /post consistently/i,
+    /engaging (content|thumbnail)/i,
+  ],
+  sales_review: [
+    /send (a )?follow[- ]?up/i,
+    /confirm the demo/i,
+    /tailor the demo/i,
+    /build rapport/i,
+    /add value/i,
+  ],
+};
+
+const CATEGORY_MISSING_RE =
+  /(missing|not (given|specified|defined|sure|provided|clear|identified)|no (topic|audience|title|cta|call to action|platform|publish date|prospect|company|objection|deadline|deal value|stage|owner|lesson topic|key concepts?|examples?)|need(s)? (to be defined|more (context|detail|info))|isn'?t (defined|specified|clear)|unclear|tbd|undefined|wasn'?t (provided|specified|given)|to be defined|hasn'?t been)/i;
+
+/**
+ * Grade a non-meeting category answer (video_learning / creator_content /
+ * sales_review) against scenario anchors. Kept in JS so the live audit stays
+ * dependency-free.
+ *
+ * @param {object} input
+ * @param {string} input.answer
+ * @param {import('../qa-scenarios/iivo-glass-scenarios.mjs').QaScenario} input.scenario
+ */
+export function scoreCategoryAnswer(input) {
+  const answer = String(input.answer ?? "");
+  const text = answer.toLowerCase();
+  const s = input.scenario ?? {};
+  const anchors = s.expectedAnchors ?? [];
+
+  const factAnchors = anchors.filter((a) => !/^(no |not |missing)/i.test(a));
+  const callOuts = anchors.filter((a) => /^(no |not |missing)/i.test(a));
+  const mentionedAnchors = factAnchors.filter((a) => text.includes(String(a).toLowerCase()));
+
+  const thin = factAnchors.length === 0;
+  const needed = factAnchors.length >= 3 ? 2 : 1;
+  const hasFacts = !thin && mentionedAnchors.length >= needed;
+
+  const missingCalledOut = CATEGORY_MISSING_RE.test(answer);
+
+  const genericPhrases = CATEGORY_GENERIC_PHRASES[s.category] ?? [];
+  const genericHits = genericPhrases.filter((re) => re.test(answer)).length;
+  const genericFlag = !hasFacts && genericHits > 0;
+
+  const CATEGORY_ACTIONABLE =
+    /\b(next step|send|draft|propose|prepare|schedule|book|follow[- ]?up|reach out|ask|build|create|define|confirm|offer|share|map|outline|review|update|set|add|record|remember|study|practice|highlight|loop in|re-?engage|nurture|enroll|post|publish|edit|tighten|clarify|pin down)\b/i;
+  const actionable =
+    (CATEGORY_ACTIONABLE.test(answer) || ACTIONABLE_PATTERNS.some((re) => re.test(answer))) &&
+    answer.length >= 40;
+
+  let verdict;
+  if (thin) {
+    // Thin context: strong is impossible; honesty about missing info = acceptable.
+    verdict = missingCalledOut ? "acceptable" : "weak";
+  } else if (!hasFacts) {
+    verdict = "weak";
+  } else if (actionable) {
+    verdict = "strong";
+  } else {
+    verdict = "acceptable";
+  }
+
+  return {
+    verdict,
+    thin,
+    genericFlag,
+    actionable,
+    mentionedAnchors,
+    expectedFactAnchors: factAnchors,
+    missingFields: callOuts,
+    missingCalledOut,
+  };
+}
+
 /**
  * Hard fail reasons for controlled visual fixture live asks.
  * @param {object} input

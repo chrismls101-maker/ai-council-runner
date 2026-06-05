@@ -13,8 +13,11 @@ import { getScenarioById, FIXTURE_PAGES } from "./qa-scenarios/iivo-glass-scenar
 import {
   scoreGlassAnswerQuality,
   scoreMeetingAnswer,
+  scoreCategoryAnswer,
   visualFixtureFailReason,
 } from "./lib/glass-answer-quality.mjs";
+
+const CATEGORY_GRADED = new Set(["video_learning", "creator_content", "sales_review"]);
 import { renderFixtureScreenshot } from "./lib/render-fixture-screenshot.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -207,6 +210,10 @@ const meeting =
     ? scoreMeetingAnswer({ answer: data.answer, scenario })
     : null;
 
+const categoryGrade = CATEGORY_GRADED.has(scenario.category)
+  ? scoreCategoryAnswer({ answer: data.answer, scenario })
+  : null;
+
 appendResult({
   scenarioId,
   category: scenario.category,
@@ -229,6 +236,16 @@ appendResult({
         meetingMissingCalledOut: meeting.missingCalledOut,
         meetingHallucinatedOwner: meeting.hallucinatedOwner,
         meetingMentionedAnchors: meeting.mentionedAnchors,
+      }
+    : {}),
+  ...(categoryGrade
+    ? {
+        categoryVerdict: categoryGrade.verdict,
+        categoryThin: categoryGrade.thin,
+        categoryGeneric: categoryGrade.genericFlag,
+        categoryMissingCalledOut: categoryGrade.missingCalledOut,
+        categoryMentionedAnchors: categoryGrade.mentionedAnchors,
+        categoryMissingFields: categoryGrade.missingFields,
       }
     : {}),
   pass: true,

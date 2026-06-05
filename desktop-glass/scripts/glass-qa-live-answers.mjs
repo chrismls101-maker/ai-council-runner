@@ -203,8 +203,13 @@ function main() {
         else fail += 1;
       }
 
+      const CATEGORY_GRADED = ["video_learning", "creator_content", "sales_review"];
       const auditScript =
-        category === "meeting_call" ? "glass-qa-meeting-audit.mjs" : "glass-live-scenario-audit.mjs";
+        category === "meeting_call"
+          ? "glass-qa-meeting-audit.mjs"
+          : category && CATEGORY_GRADED.includes(category)
+            ? "glass-qa-category-audit.mjs"
+            : "glass-live-scenario-audit.mjs";
       const audit = spawnSync(
         process.execPath,
         [join(__dirname, auditScript), "--run-since", startedAt],

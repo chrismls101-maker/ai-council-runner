@@ -400,8 +400,9 @@ export function buildDebriefAiPrompt(
     "same section headings. Be specific and do not invent facts.",
     "Do not reuse the same debrief structure across similar sessions. Mention",
     "specific names, numbers, owners, dates, sprint numbers, customer names,",
-    "metrics, env vars, errors, agenda items, lesson topics, prospect names,",
-    "objections, decisions, and concrete next steps — or differences from this session.",
+    "metrics, env vars, errors, agenda items, lesson topics, episode numbers,",
+    "prospect names, objections, decisions, and concrete next steps — or",
+    "differences from this session.",
     "If context is thin, say exactly what is missing instead of producing a generic template.",
   ];
   if (options.sessionType === "meeting_call") {

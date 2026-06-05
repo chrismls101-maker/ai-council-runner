@@ -13,7 +13,7 @@ import type { GlassAskRequestBody, GlassAskResponseBody, GlassAskSessionPayload 
 
 export const GLASS_DIRECT_SYSTEM_PROMPT = `You are IIVO Glass, a fast conversational AI companion over the user's workspace. Answer naturally and directly, like ChatGPT. Use the provided session context only when relevant. Be concise unless the user asks for depth. Do not invent screen/audio details you were not given. Do not use council/report formatting.
 
-Do not reuse the same answer structure across similar sessions. Mention specific names, numbers, topics, decisions, objections, lesson details, owners, dates, sprint numbers, customer names, metrics, env vars, agenda items, or prospect names — or differences from this session. If context is thin, say exactly what is missing instead of producing a generic template.
+Do not reuse the same answer structure across similar sessions. Mention specific names, numbers, topics, decisions, objections, lesson details, owners, dates, sprint numbers, customer names, metrics, episode numbers, prospect names, env vars, agenda items — or differences from this session. If context is thin, say exactly what is missing instead of producing a generic template.
 
 If the user asks for deep analysis, strategic council review, or multi-agent deliberation, briefly answer what you can and suggest they use Analyze Now in IIVO Glass for a deeper session analysis. Do not switch into council mode yourself.
 
@@ -111,6 +111,95 @@ export function buildMeetingAnswerGuidance(fullReport: boolean): string {
     "- Risks / blockers",
     "- Next step",
   ].join("\n");
+}
+
+const VIDEO_LEARNING_PATTERNS = [
+  /\b(lesson|module|chapter|tutorial|lecture|course|instructor|video)\b/i,
+  /\bwhat should i remember\b/i,
+  /\b(takeaway|key concept|study notes?)\b/i,
+  /\bwatch(ing)?\b/i,
+];
+
+const CREATOR_CONTENT_PATTERNS = [
+  /\bepisode\b/i,
+  /\b(hook|thumbnail|cta|call to action)\b/i,
+  /\b(podcast|newsletter|short[- ]?form|reel|tiktok|youtube|livestream|channel)\b/i,
+  /\b(audience|viewers?|subscribers?)\b/i,
+  /\b(content (calendar|plan|promise)|upload|publish)\b/i,
+];
+
+const SALES_REVIEW_PATTERNS = [
+  /\b(prospect|deal|pipeline|account|opportunity)\b/i,
+  /\b(objection|procurement|competitor|quota|close|renewal|expansion)\b/i,
+  /\b(demo|discovery|follow[- ]?up|outreach|cold email)\b/i,
+  /\b(crm|hubspot|salesforce)\b/i,
+];
+
+function countHits(text: string, patterns: RegExp[]): number {
+  return patterns.filter((re) => re.test(text)).length;
+}
+
+/** Detection for the non-meeting answer-quality categories (off prompt+context text). */
+export function looksLikeVideoLearning(prompt: string): boolean {
+  return countHits(prompt, VIDEO_LEARNING_PATTERNS) >= 2;
+}
+
+export function looksLikeCreatorContent(prompt: string): boolean {
+  return countHits(prompt, CREATOR_CONTENT_PATTERNS) >= 2;
+}
+
+export function looksLikeSalesReview(prompt: string): boolean {
+  return countHits(prompt, SALES_REVIEW_PATTERNS) >= 2;
+}
+
+const VIDEO_LEARNING_GUIDANCE = [
+  "This is a video-learning session. Ground the answer in THIS video's specifics: lesson number/topic, key concepts, exact terms, examples, warnings/mistakes, and steps actually present in the transcript or screen.",
+  "Do NOT default to generic advice (for example: diversify, dollar-cost averaging, rebalance, \"avoid timing the market\") unless those concepts are actually in the context.",
+  "",
+  "Answer with:",
+  "- 3–5 session-specific takeaways using exact terms/concepts from the context",
+  "- one practical application",
+  "- one question to review",
+  "- mention the lesson number/topic if present",
+  "If context is thin, say exactly what is missing (lesson topic, key concepts, examples) instead of inventing. The transcript may be simulated — do not invent details from a real video.",
+].join("\n");
+
+const CREATOR_CONTENT_GUIDANCE = [
+  "This is a creator-content planning session. Ground the answer in THIS episode/piece: episode number/title, target audience, topic, content promise, hook angle, thumbnail/title idea, CTA, platform, and upload timing actually present in the context.",
+  "Do NOT repeat the same generic hook/CTA advice across episodes.",
+  "",
+  "Answer with:",
+  "- the viewer promise",
+  "- hook / title / thumbnail alignment",
+  "- the main content risk",
+  "- one concrete next edit",
+  "- the CTA decision",
+  "- any missing assets/details",
+  "If the context only says \"episode N\" without a real topic/audience/title, say the missing topic, audience, title, thumbnail, CTA, platform, and publish date must be defined. Do not invent episode substance.",
+].join("\n");
+
+const SALES_REVIEW_GUIDANCE = [
+  "This is a sales-review session. Ground the answer in THIS account: prospect/company name, deal stage, objection, next step, deadline/quarter close, competitor, deal risk, value proposition, and owner actually present in the context.",
+  "Do NOT produce a generic sales-ops list (for example: \"send follow-up, confirm demo, tailor demo\").",
+  "",
+  "Answer with:",
+  "- a prospect-specific next step",
+  "- objection handling",
+  "- a demo/follow-up plan",
+  "- the close risk",
+  "- a short follow-up message angle or talk track",
+  "If prospect name, objection, owner, deadline, or deal value is missing, say so. Never invent a prospect name or deadline.",
+].join("\n");
+
+/**
+ * Category-specific answer guidance for the non-meeting answer-quality
+ * categories. Returns null when the prompt/context doesn't match a category.
+ */
+export function buildNonMeetingCategoryGuidance(prompt: string): string | null {
+  if (looksLikeVideoLearning(prompt)) return VIDEO_LEARNING_GUIDANCE;
+  if (looksLikeCreatorContent(prompt)) return CREATOR_CONTENT_GUIDANCE;
+  if (looksLikeSalesReview(prompt)) return SALES_REVIEW_GUIDANCE;
+  return null;
 }
 
 const COUNCIL_FORMAT_MARKERS =
@@ -330,8 +419,11 @@ export function buildGlassDirectUserPrompt(
     lines.push(...anchorBlock);
   }
 
+  const categoryGuidance = buildNonMeetingCategoryGuidance(prompt);
   if (looksLikeMeeting(prompt, session)) {
     lines.push("", buildMeetingAnswerGuidance(meetingWantsFullReport(prompt)));
+  } else if (categoryGuidance) {
+    lines.push("", categoryGuidance);
   } else if (session && sessionAnchorStrength(anchors) < 2) {
     // Only nudge toward "need more context" when we have a non-meeting thin session.
     lines.push("", GLASS_WEAK_ANCHOR_INSTRUCTION);

@@ -6,11 +6,15 @@ import {
   buildGlassDirectUserPrompt,
   buildGlassDirectRetryPrompt,
   buildMeetingAnswerGuidance,
+  buildNonMeetingCategoryGuidance,
   extractSessionAnchors,
   formatGlassDirectAnswer,
   GLASS_DIRECT_SYSTEM_PROMPT,
   GLASS_WEAK_ANCHOR_INSTRUCTION,
   looksLikeMeeting,
+  looksLikeVideoLearning,
+  looksLikeCreatorContent,
+  looksLikeSalesReview,
   meetingWantsFullReport,
   runGlassDirectAsk,
   answersTooSimilar,
@@ -544,6 +548,64 @@ await test("retry prompt demands distinct facts or explicit missing fields", () 
   const retry = buildGlassDirectRetryPrompt("Summarize the session.");
   assert.match(retry, /too similar\/generic/i);
   assert.match(retry, /list the missing fields/i);
+});
+
+// --- non-meeting category intelligence (video / creator / sales) ---
+
+await test("category detectors recognize their own context", () => {
+  assert.equal(
+    looksLikeVideoLearning("What should I remember?\n\nContext: Watching lesson 3 tutorial, key concepts"),
+    true,
+  );
+  assert.equal(
+    looksLikeCreatorContent("What matters here?\n\nContext: Episode 7 podcast hook, audience, CTA"),
+    true,
+  );
+  assert.equal(
+    looksLikeSalesReview("Turn this into action steps.\n\nContext: prospect Acme deal objection demo"),
+    true,
+  );
+  // A plain coding prompt matches none of them.
+  assert.equal(looksLikeVideoLearning("Fix this null pointer in my code."), false);
+  assert.equal(looksLikeCreatorContent("Fix this null pointer in my code."), false);
+  assert.equal(looksLikeSalesReview("Fix this null pointer in my code."), false);
+});
+
+await test("video-learning guidance forbids defaulting to generic investing advice", () => {
+  const g = buildNonMeetingCategoryGuidance(
+    "What should I remember?\n\nContext: lesson 5 lecture key concepts terms",
+  );
+  assert.ok(g);
+  assert.match(g, /video-learning/i);
+  assert.match(g, /dollar-cost averaging/i);
+  assert.match(g, /lesson number\/topic/i);
+});
+
+await test("creator-content guidance requires episode specifics and missing fields", () => {
+  const g = buildNonMeetingCategoryGuidance(
+    "What matters here?\n\nContext: episode 4 podcast hook thumbnail CTA audience",
+  );
+  assert.ok(g);
+  assert.match(g, /creator-content/i);
+  assert.match(g, /episode/i);
+  assert.match(g, /Do NOT repeat the same generic hook\/CTA/i);
+});
+
+await test("sales-review guidance forbids generic sales-ops lists", () => {
+  const g = buildNonMeetingCategoryGuidance(
+    "Turn this into action steps.\n\nContext: prospect Globex deal stage objection competitor",
+  );
+  assert.ok(g);
+  assert.match(g, /sales-review/i);
+  assert.match(g, /generic sales-ops list/i);
+  assert.match(g, /Never invent a prospect name/i);
+});
+
+await test("category guidance is injected into the user prompt", () => {
+  const prompt = buildGlassDirectUserPrompt(
+    "What should I remember?\n\nContext: lesson 2 React useState useEffect tutorial",
+  );
+  assert.match(prompt, /video-learning/i);
 });
 
 console.log("glassAsk.test.ts: all assertions passed");
