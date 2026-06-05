@@ -26,3 +26,6 @@ build/.icon-master.png
 # Playwright E2E artifacts
 test-results/
 playwright-report/
+
+# Overnight QA report (regenerated each run; do not commit unless asked)
+OVERNIGHT_QA_REPORT.md
