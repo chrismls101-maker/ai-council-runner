@@ -48,7 +48,7 @@ function parseArgs() {
     if (args[i] === "--count" && args[i + 1]) count = Math.max(1, Number(args[++i]) || 30);
     if (args[i] === "--seed" && args[i + 1]) seed = Number(args[++i]) || 1234;
   }
-  return { count: Math.min(Math.max(count, 25), 40), seed };
+  return { count: Math.min(Math.max(count, 25), 50), seed };
 }
 
 function pickScenarioForCategory(category, preferVisual = false) {
