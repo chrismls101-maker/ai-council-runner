@@ -27,7 +27,7 @@ import {
   buildInterventionForInsight,
   pickInterventionInsight,
 } from "./copilotInterruption.ts";
-import { detectStuckSignal } from "./copilotDiagnostic.ts";
+import { detectStuckSignal, isLikelyDiagnosticSpam } from "./copilotDiagnostic.ts";
 import {
   resolveSessionType,
   type GlassCopilotSessionType,
@@ -73,6 +73,9 @@ export type CopilotEffect =
   | "action_steps"
   | "save"
   | "diagnose"
+  | "summarize-blocker"
+  | "create-fix-plan"
+  | "save-issue"
   | "show-summary"
   | "later"
   | "dismiss";
@@ -282,9 +285,21 @@ export class SessionCopilotController {
           events: newEvents,
           recentCommands: input.recentCommands,
           visualAskFailureCount: input.visualAskFailureCount,
+          sourceApp: input.sourceApp,
+          sourceTitle: input.sourceTitle,
         });
-        if (signal.stuck && signal.reason && !this.recentShownTexts.some((t) => t === signal.reason)) {
-          intervention = buildDiagnoseOfferIntervention(signal.reason, this.deps);
+        if (
+          signal.stuck &&
+          signal.reason &&
+          !isLikelyDiagnosticSpam({
+            events: newEvents,
+            recentCommands: input.recentCommands,
+            sourceApp: input.sourceApp,
+            sourceTitle: input.sourceTitle,
+          }) &&
+          !this.recentShownTexts.some((t) => t === signal.reason)
+        ) {
+          intervention = buildDiagnoseOfferIntervention(signal.reason, this.deps, signal.category);
           this.lastInterventionMs = this.deps.now();
           this.remember(signal.reason);
         }
@@ -335,6 +350,15 @@ export class SessionCopilotController {
         if (insight) insight.userDecision = "accepted";
         effect = "diagnose";
         break;
+      case "summarize-blocker":
+        effect = "summarize-blocker";
+        break;
+      case "create-fix-plan":
+        effect = "create-fix-plan";
+        break;
+      case "save-issue":
+        effect = "save-issue";
+        break;
       case "show-summary":
         effect = "show-summary";
         break;
@@ -358,6 +382,9 @@ export class SessionCopilotController {
       action === "yes" ||
       action === "save" ||
       action === "diagnose" ||
+      action === "summarize-blocker" ||
+      action === "create-fix-plan" ||
+      action === "save-issue" ||
       action === "create-prompt" ||
       action === "turn-into-action"
     ) {

@@ -70,6 +70,9 @@ export type GlassCopilotCardAction =
   | "show-summary"
   | "turn-into-action"
   | "create-prompt"
+  | "summarize-blocker"
+  | "create-fix-plan"
+  | "save-issue"
   | "dismiss";
 
 export interface GlassCopilotCardButton {

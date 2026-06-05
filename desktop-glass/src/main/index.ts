@@ -127,7 +127,6 @@ import {
   buildDebriefAiPrompt,
   detectDebriefTrigger,
 } from "../shared/copilotDebrief.ts";
-import { buildSummaryReadyIntervention } from "../shared/copilotInterruption.ts";
 import {
   createListeningLimitState,
   extendListeningLimit,
@@ -201,16 +200,6 @@ import {
   type GlassUserSettings,
 } from "../shared/glassSettings.ts";
 import { loadGlassUserSettings, persistGlassUserSettings } from "./glassSettingsPersistence.ts";
-import { resolveDefaultPanelTab } from "../shared/glassSettings.ts";
-import {
-  isSystemAudioArmed,
-  isSystemAudioRoutingReady,
-} from "../shared/audioRoutingReady.ts";
-import { getCurrentMacOutputDeviceName } from "./macAudioOutput.ts";
-import {
-  broadcastStartupAudioRestore,
-  restoreMacOutputFromSettings,
-} from "./startupAudioRestore.ts";
 import {
   buildGlassSetupCapabilities,
   formatSetupCheckSummary,
@@ -322,7 +311,7 @@ let glassUserSettings: GlassUserSettings = { ...DEFAULT_GLASS_USER_SETTINGS };
 const state: AppState = {
   privacy: { ...initialPrivacyState },
   transcript: "",
-  panelTab: "audio",
+  panelTab: "summary",
   sessionActionStatus: "idle",
   transcriptionMode: "manual",
   systemAudioStatus: resolveInitialSystemAudioStatus(
@@ -599,79 +588,6 @@ function visualAskProbeDiagnostics(
     packagingVariant: id?.packagingVariantLabel,
     lastPreflightIssue: formatScreenCaptureProbeDebug(screenProbe),
   };
-}
-
-async function persistAudioRoutingSuccess(): Promise<void> {
-  const outputName = await getCurrentMacOutputDeviceName();
-  glassUserSettings = {
-    ...glassUserSettings,
-    audioRoutingConfigured: true,
-    ...(outputName ? { savedMacOutputDeviceName: outputName } : {}),
-  };
-  state.glassSettings = glassUserSettings;
-  await persistGlassUserSettings(glassUserSettings);
-}
-
-async function runAutomaticStartupSetup(silent = true): Promise<void> {
-  if (process.env.IIVO_GLASS_E2E === "1" || state.privacy.listening) return;
-  const result = await runGlassSetupCheck({
-    config,
-    displayTarget: state.glassSettings.displayTarget,
-  });
-  state.serverHealthForSetup = result.serverHealth;
-  state.screenCaptureProbe = result.screenCaptureProbe;
-  state.screenCaptureDetail = result.screenCaptureDetail;
-  state.windowCaptureProbe = result.windowCaptureProbe;
-  state.windowCaptureDetail = result.windowCaptureDetail;
-  const audioVerified = isSystemAudioRoutingReady(
-    state.systemAudioStatus,
-    state.systemAudioDetail,
-  );
-  const blackholeConfigured =
-    !!state.selectedVirtualAudioDeviceId ||
-    (state.virtualAudioDevices ?? []).some((d) => d.kind === "blackhole");
-  if (!audioVerified) {
-    if (!(blackholeConfigured && result.systemAudioStatus === "requires_virtual_device")) {
-      state.systemAudioStatus = result.systemAudioStatus;
-      state.systemAudioDetail = result.systemAudioDetail;
-    }
-  }
-  refreshSetupCapabilities();
-  state.setupCheckSummary = formatSetupCheckSummary(state.setupCapabilities);
-  if (!silent) {
-    state.lastNotice = state.setupCheckSummary;
-  }
-  push();
-}
-
-function broadcastStartupAudioRestoreWithRetry(attempts = 5, intervalMs = 800): void {
-  let count = 0;
-  const tick = (): void => {
-    broadcastStartupAudioRestore();
-    count += 1;
-    if (count < attempts) {
-      window.setTimeout(tick, intervalMs);
-    }
-  };
-  tick();
-}
-
-async function runMainStartupAudioRestore(): Promise<void> {
-  if (process.env.IIVO_GLASS_E2E === "1") return;
-  const output = await restoreMacOutputFromSettings(glassUserSettings);
-  if (!output.restoredOutput && glassUserSettings.savedMacOutputDeviceName) {
-    state.lastNotice =
-      output.outputMessage ??
-      "Could not auto-restore Mac sound output. Open Sound settings and select your Multi-Output Device.";
-    push();
-  }
-  // Wait for renderer + transcription provider, then restore audio routing silently.
-  window.setTimeout(() => {
-    broadcastStartupAudioRestoreWithRetry();
-    window.setTimeout(() => {
-      void runAutomaticStartupSetup(true);
-    }, 9000);
-  }, 1500);
 }
 
 function refreshSetupCapabilities(): void {
@@ -1820,7 +1736,7 @@ async function handleCommand(
       }
       return;
     case "request-start-listening":
-      state.panelTab = "diagnostics";
+      state.panelTab = "context";
       if (!isPanelVisible()) togglePanel();
       state.operationDiagnostics = recordOperation(state.operationDiagnostics, "request-start-listening", "pending");
       push();
@@ -1906,12 +1822,6 @@ async function handleCommand(
       state.systemAudioDetail = command.detail;
       if (command.status === "requires_virtual_device" || command.status === "available") {
         state.nativeLoopbackTested = true;
-      }
-      if (
-        isSystemAudioRoutingReady(command.status, command.detail) ||
-        isSystemAudioArmed(command.detail)
-      ) {
-        void persistAudioRoutingSuccess();
       }
       refreshSetupCapabilities();
       push();
@@ -2196,42 +2106,7 @@ async function handleCommand(
       refreshSetupCapabilities();
       push();
       return;
-    case "run-setup-check": {
-      const silent = command.silent === true;
-      const result = await runGlassSetupCheck({
-        config,
-        displayTarget: state.glassSettings.displayTarget,
-        skipCaptureProbe:
-          process.env.IIVO_GLASS_E2E === "1" && process.env.IIVO_GLASS_E2E_CAPTURE_FAIL !== "1",
-      });
-      state.serverHealthForSetup = result.serverHealth;
-      state.screenCaptureProbe = result.screenCaptureProbe;
-      state.screenCaptureDetail = result.screenCaptureDetail;
-      state.windowCaptureProbe = result.windowCaptureProbe;
-      state.windowCaptureDetail = result.windowCaptureDetail;
-      if (!state.privacy.listening && process.env.IIVO_GLASS_E2E !== "1") {
-        const audioVerified = isSystemAudioRoutingReady(
-          state.systemAudioStatus,
-          state.systemAudioDetail,
-        );
-        const blackholeConfigured =
-          !!state.selectedVirtualAudioDeviceId ||
-          (state.virtualAudioDevices ?? []).some((d) => d.kind === "blackhole");
-        if (!audioVerified) {
-          if (!(blackholeConfigured && result.systemAudioStatus === "requires_virtual_device")) {
-            state.systemAudioStatus = result.systemAudioStatus;
-            state.systemAudioDetail = result.systemAudioDetail;
-          }
-        }
-      }
-      refreshSetupCapabilities();
-      state.setupCheckSummary = formatSetupCheckSummary(state.setupCapabilities);
-      if (!silent) {
-        state.lastNotice = state.setupCheckSummary;
-      }
-      push();
-      return;
-    }
+    case "run-setup-check":
     case "retry-system-audio": {
       const result = await runGlassSetupCheck({
         config,
@@ -2278,22 +2153,10 @@ async function handleCommand(
       }
       refreshSetupCapabilities();
       state.setupCheckSummary = formatSetupCheckSummary(state.setupCapabilities);
-      state.lastNotice = "Capture diagnostics complete — review the report in Setup (close it when done).";
+      state.lastNotice = report.lines.join("\n");
       push();
       return;
     }
-    case "clear-last-notice":
-      state.lastNotice = undefined;
-      push();
-      return;
-    case "clear-last-error":
-      state.lastError = undefined;
-      push();
-      return;
-    case "clear-capture-diagnostics-report":
-      state.captureDiagnosticsReport = undefined;
-      push();
-      return;
     case "open-screen-recording-settings": {
       const opened = await openGlassSystemSettings("screenRecording");
       state.lastNotice = opened.message;
@@ -2319,27 +2182,12 @@ async function handleCommand(
       return;
     }
     case "show-virtual-audio-help":
-      state.panelTab = "audio";
-      if (!isPanelVisible()) togglePanel();
-      state.lastNotice = `${VIRTUAL_AUDIO_HELP_DETAIL} Open Audio → Configure for step-by-step routing.`;
+      state.lastNotice = VIRTUAL_AUDIO_HELP_DETAIL;
       push();
       return;
     case "show-blackhole-setup":
-      state.panelTab = "audio";
-      if (!isPanelVisible()) togglePanel();
-      state.lastNotice =
-        "Routing help: create a Multi-Output Device with BlackHole 2ch plus your speakers or TV, set Mac output to it, then Test Audio.";
+      state.lastNotice = BLACKHOLE_SETUP_INSTRUCTIONS;
       push();
-      return;
-    case "focus-audio-setup":
-      state.panelTab = "audio";
-      if (!isPanelVisible()) togglePanel();
-      state.lastNotice =
-        "Choose BlackHole 2ch as System Audio Source, then set Mac sound output to a Multi-Output Device.";
-      push();
-      return;
-    case "verify-system-audio":
-      broadcastTranscriptionControl({ type: "startup-audio-restore" });
       return;
     case "detect-audio-devices":
       broadcastTranscriptionControl({ type: "probe-virtual-audio-devices" });
@@ -2377,18 +2225,18 @@ async function handleCommand(
       return;
     }
     case "test-microphone":
-      state.panelTab = "audio";
+      state.panelTab = "context";
       if (!isPanelVisible()) togglePanel();
       broadcastTranscriptionControl({ type: "probe-microphone" });
       state.lastNotice = "Testing microphone — approve the macOS prompt if shown.";
       push();
       return;
     case "test-system-audio":
-      state.panelTab = "audio";
+      state.panelTab = "context";
       if (!isPanelVisible()) togglePanel();
       broadcastTranscriptionControl({ type: "test-system-audio" });
       state.lastNotice =
-        "Testing system audio — play a YouTube video now and watch the level meter in the Audio tab.";
+        "Testing system audio — choose the screen in the picker if prompted.";
       push();
       return;
     case "e2e-set-server-health":
@@ -2639,6 +2487,22 @@ async function applyCopilotEffect(
       // Direct visual ask / direct AI diagnosis using current context (user-approved).
       void submitCommand("What's going wrong on my screen? Diagnose the error I'm seeing.");
       break;
+    case "summarize-blocker":
+      void submitCommand("Summarize what's blocking me right now and the main friction.");
+      break;
+    case "create-fix-plan":
+      void submitCommand("Create a step-by-step fix plan for what I'm stuck on.");
+      break;
+    case "save-issue": {
+      const note = resolution.intervention?.body ?? insight?.text ?? "Diagnostic issue saved.";
+      moments.add({ kind: "note", note: `Issue: ${note}` });
+      await persistMoments(moments);
+      if (sessionIsLive()) {
+        sessions.addEvent({ kind: "saved_moment", title: "Saved issue", text: note });
+      }
+      state.lastNotice = "Saved issue to moments.";
+      break;
+    }
     case "show-summary":
       await generateCopilotDebrief();
       break;
@@ -3125,7 +2989,6 @@ app.whenReady().then(async () => {
   if (sessionIsLive() && copilotModeIsActive(copilot.getConfig().mode)) {
     startCopilotLoop();
   }
-  state.panelTab = resolveDefaultPanelTab(glassUserSettings);
   state.windowContext = await getCurrentWindowContext();
   setChromeLayoutPersistHandler((partial) => {
     glassUserSettings = { ...glassUserSettings, ...partial };
@@ -3141,12 +3004,7 @@ app.whenReady().then(async () => {
   if (showSplash) {
     const readyWindows = getWindows();
     const windowsReady = readyWindows ? whenGlassWindowsReady(readyWindows) : Promise.resolve();
-    void Promise.all([windowsReady, splashMinDisplay]).then(async () => {
-      await finishSplash();
-      void runMainStartupAudioRestore();
-    });
-  } else {
-    void runMainStartupAudioRestore();
+    void Promise.all([windowsReady, splashMinDisplay]).then(() => finishSplash());
   }
 
   app.on("activate", () => {

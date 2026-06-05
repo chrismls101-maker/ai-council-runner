@@ -20,6 +20,7 @@ import {
   type GlassCopilotIntervention,
   type GlassCopilotInterventionKind,
 } from "./copilotTypes.ts";
+import type { DiagnosticCategory } from "./copilotDiagnostic.ts";
 import type { GlassCopilotSessionType } from "./copilotSessionType.ts";
 import { isDuplicateText } from "./sessionIntelligence.ts";
 
@@ -249,6 +250,7 @@ export function buildSummaryReadyIntervention(deps: {
 export function buildDiagnoseOfferIntervention(
   reason: string,
   deps: { idFactory: () => string; clock: () => string },
+  _category?: DiagnosticCategory,
 ): GlassCopilotIntervention {
   return {
     id: deps.idFactory(),
@@ -257,6 +259,9 @@ export function buildDiagnoseOfferIntervention(
     body: reason,
     buttons: [
       { action: "diagnose", label: "Diagnose", primary: true },
+      { action: "summarize-blocker", label: "Summarize blocker" },
+      { action: "create-fix-plan", label: "Create fix plan" },
+      { action: "save-issue", label: "Save issue" },
       { action: "dismiss", label: "Ignore" },
     ],
     createdAt: deps.clock(),

@@ -9,6 +9,9 @@ export const MIC_PERMISSION_DENIED_MESSAGE = "Microphone permission denied";
 export const MIC_PERMISSION_DENIED_DETAIL =
   "Open Microphone Settings, allow IIVO Glass, then tap the mic again.";
 
+export const MIC_PAUSED_AUTO_MESSAGE =
+  "Microphone paused. Tap the mic to speak again.";
+
 export const DEFAULT_MIC_AUTO_SEND_SILENCE_MS = 2500;
 
 export function isMicrophoneCaptureMode(

@@ -22,15 +22,18 @@ import {
   extractCopilotInsights,
   hasNewCopilotContext,
 } from "../shared/copilotEngine.ts";
-import { detectStuckSignal } from "../shared/copilotDiagnostic.ts";
+import { detectStuckSignal, isLikelyDiagnosticSpam } from "../shared/copilotDiagnostic.ts";
 import { detectDebriefTrigger, buildSessionDebrief } from "../shared/copilotDebrief.ts";
 import {
   buildInterventionForInsight,
+  buildDiagnoseOfferIntervention,
   shouldShowOverlayCard,
 } from "../shared/copilotInterruption.ts";
 import {
   detectSessionType,
+  detectSessionTypeDetailed,
   resolveSessionType,
+  scoreSessionTypes,
 } from "../shared/copilotSessionType.ts";
 import type { GlassSession, GlassSessionEvent } from "../shared/sessionTypes.ts";
 
@@ -800,6 +803,113 @@ test("config parses sessionType + reportStyle with safe defaults", () => {
   const fallback = parseCopilotConfig({ sessionType: "bogus", reportStyle: "loud" });
   assert.equal(fallback.sessionType, "auto");
   assert.equal(fallback.reportStyle, "concise");
+});
+
+// --- session type personas + mixed signals --------------------------------
+
+test("session type detects student, founder, sales, creator, and developer workflows", () => {
+  assert.equal(
+    detectSessionType({ appName: "Canvas", transcript: "study for the exam and finish homework" }),
+    "studying",
+  );
+  assert.equal(
+    detectSessionType({
+      transcript: "our pricing strategy and investor roadmap for revenue growth",
+    }),
+    "business_strategy",
+  );
+  assert.equal(
+    detectSessionType({
+      appName: "HubSpot",
+      transcript: "follow up with the prospect about objections on the cold email outreach",
+    }),
+    "sales_review",
+  );
+  assert.equal(
+    detectSessionType({
+      windowTitle: "Product tutorial - YouTube",
+      transcript: "watching this lesson on content creation",
+    }),
+    "video_learning",
+  );
+  assert.equal(
+    detectSessionType({
+      appName: "Warp",
+      transcript: "npm install failed with a stack trace in the repo",
+    }),
+    "coding_building",
+  );
+});
+
+test("mixed close scores fall back to general_workflow", () => {
+  const result = detectSessionTypeDetailed({
+    transcript: "agenda for the meeting and refactor the deploy script",
+  });
+  assert.equal(result.type, "general_workflow");
+  assert.equal(result.mixed, true);
+});
+
+test("research workflow detected for comparison and sources", () => {
+  assert.equal(
+    detectSessionType({
+      appName: "Perplexity",
+      transcript: "compare these sources and summarize the article findings",
+    }),
+    "research",
+  );
+});
+
+// --- diagnostic depth ----------------------------------------------------
+
+test("repeated permission setup loop triggers diagnostic offer", () => {
+  const signal = detectStuckSignal({
+    events: [
+      transcriptEvent("e1", "Microphone permission denied"),
+      transcriptEvent("e2", "Toggled permission in settings but still failing"),
+    ],
+    recentCommands: ["why is mic permission still denied"],
+  });
+  assert.equal(signal.stuck, true);
+  assert.equal(signal.category, "setup_loop");
+});
+
+test("system audio routing failure triggers diagnostic offer", () => {
+  const signal = detectStuckSignal({
+    events: [
+      transcriptEvent("e1", "Selected BlackHole device but no audio signal"),
+      transcriptEvent("e2", "Virtual audio routing still not working"),
+    ],
+    sourceApp: "IIVO Glass",
+  });
+  assert.equal(signal.stuck, true);
+  assert.ok(signal.category === "setup_loop" || signal.category === "repeated_error");
+});
+
+test("contradiction phrase triggers diagnostic signal", () => {
+  const signal = detectStuckSignal({
+    events: [transcriptEvent("e1", "That contradicts what you said earlier — still failing")],
+    recentCommands: [],
+  });
+  assert.equal(signal.stuck, true);
+  assert.equal(signal.category, "contradiction");
+});
+
+test("normal repeated neutral topic is not diagnostic spam candidate", () => {
+  assert.equal(
+    isLikelyDiagnosticSpam({
+      events: [transcriptEvent("e1", "The weather is nice today")],
+      recentCommands: ["what is the weather", "what is the weather again"],
+    }),
+    true,
+  );
+});
+
+test("diagnostic card includes extended action buttons", () => {
+  const card = buildDiagnoseOfferIntervention("test", { idFactory: () => "id-1", clock: () => new Date().toISOString() });
+  const actions = card.buttons.map((b) => b.action);
+  assert.ok(actions.includes("summarize-blocker"));
+  assert.ok(actions.includes("create-fix-plan"));
+  assert.ok(actions.includes("save-issue"));
 });
 
 test("panel stays compact: CopilotConfigure has no full insight list", () => {
