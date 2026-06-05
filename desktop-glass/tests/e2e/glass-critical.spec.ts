@@ -15,6 +15,7 @@ import {
   verifyHandoffUrlReachable,
   type LaunchedGlass,
 } from "./helpers/electronApp.ts";
+import { logE2eFailureDiagnostics } from "./helpers/e2eFailureDiagnostics.ts";
 
 const COUNCIL_MARKERS = [
   "Final Action Plan",
@@ -51,6 +52,12 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   if (app) await closeGlassApp(app);
+});
+
+test.afterEach(async ({}, testInfo) => {
+  if (testInfo.status !== testInfo.expectedStatus) {
+    await logE2eFailureDiagnostics(app, commandPage, testInfo.title);
+  }
 });
 
 test.beforeEach(async () => {
