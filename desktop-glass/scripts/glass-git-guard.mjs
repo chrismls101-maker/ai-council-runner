@@ -24,6 +24,9 @@ const FAIL_BINARY_BYTES = 2 * 1024 * 1024;
 
 const BLOCKED_PATH_RE =
   /(?:^|\/)(?:release|out|node_modules|test-results|playwright-report)(?:\/|$)/i;
+/** Ignored-tree scan: release/session junk only — not every gitignored dependency file. */
+const IGNORED_ARTIFACT_RE =
+  /(?:^|\/)release\/|(?:^|\/)out\/|(?:^|\/)test-results\/|(?:^|\/)playwright-report\/|\.(?:app|dmg|zip|blockmap)(?:\/|$)/i;
 const BLOCKED_EXT_RE = /\.(?:app|dmg|zip|blockmap)$/i;
 const SESSION_ARTIFACT_RE =
   /(?:session[-_]?data|session-screenshots|session-audio|glass-sessions\.json|session[-_]?recordings?)/i;
@@ -78,6 +81,18 @@ export function loadAllowlist() {
 export function isAllowlistedPath(file, allowlist = loadAllowlist()) {
   const normalized = file.replace(/^\.\//, "");
   return allowlist.paths.has(normalized) || allowlist.largeBinaries.has(normalized);
+}
+
+/** @param {string} file */
+export function classifyIgnoredArtifact(file) {
+  const issues = [];
+  if (IGNORED_ARTIFACT_RE.test(file)) {
+    issues.push(`Ignored release/build artifact: ${file}`);
+  }
+  if (SESSION_ARTIFACT_RE.test(file)) {
+    issues.push(`Ignored session artifact: ${file}`);
+  }
+  return { issues, warnings: [] };
 }
 
 /** @param {string} file @param {"staged"|"working"|"ignored"} source */
@@ -226,6 +241,12 @@ export function runGitGuardCli(argv = process.argv.slice(2)) {
     if (ignored.includes(file)) sources.push("ignored");
 
     for (const source of sources.length ? sources : ["staged"]) {
+      if (source === "ignored") {
+        const { issues, warnings: w } = classifyIgnoredArtifact(file);
+        errors.push(...issues);
+        warnings.push(...w);
+        continue;
+      }
       const { issues, warnings: w } = classifyGitPath(file, source);
       if (source === "working" && !strict) {
         warnings.push(...issues);
@@ -235,8 +256,17 @@ export function runGitGuardCli(argv = process.argv.slice(2)) {
       warnings.push(...w);
 
       const wipPolicy = classifyWipPathPolicy(file, source, branch, strict);
-      errors.push(...wipPolicy.issues);
-      warnings.push(...wipPolicy.warnings);
+      if (source !== "ignored") {
+        errors.push(...wipPolicy.issues);
+        warnings.push(...wipPolicy.warnings);
+      }
+    }
+
+    if (ignored.includes(file)) {
+      // Size/content checks for ignored artifacts only (skip node_modules noise).
+      if (!IGNORED_ARTIFACT_RE.test(file) && !SESSION_ARTIFACT_RE.test(file)) {
+        continue;
+      }
     }
 
     const absPath = path.join(glassRoot, file);
