@@ -36,6 +36,11 @@ import {
   getScenarioBatch,
   MODE_SCENARIO_LIMITS,
 } from "./qa-scenarios/iivo-glass-scenarios.mjs";
+import {
+  accumulateE2eStats,
+  buildStepEnv,
+  resolveE2eStepStatus,
+} from "./lib/glass-overnight-e2e.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..", "..");
@@ -45,8 +50,6 @@ const LOGS = join(OUT, "logs");
 const MIN = 60_000;
 const HOUR = 60 * MIN;
 const API_URL = (process.env.IIVO_API_URL ?? "http://localhost:3001").replace(/\/$/, "");
-const E2E_TESTS_PER_RUN = 27; // critical + copilot + multidisplay (live spec skipped in stub)
-
 mkdirSync(LOGS, { recursive: true });
 
 // --- CLI ---------------------------------------------------------------------
@@ -223,6 +226,10 @@ const stats = {
   totalCommands: 0,
   totalAssertions: 0,
   e2eRepeatRuns: 0,
+  e2eStepsAttempted: 0,
+  e2eTestsExecuted: 0,
+  e2eTestsSkipped: 0,
+  e2eStepsAllSkipped: 0,
   e2eTestExecutions: 0,
   copilotScenarioExecutions: 0,
   deterministicScenarioRuns: 0,
@@ -306,7 +313,22 @@ function nextLogFile(prefix) {
   return `${String(stepCounter).padStart(3, "0")}-${safe}.log`;
 }
 
-function runStep({ name, file, command, args, cwd = REPO_ROOT, timeoutMs, phase = "", category = "general", meta = {} }) {
+function isE2eCategory(category) {
+  return category === "e2e" || category === "live-e2e";
+}
+
+function runStep({
+  name,
+  file,
+  command,
+  args,
+  cwd = REPO_ROOT,
+  timeoutMs,
+  phase = "",
+  category = "general",
+  meta = {},
+  requireRealE2e = isE2eCategory(category),
+}) {
   return new Promise((resolveStep) => {
     stats.totalCommands += 1;
     const logFile = join(LOGS, file ?? nextLogFile(name));
@@ -320,7 +342,7 @@ function runStep({ name, file, command, args, cwd = REPO_ROOT, timeoutMs, phase 
     const child = spawn(command, args, {
       cwd,
       detached: true,
-      env: { ...process.env, CI: "1", FORCE_COLOR: "0" },
+      env: buildStepEnv(process.env, { category }),
       stdio: ["ignore", "pipe", "pipe"],
     });
 
@@ -352,13 +374,49 @@ function runStep({ name, file, command, args, cwd = REPO_ROOT, timeoutMs, phase 
         /* ignore */
       }
       const durationMs = Date.now() - t0;
-      const status = timedOut ? "timeout" : code === 0 ? "pass" : "fail";
-      const record = { name, phase, category, status, code, durationMs, logFile, tailText: tail(captured), ...meta };
+      let status = timedOut ? "timeout" : code === 0 ? "pass" : "fail";
+      let e2eStats = null;
+      let e2eReason = null;
+
+      if (isE2eCategory(category)) {
+        const resolved = resolveE2eStepStatus({
+          exitCode: code,
+          timedOut,
+          logText: captured,
+          requireRealE2e,
+        });
+        status = resolved.status;
+        e2eStats = resolved.parsed;
+        e2eReason = resolved.reason ?? null;
+        accumulateE2eStats(stats, resolved.parsed, status);
+        if (e2eReason && status === "e2e_skipped") {
+          try {
+            appendFileSync(logFile, `\n[overnight-e2e] ${e2eReason}\n`);
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+
+      const record = {
+        name,
+        phase,
+        category,
+        status,
+        code,
+        durationMs,
+        logFile,
+        tailText: tail(captured),
+        e2eStats,
+        e2eReason,
+        ...meta,
+      };
       steps.push(record);
-      trackFlaky(name, status);
+      trackFlaky(name, status === "e2e_skipped" ? "fail" : status);
       if (status !== "pass") recordCategoryFailure(category);
-      const mark = status === "pass" ? "✅" : status === "timeout" ? "⏱" : "❌";
-      log(`${mark} ${name} — ${status} (${Math.round(durationMs / 1000)}s)`);
+      const mark =
+        status === "pass" ? "✅" : status === "timeout" ? "⏱" : status === "e2e_skipped" ? "⛔" : "❌";
+      log(`${mark} ${name} — ${status}${e2eReason ? ` (${e2eReason})` : ""} (${Math.round(durationMs / 1000)}s)`);
       resolveStep(record);
     };
 
@@ -461,10 +519,10 @@ async function runE2eRepeat(count, label = "") {
     timeoutMs: cfg.e2eTimeoutMin * MIN,
     category: "e2e",
     phase: "e2e",
+    requireRealE2e: process.env.GLASS_OVERNIGHT_E2E_SKIP !== "1",
     meta: { e2eRepeatCount: count },
   });
   stats.e2eRepeatRuns += 1;
-  stats.e2eTestExecutions += count * E2E_TESTS_PER_RUN;
   return r;
 }
 
@@ -481,6 +539,7 @@ async function runLiveE2e(n, total) {
     timeoutMs: 10 * MIN,
     category: "live-e2e",
     phase: "live",
+    requireRealE2e: process.env.GLASS_OVERNIGHT_E2E_SKIP !== "1",
   });
 }
 
@@ -898,9 +957,10 @@ async function writeReport() {
   }
 
   const pass = steps.filter((s) => s.status === "pass").length;
-  const fail = steps.filter((s) => s.status === "fail").length;
+  const fail = steps.filter((s) => s.status === "fail" || s.status === "e2e_skipped").length;
   const timeout = steps.filter((s) => s.status === "timeout").length;
   const skipped = steps.filter((s) => s.status === "skip").length;
+  const e2eSkippedSteps = steps.filter((s) => s.status === "e2e_skipped").length;
 
   const fmtDur = (ms) => {
     const s = Math.round(ms / 1000);
@@ -941,13 +1001,21 @@ async function writeReport() {
   if (onlyE2e) {
     warnings.push("INSUFFICIENT PRODUCT COVERAGE: mostly repeated E2E — few simulated Copilot scenarios ran.");
   }
+  if (stats.e2eStepsAllSkipped > 0) {
+    warnings.push(
+      `E2E NOT EXECUTED: ${stats.e2eStepsAllSkipped} E2E step(s) had all Playwright tests skipped (false pass prevented).`,
+    );
+  }
+  if (stats.e2eStepsAttempted > 0 && stats.e2eTestsExecuted === 0) {
+    warnings.push("E2E NOT EXECUTED: zero Playwright tests ran across all E2E steps.");
+  }
 
   const stressLabel = cfg.stressTest
     ? `TRUE STRESS TEST (${MODE} mode)`
     : "Quick validation only — not long-duration stress.";
 
   let recommend;
-  if (warnings.some((w) => w.startsWith("INCOMPLETE") || w.startsWith("LIVE AI FAILED"))) {
+  if (warnings.some((w) => w.startsWith("INCOMPLETE") || w.startsWith("LIVE AI FAILED") || w.startsWith("E2E NOT EXECUTED"))) {
     recommend = `INCOMPLETE / NOT READY — see warnings (${MODE}).`;
   } else if (!cfg.stressTest) {
     recommend = "Quick validation complete. Run `--mode standard`, `--mode deep`, or `--mode overnight --hours 6` for real stress.";
@@ -961,14 +1029,26 @@ async function writeReport() {
 
   const rows = steps
     .map((s) => {
-      const mark = s.status === "pass" ? "✅" : s.status === "timeout" ? "⏱" : s.status === "skip" ? "⏭️" : "❌";
+      const mark =
+        s.status === "pass"
+          ? "✅"
+          : s.status === "timeout"
+            ? "⏱"
+            : s.status === "skip"
+              ? "⏭️"
+              : s.status === "e2e_skipped"
+                ? "⛔"
+                : "❌";
       return `| ${mark} ${s.name} | ${s.status} | ${fmtDur(s.durationMs)} | \`${s.logFile}\` |`;
     })
     .join("\n");
 
   const failureDetail = steps
-    .filter((s) => s.status === "fail" || s.status === "timeout")
-    .map((s) => `### ${s.name} (${s.status})\n\n\`\`\`\n${s.tailText}\n\`\`\``)
+    .filter((s) => s.status === "fail" || s.status === "timeout" || s.status === "e2e_skipped")
+    .map((s) => {
+      const reason = s.e2eReason ? `\n\nReason: ${s.e2eReason}` : "";
+      return `### ${s.name} (${s.status})${reason}\n\n\`\`\`\n${s.tailText}\n\`\`\``;
+    })
     .join("\n\n");
 
   const flaky = flakyList();
@@ -1007,7 +1087,10 @@ ${warnings.length ? `## Warnings\n${warnings.map((w) => `- ⚠️ ${w}`).join("\
 | Unique diagnostic patterns | ${stats.uniqueDiagnosticPatterns} |
 | Deterministic scenario runs | ${stats.deterministicScenarioRuns} |
 | E2E repeat runs | ${stats.e2eRepeatRuns} |
-| E2E test executions (est.) | ${stats.e2eTestExecutions} |
+| E2E steps attempted | ${stats.e2eStepsAttempted} |
+| E2E tests executed (actual) | ${stats.e2eTestsExecuted} |
+| E2E tests skipped (Playwright) | ${stats.e2eTestsSkipped} |
+| E2E steps all-skipped | ${stats.e2eStepsAllSkipped}${e2eSkippedSteps ? ` (${e2eSkippedSteps} step records)` : ""} |
 | Live AI calls | ${stats.liveAiCalls} / cap ${stats.liveAiCap} (pass ${liveAiPass} / fail ${liveAiFail}) |
 | Overnight cycles | ${stats.cyclesCompleted} |
 | Commands run | ${stats.totalCommands} |
@@ -1015,7 +1098,7 @@ ${warnings.length ? `## Warnings\n${warnings.map((w) => `- ⚠️ ${w}`).join("\
 
 ## Test kind breakdown (honest)
 1. **Real live server tests** — glass:qa:live, live E2E, live scenario asks (${liveAiPass + liveAiFail} scenario/API live calls)
-2. **Stub/E2E tests** — Electron + stub server (${stats.e2eTestExecutions} est. test executions)
+2. **Stub/E2E tests** — Electron + stub server (${stats.e2eTestsExecuted} Playwright tests executed; ${stats.e2eTestsSkipped} skipped in logs)
 3. **Simulated Copilot scenarios** — transcript/screen context injected; NOT real YouTube/meeting audio (${scenarioResults.executed} runs labeled SIMULATED)
 4. **Controlled visual fixture tests** — local HTML pages; NOT real desktop screen capture
 5. **Manual still required** — real YouTube playback, system audio/BlackHole, real mic, packaged Screen Recording, subjective workflow usefulness
@@ -1056,7 +1139,14 @@ Logs: \`${LOGS}\`
 `;
 
   writeFileSync(join(OUT, "REPORT.md"), report);
-  writeFileSync(join(OUT, "stats.json"), JSON.stringify({ ...stats, actualDurationMs: actualMs, steps: steps.length, pass, fail, timeout, skipped }, null, 2));
+  writeFileSync(
+    join(OUT, "stats.json"),
+    JSON.stringify(
+      { ...stats, actualDurationMs: actualMs, steps: steps.length, pass, fail, timeout, skipped, e2eSkippedSteps },
+      null,
+      2,
+    ),
+  );
   try {
     copyFileSync(join(OUT, "REPORT.md"), join(GLASS_ROOT, "OVERNIGHT_QA_REPORT.md"));
   } catch {
@@ -1066,7 +1156,8 @@ Logs: \`${LOGS}\`
   console.log("\n" + "#".repeat(64));
   console.log(`# QA COMPLETE [${MODE}] — ${fmtDur(actualMs)} — ${pass} pass / ${fail} fail / ${timeout} timeout`);
   console.log(`# ${stressLabel}`);
-  console.log(`# E2E executions: ~${stats.e2eTestExecutions} | Copilot runs: ${stats.copilotScenarioExecutions} | Live AI: ${stats.liveAiCalls}/${stats.liveAiCap}`);
+  console.log(`# E2E: ${stats.e2eTestsExecuted} executed · ${stats.e2eTestsSkipped} skipped · ${stats.e2eStepsAllSkipped} all-skipped steps`);
+  console.log(`# Copilot runs: ${stats.copilotScenarioExecutions} | Live AI: ${stats.liveAiCalls}/${stats.liveAiCap}`);
   if (MODE === "overnight") console.log(`# Cycles: ${stats.cyclesCompleted}`);
   console.log(`# Report: ${join(OUT, "REPORT.md")}`);
   console.log("#".repeat(64));
@@ -1126,7 +1217,7 @@ process.on("SIGINT", async () => {
 main()
   .then(async () => {
     await shutdown("done");
-    process.exit(steps.some((s) => s.status === "fail" || s.status === "timeout") ? 1 : 0);
+    process.exit(steps.some((s) => s.status === "fail" || s.status === "timeout" || s.status === "e2e_skipped") ? 1 : 0);
   })
   .catch(async (err) => {
     log(`fatal: ${err?.stack || err}`);
