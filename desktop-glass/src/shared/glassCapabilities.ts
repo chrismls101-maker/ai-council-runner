@@ -107,6 +107,7 @@ export interface GlassSetupCapabilitiesInput {
   serverHealth: GlassServerHealthForSetup | null;
   sttStatus: SttProviderStatus;
   sttEnabled: boolean;
+  lastSttError?: string;
   lastError?: string;
 }
 
@@ -281,7 +282,16 @@ export function buildWindowCaptureCapability(
 }
 
 export function buildMicrophoneCapability(input: GlassSetupCapabilitiesInput): GlassCapabilityRow {
-  const { micPermission, micListening, sttEnabled, sttStatus } = input;
+  const { micPermission, micListening, sttEnabled, sttStatus, lastSttError } = input;
+  if (micListening && lastSttError?.trim()) {
+    return {
+      id: "microphone",
+      status: "error",
+      label: "Transcription failed",
+      detail: lastSttError,
+      severity: "warn",
+    };
+  }
   if (micListening) {
     return {
       id: "microphone",
@@ -353,6 +363,15 @@ function systemAudioActions(
 export function buildSystemAudioCapability(input: GlassSetupCapabilitiesInput): GlassCapabilityRow {
   const status = input.systemAudioStatus;
   const screenReady = input.screenCaptureProbe === "ready";
+  if (status === "available" && input.lastSttError?.trim()) {
+    return {
+      id: "systemAudio",
+      status: "error",
+      label: "Transcription failed",
+      detail: input.lastSttError,
+      severity: "warn",
+    };
+  }
   if (status === "available") {
     return {
       id: "systemAudio",
@@ -503,6 +522,7 @@ export function buildSttCapability(
   health: GlassServerHealthForSetup | null,
   sttStatus: SttProviderStatus,
   sttEnabled: boolean,
+  lastSttError?: string,
 ): GlassCapabilityRow {
   if (!health?.reachable) {
     return {
@@ -551,6 +571,15 @@ export function buildSttCapability(
     };
   }
   if (sttStatus === "configured") {
+    if (lastSttError?.trim()) {
+      return {
+        id: "stt",
+        status: "error",
+        label: "Transcription failed",
+        detail: lastSttError,
+        severity: "warn",
+      };
+    }
     return {
       id: "stt",
       status: "configured",
@@ -602,7 +631,7 @@ export function buildGlassSetupCapabilities(
     buildMicrophoneCapability(input),
     buildSystemAudioCapability(input),
     buildVisionCapability(input.serverHealth),
-    buildSttCapability(input.serverHealth, input.sttStatus, input.sttEnabled),
+    buildSttCapability(input.serverHealth, input.sttStatus, input.sttEnabled, input.lastSttError),
     buildServerCapability(input.serverHealth, input.lastError),
   ];
 }

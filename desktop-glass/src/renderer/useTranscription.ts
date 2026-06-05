@@ -47,6 +47,7 @@ import {
 } from "../shared/transcriptionTypes.ts";
 import {
   STT_MIC_NOT_CONFIGURED_MESSAGE,
+  STT_TRANSCRIPTION_FAILED_MESSAGE,
   sttProviderLabel,
   sttStatusMessage,
   resolveMicPathLabel,
@@ -313,7 +314,10 @@ export function useTranscription(): TranscriptionController {
         sessionId: glassState.session?.id,
       });
       if (!result.ok) {
-        dispatch({ type: "SET_ERROR", message: result.error ?? "Transcription failed." });
+        dispatch({
+          type: "SET_ERROR",
+          message: result.error ?? STT_TRANSCRIPTION_FAILED_MESSAGE,
+        });
         return;
       }
       if (source === "microphone" && result.text?.trim()) {

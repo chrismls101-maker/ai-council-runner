@@ -7,9 +7,13 @@ import {
   formatGlassDirectAnswer,
   GLASS_DIRECT_SYSTEM_PROMPT,
   runGlassDirectAsk,
+  answersTooSimilar,
 } from "../../dist/server/glass/glassDirectAsk.js";
 import { handleGlassAsk } from "../../dist/server/glass/glassAskHandler.js";
-import { promptRequestsGlassScreenVisual } from "../../dist/server/glass/glassScreenVisualPrompt.js";
+import {
+  promptRequestsGlassScreenVisual,
+  resolveGlassAskUsesVisual,
+} from "../../dist/server/glass/glassScreenVisualPrompt.js";
 import { GLASS_VISION_NOT_CONFIGURED_MESSAGE } from "../../dist/server/glass/glassVisualDirectAsk.js";
 import {
   GlassAskPayloadTooLargeError,
@@ -132,6 +136,136 @@ await test("handleGlassAsk returns routeUsed glass_direct via mock caller", asyn
 await test("GLASS_DIRECT_SYSTEM_PROMPT forbids council formatting", () => {
   assert.match(GLASS_DIRECT_SYSTEM_PROMPT, /no Final Action Plan/i);
   assert.match(GLASS_DIRECT_SYSTEM_PROMPT, /Analyze Now/i);
+  assert.match(GLASS_DIRECT_SYSTEM_PROMPT, /Do not reuse the same answer structure/i);
+});
+
+await test("buildGlassDirectUserPrompt includes recent answers for freshness", () => {
+  const prompt = buildGlassDirectUserPrompt("Summarize the call", {
+    recentEvents: [
+      {
+        kind: "iivo_response",
+        title: "IIVO response",
+        text: "Previous summary about Acme Corp pricing objections and Q3 pipeline.",
+        timestamp: new Date().toISOString(),
+      },
+    ],
+  });
+  assert.match(prompt, /Recent answers in this session/);
+  assert.match(prompt, /Acme Corp/);
+});
+
+await test("answersTooSimilar detects template-like repeats", () => {
+  const a =
+    "Key ideas: diversify portfolio across ETFs. Next steps: rebalance quarterly and review DCA schedule for retirement accounts.";
+  const b =
+    "Key ideas: diversify holdings across index funds. Next steps: rebalance each quarter and review DCA schedule for retirement goals.";
+  assert.equal(answersTooSimilar(a, b), true);
+  assert.equal(
+    answersTooSimilar(
+      "Prospect Nova Labs raised API latency objections during the demo.",
+      "Meeting with Acme covered hiring plan and runway through Q4.",
+    ),
+    false,
+  );
+});
+
+await test("similar answer triggers retry guidance in runGlassDirectAsk", async () => {
+  let calls = 0;
+  const template =
+    "Key ideas: diversify portfolio across ETFs and index funds for long-term growth. Next steps: rebalance quarterly and review dollar-cost averaging for retirement accounts.";
+  const result = await runGlassDirectAsk(
+    {
+      prompt: "What did I miss from the investing video?",
+      session: {
+        recentEvents: [
+          {
+            kind: "iivo_response",
+            title: "IIVO response",
+            text: template,
+            timestamp: new Date().toISOString(),
+          },
+        ],
+      },
+    },
+    undefined,
+    async () => {
+      calls += 1;
+      if (calls === 1) {
+        return {
+          content: template,
+          provider: "openai",
+          model: "gpt-5.5",
+          modelUsed: "gpt-5.5",
+          requestedModel: "gpt-5.5",
+          selectedModel: "gpt-5.5",
+          fallbackUsed: false,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, usageAvailable: true },
+        };
+      }
+      return {
+        content: "You missed the segment on tax-loss harvesting for Nova Labs holdings and the 401k match deadline.",
+        provider: "openai",
+        model: "gpt-5.5",
+        modelUsed: "gpt-5.5",
+        requestedModel: "gpt-5.5",
+        selectedModel: "gpt-5.5",
+        fallbackUsed: false,
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, usageAvailable: true },
+      };
+    },
+  );
+  assert.equal(calls, 2);
+  assert.match(result.answer, /Nova Labs|tax-loss/i);
+});
+
+await test("voice what matters here routes glass_direct with session context", async () => {
+  assert.equal(resolveGlassAskUsesVisual("What matters here?"), false);
+  const previousKey = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "test-key";
+  try {
+    const result = await handleGlassAsk(
+      {
+        prompt: "What matters here?",
+        session: { recentTranscript: "Discussed Q3 pipeline with Nova Labs." },
+      },
+      undefined,
+      async () => ({
+        content: "Nova Labs pricing and Q3 pipeline are the focus.",
+        provider: "openai",
+        model: "gpt-5.5",
+        modelUsed: "gpt-5.5",
+        requestedModel: "gpt-5.5",
+        selectedModel: "gpt-5.5",
+        fallbackUsed: false,
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, usageAvailable: true },
+      }),
+    );
+    assert.equal(result.routeUsed, "glass_direct");
+    assert.match(result.answer, /Nova Labs|Q3/i);
+  } finally {
+    if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previousKey;
+  }
+});
+
+await test("voice read this error routes glass_visual_direct with screenshot", async () => {
+  assert.equal(resolveGlassAskUsesVisual("Read this error"), true);
+  const previousKey = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "test-key";
+  try {
+    const result = await handleGlassAsk({
+      prompt: "Read this error",
+      latestScreenshot: {
+        imageDataUrl:
+          "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+        capturedAt: new Date().toISOString(),
+      },
+    });
+    assert.equal(result.routeUsed, "glass_visual_direct");
+  } finally {
+    if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previousKey;
+  }
 });
 
 await test("promptRequestsGlassScreenVisual detects screen questions", () => {

@@ -29,6 +29,7 @@ export function CommandBar(): JSX.Element {
   const listening = state.privacy.listening || tx.status === "listening";
   const micListening = listening && tx.isMicrophoneCapture;
   const systemListening = listening && tx.isSystemAudioCapture;
+  const transcribing = state.stt?.transcribing === true;
   const askPending = state.askStatus === "pending";
   const screenLooking = state.screenContextStatus?.kind === "looking";
   const micDenied = shouldShowMicPermissionDenied({
@@ -196,15 +197,19 @@ export function CommandBar(): JSX.Element {
             type="text"
             value={inputValue}
             placeholder={
-              micListening
+              transcribing
+                ? "Transcribing…"
+                : micListening
                 ? "Listening… speak into your microphone"
+                : systemListening
+                  ? "Listening… system audio"
                 : screenLooking
                   ? "Looking…"
                   : askPending
                     ? "IIVO is thinking…"
                     : "Ask IIVO while you work…"
             }
-            disabled={askPending}
+            disabled={askPending || transcribing}
             onChange={(e) => {
               const next = e.target.value;
               micInputTouchedRef.current = true;

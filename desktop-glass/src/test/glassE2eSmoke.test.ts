@@ -110,7 +110,7 @@ test("submitCommand captures fresh screenshot for visual screen prompts", () => 
   assert.match(block, /resolveScreenshotForVisualAsk/);
   assert.match(block, /latestScreenshot/);
   assert.match(block, /visualIntent/);
-  assert.match(block, /promptRequestsGlassScreenVisual/);
+  assert.match(block, /shouldCaptureScreenForGlassAsk/);
   assert.doesNotMatch(block, /buildLatestScreenshotAskPayload/);
 });
 

@@ -356,6 +356,10 @@ export function buildDebriefAiPrompt(
     `You are IIVO debriefing a work/research session. Write a ${styleHint},`,
     "well-organized session debrief from the structured notes below. Keep the",
     "same section headings. Be specific and do not invent facts.",
+    "Do not reuse the same debrief structure across similar sessions. Mention",
+    "specific names, metrics, env vars, errors, agenda items, lesson topics,",
+    "prospect names, objections, and concrete next steps from this session.",
+    "If context is thin, say what is missing instead of producing a generic template.",
     "",
     deterministic.markdown,
   ].join("\n");

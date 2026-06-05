@@ -1,4 +1,15 @@
-/** Minimum time the thinking overlay card stays visible before a response replaces it. */
+/** Command-bar / voice ask timeout before showing a fallback error card. */
+export const GLASS_ASK_TIMEOUT_MS = 45_000;
+
+export const VOICE_ASK_STATUS = {
+  listening: "Listening…",
+  transcribing: "Transcribing…",
+  looking: "Looking…",
+  thinking: "IIVO is thinking…",
+  timeout: "This is taking longer than expected. You can cancel and try again.",
+} as const;
+
+/** Minimum time the thinking overlay card stays visible before the answer replaces it. */
 export const THINKING_CARD_MIN_MS = 300;
 
 /** Minimum time the looking overlay card stays visible before thinking replaces it. */

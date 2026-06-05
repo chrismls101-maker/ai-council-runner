@@ -9,6 +9,7 @@ import {
   buildTranscriptEventMetadata,
   type GlassSttState,
   type SttAudioSource,
+  sttTranscriptionFailedMessage,
 } from "../shared/sttTypes.ts";
 import { saveSessionAudioChunk } from "./audioStorage.ts";
 import { getSttConfig, transcribeWithProvider } from "./sttProvider.ts";
@@ -149,7 +150,8 @@ export async function processSttChunk(
     deps.push();
     return { ok: true, text: result.text, eventId };
   } catch (err) {
-    const error = err instanceof Error ? err.message : "Transcription failed.";
+    const detail = err instanceof Error ? err.message : "Transcription failed.";
+    const error = sttTranscriptionFailedMessage(true, detail);
     deps.setSttState({
       ...deps.getSttState(),
       transcribing: false,

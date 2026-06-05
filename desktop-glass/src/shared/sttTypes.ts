@@ -87,6 +87,18 @@ export const STT_COST_NOTE =
 export const STT_MIC_NOT_CONFIGURED_MESSAGE =
   "Microphone captured. OpenAI transcription is not configured.";
 
+export const STT_TRANSCRIPTION_FAILED_MESSAGE =
+  "I heard audio but transcription failed. Try again or check STT settings.";
+
+export function sttTranscriptionFailedMessage(audioCaptured: boolean, detail?: string): string {
+  if (audioCaptured) {
+    return detail
+      ? `${STT_TRANSCRIPTION_FAILED_MESSAGE} (${detail})`
+      : STT_TRANSCRIPTION_FAILED_MESSAGE;
+  }
+  return detail?.trim() || "Transcription failed.";
+}
+
 export const STT_WEB_SPEECH_LABEL =
   "Microphone live transcription via Web Speech";
 

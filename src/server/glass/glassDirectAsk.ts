@@ -13,6 +13,8 @@ import type { GlassAskRequestBody, GlassAskResponseBody, GlassAskSessionPayload 
 
 export const GLASS_DIRECT_SYSTEM_PROMPT = `You are IIVO Glass, a fast conversational AI companion over the user's workspace. Answer naturally and directly, like ChatGPT. Use the provided session context only when relevant. Be concise unless the user asks for depth. Do not invent screen/audio details you were not given. Do not use council/report formatting.
 
+Do not reuse the same answer structure across similar sessions. Mention specific names, numbers, topics, decisions, objections, lesson details, metrics, env vars, agenda items, or prospect names from this session. If context is thin, say what is missing instead of producing a generic template.
+
 If the user asks for deep analysis, strategic council review, or multi-agent deliberation, briefly answer what you can and suggest they use Analyze Now in IIVO Glass for a deeper session analysis. Do not switch into council mode yourself.
 
 Style:
@@ -75,9 +77,45 @@ export function buildGlassDirectUserPrompt(
         `- [${event.kind}${src}${when ? ` · ${when}` : ""}] ${event.title}${event.text ? `: ${event.text}` : ""}`,
       );
     }
+    const recentAnswers = session.recentEvents
+      .filter((e) => e.kind === "iivo_response" && e.text?.trim())
+      .slice(-2);
+    if (recentAnswers.length > 0) {
+      lines.push("", "Recent answers in this session (vary phrasing; do not repeat structure):");
+      for (const answer of recentAnswers) {
+        lines.push(`- ${answer.text!.trim().slice(0, 280)}`);
+      }
+    }
   }
 
   return lines.join("\n");
+}
+
+function normalizeAnswerForCompare(text: string): string {
+  return text.toLowerCase().replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/** Jaccard-like overlap on meaningful tokens — used to detect template-like repeats. */
+export function answersTooSimilar(current: string, previous: string): boolean {
+  const tokensA = normalizeAnswerForCompare(current)
+    .split(" ")
+    .filter((w) => w.length > 3);
+  const tokensB = normalizeAnswerForCompare(previous)
+    .split(" ")
+    .filter((w) => w.length > 3);
+  if (tokensA.length < 8 || tokensB.length < 8) return false;
+  const setA = new Set(tokensA);
+  const setB = new Set(tokensB);
+  let overlap = 0;
+  for (const token of setA) {
+    if (setB.has(token)) overlap += 1;
+  }
+  const ratio = overlap / Math.max(setA.size, setB.size);
+  return ratio >= 0.55;
+}
+
+export function buildGlassDirectRetryPrompt(userPrompt: string): string {
+  return `${userPrompt}\n\nYour draft was too similar to the previous answer in this session. Rewrite with session-specific names, numbers, topics, metrics, and differences. Avoid repeating the same structure or headings.`;
 }
 
 /** Strip council-style formatting and cap overlay length. */
@@ -134,8 +172,22 @@ export async function runGlassDirectAsk(
 
   const purpose = body.modelPurpose ?? "default";
   const userPrompt = buildGlassDirectUserPrompt(prompt, body.session);
-  const result = await caller(GLASS_DIRECT_SYSTEM_PROMPT, userPrompt, signal, purpose);
-  const formatted = formatGlassDirectAnswer(result.content);
+  let result = await caller(GLASS_DIRECT_SYSTEM_PROMPT, userPrompt, signal, purpose);
+  let formatted = formatGlassDirectAnswer(result.content);
+
+  const lastAnswer = body.session?.recentEvents
+    ?.filter((event) => event.kind === "iivo_response" && event.text?.trim())
+    .slice(-1)[0]
+    ?.text?.trim();
+  if (lastAnswer && answersTooSimilar(formatted.answer, lastAnswer)) {
+    result = await caller(
+      GLASS_DIRECT_SYSTEM_PROMPT,
+      buildGlassDirectRetryPrompt(userPrompt),
+      signal,
+      purpose,
+    );
+    formatted = formatGlassDirectAnswer(result.content);
+  }
 
   const title = prompt.length > 60 ? `${prompt.slice(0, 59)}…` : prompt;
 

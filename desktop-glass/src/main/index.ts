@@ -29,7 +29,7 @@ import {
 } from "../shared/contextPayload.ts";
 import { createScreenshotContext, createContextItem } from "../shared/iivoClient.ts";
 import { IPC, type GlassCommand, type GlassState, type SessionActionStatus } from "../shared/ipc.ts";
-import { waitForMinLookingDuration, waitForMinThinkingDuration } from "../shared/glassAskTiming.ts";
+import { waitForMinLookingDuration, waitForMinThinkingDuration, GLASS_ASK_TIMEOUT_MS, VOICE_ASK_STATUS } from "../shared/glassAskTiming.ts";
 import type { PanelTab } from "../shared/types.ts";
 import { GlassSessionStore } from "../shared/sessionStore.ts";
 import {
@@ -207,6 +207,7 @@ import {
   type GlassLatestScreenshotState,
   type GlassScreenContextPhase,
 } from "../shared/glassScreenContext.ts";
+import { shouldCaptureScreenForGlassAsk } from "../shared/glassVisualIntent.ts";
 import { resolveScreenshotForVisualAsk } from "./glassVisualAskCapture.ts";
 import {
   DEFAULT_GLASS_USER_SETTINGS,
@@ -621,6 +622,7 @@ function refreshSetupCapabilities(): void {
     serverHealth: state.serverHealthForSetup,
     sttStatus: state.stt.status,
     sttEnabled: state.stt.enabled,
+    lastSttError: state.stt.lastError,
     lastError: state.lastError,
   });
 }
@@ -1240,7 +1242,7 @@ async function submitCommand(rawText: string): Promise<void> {
   askAbortController = new AbortController();
   const signal = askAbortController.signal;
 
-  const visualIntent = promptRequestsGlassScreenVisual(text);
+  const visualIntent = shouldCaptureScreenForGlassAsk(text);
   state.askInFlight = true;
   state.askStatus = "pending";
   state.lastError = undefined;
@@ -1488,8 +1490,16 @@ async function submitCommand(rawText: string): Promise<void> {
       signal,
     );
 
+  const withAskTimeout = <T>(promise: Promise<T>): Promise<T> =>
+    Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        setTimeout(() => reject(new Error(VOICE_ASK_STATUS.timeout)), GLASS_ASK_TIMEOUT_MS);
+      }),
+    ]);
+
   try {
-    let result = await runGlassAsk();
+    let result = await withAskTimeout(runGlassAsk());
 
     if (requestGeneration !== askRequestGeneration) return;
 

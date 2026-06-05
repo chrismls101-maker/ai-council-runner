@@ -4,12 +4,14 @@ import {
   buildGlassSetupCapabilities,
   buildMicrophoneCapability,
   buildScreenRecordingCapability,
+  buildSttCapability,
   buildSystemAudioCapability,
   buildVisionCapability,
   captureStatusFromSetup,
   mapCaptureErrorToScreenCaptureStatus,
   mapGetUserMediaErrorToMicPermission,
 } from "../shared/glassCapabilities.ts";
+import { STT_TRANSCRIPTION_FAILED_MESSAGE } from "../shared/sttTypes.ts";
 
 const baseInput = {
   screenCaptureProbe: "unknown" as const,
@@ -107,4 +109,38 @@ test("captureStatusFromSetup reflects permission state", () => {
     screenCaptureProbe: "permission_required",
   });
   assert.match(captureStatusFromSetup(rows), /permission/i);
+});
+
+test("STT capability shows transcription failed when lastSttError set", () => {
+  const row = buildSttCapability(
+    baseInput.serverHealth,
+    "configured",
+    true,
+    STT_TRANSCRIPTION_FAILED_MESSAGE,
+  );
+  assert.equal(row.status, "error");
+  assert.equal(row.label, "Transcription failed");
+  assert.match(row.detail ?? "", /transcription failed/i);
+});
+
+test("mic listening with transcription failure does not show ready", () => {
+  const row = buildMicrophoneCapability({
+    ...baseInput,
+    micPermission: "granted",
+    micListening: true,
+    lastSttError: STT_TRANSCRIPTION_FAILED_MESSAGE,
+  });
+  assert.equal(row.status, "error");
+  assert.equal(row.label, "Transcription failed");
+});
+
+test("system audio with track but transcription failure does not show ready", () => {
+  const row = buildSystemAudioCapability({
+    ...baseInput,
+    screenCaptureProbe: "ready",
+    systemAudioStatus: "available",
+    lastSttError: STT_TRANSCRIPTION_FAILED_MESSAGE,
+  });
+  assert.equal(row.status, "error");
+  assert.equal(row.label, "Transcription failed");
 });

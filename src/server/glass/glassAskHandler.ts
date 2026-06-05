@@ -10,7 +10,7 @@ import {
   validateGlassDirectApiKey,
   type GlassDirectAskCaller,
 } from "./glassDirectAsk.js";
-import { promptRequestsGlassScreenVisual } from "./glassScreenVisualPrompt.js";
+import { resolveGlassAskUsesVisual } from "./glassScreenVisualPrompt.js";
 import { runGlassVisualDirectAsk } from "./glassVisualDirectAsk.js";
 
 export {
@@ -40,8 +40,15 @@ export async function handleGlassAsk(
   }
 
   try {
-    const visual =
-      body.visualIntent === true || promptRequestsGlassScreenVisual(prompt);
+    const hasScreenshot = Boolean(
+      body.latestScreenshot?.imageDataUrl ||
+        body.latestScreenshot?.imageBase64 ||
+        body.latestScreenshot?.contextId,
+    );
+    const visual = resolveGlassAskUsesVisual(prompt, {
+      visualIntent: body.visualIntent,
+      hasInlineScreenshot: hasScreenshot,
+    });
     if (visual) {
       return await runGlassVisualDirectAsk(body, signal);
     }
