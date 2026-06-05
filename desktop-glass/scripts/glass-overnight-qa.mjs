@@ -12,7 +12,7 @@
 //   npm run glass:qa:overnight -- --mode standard
 //   npm run glass:qa:overnight -- --mode deep
 //   caffeinate -dimsu npm run glass:qa:overnight -- --mode overnight --hours 6
-//   npm run glass:qa:overnight -- --mode overnight --minutes 2   # short time-box test
+//   npm run glass:qa:overnight -- --mode overnight --hours 6 --seed 1234
 //
 // Output: /tmp/iivo-glass-overnight/REPORT.md (+ desktop-glass/OVERNIGHT_QA_REPORT.md)
 
@@ -29,6 +29,13 @@ import {
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import os from "node:os";
+import {
+  SCENARIOS,
+  SCENARIO_CATEGORIES,
+  getOrderedScenarios,
+  getScenarioBatch,
+  MODE_SCENARIO_LIMITS,
+} from "./qa-scenarios/iivo-glass-scenarios.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..", "..");
@@ -48,22 +55,43 @@ function parseArgs() {
   let mode = "quick";
   let hours = 6;
   let minutes = null;
+  let seed = Date.now() % 100000;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--mode" && args[i + 1]) mode = args[i + 1];
     if (args[i] === "--hours" && args[i + 1]) hours = parseFloat(args[i + 1]);
     if (args[i] === "--minutes" && args[i + 1]) minutes = parseFloat(args[i + 1]);
+    if (args[i] === "--seed" && args[i + 1]) seed = parseInt(args[i + 1], 10) || seed;
   }
   if (!["quick", "standard", "deep", "overnight"].includes(mode)) {
     console.error(`Unknown mode "${mode}". Use: quick | standard | deep | overnight`);
     process.exit(2);
   }
-  return { mode, hours, minutes };
+  return { mode, hours, minutes, seed };
 }
 
-const { mode: MODE, hours: OVERNIGHT_HOURS, minutes: OVERNIGHT_MINUTES } = parseArgs();
+const { mode: MODE, hours: OVERNIGHT_HOURS, minutes: OVERNIGHT_MINUTES, seed: QA_SEED } = parseArgs();
 
 const skipHeavyPreamble =
   MODE === "overnight" && OVERNIGHT_MINUTES != null && OVERNIGHT_MINUTES <= 5;
+
+const scenarioLimits = MODE_SCENARIO_LIMITS[MODE] ?? MODE_SCENARIO_LIMITS.quick;
+const orderedScenarios = getOrderedScenarios(MODE, QA_SEED);
+let scenarioOffset = 0;
+/** @type {Record<string, number>} */
+const liveCallsByCategory = {};
+/** @type {Set<string>} */
+const categoriesExecuted = new Set();
+/** @type {Set<string>} */
+const uniquePromptsTested = new Set();
+/** @type {Set<string>} */
+const uniqueDebriefTemplates = new Set();
+/** @type {Set<string>} */
+const uniqueDiagnosticPatterns = new Set();
+const scenarioResults = { pass: 0, fail: 0, executed: 0 };
+let liveAiPass = 0;
+let liveAiFail = 0;
+let stoppedEarly = false;
+let stopReason = null;
 
 /** @type {Record<string, object>} */
 const MODE_CONFIG = {
@@ -84,7 +112,10 @@ const MODE_CONFIG = {
     liveE2e: 3,
     liveApiAsks: 0,
     liveApiRateLimitMs: 0,
-    liveAiCap: 10,
+    liveAiCap: scenarioLimits.liveAiCap,
+    livePerCategoryCap: scenarioLimits.livePerCategoryCap,
+    maxScenarios: scenarioLimits.maxScenarios,
+    scenariosPerCycle: 0,
     stopEverythingLoops: 0,
     processCleanupChecks: 1,
   },
@@ -97,7 +128,7 @@ const MODE_CONFIG = {
     runEnv: true,
     e2eRepeat: 25,
     e2eTimeoutMin: 90,
-    copilotPasses: 5,
+    copilotPasses: 2,
     copilotStressLoops: 5,
     visualPrivacyPasses: 5,
     setupStatusPasses: 5,
@@ -105,7 +136,10 @@ const MODE_CONFIG = {
     liveE2e: 10,
     liveApiAsks: 0,
     liveApiRateLimitMs: 0,
-    liveAiCap: 15,
+    liveAiCap: scenarioLimits.liveAiCap,
+    livePerCategoryCap: scenarioLimits.livePerCategoryCap,
+    maxScenarios: scenarioLimits.maxScenarios,
+    scenariosPerCycle: 0,
     stopEverythingLoops: 0,
     processCleanupChecks: 2,
   },
@@ -118,15 +152,18 @@ const MODE_CONFIG = {
     runEnv: true,
     e2eRepeat: 50,
     e2eTimeoutMin: 180,
-    copilotPasses: 10,
-    copilotStressLoops: 35,
+    copilotPasses: 3,
+    copilotStressLoops: 10,
     visualPrivacyPasses: 10,
     setupStatusPasses: 10,
     liveQaLive: 1,
     liveE2e: 25,
-    liveApiAsks: 25,
+    liveApiAsks: 15,
     liveApiRateLimitMs: 3000,
-    liveAiCap: 50,
+    liveAiCap: scenarioLimits.liveAiCap,
+    livePerCategoryCap: scenarioLimits.livePerCategoryCap,
+    maxScenarios: scenarioLimits.maxScenarios,
+    scenariosPerCycle: 0,
     stopEverythingLoops: 10,
     processCleanupChecks: 5,
   },
@@ -139,15 +176,18 @@ const MODE_CONFIG = {
     runEnv: true,
     e2eRepeatPerCycle: 1,
     e2eTimeoutMin: 15,
-    copilotPasses: 0, // per-cycle instead
+    copilotPasses: 0,
     copilotStressLoopsPerCycle: 1,
     visualPrivacyPassesPerCycle: 1,
     setupStatusPassesPerCycle: 1,
     liveQaLive: 1,
     liveE2ePerCycle: 0,
-    liveApiAsksPerCycle: 1,
+    liveApiAsksPerCycle: 0,
     liveApiRateLimitMs: 4000,
-    liveAiCap: 75,
+    liveAiCap: scenarioLimits.liveAiCap,
+    livePerCategoryCap: scenarioLimits.livePerCategoryCap,
+    maxScenarios: Infinity,
+    scenariosPerCycle: scenarioLimits.scenariosPerCycle,
     stopEverythingLoopsPerCycle: 1,
     processCleanupChecksPerCycle: 1,
     criticalFailureThreshold: 3,
@@ -174,19 +214,26 @@ const criticalFailureStreak = {};
 
 const stats = {
   mode: MODE,
+  seed: QA_SEED,
   intendedDuration: cfg.intendedDuration,
+  targetDurationMs: timeBudgetMs,
   stressTest: cfg.stressTest,
   disclaimer: cfg.disclaimer,
+  scenariosAvailable: SCENARIOS.length,
   totalCommands: 0,
   totalAssertions: 0,
   e2eRepeatRuns: 0,
   e2eTestExecutions: 0,
   copilotScenarioExecutions: 0,
+  deterministicScenarioRuns: 0,
   copilotStressLoops: 0,
   liveAiCalls: 0,
   liveAiCap: cfg.liveAiCap,
   cyclesCompleted: 0,
   processCleanupChecks: 0,
+  uniquePrompts: 0,
+  uniqueDebriefTemplates: 0,
+  uniqueDiagnosticPatterns: 0,
 };
 
 let serverStartedByUs = false;
@@ -445,7 +492,7 @@ async function runLiveApiAsk(n, total, prompt) {
   if (cfg.liveApiRateLimitMs > 0 && n > 1) await sleep(cfg.liveApiRateLimitMs);
   stats.liveAiCalls += 1;
   return runStep({
-    name: `Live API ask ${n}/${total}`,
+    name: `Live API ask ${n} of ${total}`,
     command: "node",
     args: ["scripts/glass-live-ask-once.mjs", prompt ?? `Stress ask #${n}: What is IIVO Glass? One sentence.`],
     cwd: GLASS_ROOT,
@@ -453,6 +500,82 @@ async function runLiveApiAsk(n, total, prompt) {
     category: "live-api",
     phase: "live",
   });
+}
+
+function canLiveForCategory(category) {
+  const cap = cfg.livePerCategoryCap ?? 10;
+  return (liveCallsByCategory[category] ?? 0) < cap;
+}
+
+async function runScenarioBatch(count, label = "") {
+  if (count <= 0) return null;
+  const batch = getScenarioBatch(orderedScenarios, scenarioOffset, count);
+  scenarioOffset += count;
+  if (scenarioOffset >= orderedScenarios.length) {
+    scenarioOffset = 0;
+    log("Scenario bank exhausted — reshuffling from offset 0");
+  }
+  for (const s of batch) {
+    categoriesExecuted.add(s.category);
+    uniquePromptsTested.add(s.userPrompt);
+    if (s.expectedBehavior === "debrief") uniqueDebriefTemplates.add(s.expectedSessionType);
+    if (s.category.startsWith("diagnostic")) uniqueDiagnosticPatterns.add(s.category);
+  }
+  const ids = batch.map((s) => s.id).join(",");
+  const r = await runStep({
+    name: `Scenario batch${label ? ` ${label}` : ""} (${batch.length}) [SIMULATED]`,
+    command: "node",
+    args: [
+      "--experimental-strip-types",
+      "scripts/glass-scenario-runner.mjs",
+      "--ids",
+      ids,
+      "--seed",
+      String(QA_SEED),
+      "--mode",
+      MODE,
+    ],
+    cwd: GLASS_ROOT,
+    timeoutMs: Math.max(5, count) * MIN,
+    category: "scenario-deterministic",
+    phase: "scenario",
+  });
+  stats.deterministicScenarioRuns += batch.length;
+  try {
+    const j = JSON.parse(readFileSync(join(OUT, "scenario-run-result.json"), "utf8"));
+    scenarioResults.executed += j.executed ?? 0;
+    scenarioResults.pass += j.passed ?? 0;
+    scenarioResults.fail += j.failed ?? 0;
+  } catch {
+    /* ignore */
+  }
+  return r;
+}
+
+async function runLiveScenarioBatch(maxCount, label = "") {
+  if (!serverHealthy || liveCapReached() || maxCount <= 0) return;
+  let done = 0;
+  const startOffset = scenarioOffset;
+  for (let i = 0; i < orderedScenarios.length && done < maxCount; i++) {
+    const s = orderedScenarios[(startOffset + i) % orderedScenarios.length];
+    if (!s.liveAllowed || !canLiveForCategory(s.category)) continue;
+    if (cfg.liveApiRateLimitMs > 0 && done > 0) await sleep(cfg.liveApiRateLimitMs);
+    stats.liveAiCalls += 1;
+    liveCallsByCategory[s.category] = (liveCallsByCategory[s.category] ?? 0) + 1;
+    const kind = s.testKind === "controlled_visual_fixture" ? "CONTROLLED VISUAL FIXTURE" : "SIMULATED+live";
+    const r = await runStep({
+      name: `Live scenario ${s.id} [${kind}]`,
+      command: "node",
+      args: ["scripts/glass-live-scenario-ask.mjs", "--scenario-id", s.id],
+      cwd: GLASS_ROOT,
+      timeoutMs: 2 * MIN,
+      category: "live-scenario",
+      phase: "live",
+    });
+    if (r.status === "pass") liveAiPass += 1;
+    else liveAiFail += 1;
+    done += 1;
+  }
 }
 
 async function runProcessCleanup(label = "") {
@@ -572,6 +695,10 @@ async function runQuickStandardDeep() {
     await runCopilotQa(i, cfg.copilotPasses);
   }
 
+  if (cfg.maxScenarios > 0) {
+    await runScenarioBatch(Math.min(cfg.maxScenarios, orderedScenarios.length), "full");
+  }
+
   if (cfg.copilotStressLoops > 0) {
     await runCopilotStress(cfg.copilotStressLoops);
   }
@@ -592,7 +719,7 @@ async function runQuickStandardDeep() {
   if (serverHealthy) {
     for (let i = 1; i <= cfg.liveQaLive; i++) {
       if (liveCapReached()) break;
-      stats.liveAiCalls += 3; // qa:live runs ~3 direct asks
+      stats.liveAiCalls += 1;
       await runStep({
         name: `Live QA (qa:live) ${i}/${cfg.liveQaLive}`,
         command: "npm",
@@ -608,6 +735,13 @@ async function runQuickStandardDeep() {
     for (let i = 1; i <= cfg.liveApiAsks; i++) {
       await runLiveApiAsk(i, cfg.liveApiAsks);
     }
+    const liveScenarioBudget = Math.min(
+      cfg.liveAiCap - stats.liveAiCalls,
+      cfg.maxScenarios === Infinity ? 5 : Math.max(1, Math.floor(cfg.maxScenarios / 4)),
+    );
+    if (liveScenarioBudget > 0) {
+      await runLiveScenarioBatch(liveScenarioBudget, "mode-end");
+    }
   } else {
     recordSkip("Live QA suite", "server offline", "live");
   }
@@ -621,8 +755,9 @@ async function runOvernightCycle(cycleNum) {
   log(`--- Cycle ${cycleNum} (${Math.round(timeRemaining() / MIN)}m remaining) ---`);
 
   if (skipHeavyPreamble) {
+    await runScenarioBatch(2, `cycle ${cycleNum}`);
     await runCopilotStress(1, `cycle ${cycleNum}`);
-    await runVisualPrivacy(cycleNum, "∞");
+    await runVisualPrivacy(cycleNum, "cycle");
     stats.cyclesCompleted += 1;
     return "continue";
   }
@@ -632,25 +767,22 @@ async function runOvernightCycle(cycleNum) {
   const e2e = await runE2eRepeat(cfg.e2eRepeatPerCycle, `cycle ${cycleNum}`);
   if (e2e.status !== "pass") cycleFailures.push("e2e");
 
+  await runScenarioBatch(cfg.scenariosPerCycle ?? 8, `cycle ${cycleNum}`);
+
   if (serverHealthy && !liveCapReached()) {
-    const ask = await runLiveApiAsk(cycleNum, cfg.liveApiAsksPerCycle);
-    if (ask && ask.status !== "pass") cycleFailures.push("live-api");
+    await runLiveScenarioBatch(2, `cycle ${cycleNum}`);
   }
 
   const stress = await runCopilotStress(cfg.copilotStressLoopsPerCycle, `cycle ${cycleNum}`);
   if (stress.status !== "pass") cycleFailures.push("copilot-stress");
 
-  await runCopilotQa(cycleNum, "∞");
-
-  await runVisualPrivacy(cycleNum, "∞");
-  await runSetupStatus(cycleNum, "∞");
-
+  await runVisualPrivacy(cycleNum, "cycle");
+  await runSetupStatus(cycleNum, "cycle");
   await runProcessCleanup(`cycle ${cycleNum}`);
 
   stats.cyclesCompleted += 1;
 
-  // Critical failure streak tracking per category in this cycle.
-  const cats = ["e2e", "live-api", "copilot-stress"];
+  const cats = ["e2e", "live-scenario", "copilot-stress"];
   for (const cat of cats) {
     if (cycleFailures.includes(cat)) {
       criticalFailureStreak[cat] = (criticalFailureStreak[cat] ?? 0) + 1;
@@ -663,10 +795,21 @@ async function runOvernightCycle(cycleNum) {
   for (const [cat, streak] of Object.entries(criticalFailureStreak)) {
     if (streak >= threshold) {
       log(`🛑 STOP: "${cat}" failed ${streak} consecutive cycles (threshold ${threshold})`);
+      stoppedEarly = true;
+      stopReason = `critical failure: ${cat} × ${streak}`;
       return "critical-stop";
     }
   }
   return "continue";
+}
+
+async function runScenarioOnlyUntilBudget() {
+  while (!budgetExpired()) {
+    stats.cyclesCompleted += 1;
+    await runScenarioBatch(4, `fill-${stats.cyclesCompleted}`);
+    if (serverHealthy && !liveCapReached()) await runLiveScenarioBatch(1, "fill");
+    await sleep(1500);
+  }
 }
 
 async function runOvernight() {
@@ -681,7 +824,7 @@ async function runOvernight() {
     }
 
     if (serverHealthy && cfg.liveQaLive > 0 && !liveCapReached()) {
-      stats.liveAiCalls += 3;
+      stats.liveAiCalls += 1;
       await runStep({
         name: "Live QA (qa:live) pre-cycle",
         command: "npm",
@@ -702,13 +845,22 @@ async function runOvernight() {
     const result = await runOvernightCycle(cycle);
     if (result === "critical-stop") break;
     if (liveCapReached()) {
-      log(`Live AI cap reached (${stats.liveAiCalls}/${stats.liveAiCap}) — remaining cycles use deterministic tests only`);
+      log(`Live AI cap reached (${stats.liveAiCalls}/${stats.liveAiCap}) — remaining cycles use deterministic/simulated tests only`);
     }
-    // Brief cooldown between cycles.
     await sleep(2500);
   }
 
-  if (budgetExpired()) log(`Time budget expired (${cfg.intendedDuration})`);
+  // Keep running scenario batches until time budget is fully consumed (unless critical stop).
+  if (!stoppedEarly && timeRemaining() > 30_000) {
+    log(`Filling remaining ${Math.round(timeRemaining() / MIN)}m with scenario batches until budget expires`);
+    await runScenarioOnlyUntilBudget();
+  }
+
+  if (budgetExpired()) {
+    log(`Time budget reached (${cfg.intendedDuration})`);
+  } else if (stoppedEarly) {
+    log(`Stopped early: ${stopReason}`);
+  }
 }
 
 // --- report ------------------------------------------------------------------
@@ -757,17 +909,52 @@ async function writeReport() {
     return `${(s / 3600).toFixed(1)}h`;
   };
 
+  stats.uniquePrompts = uniquePromptsTested.size;
+  stats.uniqueDebriefTemplates = uniqueDebriefTemplates.size;
+  stats.uniqueDiagnosticPatterns = uniqueDiagnosticPatterns.size;
+
+  const categoryCoveragePct =
+    SCENARIO_CATEGORIES.length > 0
+      ? Math.round((categoriesExecuted.size / SCENARIO_CATEGORIES.length) * 100)
+      : 0;
+  const targetMs = stats.targetDurationMs ?? 0;
+  const durationPct = targetMs > 0 ? actualMs / targetMs : 1;
+  const onlyE2e =
+    stats.deterministicScenarioRuns === 0 && stats.e2eRepeatRuns > 0 && MODE !== "quick";
+
+  const warnings = [];
+  if (!cfg.stressTest) {
+    warnings.push("Quick validation only — not long-duration stress.");
+  }
+  if (targetMs > 0 && durationPct < 0.9 && !stoppedEarly) {
+    warnings.push(`INCOMPLETE: actual duration ${fmtDur(actualMs)} is under 90% of target ${fmtDur(targetMs)}.`);
+  }
+  if (stoppedEarly) {
+    warnings.push(`INCOMPLETE: stopped early — ${stopReason}`);
+  }
+  if (cfg.stressTest && categoryCoveragePct < 80) {
+    warnings.push(`INCOMPLETE: only ${categoryCoveragePct}% scenario categories covered (need ≥80%).`);
+  }
+  if (liveAiFail > 0 && liveAiPass === 0 && stats.liveAiCalls > 0) {
+    warnings.push("LIVE AI FAILED: all live scenario/API calls failed.");
+  }
+  if (onlyE2e) {
+    warnings.push("INSUFFICIENT PRODUCT COVERAGE: mostly repeated E2E — few simulated Copilot scenarios ran.");
+  }
+
   const stressLabel = cfg.stressTest
     ? `TRUE STRESS TEST (${MODE} mode)`
     : "Quick validation only — not long-duration stress.";
 
   let recommend;
-  if (!cfg.stressTest) {
-    recommend = "Quick validation complete. Run `--mode standard`, `--mode deep`, or `--mode overnight` for real stress coverage.";
+  if (warnings.some((w) => w.startsWith("INCOMPLETE") || w.startsWith("LIVE AI FAILED"))) {
+    recommend = `INCOMPLETE / NOT READY — see warnings (${MODE}).`;
+  } else if (!cfg.stressTest) {
+    recommend = "Quick validation complete. Run `--mode standard`, `--mode deep`, or `--mode overnight --hours 6` for real stress.";
   } else if (fail === 0 && timeout === 0) {
     recommend = serverHealthy
       ? `READY for manual workflow testing (${MODE} stress pass).`
-      : `Partial pass — deterministic stress green but live AI NOT verified (server offline).`;
+      : `Partial pass — deterministic/simulated stress green; live AI limited or offline.`;
   } else {
     recommend = `NOT READY — ${fail} fail, ${timeout} timeout in ${MODE} mode.`;
   }
@@ -795,30 +982,46 @@ async function writeReport() {
 | Field | Value |
 |-------|-------|
 | **Selected mode** | \`${MODE}\` |
+| **Seed** | \`${QA_SEED}\` (replay: \`--seed ${QA_SEED}\`) |
 | **Stress test?** | ${cfg.stressTest ? "YES — true stress" : "NO — quick validation only"} |
-| **Intended duration** | ${cfg.intendedDuration} |
-| **Actual duration** | ${fmtDur(actualMs)} |
+| **Target duration** | ${cfg.intendedDuration}${targetMs ? ` (${fmtDur(targetMs)})` : ""} |
+| **Actual duration** | ${fmtDur(actualMs)}${targetMs ? ` (${Math.round(durationPct * 100)}% of target)` : ""} |
+| **Run complete?** | ${warnings.some((w) => w.startsWith("INCOMPLETE")) ? "NO" : targetMs ? (durationPct >= 0.9 || stoppedEarly ? "YES (budget or critical stop)" : "NO — under 90% target") : "YES"} |
 | **Start** | ${startedAt.toISOString()} |
 | **End** | ${endedAt.toISOString()} |
 | **Branch / commit** | \`${branch}\` @ \`${commit}\` |
-| **Working tree** | ${treeStatus === "clean" ? "clean" : "DIRTY"} |
-| **Server** | ${serverHealthy ? `REAL @ ${API_URL}` : "offline — live BLOCKED"} |
+| **Server** | ${serverHealthy ? `REAL live server @ ${API_URL}` : "offline — live BLOCKED"} |
 
 > **${stressLabel}**
 
-## Execution totals
+${warnings.length ? `## Warnings\n${warnings.map((w) => `- ⚠️ ${w}`).join("\n")}\n` : ""}
+
+## Coverage accounting
 | Metric | Count |
 |--------|-------|
-| Commands run | ${stats.totalCommands} |
-| Test assertions (counted) | ${stats.totalAssertions}${copilot ? ` (+ last copilot pass ${copilot.passed}/${copilot.total})` : ""} |
+| Scenarios available | ${stats.scenariosAvailable} |
+| Scenarios executed (deterministic) | ${scenarioResults.executed} (${scenarioResults.pass} pass / ${scenarioResults.fail} fail) |
+| Categories covered | ${categoriesExecuted.size} / ${SCENARIO_CATEGORIES.length} (${categoryCoveragePct}%) |
+| Unique prompts tested | ${stats.uniquePrompts} |
+| Unique debrief templates | ${stats.uniqueDebriefTemplates} |
+| Unique diagnostic patterns | ${stats.uniqueDiagnosticPatterns} |
+| Deterministic scenario runs | ${stats.deterministicScenarioRuns} |
 | E2E repeat runs | ${stats.e2eRepeatRuns} |
-| E2E test executions (est.) | ${stats.e2eTestExecutions} (~${E2E_TESTS_PER_RUN} tests × repeat count) |
-| Copilot scenario runs | ${stats.copilotScenarioExecutions} |
-| Copilot stress loops | ${stats.copilotStressLoops} |
-| Live AI calls | ${stats.liveAiCalls} / cap ${stats.liveAiCap} |
+| E2E test executions (est.) | ${stats.e2eTestExecutions} |
+| Live AI calls | ${stats.liveAiCalls} / cap ${stats.liveAiCap} (pass ${liveAiPass} / fail ${liveAiFail}) |
 | Overnight cycles | ${stats.cyclesCompleted} |
-| Process cleanup checks | ${stats.processCleanupChecks} |
+| Commands run | ${stats.totalCommands} |
 | Step results | ✅ ${pass} · ❌ ${fail} · ⏱ ${timeout} · ⏭️ ${skipped} |
+
+## Test kind breakdown (honest)
+1. **Real live server tests** — glass:qa:live, live E2E, live scenario asks (${liveAiPass + liveAiFail} scenario/API live calls)
+2. **Stub/E2E tests** — Electron + stub server (${stats.e2eTestExecutions} est. test executions)
+3. **Simulated Copilot scenarios** — transcript/screen context injected; NOT real YouTube/meeting audio (${scenarioResults.executed} runs labeled SIMULATED)
+4. **Controlled visual fixture tests** — local HTML pages; NOT real desktop screen capture
+5. **Manual still required** — real YouTube playback, system audio/BlackHole, real mic, packaged Screen Recording, subjective workflow usefulness
+
+## Scenario categories executed
+${categoriesExecuted.size ? [...categoriesExecuted].sort().map((c) => `- ${c}`).join("\n") : "- (none)"}
 
 ## Recommendation
 **${recommend}**
