@@ -8,7 +8,7 @@ import {
   getOrderedScenarios,
   getScenarioBatch,
   MODE_SCENARIO_LIMITS,
-} from "../../scripts/qa-scenarios/iivo-glass-scenarios.mjs";
+} from "../shared/qaScenarioBank.ts";
 
 test("scenario bank has 100+ scenarios", () => {
   assert.ok(SCENARIOS.length >= 100, `got ${SCENARIOS.length}`);
