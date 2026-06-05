@@ -16,6 +16,7 @@ import {
   type LaunchedGlass,
 } from "./helpers/electronApp.ts";
 import { logE2eFailureDiagnostics } from "./helpers/e2eFailureDiagnostics.ts";
+import { resetE2eSetupState } from "./helpers/e2eSetupReset.ts";
 
 const COUNCIL_MARKERS = [
   "Final Action Plan",
@@ -62,6 +63,7 @@ test.afterEach(async ({}, testInfo) => {
 
 test.beforeEach(async () => {
   const { command } = await getGlassWindows(app.browser);
+  await resetE2eSetupState(command);
   await command.evaluate(() => window.glass.send({ type: "clear-command-feed" }));
   await resetE2eExternalUrls(command);
   app.stub.resetHandoffState();
@@ -77,6 +79,7 @@ test.describe("IIVO Glass Electron E2E", () => {
     expect(app.electronProcess.exitCode).toBeNull();
 
     const launchState = await readGlassState(command);
+    expect(launchState.privacy.listening).toBe(false);
     expect(launchState.micPermission ?? "not_requested").toBe("not_requested");
   });
 

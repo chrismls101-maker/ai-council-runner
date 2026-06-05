@@ -14,7 +14,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const glassRoot = path.resolve(__dirname, "..");
 const CDP_PORT = 19222;
 const runs = Math.max(1, Number.parseInt(process.argv[2] ?? "3", 10) || 3);
-const COOLDOWN_MS = 1500;
+const COOLDOWN_MS = 2500;
 
 function killStaleCdpPort(port = CDP_PORT) {
   try {
