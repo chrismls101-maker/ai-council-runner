@@ -12,6 +12,26 @@ This document separates **fixed automated coverage** from **environment / manual
 | Custom CDP launcher felt like a workaround | Formalized as `launchGlassElectronForE2E` — intentional Electron 31 + Playwright compatibility layer (fixed CDP port 19222). |
 | CI skip was vague | Skip reasons are explicit. Use `GLASS_E2E_CI=1` on runners with display/xvfb, or `GLASS_E2E_FORCE=1` locally. See `npm run glass:e2e:ci`. |
 
+## Streaming / partial-answer decision (Voice Mode)
+
+**Decision: Option B (non-streaming + latency UX bridge).** Token streaming for
+`glass_direct` / `glass_visual_direct` is intentionally **deferred to Voice Mode
+v2** to avoid destabilizing the working single-call pipeline (model fallback
+chain, council-format stripping, visual 413 retry, abort/cancel semantics).
+
+The bridge that keeps Voice Mode from feeling dead during 3–13s waits
+(`glassAskTiming.ts`):
+
+- escalating status: `Listening…` → `Transcribing…` → `Looking…` → `IIVO is
+  thinking…` → `Still working…` (6s) → timeout copy (45s);
+- first-sentence preview (`firstSentencePreview`) as an early answer hint;
+- a Cancel button (`cancel-glass-ask`) and Stop Everything (`stop-everything`)
+  that clear pending/partial state.
+
+Voice Mode v2 enhancement (future): server-sent token streaming surfaced as
+`ANSWER_PARTIAL` events into the existing `voiceModeReducer` (the state machine
+already models an `answering` phase with `answerPreview`).
+
 ## Environment requirements (not product bugs)
 
 | Requirement | Notes |

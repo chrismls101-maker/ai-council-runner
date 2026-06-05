@@ -4,6 +4,7 @@ import { ChromeRepositionOverlay } from "../ChromeRepositionOverlay.tsx";
 import { ensureCommandBarClickable, useChromeLockToggle } from "../useChromeLockToggle.ts";
 import { useChromeWindowDrag } from "../useChromeWindowDrag.ts";
 import { useTranscriptionContext } from "../TranscriptionProvider.tsx";
+import { VoiceModePanel } from "./VoiceModePanel.tsx";
 import type { TranscriptionMode } from "../../shared/audioCaptureTypes.ts";
 import {
   micPermissionDeniedMessage,
@@ -167,6 +168,8 @@ export function CommandBar(): JSX.Element {
         }
       >
         {!chromeLocked ? <ChromeRepositionOverlay surfaceRef={dragSurfaceRef} /> : null}
+
+        <VoiceModePanel />
 
         <div className="command-bar__row">
           <button

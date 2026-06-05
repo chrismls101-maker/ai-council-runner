@@ -1720,6 +1720,95 @@ html.glass-dock-window #root {
   color: var(--danger);
 }
 
+/* ---------- Voice Mode panel ---------- */
+.voice-mode {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 2px 6px;
+  pointer-events: auto;
+}
+.voice-mode__start {
+  align-self: flex-start;
+  height: 30px;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 10px;
+  border: 1px solid var(--glass-border-bright);
+  background: rgba(56, 225, 255, 0.14);
+  color: var(--cyan);
+  cursor: pointer;
+}
+.voice-mode__start:hover {
+  background: rgba(56, 225, 255, 0.22);
+}
+.voice-mode--active {
+  border: 1px solid var(--glass-border-bright);
+  border-radius: 12px;
+  padding: 8px 10px;
+  background: rgba(56, 225, 255, 0.06);
+}
+.voice-mode--error {
+  border-color: rgba(255, 107, 129, 0.5);
+  background: rgba(255, 107, 129, 0.08);
+}
+.voice-mode__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.voice-mode__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--cyan);
+}
+.voice-mode__pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 8px rgba(56, 225, 255, 0.7);
+  animation: voice-mode-pulse 1.4s ease-in-out infinite;
+}
+@keyframes voice-mode-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.voice-mode__status {
+  font-size: 12px;
+  color: var(--glass-text-dim);
+}
+.voice-mode__transcript,
+.voice-mode__preview {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--glass-text);
+  line-height: 1.35;
+}
+.voice-mode__preview {
+  color: var(--glass-text-dim);
+}
+.voice-mode__error {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--danger);
+}
+.voice-mode__actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 2px;
+}
+
 /* ---------- Panel status grid ---------- */
 .panel__hint {
   margin: 8px 0 4px;

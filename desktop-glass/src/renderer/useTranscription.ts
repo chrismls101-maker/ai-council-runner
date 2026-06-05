@@ -54,6 +54,10 @@ import {
 } from "../shared/sttTypes.ts";
 import { listeningModeHint } from "../shared/glassOperations.ts";
 import {
+  isVoiceModeActive,
+  voiceModeHandleAutoSubmit,
+} from "../shared/voiceModeBridge.ts";
+import {
   systemAudioFixHint,
   sttFixHint,
 } from "../shared/systemAudioFixHints.ts";
@@ -249,6 +253,13 @@ export function useTranscription(): TranscriptionController {
       micDraftRef.current.finalized,
       micDraftRef.current.interim,
     );
+    // Voice Mode owns submission (so it can route direct/visual/debrief). When
+    // active, hand off the draft instead of issuing our own submit-command.
+    if (isVoiceModeActive()) {
+      if (!voiceModeHandleAutoSubmit(draft)) return false;
+      stopListeningRef.current?.();
+      return true;
+    }
     if (
       !shouldAutoSendMicAfterSilence(
         glassState.glassSettings.micAutoSendAfterSilence,
