@@ -1,14 +1,16 @@
 /**
- * Run Glass setup check (main process) — server, vision, STT, screen + system audio probes.
+ * Run Glass setup check (main process) — server, vision, STT, screen/window/system audio probes.
  */
 
 import type { GlassConfig } from "../shared/config.ts";
-import type {
-  GlassServerHealthForSetup,
-  ScreenCaptureProbeStatus,
-} from "../shared/glassCapabilities.ts";
-import { mapCaptureErrorToScreenCaptureStatus } from "../shared/glassCapabilities.ts";
-import { probeScreenCapturePermission } from "./capture.ts";
+import type { GlassServerHealthForSetup } from "../shared/glassCapabilities.ts";
+import {
+  deriveScreenCaptureStatusFromProbe,
+  deriveWindowCaptureStatusFromProbe,
+  type ScreenCaptureProbeStatus,
+  type WindowCaptureProbeStatus,
+} from "../shared/captureSourceEnumeration.ts";
+import { probeDesktopCaptureSources } from "./captureSourceProbe.ts";
 import { fetchGlassServerHealth } from "./glassVisualAskPreflight.ts";
 import { resolveCaptureDisplay } from "./displayRegistry.ts";
 import type { GlassDisplayTarget } from "../shared/glassSettings.ts";
@@ -19,6 +21,8 @@ export interface GlassSetupCheckResult {
   serverHealth: GlassServerHealthForSetup | null;
   screenCaptureProbe: ScreenCaptureProbeStatus;
   screenCaptureDetail?: string;
+  windowCaptureProbe: WindowCaptureProbeStatus;
+  windowCaptureDetail?: string;
   systemAudioStatus: SystemAudioStatus;
   systemAudioDetail?: string;
   systemAudioDiagnostics?: string;
@@ -47,8 +51,9 @@ export async function runGlassSetupCheck(input: {
   const initial: GlassSetupCheckResult = {
     serverHealth,
     screenCaptureProbe: "unknown",
+    windowCaptureProbe: "unknown",
     systemAudioStatus: "not_tested",
-    systemAudioDetail: "Run Setup Check to probe screen and system audio separately.",
+    systemAudioDetail: "Run Setup Check to probe screen, window, and system audio separately.",
   };
 
   if (input.skipCaptureProbe || process.env.IIVO_GLASS_E2E === "1") {
@@ -58,6 +63,8 @@ export async function runGlassSetupCheck(input: {
         process.env.IIVO_GLASS_E2E === "1"
           ? "Screen capture probe skipped in E2E."
           : undefined,
+      windowCaptureDetail:
+        process.env.IIVO_GLASS_E2E === "1" ? "Window capture probe skipped in E2E." : undefined,
       systemAudioStatus: "not_tested",
       systemAudioDetail: "System audio probe skipped.",
     };
@@ -65,18 +72,31 @@ export async function runGlassSetupCheck(input: {
 
   const target = resolveCaptureDisplay(input.displayTarget);
 
-  const screenProbe = await probeScreenCapturePermission(target.id);
-  const screenCaptureProbe: ScreenCaptureProbeStatus = screenProbe.ok
-    ? "ready"
-    : mapCaptureErrorToScreenCaptureStatus(screenProbe.error);
-  const screenCaptureDetail = screenProbe.ok ? undefined : screenProbe.error;
+  const screenEnum = await probeDesktopCaptureSources({
+    kind: "screen",
+    types: ["screen"],
+    displayId: target.id,
+  });
+  const windowEnum = await probeDesktopCaptureSources({
+    kind: "window",
+    types: ["window"],
+    displayId: target.id,
+  });
 
-  const audioProbe = await probeSystemAudioEnumeration(target.id, screenCaptureProbe);
+  const screenDerived = deriveScreenCaptureStatusFromProbe(screenEnum);
+  const windowDerived = deriveWindowCaptureStatusFromProbe(windowEnum);
+
+  const audioProbe = await probeSystemAudioEnumeration(
+    target.id,
+    screenDerived.status,
+  );
 
   return {
     serverHealth,
-    screenCaptureProbe,
-    screenCaptureDetail,
+    screenCaptureProbe: screenDerived.status,
+    screenCaptureDetail: screenDerived.detail,
+    windowCaptureProbe: windowDerived.status,
+    windowCaptureDetail: windowDerived.detail,
     systemAudioStatus: audioProbe.status,
     systemAudioDetail: audioProbe.detail,
     systemAudioDiagnostics: audioProbe.diagnosticsLine,

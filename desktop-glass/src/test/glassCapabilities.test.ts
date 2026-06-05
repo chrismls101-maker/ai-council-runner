@@ -86,6 +86,18 @@ test("server offline maps to error severity", () => {
   assert.match(server?.label ?? "", /Offline/i);
 });
 
+test("screen source_enumeration_failed shows actionable label not vague failed", () => {
+  const rows = buildGlassSetupCapabilities({
+    ...baseInput,
+    screenCaptureProbe: "source_enumeration_failed",
+    screenCaptureDetail: "Failed to get sources.",
+    systemAudioStatus: "not_tested",
+  });
+  const screen = rows.find((r) => r.id === "screenRecording");
+  assert.equal(screen?.label, "Source enumeration failed");
+  assert.match(screen?.detail ?? "", /Screen sources could not be enumerated/i);
+});
+
 test("captureStatusFromSetup reflects permission state", () => {
   const rows = buildGlassSetupCapabilities({
     ...baseInput,

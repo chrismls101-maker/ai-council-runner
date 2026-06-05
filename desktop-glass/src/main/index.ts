@@ -184,7 +184,10 @@ import {
   type GlassServerHealthForSetup,
   type MicPermissionReport,
   type ScreenCaptureProbeStatus,
+  type WindowCaptureProbeStatus,
 } from "../shared/glassCapabilities.ts";
+import type { CaptureDiagnosticsReport } from "../shared/captureDiagnostics.ts";
+import { runCaptureDiagnosticsReport } from "./captureDiagnostics.ts";
 import { runGlassSetupCheck } from "./glassSetupCheck.ts";
 import { openGlassSystemSettings } from "./glassSystemSettings.ts";
 import { glassMenuAppName } from "../shared/glassAppIdentity.ts";
@@ -245,10 +248,13 @@ interface AppState {
   glassSettings: GlassUserSettings;
   screenCaptureProbe: ScreenCaptureProbeStatus;
   screenCaptureDetail?: string;
+  windowCaptureProbe: WindowCaptureProbeStatus;
+  windowCaptureDetail?: string;
   micPermission: MicPermissionReport;
   serverHealthForSetup: GlassServerHealthForSetup | null;
   setupCapabilities: GlassCapabilityRow[];
   setupCheckSummary?: string;
+  captureDiagnosticsReport?: CaptureDiagnosticsReport;
 }
 
 let askAbortController: AbortController | null = null;
@@ -282,6 +288,7 @@ const state: AppState = {
   ephemeralVisualCapture: null,
   glassSettings: { ...DEFAULT_GLASS_USER_SETTINGS },
   screenCaptureProbe: "unknown",
+  windowCaptureProbe: "unknown",
   micPermission: "not_requested",
   serverHealthForSetup: null,
   setupCapabilities: [],
@@ -300,6 +307,8 @@ function refreshSetupCapabilities(): void {
     platform: process.platform,
     screenCaptureProbe: state.screenCaptureProbe,
     screenCaptureDetail: state.screenCaptureDetail,
+    windowCaptureProbe: state.windowCaptureProbe,
+    windowCaptureDetail: state.windowCaptureDetail,
     captureStatus: state.operationDiagnostics.captureStatus,
     micPermission: state.micPermission,
     micListening: state.privacy.listening,
@@ -356,6 +365,7 @@ function snapshot(): GlassState {
     connectedDisplays: getConnectedDisplays(),
     setupCapabilities: state.setupCapabilities,
     setupCheckSummary: state.setupCheckSummary,
+    captureDiagnosticsReport: state.captureDiagnosticsReport,
     micPermission: state.micPermission,
   };
 }
@@ -1729,6 +1739,8 @@ async function handleCommand(
       state.serverHealthForSetup = result.serverHealth;
       state.screenCaptureProbe = result.screenCaptureProbe;
       state.screenCaptureDetail = result.screenCaptureDetail;
+      state.windowCaptureProbe = result.windowCaptureProbe;
+      state.windowCaptureDetail = result.windowCaptureDetail;
       if (!state.privacy.listening && process.env.IIVO_GLASS_E2E !== "1") {
         state.systemAudioStatus = result.systemAudioStatus;
         state.systemAudioDetail = result.systemAudioDetail;
@@ -1739,6 +1751,25 @@ async function handleCommand(
         command.type === "retry-system-audio"
           ? `System audio probe: ${result.systemAudioStatus}${result.systemAudioDiagnostics ? ` (${result.systemAudioDiagnostics})` : ""}`
           : state.setupCheckSummary;
+      push();
+      return;
+    }
+    case "run-capture-diagnostics": {
+      const report = await runCaptureDiagnosticsReport({
+        displayTarget: state.glassSettings.displayTarget,
+      });
+      state.captureDiagnosticsReport = report;
+      state.screenCaptureProbe = report.screenCaptureProbe;
+      state.screenCaptureDetail = report.screenCaptureDetail;
+      state.windowCaptureProbe = report.windowCaptureProbe;
+      state.windowCaptureDetail = report.windowCaptureDetail;
+      if (!state.privacy.listening) {
+        state.systemAudioStatus = report.systemAudioStatus;
+        state.systemAudioDetail = report.systemAudioDetail;
+      }
+      refreshSetupCapabilities();
+      state.setupCheckSummary = formatSetupCheckSummary(state.setupCapabilities);
+      state.lastNotice = report.lines.join("\n");
       push();
       return;
     }
@@ -1809,6 +1840,22 @@ async function handleCommand(
     case "e2e-set-server-health":
       if (process.env.IIVO_GLASS_E2E === "1") {
         state.serverHealthForSetup = command.health;
+        push();
+      }
+      return;
+    case "e2e-set-capture-probes":
+      if (process.env.IIVO_GLASS_E2E === "1") {
+        if (command.screenCaptureProbe) state.screenCaptureProbe = command.screenCaptureProbe;
+        if (command.screenCaptureDetail !== undefined) {
+          state.screenCaptureDetail = command.screenCaptureDetail;
+        }
+        if (command.windowCaptureProbe) state.windowCaptureProbe = command.windowCaptureProbe;
+        if (command.systemAudioStatus) state.systemAudioStatus = command.systemAudioStatus;
+        if (command.systemAudioDetail !== undefined) {
+          state.systemAudioDetail = command.systemAudioDetail;
+        }
+        refreshSetupCapabilities();
+        state.setupCheckSummary = formatSetupCheckSummary(state.setupCapabilities);
         push();
       }
       return;
@@ -2221,6 +2268,14 @@ function registerIpc(): void {
       process.env.IIVO_GLASS_E2E_CAPTURE_FAIL = "1";
       return { ok: true };
     });
+    ipcMain.handle(IPC.e2eSimulateScreenEnumFail, () => {
+      process.env.IIVO_GLASS_E2E_SCREEN_ENUM_FAIL = "1";
+      return { ok: true };
+    });
+    ipcMain.handle(IPC.e2eSimulateSystemAudioEnumFail, () => {
+      process.env.IIVO_GLASS_E2E_SYSTEM_AUDIO_ENUM_FAIL = "1";
+      return { ok: true };
+    });
   }
 }
 
@@ -2233,6 +2288,16 @@ function registerGlobalHotkeys(): void {
 }
 
 app.whenReady().then(async () => {
+  if (process.env.IIVO_GLASS_DIAGNOSE === "1") {
+    glassUserSettings = await loadGlassUserSettings();
+    const report = await runCaptureDiagnosticsReport({
+      displayTarget: glassUserSettings.displayTarget,
+    });
+    console.log(JSON.stringify(report, null, 2));
+    app.quit();
+    return;
+  }
+
   // Show the cinematic boot splash immediately, before any async startup work.
   const showSplash = process.env.IIVO_GLASS_E2E !== "1";
   if (showSplash) {

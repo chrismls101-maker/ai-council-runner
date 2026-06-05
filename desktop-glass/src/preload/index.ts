@@ -63,6 +63,21 @@ const glassApi = {
   simulateE2eCaptureFail(): Promise<{ ok: boolean }> {
     return ipcRenderer.invoke(IPC.e2eSimulateCaptureFail) as Promise<{ ok: boolean }>;
   },
+  simulateE2eScreenEnumFail(): Promise<{ ok: boolean }> {
+    return ipcRenderer.invoke(IPC.e2eSimulateScreenEnumFail) as Promise<{ ok: boolean }>;
+  },
+  simulateE2eSystemAudioEnumFail(): Promise<{ ok: boolean }> {
+    return ipcRenderer.invoke(IPC.e2eSimulateSystemAudioEnumFail) as Promise<{ ok: boolean }>;
+  },
+  setE2eCaptureProbes(payload: {
+    screenCaptureProbe?: import("../shared/captureSourceEnumeration.ts").ScreenCaptureProbeStatus;
+    screenCaptureDetail?: string;
+    windowCaptureProbe?: import("../shared/captureSourceEnumeration.ts").WindowCaptureProbeStatus;
+    systemAudioStatus?: import("../shared/systemAudioTypes.ts").SystemAudioStatus;
+    systemAudioDetail?: string;
+  }): Promise<{ ok: boolean }> {
+    return ipcRenderer.invoke(IPC.e2eSetCaptureProbes, payload) as Promise<{ ok: boolean }>;
+  },
 };
 
 export type GlassApi = typeof glassApi;

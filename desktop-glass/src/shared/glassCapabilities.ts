@@ -6,9 +6,18 @@ import type { SystemAudioStatus } from "./systemAudioTypes.ts";
 import { systemAudioStatusMessage } from "./systemAudioTypes.ts";
 import {
   PERMISSION_JUST_GRANTED_RESTART_HINT,
+  isSourceEnumerationFailedMessage,
   shouldShowVirtualDeviceGuidance,
 } from "./systemAudioProbe.ts";
 import type { SttProviderStatus } from "./sttTypes.ts";
+import {
+  mapEnumerationErrorToScreenCaptureStatus,
+  SCREEN_SOURCE_ENUMERATION_USER_MESSAGE,
+  type ScreenCaptureProbeStatus,
+  type WindowCaptureProbeStatus,
+} from "./captureSourceEnumeration.ts";
+
+export type { ScreenCaptureProbeStatus, WindowCaptureProbeStatus };
 export type GlassCapabilityStatus =
   | "ready"
   | "not_requested"
@@ -24,6 +33,7 @@ export type GlassCapabilitySeverity = "ok" | "warn" | "error" | "idle";
 
 export type GlassCapabilityId =
   | "screenRecording"
+  | "windowCapture"
   | "microphone"
   | "systemAudio"
   | "vision"
@@ -40,7 +50,8 @@ export type GlassSetupActionType =
   | "retry-system-audio"
   | "test-microphone"
   | "test-system-audio"
-  | "run-setup-check";
+  | "run-setup-check"
+  | "run-capture-diagnostics";
 
 export interface GlassSetupAction {
   label: string;
@@ -60,8 +71,6 @@ export interface GlassCapabilityRow {
 
 export type MicPermissionReport = "not_requested" | "granted" | "denied" | "error";
 
-export type ScreenCaptureProbeStatus = "unknown" | "ready" | "permission_required" | "error";
-
 export interface GlassServerHealthForSetup {
   reachable: boolean;
   vision?: {
@@ -80,6 +89,8 @@ export interface GlassSetupCapabilitiesInput {
   platform?: NodeJS.Platform;
   screenCaptureProbe: ScreenCaptureProbeStatus;
   screenCaptureDetail?: string;
+  windowCaptureProbe?: WindowCaptureProbeStatus;
+  windowCaptureDetail?: string;
   captureStatus?: string;
   micPermission: MicPermissionReport;
   micListening?: boolean;
@@ -121,10 +132,7 @@ function severityFromStatus(status: GlassCapabilityStatus): GlassCapabilitySever
 export function mapCaptureErrorToScreenCaptureStatus(
   message: string,
 ): ScreenCaptureProbeStatus {
-  if (/permission|screen recording|empty image/i.test(message)) {
-    return "permission_required";
-  }
-  return "error";
+  return mapEnumerationErrorToScreenCaptureStatus(message);
 }
 
 export function mapGetUserMediaErrorToMicPermission(err: unknown): MicPermissionReport {
@@ -168,6 +176,26 @@ export function buildScreenRecordingCapability(
       severity: "warn",
     };
   }
+  if (probe === "source_enumeration_failed") {
+    const raw = input.screenCaptureDetail ?? "";
+    const detail = isSourceEnumerationFailedMessage(raw)
+      ? [SCREEN_SOURCE_ENUMERATION_USER_MESSAGE, raw].filter(Boolean).join(" ")
+      : raw || SCREEN_SOURCE_ENUMERATION_USER_MESSAGE;
+    return {
+      id: "screenRecording",
+      status: "error",
+      label: "Source enumeration failed",
+      detail,
+      actionLabel: "Run Capture Diagnostics",
+      actionCommand: "run-capture-diagnostics",
+      actions: [
+        { label: "Run Capture Diagnostics", command: "run-capture-diagnostics" },
+        { label: "Open Screen Recording Settings", command: "open-screen-recording-settings" },
+        { label: "Retry Capture", command: "retry-capture" },
+      ],
+      severity: "error",
+    };
+  }
   if (probe === "error") {
     return {
       id: "screenRecording",
@@ -184,6 +212,61 @@ export function buildScreenRecordingCapability(
     status: "not_requested",
     label: "Not checked",
     detail: "Run Setup Check or capture the screen to verify permission.",
+    actionLabel: "Run Setup Check",
+    actionCommand: "run-setup-check",
+    severity: "idle",
+  };
+}
+
+export function buildWindowCaptureCapability(
+  input: GlassSetupCapabilitiesInput,
+): GlassCapabilityRow {
+  const probe = input.windowCaptureProbe ?? "unknown";
+  if (probe === "ready") {
+    return {
+      id: "windowCapture",
+      status: "ready",
+      label: "Ready",
+      detail: "Window sources are available for capture.",
+      severity: "ok",
+    };
+  }
+  if (probe === "permission_required") {
+    return {
+      id: "windowCapture",
+      status: "permission_required",
+      label: "Permission needed",
+      detail: input.windowCaptureDetail,
+      actionLabel: "Open Screen Recording Settings",
+      actionCommand: "open-screen-recording-settings",
+      severity: "warn",
+    };
+  }
+  if (probe === "source_enumeration_failed") {
+    return {
+      id: "windowCapture",
+      status: "error",
+      label: "Source enumeration failed",
+      detail: input.windowCaptureDetail,
+      actionLabel: "Run Capture Diagnostics",
+      actionCommand: "run-capture-diagnostics",
+      severity: "error",
+    };
+  }
+  if (probe === "error") {
+    return {
+      id: "windowCapture",
+      status: "error",
+      label: "Enumeration failed",
+      detail: input.windowCaptureDetail,
+      severity: "warn",
+    };
+  }
+  return {
+    id: "windowCapture",
+    status: "not_requested",
+    label: "Not checked",
+    detail: "Run Setup Check to verify window source enumeration.",
     actionLabel: "Run Setup Check",
     actionCommand: "run-setup-check",
     severity: "idle",
@@ -304,8 +387,12 @@ export function buildSystemAudioCapability(input: GlassSetupCapabilitiesInput): 
     };
   }
   if (status === "source_enumeration_failed") {
-    const detail =
-      input.systemAudioDetail ?? systemAudioStatusMessage("source_enumeration_failed");
+    const raw = input.systemAudioDetail ?? systemAudioStatusMessage("source_enumeration_failed");
+    const detail = screenReady
+      ? raw
+      : isSourceEnumerationFailedMessage(raw)
+        ? [SCREEN_SOURCE_ENUMERATION_USER_MESSAGE, raw].filter(Boolean).join(" ")
+        : raw;
     return {
       id: "systemAudio",
       status: "error",
@@ -507,6 +594,7 @@ export function buildGlassSetupCapabilities(
 ): GlassCapabilityRow[] {
   return [
     buildScreenRecordingCapability(input),
+    buildWindowCaptureCapability(input),
     buildMicrophoneCapability(input),
     buildSystemAudioCapability(input),
     buildVisionCapability(input.serverHealth),
@@ -539,8 +627,12 @@ export function permissionsSummaryFromSetup(rows: GlassCapabilityRow[]): {
     needed.push("Microphone");
   }
   if (sys?.status === "requires_virtual_device") needed.push("Virtual audio");
-  if (sys?.status === "error" && sys.label === "Source enumeration failed") {
+  if (sys?.status === "error" && sys.label === "Source enumeration failed" && screen?.status !== "ready") {
     needed.push("System audio");
+  }
+  const win = rows.find((r) => r.id === "windowCapture");
+  if (win?.label === "Source enumeration failed" && screen?.status !== "ready") {
+    needed.push("Window capture");
   }
   if (sys?.status === "permission_required" && !needed.includes("Screen Recording")) {
     needed.push("Screen Recording");

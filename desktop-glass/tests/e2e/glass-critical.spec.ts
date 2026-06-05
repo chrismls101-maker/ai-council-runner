@@ -404,4 +404,40 @@ test.describe("IIVO Glass Electron E2E", () => {
     expect(state.windows?.overlayClickThrough).toBe(true);
     expect(state.windows?.commandBarVisible).toBe(true);
   });
+
+  test("15 — setup shows separate screen and system audio statuses", async () => {
+    const { command, dock, panel } = await getGlassWindows(app.browser);
+    await dock.locator('[data-testid="glass-dock-open-panel"]').click();
+    await expect(panel.locator('[data-testid="glass-panel-setup"]')).toBeVisible();
+
+    await command.evaluate(() => {
+      window.glass.send({
+        type: "e2e-set-capture-probes",
+        screenCaptureProbe: "ready",
+        systemAudioStatus: "source_enumeration_failed",
+        systemAudioDetail: "Failed to get sources.",
+      });
+    });
+
+    await expect
+      .poll(async () => {
+        const screen = (await readGlassState(command)).setupCapabilities?.find(
+          (r) => r.id === "screenRecording",
+        );
+        return screen?.label;
+      })
+      .toBe("Ready");
+
+    const state = await readGlassState(command);
+    const screen = state.setupCapabilities?.find((r) => r.id === "screenRecording");
+    const sys = state.setupCapabilities?.find((r) => r.id === "systemAudio");
+    expect(screen?.label).toBe("Ready");
+    expect(sys?.label).toBe("Source enumeration failed");
+    await expect(panel.locator('[data-testid="glass-setup-row-systemAudio"]')).toContainText(
+      /Source enumeration failed|Failed to get sources/i,
+    );
+    await expect(panel.locator('[data-testid="glass-setup-row-screenRecording"]')).toContainText(
+      /Ready/i,
+    );
+  });
 });

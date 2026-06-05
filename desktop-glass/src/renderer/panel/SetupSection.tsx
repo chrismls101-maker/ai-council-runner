@@ -40,12 +40,30 @@ export function SetupSection(): JSX.Element {
     <div className="setup-section" data-testid="glass-panel-setup">
       <div className="setup-section__head">
         <p className="section-title">Setup</p>
-        <button type="button" className="gbtn gbtn--small" onClick={() => void runSetupCheck()}>
-          Run Setup Check
-        </button>
+        <div className="setup-section__head-actions">
+          <button type="button" className="gbtn gbtn--small" onClick={() => void runSetupCheck()}>
+            Run Setup Check
+          </button>
+          <button
+            type="button"
+            className="gbtn gbtn--small"
+            data-testid="glass-run-capture-diagnostics"
+            onClick={() => send({ type: "run-capture-diagnostics" })}
+          >
+            Run Capture Diagnostics
+          </button>
+        </div>
       </div>
       {state.setupCheckSummary ? (
         <p className="hint setup-section__summary">{state.setupCheckSummary}</p>
+      ) : null}
+      {state.captureDiagnosticsReport ? (
+        <pre
+          className="setup-section__diagnostics"
+          data-testid="glass-capture-diagnostics-report"
+        >
+          {state.captureDiagnosticsReport.lines.join("\n")}
+        </pre>
       ) : null}
       <ul className="setup-section__rows">
         {rows.map((row) => (
@@ -90,7 +108,9 @@ export function SetupSection(): JSX.Element {
 function labelForCapability(id: GlassCapabilityRow["id"]): string {
   switch (id) {
     case "screenRecording":
-      return "Screen Recording";
+      return "Screen Capture";
+    case "windowCapture":
+      return "Window Capture";
     case "microphone":
       return "Microphone";
     case "systemAudio":

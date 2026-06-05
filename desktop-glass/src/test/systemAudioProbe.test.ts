@@ -15,6 +15,7 @@ import {
   buildSystemAudioProbeDetail,
   shouldShowVirtualDeviceGuidance,
 } from "../shared/systemAudioProbe.ts";
+import { deriveScreenCaptureStatusFromProbe } from "../shared/captureSourceEnumeration.ts";
 
 const baseInput = {
   screenCaptureProbe: "ready" as const,
@@ -59,6 +60,27 @@ test("restart macOS guidance appears on enumeration failure", () => {
   assert.match(detail, new RegExp(MACOS_RESTART_ONCE_HINT.replace(/\./g, "\\.")));
 });
 
+test("video-only screen enumeration failure maps to screen source_enumeration_failed status", () => {
+  const derived = deriveScreenCaptureStatusFromProbe({
+    kind: "screen",
+    types: ["screen"],
+    ok: false,
+    sourceCount: 0,
+    sources: [],
+    errorMessage: "Failed to get sources.",
+  });
+  assert.equal(derived.status, "source_enumeration_failed");
+  const rows = buildGlassSetupCapabilities({
+    ...baseInput,
+    screenCaptureProbe: derived.status,
+    screenCaptureDetail: derived.detail,
+    systemAudioStatus: "not_tested",
+  });
+  const screen = rows.find((r) => r.id === "screenRecording");
+  assert.equal(screen?.label, "Source enumeration failed");
+  assert.match(screen?.detail ?? "", /Screen sources could not be enumerated/i);
+});
+
 test("screen capture ready + system audio enumeration failed does not mark Capture failed", () => {
   const rows = buildGlassSetupCapabilities({
     ...baseInput,
@@ -94,6 +116,18 @@ test("virtual device guidance only when status is requires_virtual_device and sc
     systemAudioDetail: "No audio track from display media.",
   });
   assert.match(rowVirtual.detail ?? "", /virtual audio device/i);
+});
+
+test("diagnostic-style summary preserves failed to get sources in system audio detail", () => {
+  const rows = buildGlassSetupCapabilities({
+    ...baseInput,
+    screenCaptureProbe: "ready",
+    systemAudioStatus: "source_enumeration_failed",
+    systemAudioDetail: "Failed to get sources.",
+  });
+  const sys = rows.find((r) => r.id === "systemAudio");
+  assert.match(sys?.detail ?? "", /Failed to get sources/i);
+  assert.equal(sys?.label, "Source enumeration failed");
 });
 
 test("setup summary notes capture can work when only system audio fails", () => {

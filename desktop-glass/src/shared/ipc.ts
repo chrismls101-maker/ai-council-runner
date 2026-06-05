@@ -60,6 +60,9 @@ export const IPC = {
   e2eGetWindowMetadata: "glass:e2e-get-window-metadata",
   e2eGetCaptureTarget: "glass:e2e-get-capture-target",
   e2eSimulateCaptureFail: "glass:e2e-simulate-capture-fail",
+  e2eSimulateScreenEnumFail: "glass:e2e-simulate-screen-enum-fail",
+  e2eSimulateSystemAudioEnumFail: "glass:e2e-simulate-system-audio-enum-fail",
+  e2eSetCaptureProbes: "glass:e2e-set-capture-probes",
 } as const;
 
 export type TranscriptionControlCommand =
@@ -116,6 +119,7 @@ export type GlassCommand =
   | { type: "set-overlay-mode"; mode: OverlayMode }
   | { type: "window-context-refresh" }
   | { type: "run-setup-check" }
+  | { type: "run-capture-diagnostics" }
   | { type: "report-mic-permission"; status: import("./glassCapabilities.ts").MicPermissionReport }
   | { type: "open-screen-recording-settings" }
   | { type: "open-microphone-settings" }
@@ -130,6 +134,14 @@ export type GlassCommand =
   | {
       type: "e2e-set-server-health";
       health: import("./glassCapabilities.ts").GlassServerHealthForSetup | null;
+    }
+  | {
+      type: "e2e-set-capture-probes";
+      screenCaptureProbe?: import("./captureSourceEnumeration.ts").ScreenCaptureProbeStatus;
+      screenCaptureDetail?: string;
+      windowCaptureProbe?: import("./captureSourceEnumeration.ts").WindowCaptureProbeStatus;
+      systemAudioStatus?: SystemAudioStatus;
+      systemAudioDetail?: string;
     }
   | { type: "session-start"; title?: string }
   | { type: "session-pause" }
@@ -187,6 +199,7 @@ export interface GlassState {
   connectedDisplays: ConnectedDisplaySnapshot[];
   setupCapabilities: import("./glassCapabilities.ts").GlassCapabilityRow[];
   setupCheckSummary?: string;
+  captureDiagnosticsReport?: import("./captureDiagnostics.ts").CaptureDiagnosticsReport;
   micPermission: import("./glassCapabilities.ts").MicPermissionReport;
 }
 

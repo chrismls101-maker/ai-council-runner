@@ -8,6 +8,8 @@
  */
 
 import { desktopCapturer, screen } from "electron";
+import { deriveScreenCaptureStatusFromProbe } from "../shared/captureSourceEnumeration.ts";
+import { probeDesktopCaptureSources } from "./captureSourceProbe.ts";
 
 /** 1×1 PNG for Electron E2E (no Screen Recording permission required). */
 const E2E_STUB_IMAGE_DATA_URL =
@@ -79,36 +81,19 @@ export async function captureDisplayById(
 export async function probeScreenCapturePermission(
   displayId: number,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (process.env.IIVO_GLASS_E2E === "1" && process.env.IIVO_GLASS_E2E_CAPTURE_FAIL !== "1") {
+  const probe = await probeDesktopCaptureSources({
+    kind: "screen",
+    types: ["screen"],
+    displayId,
+  });
+  const derived = deriveScreenCaptureStatusFromProbe(probe);
+  if (derived.status === "ready") {
     return { ok: true };
   }
-  if (process.env.IIVO_GLASS_E2E_CAPTURE_FAIL === "1") {
-    return {
-      ok: false,
-      error:
-        "Screen capture returned an empty image. On macOS, grant Screen Recording permission to IIVO Glass.",
-    };
-  }
-
-  const display =
-    screen.getAllDisplays().find((d) => d.id === displayId) ?? screen.getPrimaryDisplay();
-  const sources = await desktopCapturer.getSources({
-    types: ["screen"],
-    thumbnailSize: { width: 64, height: 64 },
-  });
-  if (sources.length === 0) {
-    return { ok: false, error: "No screen sources available for capture." };
-  }
-  const targetId = String(display.id);
-  const source = sources.find((s) => s.display_id === targetId) ?? sources[0];
-  if (source.thumbnail.isEmpty()) {
-    return {
-      ok: false,
-      error:
-        "Screen capture returned an empty image. On macOS, grant Screen Recording permission to IIVO Glass.",
-    };
-  }
-  return { ok: true };
+  return {
+    ok: false,
+    error: derived.detail ?? probe.errorMessage ?? "Screen capture permission probe failed.",
+  };
 }
 
 /** @deprecated Use captureDisplayById with the active Glass display. */
