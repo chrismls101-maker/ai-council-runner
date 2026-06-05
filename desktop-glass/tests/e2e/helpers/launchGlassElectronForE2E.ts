@@ -31,6 +31,7 @@ export interface LaunchedGlassElectron {
   browser: Browser;
   electronProcess: ChildProcess;
   stub: StubServerHandle;
+  getStderrTail: () => string;
 }
 
 function stderrTail(stderr: string): string {
@@ -196,7 +197,12 @@ export async function launchGlassElectronForE2E(): Promise<LaunchedGlassElectron
   try {
     await waitForCdp(GLASS_CDP_URL, electronProcess, stderr);
     const browser = await connectOverCdpWithRetry(GLASS_CDP_URL, electronProcess, stderr);
-    return { browser, electronProcess, stub };
+    return {
+      browser,
+      electronProcess,
+      stub,
+      getStderrTail: () => stderrTail(stderr),
+    };
   } catch (err) {
     electronProcess.kill("SIGKILL");
     await stub.close().catch(() => undefined);

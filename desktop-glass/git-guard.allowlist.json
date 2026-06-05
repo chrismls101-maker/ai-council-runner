@@ -1,0 +1,8 @@
+{
+  "paths": [
+    "build/icon.icns",
+    "build/icon.png"
+  ],
+  "largeBinaries": [],
+  "contentPatterns": []
+}

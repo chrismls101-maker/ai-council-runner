@@ -70,6 +70,7 @@
     "glass:e2e:repeat": "npm run e2e:repeat --prefix desktop-glass",
     "glass:git:guard": "npm run git:guard --prefix desktop-glass",
     "glass:git:guard:all": "npm run git:guard:all --prefix desktop-glass",
+    "glass:git:guard:release": "npm run git:guard:release --prefix desktop-glass",
     "glass:wip:status": "npm run wip:status --prefix desktop-glass",
     "glass:validate:clean": "npm run validate:clean --prefix desktop-glass",
     "glass:e2e:ci": "npm run e2e:ci --prefix desktop-glass",

@@ -85,6 +85,10 @@ export function CopilotConfigure({ sessionLive }: { sessionLive: boolean }): JSX
             </select>
           </label>
           <p className="copilot-config__mode-hint">{COPILOT_MODE_HINTS[config.mode]}</p>
+          <p className="copilot-config__mode-hint" data-testid="glass-copilot-trust-boundary">
+            Safe by default: no listening on launch. Ask before diagnosis — AI analysis runs only after you
+            approve a diagnostic card. Refine session type uses AI on demand, not every transcript tick.
+          </p>
 
           <label className="copilot-config__field">
             <span>Session type</span>

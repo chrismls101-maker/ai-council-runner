@@ -60,8 +60,20 @@ npm run glass:validate:clean -- --strict
 ```bash
 npm run glass:git:guard          # staged files only
 npm run glass:git:guard:all      # staged + working tree (strict)
+npm run glass:git:guard:release  # release discipline: content scan + ignored artifacts
 npm run glass:wip:status         # branch context reminders
 ```
+
+The guard checks path patterns, suspicious file contents (base64 screenshots, API keys, session JSON), large binaries, and WIP-only paths on the stable branch. Allowlist intentional assets in `git-guard.allowlist.json`.
+
+## Product trust boundaries (by design)
+
+These are **not** bugs or missing features — they protect privacy and safety:
+
+- **Safe by default** — Glass does not start listening or capture on launch.
+- **Ask before diagnosis** — Session Copilot may suggest a diagnostic card, but AI root-cause analysis runs only after you click **Diagnose**.
+- **Refine session type on demand** — Semantic session classification uses AI only when you choose **Refine session type** or during an explicit debrief, not on every transcript tick.
+- **No Council in the real-time loop** — Copilot cards and diagnostics never invoke the full Council pipeline during live sessions.
 
 See [WIP_INTEGRATION_PLAN.md](./WIP_INTEGRATION_PLAN.md) for safe WIP integration.
 
