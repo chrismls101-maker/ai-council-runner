@@ -131,7 +131,7 @@ function main() {
       const models = server.health?.glassModels;
       if (models) {
         console.log(
-          `Models: text=${models.text?.primary} vision=${models.vision?.primary} fallback=${models.fallback}`,
+          `Models: text=${models.text?.selectedModel} vision=${models.vision?.selectedModel} fallbackChain=${(models.fallbackChain ?? []).join("→")}`,
         );
       }
 

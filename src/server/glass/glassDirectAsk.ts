@@ -2,8 +2,13 @@
  * IIVO Glass direct assistant — single OpenAI call, no Council/router.
  */
 
-import { GLASS_MODEL_FALLBACK, resolveGlassModelPrimary, type GlassModelPurpose } from "../config/glassModels.js";
-import { callOpenAIWithFallback, ProviderError } from "../providers/openai.js";
+import {
+  buildGlassModelTryChain,
+  recordGlassModelRuntime,
+  resolveGlassModelPrimary,
+  type GlassModelPurpose,
+} from "../config/glassModels.js";
+import { callOpenAIWithModelChain, ProviderError } from "../providers/openai.js";
 import type { GlassAskRequestBody, GlassAskResponseBody, GlassAskSessionPayload } from "./glassAskTypes.js";
 
 export const GLASS_DIRECT_SYSTEM_PROMPT = `You are IIVO Glass, a fast conversational AI companion over the user's workspace. Answer naturally and directly, like ChatGPT. Use the provided session context only when relevant. Be concise unless the user asks for depth. Do not invent screen/audio details you were not given. Do not use council/report formatting.
@@ -26,9 +31,18 @@ export type GlassDirectAskCaller = (
   purpose?: GlassModelPurpose,
 ) => Promise<import("../providers/openai.js").OpenAICallWithFallbackResult>;
 
-const defaultCaller: GlassDirectAskCaller = (system, user, signal, purpose = "default") => {
-  const primary = resolveGlassModelPrimary("text", purpose);
-  return callOpenAIWithFallback(system, user, primary, signal, GLASS_MODEL_FALLBACK, 900);
+const defaultCaller: GlassDirectAskCaller = async (system, user, signal, purpose = "default") => {
+  const selected = resolveGlassModelPrimary("text", purpose);
+  const chain = buildGlassModelTryChain(selected);
+  const result = await callOpenAIWithModelChain(system, user, chain, signal, 900);
+  recordGlassModelRuntime("text", purpose, {
+    requestedModel: result.requestedModel,
+    selectedModel: result.selectedModel,
+    modelUsed: result.modelUsed,
+    fallbackUsed: result.fallbackUsed,
+    fallbackReason: result.fallbackReason ?? null,
+  });
+  return result;
 };
 
 export function buildGlassDirectUserPrompt(
@@ -128,9 +142,9 @@ export async function runGlassDirectAsk(
   return {
     answer: formatted.answer,
     shortAnswer: formatted.shortAnswer,
-    model: result.model,
+    model: result.modelUsed,
     modelRequested: result.requestedModel,
-    modelUsed: result.model,
+    modelUsed: result.modelUsed,
     fallbackUsed: result.fallbackUsed,
     routeUsed: "glass_direct",
     title,

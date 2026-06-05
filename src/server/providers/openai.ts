@@ -88,27 +88,36 @@ function parseOpenAiUsage(data: {
   };
 }
 
-export async function callOpenAI(
-  systemPrompt: string,
-  userPrompt: string,
-  signal?: AbortSignal,
-  model: string = MODELS.openai.gpt4o,
-  maxOutputTokens?: number,
-): Promise<ProviderResult> {
-  const apiKey = getOpenAiKey();
+function usesGpt5ClassParams(model: string): boolean {
+  return /^(gpt-5|gpt-5\.|o3|o4-mini|o4)/.test(model);
+}
 
-  const body: Record<string, unknown> = {
-    model,
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt },
-    ],
-    temperature: 0.7,
-  };
-  if (maxOutputTokens != null) {
-    body.max_tokens = maxOutputTokens;
+function buildChatCompletionBody(
+  model: string,
+  messages: unknown[],
+  maxOutputTokens: number | undefined,
+  temperature: number | undefined,
+): Record<string, unknown> {
+  const body: Record<string, unknown> = { model, messages };
+  if (!usesGpt5ClassParams(model) && temperature != null) {
+    body.temperature = temperature;
   }
+  if (maxOutputTokens != null) {
+    if (usesGpt5ClassParams(model)) {
+      body.max_completion_tokens = maxOutputTokens;
+    } else {
+      body.max_tokens = maxOutputTokens;
+    }
+  }
+  return body;
+}
 
+async function postChatCompletion(
+  body: Record<string, unknown>,
+  signal?: AbortSignal,
+  label = "OpenAI",
+): Promise<{ content: string; model: string; usage: ProviderUsage }> {
+  const apiKey = getOpenAiKey();
   const response = await fetchWithTimeout(
     "https://api.openai.com/v1/chat/completions",
     {
@@ -123,14 +132,15 @@ export async function callOpenAI(
   );
 
   if (!response.ok) {
-    const body = await response.text();
+    const errBody = await response.text();
     throw new ProviderError(
-      `OpenAI API error (${response.status}): ${sanitizeError(body)}`,
+      `${label} API error (${response.status}): ${sanitizeError(errBody)}`,
       "openai",
     );
   }
 
   const data = (await response.json()) as {
+    model?: string;
     choices?: Array<{ message?: { content?: string } }>;
     usage?: {
       prompt_tokens?: number;
@@ -141,14 +151,37 @@ export async function callOpenAI(
 
   const content = data.choices?.[0]?.message?.content?.trim();
   if (!content) {
-    throw new ProviderError("OpenAI returned an empty response.", "openai");
+    throw new ProviderError(`${label} returned an empty response.`, "openai");
   }
 
   return {
     content,
-    provider: "openai",
-    model,
+    model: data.model ?? String(body.model),
     usage: parseOpenAiUsage(data),
+  };
+}
+
+export async function callOpenAI(
+  systemPrompt: string,
+  userPrompt: string,
+  signal?: AbortSignal,
+  model: string = MODELS.openai.gpt4o,
+  maxOutputTokens?: number,
+): Promise<ProviderResult> {
+  const messages = [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: userPrompt },
+  ];
+  const result = await postChatCompletion(
+    buildChatCompletionBody(model, messages, maxOutputTokens, 0.7),
+    signal,
+    "OpenAI",
+  );
+  return {
+    content: result.content,
+    provider: "openai",
+    model: result.model,
+    usage: result.usage,
   };
 }
 
@@ -164,65 +197,28 @@ export async function callOpenAIVision(
   model: string = MODELS.openai.gpt4o,
   maxOutputTokens?: number,
 ): Promise<ProviderResult> {
-  const apiKey = getOpenAiKey();
+  getOpenAiKey();
 
   const userContent: OpenAIUserContentPart[] = [
     { type: "text", text: userText },
     { type: "image_url", image_url: { url: imageDataUrl, detail: "auto" } },
   ];
 
-  const body: Record<string, unknown> = {
-    model,
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userContent },
-    ],
-    temperature: 0.4,
-  };
-  if (maxOutputTokens != null) {
-    body.max_tokens = maxOutputTokens;
-  }
-
-  const response = await fetchWithTimeout(
-    "https://api.openai.com/v1/chat/completions",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-      signal,
-    },
+  const messages = [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: userContent },
+  ];
+  const result = await postChatCompletion(
+    buildChatCompletionBody(model, messages, maxOutputTokens, 0.4),
+    signal,
+    "OpenAI vision",
   );
 
-  if (!response.ok) {
-    const bodyText = await response.text();
-    throw new ProviderError(
-      `OpenAI vision API error (${response.status}): ${sanitizeError(bodyText)}`,
-      "openai",
-    );
-  }
-
-  const data = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-    usage?: {
-      prompt_tokens?: number;
-      completion_tokens?: number;
-      total_tokens?: number;
-    };
-  };
-
-  const content = data.choices?.[0]?.message?.content?.trim();
-  if (!content) {
-    throw new ProviderError("OpenAI vision returned an empty response.", "openai");
-  }
-
   return {
-    content,
+    content: result.content,
     provider: "openai",
-    model,
-    usage: parseOpenAiUsage(data),
+    model: result.model,
+    usage: result.usage,
   };
 }
 
@@ -252,9 +248,104 @@ export function isOpenAiModelUnavailableError(err: unknown): boolean {
 
 export type OpenAICallWithFallbackResult = ProviderResult & {
   requestedModel: string;
+  selectedModel: string;
+  modelUsed: string;
   fallbackUsed: boolean;
+  fallbackReason?: string;
 };
 
+function fallbackReasonFromError(err: unknown, failedModel: string): string {
+  if (err instanceof ProviderError) {
+    return `${failedModel}: ${err.message.slice(0, 240)}`;
+  }
+  return `${failedModel}: ${err instanceof Error ? err.message : String(err)}`;
+}
+
+export async function callOpenAIWithModelChain(
+  systemPrompt: string,
+  userPrompt: string,
+  models: string[],
+  signal?: AbortSignal,
+  maxOutputTokens?: number,
+): Promise<OpenAICallWithFallbackResult> {
+  if (models.length === 0) {
+    throw new ProviderError("No models provided for OpenAI call.", "openai");
+  }
+  const requestedModel = models[0];
+  let lastErr: unknown;
+  for (let i = 0; i < models.length; i++) {
+    const model = models[i];
+    try {
+      const result = await callOpenAI(systemPrompt, userPrompt, signal, model, maxOutputTokens);
+      return {
+        ...result,
+        requestedModel,
+        selectedModel: requestedModel,
+        modelUsed: result.model,
+        fallbackUsed: i > 0,
+        fallbackReason:
+          i > 0 && lastErr ? fallbackReasonFromError(lastErr, models[i - 1]) : undefined,
+      };
+    } catch (err) {
+      lastErr = err;
+      if (!isOpenAiModelUnavailableError(err) || i === models.length - 1) {
+        throw err;
+      }
+      console.warn(
+        `[glass-models] OpenAI text model "${model}" unavailable — trying "${models[i + 1]}"`,
+      );
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new ProviderError(String(lastErr), "openai");
+}
+
+export async function callOpenAIVisionWithModelChain(
+  systemPrompt: string,
+  userText: string,
+  imageDataUrl: string,
+  models: string[],
+  signal?: AbortSignal,
+  maxOutputTokens?: number,
+): Promise<OpenAICallWithFallbackResult> {
+  if (models.length === 0) {
+    throw new ProviderError("No models provided for OpenAI vision call.", "openai");
+  }
+  const requestedModel = models[0];
+  let lastErr: unknown;
+  for (let i = 0; i < models.length; i++) {
+    const model = models[i];
+    try {
+      const result = await callOpenAIVision(
+        systemPrompt,
+        userText,
+        imageDataUrl,
+        signal,
+        model,
+        maxOutputTokens,
+      );
+      return {
+        ...result,
+        requestedModel,
+        selectedModel: requestedModel,
+        modelUsed: result.model,
+        fallbackUsed: i > 0,
+        fallbackReason:
+          i > 0 && lastErr ? fallbackReasonFromError(lastErr, models[i - 1]) : undefined,
+      };
+    } catch (err) {
+      lastErr = err;
+      if (!isOpenAiModelUnavailableError(err) || i === models.length - 1) {
+        throw err;
+      }
+      console.warn(
+        `[glass-models] OpenAI vision model "${model}" unavailable — trying "${models[i + 1]}"`,
+      );
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new ProviderError(String(lastErr), "openai");
+}
+
+/** @deprecated use callOpenAIWithModelChain */
 export async function callOpenAIWithFallback(
   systemPrompt: string,
   userPrompt: string,
@@ -263,33 +354,16 @@ export async function callOpenAIWithFallback(
   fallbackModel: string = MODELS.openai.gpt4o,
   maxOutputTokens?: number,
 ): Promise<OpenAICallWithFallbackResult> {
-  try {
-    const result = await callOpenAI(
-      systemPrompt,
-      userPrompt,
-      signal,
-      primaryModel,
-      maxOutputTokens,
-    );
-    return { ...result, requestedModel: primaryModel, fallbackUsed: false };
-  } catch (err) {
-    if (primaryModel === fallbackModel || !isOpenAiModelUnavailableError(err)) {
-      throw err;
-    }
-    console.warn(
-      `[glass-models] OpenAI text model "${primaryModel}" unavailable — falling back to "${fallbackModel}"`,
-    );
-    const result = await callOpenAI(
-      systemPrompt,
-      userPrompt,
-      signal,
-      fallbackModel,
-      maxOutputTokens,
-    );
-    return { ...result, requestedModel: primaryModel, fallbackUsed: true };
-  }
+  return callOpenAIWithModelChain(
+    systemPrompt,
+    userPrompt,
+    [primaryModel, fallbackModel].filter((m, i, a) => a.indexOf(m) === i),
+    signal,
+    maxOutputTokens,
+  );
 }
 
+/** @deprecated use callOpenAIVisionWithModelChain */
 export async function callOpenAIVisionWithFallback(
   systemPrompt: string,
   userText: string,
@@ -299,33 +373,14 @@ export async function callOpenAIVisionWithFallback(
   fallbackModel: string = MODELS.openai.gpt4o,
   maxOutputTokens?: number,
 ): Promise<OpenAICallWithFallbackResult> {
-  try {
-    const result = await callOpenAIVision(
-      systemPrompt,
-      userText,
-      imageDataUrl,
-      signal,
-      primaryModel,
-      maxOutputTokens,
-    );
-    return { ...result, requestedModel: primaryModel, fallbackUsed: false };
-  } catch (err) {
-    if (primaryModel === fallbackModel || !isOpenAiModelUnavailableError(err)) {
-      throw err;
-    }
-    console.warn(
-      `[glass-models] OpenAI vision model "${primaryModel}" unavailable — falling back to "${fallbackModel}"`,
-    );
-    const result = await callOpenAIVision(
-      systemPrompt,
-      userText,
-      imageDataUrl,
-      signal,
-      fallbackModel,
-      maxOutputTokens,
-    );
-    return { ...result, requestedModel: primaryModel, fallbackUsed: true };
-  }
+  return callOpenAIVisionWithModelChain(
+    systemPrompt,
+    userText,
+    imageDataUrl,
+    [primaryModel, fallbackModel].filter((m, i, a) => a.indexOf(m) === i),
+    signal,
+    maxOutputTokens,
+  );
 }
 
 export function validateOpenAiKey(): string | null {

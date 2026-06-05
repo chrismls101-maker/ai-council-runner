@@ -78,7 +78,9 @@ for (const prompt of councilPrompts) {
         content: `Helpful answer for: ${prompt}`,
         provider: "openai",
         model: "gpt-4o",
-        requestedModel: "gpt-4.1",
+        modelUsed: "gpt-4o",
+        requestedModel: "gpt-5.5",
+        selectedModel: "gpt-5.5",
         fallbackUsed: true,
         usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, usageAvailable: true },
       }),
@@ -110,14 +112,16 @@ await test("handleGlassAsk returns routeUsed glass_direct via mock caller", asyn
       async () => ({
         content: "- You are editing IIVO Glass.\n- Command bar is direct-only.",
         provider: "openai",
-        model: "gpt-4o",
-        requestedModel: "gpt-4.1",
+        model: "gpt-5.5",
+        modelUsed: "gpt-5.5",
+        requestedModel: "gpt-5.5",
+        selectedModel: "gpt-5.5",
         fallbackUsed: false,
         usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, usageAvailable: true },
       }),
     );
     assert.equal(result.routeUsed, "glass_direct");
-    assert.equal(result.model, "gpt-4o");
+    assert.equal(result.model, "gpt-5.5");
     assert.match(result.answer, /IIVO Glass/);
   } finally {
     if (previousKey === undefined) delete process.env.OPENAI_API_KEY;

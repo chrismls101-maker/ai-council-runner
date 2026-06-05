@@ -1,6 +1,7 @@
 import { getImageVisionConfig } from "../config/vision.js";
 import {
-  GLASS_MODEL_FALLBACK,
+  buildGlassModelTryChain,
+  recordGlassModelRuntime,
   resolveGlassModelPrimary,
   type GlassModelPurpose,
 } from "../config/glassModels.js";
@@ -14,7 +15,7 @@ import { sourceConfidenceLabel, sourceConfidenceFromType } from "../contextBridg
 import { getMaxOutputTokens } from "../config/tokenModes.js";
 import { normalizeTokenMode } from "../config/tokenModes.js";
 import { buildAgentCost } from "../pricing/calculateCost.js";
-import { callOpenAIVisionWithFallback } from "../providers/openai.js";
+import { callOpenAIVisionWithModelChain } from "../providers/openai.js";
 import type { AgentCost, AgentMeta } from "../types/index.js";
 
 const VISION_ANSWER_SYSTEM = `You are IIVO — a sharp founder/operator assistant analyzing a screenshot the user explicitly captured and attached.
@@ -147,16 +148,23 @@ export async function runVisionAnswer(input: {
 
   try {
     const purpose = input.modelPurpose ?? "default";
-    const primary = resolveGlassModelPrimary("vision", purpose);
-    const result = await callOpenAIVisionWithFallback(
+    const selected = resolveGlassModelPrimary("vision", purpose);
+    const chain = buildGlassModelTryChain(selected);
+    const result = await callOpenAIVisionWithModelChain(
       VISION_ANSWER_SYSTEM,
       userText,
       screenshot.imageDataUrl,
-      primary,
+      chain,
       input.signal,
-      GLASS_MODEL_FALLBACK,
       maxOutputTokens,
     );
+    recordGlassModelRuntime("vision", purpose, {
+      requestedModel: result.requestedModel,
+      selectedModel: result.selectedModel,
+      modelUsed: result.modelUsed,
+      fallbackUsed: result.fallbackUsed,
+      fallbackReason: result.fallbackReason ?? null,
+    });
 
     const completedAt = new Date().toISOString();
     const cost = buildAgentCost(
@@ -183,7 +191,7 @@ export async function runVisionAnswer(input: {
         visionConfigured: true,
         visionEnabled: true,
         visionProvider: result.provider,
-        visionModel: result.model,
+        visionModel: result.modelUsed,
         visionModelRequested: result.requestedModel,
         visionFallbackUsed: result.fallbackUsed,
         screenshotTitle: screenshot.title,

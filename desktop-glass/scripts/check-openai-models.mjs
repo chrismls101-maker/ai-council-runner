@@ -16,24 +16,33 @@ dotenv.config({ path: join(repoRoot, ".env") });
 
 const FALLBACK = "gpt-4o";
 
+/** Not compatible with Glass `/v1/chat/completions` route. */
+const EXCLUDED = new Set(["gpt-5.5-pro", "gpt-5.5-pro-2026-04-23"]);
+
+const CHAT_CANDIDATES_BASE = [
+  "gpt-5.5",
+  "gpt-5.5-2026-04-23",
+  "gpt-5.4",
+  "gpt-5",
+  "gpt-5-chat-latest",
+  "gpt-4.1",
+  "gpt-4o",
+];
+
 const TEXT_CANDIDATES = unique([
   process.env.IIVO_GLASS_OPENAI_MODEL,
   process.env.IIVO_GLASS_SEMANTIC_MODEL,
   process.env.IIVO_GLASS_DIAGNOSTIC_MODEL,
-  "gpt-4.1",
-  "gpt-4.1-mini",
-  "gpt-4o",
-  FALLBACK,
-]);
+  ...CHAT_CANDIDATES_BASE,
+]).filter((m) => !EXCLUDED.has(m));
 
 const VISION_CANDIDATES = unique([
   process.env.IIVO_GLASS_VISION_MODEL,
   process.env.IMAGE_VISION_MODEL,
   process.env.IIVO_GLASS_DIAGNOSTIC_MODEL,
-  "gpt-4.1",
-  "gpt-4o",
-  FALLBACK,
-]);
+  process.env.IIVO_GLASS_OPENAI_MODEL,
+  ...CHAT_CANDIDATES_BASE,
+]).filter((m) => !EXCLUDED.has(m));
 
 function unique(list) {
   const out = [];
@@ -42,6 +51,24 @@ function unique(list) {
     if (v && !out.includes(v)) out.push(v);
   }
   return out;
+}
+
+function usesGpt5ClassParams(model) {
+  return /^(gpt-5|gpt-5\.|o3|o4)/.test(model);
+}
+
+function buildProbeBody(model) {
+  const body = {
+    model,
+    messages: [{ role: "user", content: "Reply with exactly: ok" }],
+  };
+  if (usesGpt5ClassParams(model)) {
+    body.max_completion_tokens = 5;
+  } else {
+    body.max_tokens = 5;
+    body.temperature = 0;
+  }
+  return body;
 }
 
 function isModelUnavailable(status, bodyText) {
@@ -66,12 +93,7 @@ async function probeTextModel(model) {
         Authorization: `Bearer ${key}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model,
-        messages: [{ role: "user", content: "Reply with exactly: ok" }],
-        max_tokens: 5,
-        temperature: 0,
-      }),
+      body: JSON.stringify(buildProbeBody(model)),
       signal: AbortSignal.timeout(30_000),
     });
     const body = await res.text();
@@ -120,7 +142,7 @@ async function main() {
   console.log("");
 
   if (!process.env.OPENAI_API_KEY?.trim()) {
-    console.log("Set OPENAI_API_KEY to probe your account. Runtime fallback remains gpt-4o.");
+    console.log("Set OPENAI_API_KEY to probe your account. Runtime fallback chain: gpt-4.1 → gpt-4o.");
     process.exit(0);
   }
 

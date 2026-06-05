@@ -164,27 +164,12 @@ app.get("/api/health", (_req, res) => {
       reason: vision.reason,
     },
     glassModels: {
-      fallback: glassModels.fallback,
-      text: {
-        configured: glassModels.text.configured,
-        primary: glassModels.text.primary,
-        envVar: glassModels.text.envVar,
-      },
-      vision: {
-        configured: glassModels.vision.configured,
-        primary: glassModels.vision.primary,
-        envVar: glassModels.vision.envVar,
-      },
-      diagnostic: {
-        configured: glassModels.diagnostic.configured,
-        primary: glassModels.diagnostic.primary,
-        envVar: glassModels.diagnostic.envVar,
-      },
-      semantic: {
-        configured: glassModels.semantic.configured,
-        primary: glassModels.semantic.primary,
-        envVar: glassModels.semantic.envVar,
-      },
+      defaultModel: glassModels.defaultModel,
+      fallbackChain: glassModels.fallbackChain,
+      text: glassModels.text,
+      vision: glassModels.vision,
+      diagnostic: glassModels.diagnostic,
+      semantic: glassModels.semantic,
     },
   });
 });

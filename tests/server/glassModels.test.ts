@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import {
-  GLASS_MODEL_FALLBACK,
+  GLASS_DEFAULT_MODEL,
+  GLASS_MODEL_FALLBACK_CHAIN,
+  buildGlassModelTryChain,
   getConfiguredGlassTextModel,
   getConfiguredGlassVisionModel,
   getGlassModelsDiagnostics,
@@ -18,11 +20,14 @@ function test(name: string, fn: () => void | Promise<void>) {
     });
 }
 
-await test("resolveGlassModelPrimary defaults to gpt-4.1 when env unset", () => {
+await test("resolveGlassModelPrimary defaults to gpt-5.5 when env unset", () => {
   const prev = process.env.IIVO_GLASS_OPENAI_MODEL;
   delete process.env.IIVO_GLASS_OPENAI_MODEL;
   try {
-    assert.equal(resolveGlassModelPrimary("text", "default"), "gpt-4.1");
+    assert.equal(resolveGlassModelPrimary("text", "default"), "gpt-5.5");
+    assert.equal(resolveGlassModelPrimary("vision", "default"), "gpt-5.5");
+    assert.equal(resolveGlassModelPrimary("text", "diagnostic"), "gpt-5.5");
+    assert.equal(resolveGlassModelPrimary("text", "semantic"), "gpt-5.5");
   } finally {
     if (prev === undefined) delete process.env.IIVO_GLASS_OPENAI_MODEL;
     else process.env.IIVO_GLASS_OPENAI_MODEL = prev;
@@ -68,11 +73,18 @@ await test("IIVO_GLASS_VISION_MODEL overrides vision primary", () => {
   }
 });
 
-await test("getGlassModelsDiagnostics includes fallback", () => {
+await test("buildGlassModelTryChain appends gpt-4.1 and gpt-4o fallback", () => {
+  assert.deepEqual(buildGlassModelTryChain("gpt-5.5"), ["gpt-5.5", "gpt-4.1", "gpt-4o"]);
+  assert.deepEqual(buildGlassModelTryChain("gpt-4.1"), ["gpt-4.1", "gpt-4o"]);
+});
+
+await test("getGlassModelsDiagnostics includes fallback chain and defaults", () => {
   const d = getGlassModelsDiagnostics();
-  assert.equal(d.fallback, GLASS_MODEL_FALLBACK);
-  assert.ok(d.text.primary);
-  assert.ok(d.vision.primary);
+  assert.equal(d.defaultModel, GLASS_DEFAULT_MODEL);
+  assert.deepEqual(d.fallbackChain, [...GLASS_MODEL_FALLBACK_CHAIN]);
+  assert.equal(d.text.selectedModel, "gpt-5.5");
+  assert.deepEqual(d.text.fallbackChain, ["gpt-5.5", "gpt-4.1", "gpt-4o"]);
+  assert.ok(d.vision.selectedModel);
 });
 
 await test("isOpenAiModelUnavailableError detects model_not_found", () => {

@@ -6,12 +6,13 @@ import { getContextItem } from "../contextBridge/contextStore.js";
 import type { ContextItem } from "../contextBridge/types.js";
 import { getImageVisionConfig } from "../config/vision.js";
 import {
-  GLASS_MODEL_FALLBACK,
+  buildGlassModelTryChain,
+  recordGlassModelRuntime,
   resolveGlassModelPrimary,
   type GlassModelPurpose,
 } from "../config/glassModels.js";
 import { runVisionAnswer, type VisionAnswerResult } from "../agents/runVisionAnswer.js";
-import { callOpenAIVisionWithFallback } from "../providers/openai.js";
+import { callOpenAIVisionWithModelChain } from "../providers/openai.js";
 import { getMaxOutputTokens } from "../config/tokenModes.js";
 import { formatGlassDirectAnswer } from "./glassDirectAsk.js";
 import type { GlassAskLatestScreenshot, GlassAskRequestBody, GlassAskResponseBody } from "./glassAskTypes.js";
@@ -86,16 +87,23 @@ async function runVisionFromDataUrl(
   }
 
   try {
-    const primary = resolveGlassModelPrimary("vision", purpose);
-    const result = await callOpenAIVisionWithFallback(
+    const selected = resolveGlassModelPrimary("vision", purpose);
+    const chain = buildGlassModelTryChain(selected);
+    const result = await callOpenAIVisionWithModelChain(
       GLASS_VISUAL_SYSTEM,
       buildVisualUserPrompt(prompt, meta),
       imageDataUrl,
-      primary,
+      chain,
       signal,
-      GLASS_MODEL_FALLBACK,
       getMaxOutputTokens("strategy", "standard"),
     );
+    recordGlassModelRuntime("vision", purpose, {
+      requestedModel: result.requestedModel,
+      selectedModel: result.selectedModel,
+      modelUsed: result.modelUsed,
+      fallbackUsed: result.fallbackUsed,
+      fallbackReason: result.fallbackReason ?? null,
+    });
     const completedAt = new Date().toISOString();
     return {
       output: result.content,
@@ -111,7 +119,7 @@ async function runVisionFromDataUrl(
         visionConfigured: true,
         visionEnabled: true,
         visionProvider: result.provider,
-        visionModel: result.model,
+        visionModel: result.modelUsed,
         visionModelRequested: result.requestedModel,
         visionFallbackUsed: result.fallbackUsed,
       },

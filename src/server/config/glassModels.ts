@@ -1,20 +1,68 @@
 /**
  * IIVO Glass direct AI model configuration (text, vision, semantic, diagnostic).
- * Env overrides with safe fallback to gpt-4o when the primary model is unavailable.
+ * Defaults to GPT-5.5-class models with fallback chain: primary → gpt-4.1 → gpt-4o.
  */
 
 import { MODELS } from "./models.js";
 
-export const GLASS_MODEL_FALLBACK = MODELS.openai.gpt4o;
+export const GLASS_DEFAULT_MODEL = "gpt-5.5";
+
+/** Not compatible with Glass `/v1/chat/completions` route — excluded from probes and defaults. */
+export const GLASS_CHAT_MODEL_EXCLUDED = new Set([
+  "gpt-5.5-pro",
+  "gpt-5.5-pro-2026-04-23",
+]);
+
+/** Probe / default order when env is unset (env override always wins first). */
+export const GLASS_CHAT_MODEL_CANDIDATES = [
+  "gpt-5.5",
+  "gpt-5.5-2026-04-23",
+  "gpt-5.4",
+  "gpt-5",
+  "gpt-5-chat-latest",
+  "gpt-4.1",
+  "gpt-4o",
+] as const;
+
+export const GLASS_VISION_MODEL_CANDIDATES = GLASS_CHAT_MODEL_CANDIDATES;
+
+export const GLASS_MODEL_FALLBACK_CHAIN = ["gpt-4.1", "gpt-4o"] as const;
+
+export const GLASS_MODEL_FINAL_FALLBACK = MODELS.openai.gpt4o;
 
 export type GlassModelPurpose = "default" | "semantic" | "diagnostic";
 
 export type GlassModelKind = "text" | "vision";
 
-/** When env is unset — probed by check-openai-models.mjs; runtime falls back if unavailable. */
-export const GLASS_TEXT_MODEL_CANDIDATES = ["gpt-4.1", "gpt-4.1-mini", "gpt-4o"] as const;
+export interface GlassModelRuntimeRecord {
+  requestedModel: string;
+  selectedModel: string;
+  modelUsed: string;
+  fallbackUsed: boolean;
+  fallbackReason: string | null;
+  at: string;
+}
 
-export const GLASS_VISION_MODEL_CANDIDATES = ["gpt-4.1", "gpt-4o"] as const;
+const runtimeBySlot = new Map<string, GlassModelRuntimeRecord>();
+
+function slotKey(kind: GlassModelKind, purpose: GlassModelPurpose): string {
+  return `${kind}:${purpose}`;
+}
+
+export function recordGlassModelRuntime(
+  kind: GlassModelKind,
+  purpose: GlassModelPurpose,
+  record: Omit<GlassModelRuntimeRecord, "at">,
+): void {
+  runtimeBySlot.set(slotKey(kind, purpose), { ...record, at: new Date().toISOString() });
+}
+
+export function getGlassModelRuntime(
+  kind: GlassModelKind,
+  purpose: GlassModelPurpose,
+): GlassModelRuntimeRecord | null {
+  return runtimeBySlot.get(slotKey(kind, purpose)) ?? null;
+}
 
 export function getConfiguredGlassTextModel(): string | undefined {
   return process.env.IIVO_GLASS_OPENAI_MODEL?.trim() || undefined;
@@ -37,14 +85,18 @@ export function getConfiguredGlassSemanticModel(): string | undefined {
 }
 
 export function defaultGlassTextModel(): string {
-  return GLASS_TEXT_MODEL_CANDIDATES[0];
+  return GLASS_DEFAULT_MODEL;
 }
 
 export function defaultGlassVisionModel(): string {
-  return GLASS_VISION_MODEL_CANDIDATES[0];
+  return GLASS_DEFAULT_MODEL;
 }
 
-/** Primary model to attempt before fallback. */
+export function isExcludedGlassChatModel(model: string): boolean {
+  return GLASS_CHAT_MODEL_EXCLUDED.has(model);
+}
+
+/** Primary model to attempt before fallback chain. */
 export function resolveGlassModelPrimary(
   kind: GlassModelKind,
   purpose: GlassModelPurpose = "default",
@@ -84,54 +136,96 @@ export function resolveGlassModelPrimary(
   return getConfiguredGlassTextModel() ?? defaultGlassTextModel();
 }
 
+/** Full try order: selected primary, then gpt-4.1, then gpt-4o (deduped). */
+export function buildGlassModelTryChain(primary: string): string[] {
+  const chain: string[] = [];
+  for (const model of [primary, ...GLASS_MODEL_FALLBACK_CHAIN]) {
+    if (!isExcludedGlassChatModel(model) && !chain.includes(model)) {
+      chain.push(model);
+    }
+  }
+  return chain;
+}
+
 export interface GlassModelSlotDiagnostics {
   envVar: string;
   configured: string | null;
-  primary: string;
-  fallback: string;
+  requestedModel: string;
+  selectedModel: string;
+  fallbackChain: string[];
+  modelActuallyUsed: string | null;
+  fallbackUsed: boolean | null;
+  fallbackReason: string | null;
+  lastUsedAt: string | null;
 }
 
 export interface GlassModelsDiagnostics {
-  fallback: string;
+  defaultModel: string;
+  fallbackChain: string[];
   text: GlassModelSlotDiagnostics;
   vision: GlassModelSlotDiagnostics;
   diagnostic: GlassModelSlotDiagnostics;
   semantic: GlassModelSlotDiagnostics;
 }
 
+function slotDiagnostics(
+  envVar: string,
+  configured: string | null,
+  kind: GlassModelKind,
+  purpose: GlassModelPurpose,
+): GlassModelSlotDiagnostics {
+  const selected = resolveGlassModelPrimary(kind, purpose);
+  const runtime = getGlassModelRuntime(kind, purpose);
+  return {
+    envVar,
+    configured,
+    requestedModel: selected,
+    selectedModel: selected,
+    fallbackChain: buildGlassModelTryChain(selected),
+    modelActuallyUsed: runtime?.modelUsed ?? null,
+    fallbackUsed: runtime?.fallbackUsed ?? null,
+    fallbackReason: runtime?.fallbackReason ?? null,
+    lastUsedAt: runtime?.at ?? null,
+  };
+}
+
 export function getGlassModelsDiagnostics(): GlassModelsDiagnostics {
   return {
-    fallback: GLASS_MODEL_FALLBACK,
-    text: {
-      envVar: "IIVO_GLASS_OPENAI_MODEL",
-      configured: getConfiguredGlassTextModel() ?? null,
-      primary: resolveGlassModelPrimary("text", "default"),
-      fallback: GLASS_MODEL_FALLBACK,
-    },
-    vision: {
-      envVar: "IIVO_GLASS_VISION_MODEL",
-      configured: getConfiguredGlassVisionModel() ?? null,
-      primary: resolveGlassModelPrimary("vision", "default"),
-      fallback: GLASS_MODEL_FALLBACK,
-    },
-    diagnostic: {
-      envVar: "IIVO_GLASS_DIAGNOSTIC_MODEL",
-      configured: getConfiguredGlassDiagnosticModel() ?? null,
-      primary: resolveGlassModelPrimary("text", "diagnostic"),
-      fallback: GLASS_MODEL_FALLBACK,
-    },
-    semantic: {
-      envVar: "IIVO_GLASS_SEMANTIC_MODEL",
-      configured: getConfiguredGlassSemanticModel() ?? null,
-      primary: resolveGlassModelPrimary("text", "semantic"),
-      fallback: GLASS_MODEL_FALLBACK,
-    },
+    defaultModel: GLASS_DEFAULT_MODEL,
+    fallbackChain: [...GLASS_MODEL_FALLBACK_CHAIN],
+    text: slotDiagnostics(
+      "IIVO_GLASS_OPENAI_MODEL",
+      getConfiguredGlassTextModel() ?? null,
+      "text",
+      "default",
+    ),
+    vision: slotDiagnostics(
+      "IIVO_GLASS_VISION_MODEL",
+      getConfiguredGlassVisionModel() ?? null,
+      "vision",
+      "default",
+    ),
+    diagnostic: slotDiagnostics(
+      "IIVO_GLASS_DIAGNOSTIC_MODEL",
+      getConfiguredGlassDiagnosticModel() ?? null,
+      "text",
+      "diagnostic",
+    ),
+    semantic: slotDiagnostics(
+      "IIVO_GLASS_SEMANTIC_MODEL",
+      getConfiguredGlassSemanticModel() ?? null,
+      "text",
+      "semantic",
+    ),
   };
 }
 
 export function logGlassModelStatus(): void {
   const d = getGlassModelsDiagnostics();
   console.log(
-    `[glass-models] text=${d.text.primary} vision=${d.vision.primary} diagnostic=${d.diagnostic.primary} semantic=${d.semantic.primary} fallback=${d.fallback}`,
+    `[glass-models] default=${d.defaultModel} text=${d.text.selectedModel} vision=${d.vision.selectedModel} diagnostic=${d.diagnostic.selectedModel} semantic=${d.semantic.selectedModel} fallbackChain=${d.fallbackChain.join("→")}`,
   );
 }
+
+/** @deprecated use GLASS_MODEL_FINAL_FALLBACK */
+export const GLASS_MODEL_FALLBACK = GLASS_MODEL_FINAL_FALLBACK;
