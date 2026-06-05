@@ -1,13 +1,46 @@
 /** Command-bar / voice ask timeout before showing a fallback error card. */
 export const GLASS_ASK_TIMEOUT_MS = 45_000;
 
+/** After this long with no answer, escalate the thinking copy to "Still working…". */
+export const GLASS_ASK_STILL_WORKING_MS = 6_000;
+
 export const VOICE_ASK_STATUS = {
   listening: "Listening…",
   transcribing: "Transcribing…",
   looking: "Looking…",
   thinking: "IIVO is thinking…",
+  stillWorking: "Still working…",
   timeout: "This is taking longer than expected. You can cancel and try again.",
 } as const;
+
+export type GlassAskPhase = "thinking" | "looking";
+
+/**
+ * Resolve the status label to show while an ask is in flight, escalating from
+ * the phase label → "Still working…" → timeout copy as time passes. Keeps Voice
+ * Mode from feeling dead during 3–13s waits even without token streaming.
+ */
+export function voiceAskStatusForElapsed(
+  elapsedMs: number,
+  phase: GlassAskPhase = "thinking",
+): string {
+  if (elapsedMs >= GLASS_ASK_TIMEOUT_MS) return VOICE_ASK_STATUS.timeout;
+  if (elapsedMs >= GLASS_ASK_STILL_WORKING_MS) return VOICE_ASK_STATUS.stillWorking;
+  return phase === "looking" ? VOICE_ASK_STATUS.looking : VOICE_ASK_STATUS.thinking;
+}
+
+/**
+ * Extract the first sentence of an answer for an early preview as soon as the
+ * leading text is available (bridge for not-yet-streaming responses).
+ */
+export function firstSentencePreview(text: string, maxLen = 160): string {
+  const clean = text.replace(/\s+/g, " ").trim();
+  if (!clean) return "";
+  const match = clean.match(/^.*?[.!?](\s|$)/);
+  const sentence = (match ? match[0] : clean).trim();
+  if (sentence.length <= maxLen) return sentence;
+  return `${sentence.slice(0, maxLen).trim()}…`;
+}
 
 /** Minimum time the thinking overlay card stays visible before the answer replaces it. */
 export const THINKING_CARD_MIN_MS = 300;

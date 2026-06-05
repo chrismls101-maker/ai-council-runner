@@ -4,10 +4,13 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
   buildGlassDirectUserPrompt,
+  extractSessionAnchors,
   formatGlassDirectAnswer,
   GLASS_DIRECT_SYSTEM_PROMPT,
+  GLASS_WEAK_ANCHOR_INSTRUCTION,
   runGlassDirectAsk,
   answersTooSimilar,
+  sessionAnchorStrength,
 } from "../../dist/server/glass/glassDirectAsk.js";
 import { handleGlassAsk } from "../../dist/server/glass/glassAskHandler.js";
 import {
@@ -431,6 +434,65 @@ await test("visual ask path does not call runCouncilFull", () => {
     "utf8",
   );
   assert.doesNotMatch(visualSource, /runCouncilFull/);
+});
+
+// --- PART 5: template drift / session anchor extraction ---
+
+await test("extractSessionAnchors pulls sprint numbers and decisions (meeting_call)", () => {
+  const a = extractSessionAnchors({
+    summary: "Sprint 14 planning. We decided to cut the billing migration.",
+    recentTranscript: "Maria pushed back on the timeline. Due Friday for the API spec.",
+  });
+  assert.ok(a.sprints.some((s) => /sprint\s*14/i.test(s)));
+  assert.ok(a.decisions.length > 0);
+  assert.ok(a.names.some((n) => /Maria/.test(n)));
+  assert.ok(a.dueDates.length > 0);
+});
+
+await test("extractSessionAnchors pulls lesson/episode numbers (video_learning / creator_content)", () => {
+  const vl = extractSessionAnchors({
+    summary: "Lesson 3 on dollar cost averaging and rebalancing a portfolio.",
+  });
+  assert.ok(vl.lessons.some((l) => /lesson\s*3/i.test(l)));
+
+  const cc = extractSessionAnchors({
+    recentTranscript: "Episode 7 hook about morning routines for creators.",
+  });
+  assert.ok(cc.lessons.some((l) => /episode\s*7/i.test(l)));
+});
+
+await test("extractSessionAnchors pulls metrics, objections and errors (sales_review / debug)", () => {
+  const sales = extractSessionAnchors({
+    summary: "Deal with Acme worth $42k. Prospect concerned about onboarding time.",
+  });
+  assert.ok(sales.metrics.some((m) => /\$\s?42k/i.test(m)));
+  assert.ok(sales.objections.length > 0);
+
+  const debug = extractSessionAnchors({
+    recentTranscript: "DATABASE_URL missing, request failed with a 500 error.",
+  });
+  assert.ok(debug.envErrors.some((e) => /DATABASE_URL/.test(e)));
+  assert.ok(debug.envErrors.some((e) => /error|500/i.test(e)));
+});
+
+await test("thin context yields weak anchor strength and triggers need-more-context instruction", () => {
+  const thin = extractSessionAnchors({ summary: "Working on stuff." });
+  assert.ok(sessionAnchorStrength(thin) < 2);
+  const prompt = buildGlassDirectUserPrompt("Summarize this", { summary: "Working on stuff." });
+  assert.match(prompt, /I need more specific context/i);
+});
+
+await test("rich context does not append the weak-anchor instruction", () => {
+  const prompt = buildGlassDirectUserPrompt("Summarize this", {
+    summary: "Sprint 14 with Maria. Decided to cut billing. Deal worth $42k due Friday.",
+  });
+  assert.doesNotMatch(prompt, new RegExp(GLASS_WEAK_ANCHOR_INSTRUCTION.slice(0, 30), "i"));
+  assert.match(prompt, /Session-specific anchors/i);
+});
+
+await test("buildGlassDirectUserPrompt with no session never nags for context", () => {
+  const prompt = buildGlassDirectUserPrompt("What is a closure in JS?");
+  assert.doesNotMatch(prompt, /I need more specific context/i);
 });
 
 console.log("glassAsk.test.ts: all assertions passed");

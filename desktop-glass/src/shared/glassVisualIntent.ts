@@ -109,3 +109,12 @@ export function formatCaptureAgeSeconds(capturedAt: string, nowMs = Date.now()):
   if (!Number.isFinite(ageMs)) return undefined;
   return Math.max(0, Math.round(ageMs / 1000));
 }
+
+/** Clear error shown when a fresh capture is impossible (no fake answer). */
+export const GLASS_VISUAL_CAPTURE_PERMISSION_MESSAGE =
+  "I couldn't capture the screen. Check Screen Recording permission in System Settings, then try again.";
+
+/** Clearly-labeled fallback notice when reusing the last recent capture. */
+export function fallbackCaptureWarning(ageSeconds: number): string {
+  return `Using your last capture from ${Math.max(0, Math.round(ageSeconds))}s ago.`;
+}

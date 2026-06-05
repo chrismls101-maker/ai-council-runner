@@ -47,6 +47,152 @@ const defaultCaller: GlassDirectAskCaller = async (system, user, signal, purpose
   return result;
 };
 
+export interface SessionAnchors {
+  names: string[];
+  metrics: string[];
+  sprints: string[];
+  lessons: string[];
+  objections: string[];
+  envErrors: string[];
+  decisions: string[];
+  dueDates: string[];
+}
+
+const STOP_NAME_WORDS = new Set([
+  "The", "This", "That", "There", "Then", "These", "Those", "What", "When",
+  "Where", "Which", "Who", "Why", "How", "Session", "Recent", "Active",
+  "Summary", "Transcript", "Source", "Glass", "IIVO", "OpenAI", "GPT",
+  "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
+  "January", "February", "March", "April", "May", "June", "July", "August",
+  "September", "October", "November", "December",
+]);
+
+function dedupeAnchor(values: string[], max = 6): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values) {
+    const clean = value.trim();
+    if (!clean) continue;
+    const key = clean.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(clean);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+function collectSessionText(session?: GlassAskSessionPayload): string {
+  if (!session) return "";
+  const parts: string[] = [];
+  if (session.summary) parts.push(session.summary);
+  if (session.recentTranscript) parts.push(session.recentTranscript);
+  if (session.recentInsights?.length) parts.push(session.recentInsights.join("\n"));
+  for (const event of session.recentEvents ?? []) {
+    if (event.title) parts.push(event.title);
+    if (event.text) parts.push(event.text);
+  }
+  if (session.currentSource) {
+    parts.push(
+      [session.currentSource.appName, session.currentSource.windowTitle, session.currentSource.sourceTitle]
+        .filter(Boolean)
+        .join(" "),
+    );
+  }
+  return parts.join("\n");
+}
+
+/**
+ * Extract concrete, session-specific anchors so the model can ground answers in
+ * real details (names, metrics, sprint/lesson numbers, objections, errors,
+ * decisions, due dates) rather than producing a generic template.
+ */
+export function extractSessionAnchors(session?: GlassAskSessionPayload): SessionAnchors {
+  const text = collectSessionText(session);
+  const anchors: SessionAnchors = {
+    names: [],
+    metrics: [],
+    sprints: [],
+    lessons: [],
+    objections: [],
+    envErrors: [],
+    decisions: [],
+    dueDates: [],
+  };
+  if (!text.trim()) return anchors;
+
+  // Proper-noun-ish names (multi-word capitalized or single capitalized token).
+  const nameMatches = text.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\b/g) ?? [];
+  anchors.names = dedupeAnchor(
+    nameMatches.filter((n) => {
+      const first = n.split(/\s+/)[0];
+      return !STOP_NAME_WORDS.has(first);
+    }),
+  );
+
+  // Metrics: currency, percentages, multipliers, counts with units.
+  const metricMatches =
+    text.match(/(?:\$|€|£)\s?\d[\d,.]*\s?[kKmMbB]?|\b\d[\d,.]*\s?%|\b\d[\d,.]*\s?(?:x|users|reps|deals|leads|MRR|ARR|days|weeks|hrs|hours)\b/gi) ?? [];
+  anchors.metrics = dedupeAnchor(metricMatches);
+
+  anchors.sprints = dedupeAnchor(text.match(/\bsprint\s*#?\s*\d+\b/gi) ?? []);
+  anchors.lessons = dedupeAnchor(
+    text.match(/\b(?:lesson|module|episode|chapter|video)\s*#?\s*\d+\b/gi) ?? [],
+  );
+
+  // Objections / hesitations.
+  const objectionMatches =
+    text.match(/[^.!?\n]*\b(?:objection|concerned about|worried about|pushback|hesitant|too expensive|not sure|budget|blocker)\b[^.!?\n]*/gi) ?? [];
+  anchors.objections = dedupeAnchor(objectionMatches.map((m) => m.trim()), 4);
+
+  // Env vars (UPPER_SNAKE) + error markers.
+  const envMatches = text.match(/\b[A-Z][A-Z0-9]+(?:_[A-Z0-9]+)+\b/g) ?? [];
+  const errorMatches =
+    text.match(/[^.!?\n]*\b(?:error|exception|failed|stack trace|undefined|null pointer|timeout|500|404)\b[^.!?\n]*/gi) ?? [];
+  anchors.envErrors = dedupeAnchor([...envMatches, ...errorMatches.map((m) => m.trim())], 5);
+
+  // Decisions.
+  const decisionMatches =
+    text.match(/[^.!?\n]*\b(?:decided|decision|we will|we'll|going with|agreed to|chose|committed to)\b[^.!?\n]*/gi) ?? [];
+  anchors.decisions = dedupeAnchor(decisionMatches.map((m) => m.trim()), 4);
+
+  // Due dates.
+  const dueMatches =
+    text.match(/\bdue\b[^.!?\n]*|\bby\s+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun|next week|end of (?:day|week|month)|\d{1,2}\/\d{1,2})[^.!?\n]*/gi) ?? [];
+  anchors.dueDates = dedupeAnchor(dueMatches.map((m) => m.trim()), 4);
+
+  return anchors;
+}
+
+/** Count how many anchor categories produced concrete hits. */
+export function sessionAnchorStrength(anchors: SessionAnchors): number {
+  return Object.values(anchors).filter((arr) => arr.length > 0).length;
+}
+
+export const GLASS_WEAK_ANCHOR_INSTRUCTION =
+  "Context is thin: few session-specific anchors were found. If you cannot ground this answer in concrete names, numbers, decisions, or details from THIS session, say \"I need more specific context to separate this from prior sessions.\" instead of producing a generic template.";
+
+function buildSessionAnchorBlock(anchors: SessionAnchors): string[] {
+  const lines: string[] = [];
+  const entries: [string, string[]][] = [
+    ["Names", anchors.names],
+    ["Metrics", anchors.metrics],
+    ["Sprints", anchors.sprints],
+    ["Lessons/topics", anchors.lessons],
+    ["Objections", anchors.objections],
+    ["Errors/env", anchors.envErrors],
+    ["Decisions", anchors.decisions],
+    ["Due dates", anchors.dueDates],
+  ];
+  const present = entries.filter(([, arr]) => arr.length > 0);
+  if (present.length === 0) return lines;
+  lines.push("", "Session-specific anchors (ground your answer in these — do not ignore them):");
+  for (const [label, arr] of present) {
+    lines.push(`- ${label}: ${arr.join("; ")}`);
+  }
+  return lines;
+}
+
 export function buildGlassDirectUserPrompt(
   prompt: string,
   session?: GlassAskSessionPayload,
@@ -86,6 +232,16 @@ export function buildGlassDirectUserPrompt(
         lines.push(`- ${answer.text!.trim().slice(0, 280)}`);
       }
     }
+  }
+
+  const anchors = extractSessionAnchors(session);
+  const anchorBlock = buildSessionAnchorBlock(anchors);
+  if (anchorBlock.length > 0) {
+    lines.push(...anchorBlock);
+  }
+  // Only nudge toward "need more context" when we have a session but it is thin.
+  if (session && sessionAnchorStrength(anchors) < 2) {
+    lines.push("", GLASS_WEAK_ANCHOR_INSTRUCTION);
   }
 
   return lines.join("\n");

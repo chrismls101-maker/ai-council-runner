@@ -7,15 +7,15 @@ import type { GlassSessionStore } from "../shared/sessionStore.ts";
 import {
   buildGlassSttState,
   buildTranscriptEventMetadata,
+  classifySttFailure,
   type GlassSttState,
   type SttAudioSource,
-  sttTranscriptionFailedMessage,
+  sttSourceErrorMessage,
 } from "../shared/sttTypes.ts";
 import { saveSessionAudioChunk } from "./audioStorage.ts";
 import { getSttConfig, transcribeWithProvider } from "./sttProvider.ts";
 import type { WindowContext } from "../shared/windowContextTypes.ts";
 import type { GlassConfig } from "../shared/config.ts";
-import { sttStatusMessage } from "../shared/sttTypes.ts";
 
 export interface SttProcessChunkPayload {
   buffer: ArrayBuffer;
@@ -60,7 +60,7 @@ export async function processSttChunk(
   deps.push();
 
   if (!config.enabled || config.status !== "configured") {
-    const error = sttStatusMessage(config.status, config.endpoint);
+    const error = sttSourceErrorMessage(payload.source, "config_missing");
     deps.setSttState({ ...deps.getSttState(), transcribing: false, lastError: error });
     deps.push();
     return { ok: false, error };
@@ -68,9 +68,10 @@ export async function processSttChunk(
 
   const buffer = Buffer.from(payload.buffer);
   if (buffer.length < 512) {
-    deps.setSttState({ ...deps.getSttState(), transcribing: false });
+    const error = sttSourceErrorMessage(payload.source, "no_signal");
+    deps.setSttState({ ...deps.getSttState(), transcribing: false, lastError: error });
     deps.push();
-    return { ok: false, error: "Audio chunk too small to transcribe." };
+    return { ok: false, error };
   }
 
   const session = deps.sessions.current();
@@ -151,7 +152,8 @@ export async function processSttChunk(
     return { ok: true, text: result.text, eventId };
   } catch (err) {
     const detail = err instanceof Error ? err.message : "Transcription failed.";
-    const error = sttTranscriptionFailedMessage(true, detail);
+    const kind = classifySttFailure(detail);
+    const error = sttSourceErrorMessage(payload.source, kind, detail);
     deps.setSttState({
       ...deps.getSttState(),
       transcribing: false,

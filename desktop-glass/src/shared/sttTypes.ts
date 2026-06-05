@@ -99,6 +99,80 @@ export function sttTranscriptionFailedMessage(audioCaptured: boolean, detail?: s
   return detail?.trim() || "Transcription failed.";
 }
 
+/**
+ * Distinct STT failure causes so the UI can show a source-specific message and
+ * a source-specific retry action instead of a generic "Ready"/"failed".
+ */
+export type SttFailureKind =
+  | "no_signal"
+  | "transcription_failed"
+  | "server_unavailable"
+  | "config_missing";
+
+const NO_SIGNAL_PATTERNS = [
+  /too small to transcribe/i,
+  /empty transcript/i,
+  /no audio/i,
+  /audio file is empty/i,
+  /no signal/i,
+];
+
+const SERVER_UNAVAILABLE_PATTERNS = [
+  /server unavailable/i,
+  /transcription server/i,
+  /econnrefused/i,
+  /failed to reach/i,
+  /network failure/i,
+];
+
+const CONFIG_MISSING_PATTERNS = [
+  /not configured/i,
+  /missing.*key/i,
+  /api key/i,
+  /disabled/i,
+  /IIVO_GLASS_OPENAI_API_KEY/i,
+];
+
+/** Classify a raw STT error string into a coarse failure kind. */
+export function classifySttFailure(detail: string | undefined): SttFailureKind {
+  const text = (detail ?? "").trim();
+  if (!text) return "transcription_failed";
+  if (CONFIG_MISSING_PATTERNS.some((re) => re.test(text))) return "config_missing";
+  if (SERVER_UNAVAILABLE_PATTERNS.some((re) => re.test(text))) return "server_unavailable";
+  if (NO_SIGNAL_PATTERNS.some((re) => re.test(text))) return "no_signal";
+  return "transcription_failed";
+}
+
+/** Source-specific, human-readable STT failure copy. */
+export function sttSourceErrorMessage(
+  source: SttAudioSource,
+  kind: SttFailureKind,
+  detail?: string,
+): string {
+  const sourceLabel = source === "system_audio" ? "System audio" : "Microphone";
+  const suffix = detail?.trim() ? ` (${detail.trim()})` : "";
+  switch (kind) {
+    case "no_signal":
+      return source === "system_audio"
+        ? `No system-audio signal detected. Confirm output is routed through BlackHole/Loopback and audio is playing.${suffix}`
+        : `No microphone signal detected. Check your input device and speak again.${suffix}`;
+    case "server_unavailable":
+      return `${STT_SERVER_UNAVAILABLE_MESSAGE}${suffix}`;
+    case "config_missing":
+      return `${sourceLabel} captured, but transcription is not configured. ${STT_MISSING_KEY_MESSAGE}`;
+    case "transcription_failed":
+    default:
+      return `${sourceLabel} captured audio but transcription failed. Try again or check STT settings.${suffix}`;
+  }
+}
+
+/** Which retry command the UI should offer for a failed source. */
+export function sttRetryActionForSource(
+  source: SttAudioSource,
+): "test-microphone" | "retry-system-audio" {
+  return source === "system_audio" ? "retry-system-audio" : "test-microphone";
+}
+
 export const STT_WEB_SPEECH_LABEL =
   "Microphone live transcription via Web Speech";
 

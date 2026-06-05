@@ -15,6 +15,8 @@ import type {
 import { getCachedWindowContext } from "./windowContext.ts";
 import { optimizeVisualAskImage } from "./visualImageOptimizer.ts";
 import {
+  GLASS_VISUAL_CAPTURE_PERMISSION_MESSAGE,
+  fallbackCaptureWarning,
   formatCaptureAgeSeconds,
   isFallbackGlassCapture,
   isRecentGlassCapture,
@@ -28,8 +30,7 @@ import { shouldPersistVisualAskToSession } from "../shared/glassScreenshotRetent
 import type { GlassUserSettings } from "../shared/glassSettings.ts";
 import type { GlassSessionStore } from "../shared/sessionStore.ts";
 
-export const GLASS_VISUAL_CAPTURE_PERMISSION_MESSAGE =
-  "I couldn't capture the screen. Check Screen Recording permission in System Settings, then try again.";
+export { GLASS_VISUAL_CAPTURE_PERMISSION_MESSAGE };
 
 export type VisualAskCaptureOutcome =
   | {
@@ -197,7 +198,7 @@ async function fallbackPayload(
       const age = formatCaptureAgeSeconds(latest.capturedAt) ?? 0;
       return {
         payload,
-        warning: `Using your last capture from ${age}s ago.`,
+        warning: fallbackCaptureWarning(age),
       };
     }
   }
@@ -221,7 +222,7 @@ async function fallbackPayload(
           label: latest?.displayLabel,
           displayId: latest?.displayId,
         },
-        warning: `Using your last capture from ${age}s ago.`,
+        warning: fallbackCaptureWarning(age),
       };
     }
   }
@@ -241,7 +242,7 @@ async function fallbackPayload(
           sourceTitle: latest.sourceTitle,
           contextId: latest.contextId,
         },
-        warning: `Using your last capture from ${age}s ago.`,
+        warning: fallbackCaptureWarning(age),
       };
     }
   }

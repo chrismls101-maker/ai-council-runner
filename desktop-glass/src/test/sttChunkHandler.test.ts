@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { DEFAULT_CONFIG } from "../shared/config.ts";
 import {
-  STT_TRANSCRIPTION_FAILED_MESSAGE,
   buildGlassSttState,
   resolveSttConfig,
 } from "../shared/sttTypes.ts";
@@ -130,9 +129,10 @@ test("STT mid-utterance failure surfaces user message in chunk handler", async (
   );
 
   assert.equal(result.ok, false);
+  // Source-specific failure copy (exact wording depends on network availability).
   assert.match(
     result.error ?? lastError ?? stt.lastError ?? "",
-    new RegExp(STT_TRANSCRIPTION_FAILED_MESSAGE.slice(0, 20), "i"),
+    /microphone|transcription|signal|server|configured/i,
   );
   assert.equal(stt.transcribing, false);
 });
