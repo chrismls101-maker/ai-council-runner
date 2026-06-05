@@ -1,0 +1,156 @@
+import { useState } from "react";
+import { send, useGlassState } from "../useGlassState.ts";
+import {
+  COPILOT_INTERVAL_OPTIONS,
+  COPILOT_MODE_HINTS,
+  COPILOT_MODE_LABELS,
+  type GlassCopilotMode,
+} from "../../shared/copilotTypes.ts";
+
+const MODES: GlassCopilotMode[] = ["off", "passive", "coaching", "diagnostic"];
+
+/**
+ * Compact Session Copilot row + Configure drawer. Only meaningful while a
+ * session is active — the row explains this when no session is live.
+ */
+export function CopilotConfigure({ sessionLive }: { sessionLive: boolean }): JSX.Element {
+  const state = useGlassState();
+  const [expanded, setExpanded] = useState(false);
+  const copilot = state.copilot;
+  const config = copilot.config;
+  const statusLabel = COPILOT_MODE_LABELS[copilot.mode];
+
+  return (
+    <div className="copilot-config" data-testid="glass-copilot-config">
+      <div className="copilot-config__status-row">
+        <span className={`copilot-config__dot copilot-config__dot--${copilot.active ? "on" : "off"}`} />
+        <div className="copilot-config__summary">
+          <strong>Session Copilot</strong>
+          <span className="copilot-config__state">
+            Status: {statusLabel}
+            {copilot.active ? ` · ${copilot.insightCount} insight${copilot.insightCount === 1 ? "" : "s"}` : ""}
+          </span>
+        </div>
+        <button
+          type="button"
+          className="gbtn gbtn--ghost"
+          aria-expanded={expanded}
+          data-testid="glass-copilot-configure-toggle"
+          onClick={() => setExpanded((open) => !open)}
+        >
+          {expanded ? "Hide" : "Configure"}
+        </button>
+      </div>
+
+      {!sessionLive ? (
+        <p className="copilot-config__hint">
+          Start a session to enable Session Copilot. It never listens on launch.
+        </p>
+      ) : null}
+
+      {expanded ? (
+        <div className="copilot-config__drawer" data-testid="glass-copilot-drawer">
+          <label className="copilot-config__field">
+            <span>Mode</span>
+            <select
+              value={config.mode}
+              disabled={!sessionLive}
+              onChange={(e) => send({ type: "copilot-set-mode", mode: e.target.value as GlassCopilotMode })}
+            >
+              {MODES.map((mode) => (
+                <option key={mode} value={mode}>
+                  {COPILOT_MODE_LABELS[mode]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="copilot-config__mode-hint">{COPILOT_MODE_HINTS[config.mode]}</p>
+
+          <label className="copilot-config__field">
+            <span>Insight interval</span>
+            <select
+              value={config.intervalSec}
+              onChange={(e) =>
+                send({ type: "copilot-set-config", patch: { intervalSec: Number(e.target.value) as 60 | 90 | 120 } })
+              }
+            >
+              {COPILOT_INTERVAL_OPTIONS.map((sec) => (
+                <option key={sec} value={sec}>
+                  {sec} seconds
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="copilot-config__row-check">
+            <input
+              type="checkbox"
+              checked={config.showOverlaySuggestions}
+              onChange={(e) =>
+                send({ type: "copilot-set-config", patch: { showOverlaySuggestions: e.target.checked } })
+              }
+            />
+            <span>Show overlay suggestions</span>
+          </label>
+
+          <label className="copilot-config__row-check">
+            <input
+              type="checkbox"
+              checked={config.autoDebriefOnEnd}
+              onChange={(e) =>
+                send({ type: "copilot-set-config", patch: { autoDebriefOnEnd: e.target.checked } })
+              }
+            />
+            <span>Auto-debrief when session ends</span>
+          </label>
+
+          <label className="copilot-config__row-check">
+            <input
+              type="checkbox"
+              checked={config.muteSuggestions}
+              onChange={(e) => send({ type: "copilot-set-muted", muted: e.target.checked })}
+            />
+            <span>Mute suggestions</span>
+          </label>
+
+          <label className="copilot-config__field">
+            <span>Silence timeout (min)</span>
+            <input
+              type="number"
+              min={1}
+              max={60}
+              value={config.silenceTimeoutMin}
+              onChange={(e) =>
+                send({ type: "copilot-set-config", patch: { silenceTimeoutMin: Number(e.target.value) } })
+              }
+            />
+          </label>
+
+          <label className="copilot-config__field">
+            <span>Max listening (min)</span>
+            <input
+              type="number"
+              min={5}
+              max={480}
+              value={config.maxListeningMin}
+              onChange={(e) =>
+                send({ type: "copilot-set-config", patch: { maxListeningMin: Number(e.target.value) } })
+              }
+            />
+          </label>
+
+          {copilot.active ? (
+            <button
+              type="button"
+              className="gbtn"
+              data-testid="glass-copilot-debrief-now"
+              onClick={() => send({ type: "copilot-generate-debrief" })}
+            >
+              Generate debrief now
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}

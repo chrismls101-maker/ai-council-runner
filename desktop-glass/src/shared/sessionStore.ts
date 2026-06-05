@@ -79,6 +79,7 @@ function migrateSession(raw: Partial<GlassSession>, clock: Clock): GlassSession 
     events: Array.isArray(raw.events) ? raw.events : [],
     insights: Array.isArray(raw.insights) ? raw.insights : [],
     summary: raw.summary,
+    copilot: raw.copilot,
   };
 }
 
@@ -270,6 +271,15 @@ export class GlassSessionStore {
     const session = this.current();
     if (!session) return null;
     session.summary = summary;
+    this.touch(session);
+    return session;
+  }
+
+  /** Persist Session Copilot data (insights / interventions / debrief) on the current session. */
+  setCopilotData(data: import("./copilotTypes.ts").GlassCopilotSessionData): GlassSession | null {
+    const session = this.current();
+    if (!session) return null;
+    session.copilot = data;
     this.touch(session);
     return session;
   }

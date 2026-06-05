@@ -80,4 +80,6 @@ export type GlassSession = {
   events: GlassSessionEvent[];
   insights: GlassSessionInsight[];
   summary?: string;
+  /** Session Copilot data (insights / interventions / debrief). Optional. */
+  copilot?: import("./copilotTypes.ts").GlassCopilotSessionData;
 };
