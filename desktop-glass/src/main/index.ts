@@ -202,6 +202,8 @@ import {
   DUPLICATE_APP_CAPTURE_FAILURE_MESSAGE,
   formatScreenCaptureProbeDebug,
 } from "../shared/screenCaptureProbe.ts";
+import { detectVirtualAudioDevices } from "../shared/virtualAudioDevices.ts";
+import type { VirtualAudioDeviceMatch } from "../shared/virtualAudioDevices.ts";
 
 loadGlassEnv();
 app.setName(glassMenuAppName(app.isPackaged));
@@ -269,6 +271,9 @@ interface AppState {
   appIdentityReport?: GlassAppIdentityReport;
   duplicateAppBundles: DuplicateGlassAppBundle[];
   duplicateAppWarning?: string;
+  virtualAudioDevices: VirtualAudioDeviceMatch[];
+  selectedVirtualAudioDeviceId?: string;
+  nativeLoopbackTested: boolean;
 }
 
 let askAbortController: AbortController | null = null;
@@ -307,6 +312,8 @@ const state: AppState = {
   serverHealthForSetup: null,
   setupCapabilities: [],
   duplicateAppBundles: [],
+  virtualAudioDevices: [],
+  nativeLoopbackTested: false,
 };
 
 let moments = new SavedMomentsStore();
@@ -361,6 +368,8 @@ function refreshSetupCapabilities(): void {
     micListening: state.privacy.listening,
     systemAudioStatus: state.systemAudioStatus,
     systemAudioDetail: state.systemAudioDetail,
+    virtualAudioDevices: state.virtualAudioDevices,
+    selectedVirtualAudioDeviceId: state.selectedVirtualAudioDeviceId,
     transcriptionMode: state.transcriptionMode,
     serverHealth: state.serverHealthForSetup,
     sttStatus: state.stt.status,
@@ -416,6 +425,8 @@ function snapshot(): GlassState {
     appIdentityReport: state.appIdentityReport,
     duplicateAppBundles: state.duplicateAppBundles,
     duplicateAppWarning: state.duplicateAppWarning,
+    virtualAudioDevices: state.virtualAudioDevices,
+    selectedVirtualAudioDeviceId: state.selectedVirtualAudioDeviceId,
     micPermission: state.micPermission,
   };
 }
@@ -1548,6 +1559,25 @@ async function handleCommand(
     case "system-audio-set-status":
       state.systemAudioStatus = command.status;
       state.systemAudioDetail = command.detail;
+      if (command.status === "requires_virtual_device" || command.status === "available") {
+        state.nativeLoopbackTested = true;
+      }
+      refreshSetupCapabilities();
+      push();
+      return;
+    case "report-virtual-audio-devices":
+      state.virtualAudioDevices = detectVirtualAudioDevices(command.devices);
+      if (
+        state.selectedVirtualAudioDeviceId &&
+        !state.virtualAudioDevices.some((d) => d.deviceId === state.selectedVirtualAudioDeviceId)
+      ) {
+        state.selectedVirtualAudioDeviceId = undefined;
+      }
+      refreshSetupCapabilities();
+      push();
+      return;
+    case "set-selected-virtual-audio-device":
+      state.selectedVirtualAudioDeviceId = command.deviceId;
       refreshSetupCapabilities();
       push();
       return;

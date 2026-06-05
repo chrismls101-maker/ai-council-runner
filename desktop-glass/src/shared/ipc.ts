@@ -83,6 +83,8 @@ export type GlassCommand =
   | { type: "clear-transcript" }
   | { type: "transcription-set-mode"; mode: TranscriptionMode }
   | { type: "system-audio-set-status"; status: SystemAudioStatus; detail?: string }
+  | { type: "report-virtual-audio-devices"; devices: { deviceId: string; label: string }[] }
+  | { type: "set-selected-virtual-audio-device"; deviceId: string }
   | { type: "stt-listening-timer"; elapsedMs: number }
   | { type: "stt-cost-warning" }
   | { type: "save-moment"; note?: string; kind?: GlassMomentKind }
@@ -203,6 +205,8 @@ export interface GlassState {
   appIdentityReport?: import("./glassAppIdentityReport.ts").GlassAppIdentityReport;
   duplicateAppBundles?: import("./glassAppIdentityReport.ts").DuplicateGlassAppBundle[];
   duplicateAppWarning?: string;
+  virtualAudioDevices?: import("./virtualAudioDevices.ts").VirtualAudioDeviceMatch[];
+  selectedVirtualAudioDeviceId?: string;
   micPermission: import("./glassCapabilities.ts").MicPermissionReport;
 }
 

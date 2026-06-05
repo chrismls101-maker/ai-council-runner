@@ -141,12 +141,15 @@ test("setup summary notes capture can work when only system audio fails", () => 
   assert.match(summary, /systemAudio/i);
 });
 
-test("no audio track after permission maps to requires_virtual_device not enumeration", () => {
+test("no audio track after permission maps to requires_virtual_device not not_tested", () => {
   const resolved = resolveSystemAudioProbeStatus({
     screenCaptureReady: true,
     videoSourceCount: 2,
     videoThumbnailEmpty: false,
     hasNativeAudioTrack: false,
+    platform: "darwin",
   });
-  assert.equal(resolved.status, "not_tested");
+  assert.equal(resolved.status, "requires_virtual_device");
+  assert.match(resolved.detail, /Native system audio is not available/i);
+  assert.notEqual(resolved.status, "not_tested");
 });

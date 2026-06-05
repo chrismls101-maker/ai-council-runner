@@ -11,6 +11,7 @@ import {
   isSourceEnumerationFailedMessage,
   buildSystemAudioProbeDetail,
 } from "./systemAudioProbe.ts";
+import { NATIVE_SYSTEM_AUDIO_UNAVAILABLE_MESSAGE } from "./virtualAudioDevices.ts";
 
 /** Darwin 22 ≈ macOS 13 — first macOS with loopback APIs Chromium uses. */
 const MACOS_LOOPBACK_MIN_DARWIN = 22;
@@ -71,10 +72,25 @@ export function mapSystemAudioStreamResult(
   return platform === "darwin" ? "requires_virtual_device" : "requires_permission";
 }
 
+export function mapSystemAudioStreamResultDetail(
+  audioTrackCount: number,
+  platform: NodeJS.Platform = process.platform,
+): { status: SystemAudioStatus; detail?: string } {
+  const status = mapSystemAudioStreamResult(audioTrackCount, platform);
+  if (status === "requires_virtual_device") {
+    return { status, detail: NATIVE_SYSTEM_AUDIO_UNAVAILABLE_MESSAGE };
+  }
+  if (status === "available") {
+    return { status, detail: "Native loopback audio track detected." };
+  }
+  return { status };
+}
+
 export function canAttemptSystemAudioCapture(status: SystemAudioStatus): boolean {
   return (
     status === "available" ||
     status === "requires_permission" ||
+    status === "requires_virtual_device" ||
     status === "source_enumeration_failed" ||
     status === "not_tested" ||
     status === "error"

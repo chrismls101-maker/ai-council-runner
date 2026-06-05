@@ -1,8 +1,10 @@
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { send, useGlassState } from "../useGlassState.ts";
 import type { GlassCommand } from "../../shared/ipc.ts";
 import type { GlassCapabilityRow, GlassSetupActionType } from "../../shared/glassCapabilities.ts";
 import { mapPermissionsApiToMic } from "../../shared/glassCapabilities.ts";
+import { formatVirtualAudioDeviceOption } from "../../shared/virtualAudioDevices.ts";
+import { reportVirtualAudioDevices } from "./virtualAudioScan.ts";
 
 function severityClass(severity: GlassCapabilityRow["severity"]): string {
   return `status-dot status-dot--${severity}`;
@@ -31,8 +33,13 @@ export function SetupSection(): JSX.Element {
   const state = useGlassState();
   const rows = state.setupCapabilities ?? [];
 
+  useEffect(() => {
+    void reportVirtualAudioDevices();
+  }, []);
+
   const runSetupCheck = useCallback(async () => {
     await queryMicPermissionWithoutPrompt();
+    await reportVirtualAudioDevices();
     send({ type: "run-setup-check" });
   }, []);
 
@@ -71,6 +78,7 @@ export function SetupSection(): JSX.Element {
           {state.captureDiagnosticsReport.lines.join("\n")}
         </pre>
       ) : null}
+      <VirtualAudioDevicePanel />
       <ul className="setup-section__rows">
         {rows.map((row) => (
           <li key={row.id} className="setup-section__row" data-testid={`glass-setup-row-${row.id}`}>
@@ -107,6 +115,75 @@ export function SetupSection(): JSX.Element {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+function VirtualAudioDevicePanel(): JSX.Element | null {
+  const state = useGlassState();
+  if (state.systemAudioStatus !== "requires_virtual_device") return null;
+
+  const devices = state.virtualAudioDevices ?? [];
+  const selectedId = state.selectedVirtualAudioDeviceId ?? "";
+
+  if (devices.length === 0) {
+    return (
+      <div
+        className="setup-section__virtual-audio"
+        data-testid="glass-virtual-audio-setup"
+      >
+        <p className="setup-section__virtual-audio-title">Virtual audio setup</p>
+        <p className="hint setup-section__virtual-audio-hint">
+          No virtual audio input detected. Install BlackHole or Loopback, route system output
+          through it in Audio MIDI Setup, then rescan.
+        </p>
+        <button
+          type="button"
+          className="gbtn gbtn--small"
+          data-testid="glass-rescan-virtual-audio"
+          onClick={() => void reportVirtualAudioDevices()}
+        >
+          Rescan devices
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="setup-section__virtual-audio"
+      data-testid="glass-virtual-audio-selector"
+    >
+      <p className="setup-section__virtual-audio-title">Virtual audio device</p>
+      <p className="hint setup-section__virtual-audio-hint">
+        Virtual audio device detected — select it for system audio.
+      </p>
+      <label className="setup-section__virtual-audio-label">
+        <span className="sr-only">Virtual audio input</span>
+        <select
+          className="setup-section__virtual-audio-select"
+          data-testid="glass-virtual-audio-select"
+          value={selectedId}
+          onChange={(e) =>
+            send({ type: "set-selected-virtual-audio-device", deviceId: e.target.value })
+          }
+        >
+          <option value="">Choose a device…</option>
+          {devices.map((device) => (
+            <option key={device.deviceId} value={device.deviceId}>
+              {formatVirtualAudioDeviceOption(device)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button
+        type="button"
+        className="gbtn gbtn--small"
+        data-testid="glass-rescan-virtual-audio"
+        onClick={() => void reportVirtualAudioDevices()}
+      >
+        Rescan devices
+      </button>
     </div>
   );
 }

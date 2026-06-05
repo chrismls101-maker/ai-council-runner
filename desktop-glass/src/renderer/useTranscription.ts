@@ -27,9 +27,10 @@ import {
 } from "../shared/commandBarMic.ts";
 import {
   mapSystemAudioCaptureError,
-  mapSystemAudioStreamResult,
+  mapSystemAudioStreamResultDetail,
   stopMediaStreamState,
 } from "../shared/systemAudioCapture.ts";
+import { reportVirtualAudioDevices } from "./panel/virtualAudioScan.ts";
 import {
   initialTranscriptionState,
   transcriptionReducer,
@@ -452,16 +453,19 @@ export function useTranscription(): TranscriptionController {
         stream.removeTrack(track);
       }
       const audioTracks = stream.getAudioTracks();
-      const nextStatus = mapSystemAudioStreamResult(audioTracks.length);
+      const mapped = mapSystemAudioStreamResultDetail(audioTracks.length);
       if (audioTracks.length === 0) {
         stopMediaStreamState(stream.getTracks());
-        setSystemAudioStatus(nextStatus);
-        syncSystemAudioStatus(nextStatus);
+        setSystemAudioStatus(mapped.status);
+        setSystemAudioDetail(mapped.detail);
+        syncSystemAudioStatus(mapped.status, mapped.detail);
+        void reportVirtualAudioDevices();
         dispatch({
           type: "SET_ERROR",
           message: modeStatusMessage("system_audio", {
             ...snapshot,
-            systemAudioStatus: nextStatus,
+            systemAudioStatus: mapped.status,
+            systemAudioDetail: mapped.detail,
           }),
         });
         return;

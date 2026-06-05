@@ -60,9 +60,12 @@ test("microphone denied maps to permission_denied with settings action", () => {
 test("system audio no track maps to requires_virtual_device", () => {
   const row = buildSystemAudioCapability({
     ...baseInput,
+    screenCaptureProbe: "ready",
     systemAudioStatus: "requires_virtual_device",
   });
   assert.equal(row.status, "requires_virtual_device");
+  assert.notEqual(row.label, "Not verified");
+  assert.match(row.detail ?? "", /Native system audio is not available/i);
   assert.equal(row.actionCommand, "show-virtual-audio-help");
 });
 

@@ -7,8 +7,11 @@ import { systemAudioStatusMessage } from "./systemAudioTypes.ts";
 import {
   PERMISSION_JUST_GRANTED_RESTART_HINT,
   isSourceEnumerationFailedMessage,
-  shouldShowVirtualDeviceGuidance,
 } from "./systemAudioProbe.ts";
+import {
+  buildSystemAudioVirtualDeviceDetail,
+  type VirtualAudioDeviceMatch,
+} from "./virtualAudioDevices.ts";
 import type { SttProviderStatus } from "./sttTypes.ts";
 import {
   mapEnumerationErrorToScreenCaptureStatus,
@@ -96,6 +99,8 @@ export interface GlassSetupCapabilitiesInput {
   micListening?: boolean;
   systemAudioStatus: SystemAudioStatus;
   systemAudioDetail?: string;
+  virtualAudioDevices?: VirtualAudioDeviceMatch[];
+  selectedVirtualAudioDeviceId?: string;
   transcriptionMode?: string;
   serverHealth: GlassServerHealthForSetup | null;
   sttStatus: SttProviderStatus;
@@ -405,15 +410,19 @@ export function buildSystemAudioCapability(input: GlassSetupCapabilitiesInput): 
     };
   }
   if (status === "requires_virtual_device") {
-    const detail = shouldShowVirtualDeviceGuidance(status, screenReady)
-      ? [input.systemAudioDetail, VIRTUAL_AUDIO_HELP_DETAIL].filter(Boolean).join(" ")
-      : (input.systemAudioDetail ?? VIRTUAL_AUDIO_HELP_DETAIL);
+    const detail = buildSystemAudioVirtualDeviceDetail({
+      virtualDevices: input.virtualAudioDevices ?? [],
+      selectedDeviceId: input.selectedVirtualAudioDeviceId,
+      nativeUnavailable: true,
+      extraDetail: input.systemAudioDetail,
+    });
+    const hasVirtual = (input.virtualAudioDevices?.length ?? 0) > 0;
     return {
       id: "systemAudio",
       status: "requires_virtual_device",
-      label: "Virtual device may be required",
+      label: hasVirtual ? "Virtual device detected" : "Virtual device needed",
       detail,
-      actionLabel: "Virtual audio setup",
+      actionLabel: hasVirtual ? "Virtual audio setup" : "Virtual audio setup",
       actionCommand: "show-virtual-audio-help",
       actions: systemAudioActions(
         { label: "Virtual audio setup", command: "show-virtual-audio-help" },

@@ -41,6 +41,8 @@ export async function probeSystemAudioEnumeration(
       screenCaptureReady,
       videoSourceCount: screenCaptureReady ? 1 : 0,
       videoThumbnailEmpty: !screenCaptureReady,
+      platform: process.platform,
+      hasNativeAudioTrack: false,
     });
     const diagnostics = {
       ...baseDiagnostics,
@@ -68,6 +70,7 @@ export async function probeSystemAudioEnumeration(
         screenCaptureReady,
         videoSourceCount: 0,
         videoThumbnailEmpty: true,
+        platform: process.platform,
         enumerationError: "No screen sources available for system audio enumeration.",
       });
       const diagnosticsLine = formatSystemAudioProbeDiagnostics(baseDiagnostics);
@@ -87,6 +90,8 @@ export async function probeSystemAudioEnumeration(
       screenCaptureReady,
       videoSourceCount: sources.length,
       videoThumbnailEmpty,
+      platform: process.platform,
+      hasNativeAudioTrack: false,
     });
     const diagnosticsLine = formatSystemAudioProbeDiagnostics(baseDiagnostics);
     console.info(`[IIVO Glass] system audio probe: ${diagnosticsLine}`);
@@ -103,6 +108,7 @@ export async function probeSystemAudioEnumeration(
       enumerationError: errorMessage,
       videoSourceCount: 0,
       videoThumbnailEmpty: true,
+      platform: process.platform,
     });
     const detail =
       resolved.detail +

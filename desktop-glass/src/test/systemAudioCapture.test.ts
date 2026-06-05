@@ -4,10 +4,12 @@ import {
   canAttemptSystemAudioCapture,
   mapSystemAudioCaptureError,
   mapSystemAudioStreamResult,
+  mapSystemAudioStreamResultDetail,
   resolveInitialSystemAudioStatus,
   stopMediaStreamState,
   systemAudioListeningMessage,
 } from "../shared/systemAudioCapture.ts";
+import { NATIVE_SYSTEM_AUDIO_UNAVAILABLE_MESSAGE } from "../shared/virtualAudioDevices.ts";
 import { SYSTEM_AUDIO_STATUS_MESSAGES } from "../shared/systemAudioTypes.ts";
 
 test("system audio status detection on macOS 13+", () => {
@@ -27,6 +29,9 @@ test("unsupported fallback on unknown platform", () => {
 test("requires virtual device when stream has no audio on macOS", () => {
   assert.equal(mapSystemAudioStreamResult(0, "darwin"), "requires_virtual_device");
   assert.equal(mapSystemAudioStreamResult(1, "darwin"), "available");
+  const detail = mapSystemAudioStreamResultDetail(0, "darwin");
+  assert.equal(detail.status, "requires_virtual_device");
+  assert.equal(detail.detail, NATIVE_SYSTEM_AUDIO_UNAVAILABLE_MESSAGE);
 });
 
 test("permission error maps to requires_permission", () => {
@@ -54,7 +59,7 @@ test("can attempt capture when permission may be grantable", () => {
   assert.equal(canAttemptSystemAudioCapture("source_enumeration_failed"), true);
   assert.equal(canAttemptSystemAudioCapture("not_tested"), true);
   assert.equal(canAttemptSystemAudioCapture("unsupported"), false);
-  assert.equal(canAttemptSystemAudioCapture("requires_virtual_device"), false);
+  assert.equal(canAttemptSystemAudioCapture("requires_virtual_device"), true);
 });
 
 test("listening message when capture active", () => {

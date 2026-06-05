@@ -4,6 +4,7 @@
 
 import type { ScreenCaptureProbeStatus } from "./glassCapabilities.ts";
 import type { SystemAudioStatus } from "./systemAudioTypes.ts";
+import { NATIVE_SYSTEM_AUDIO_UNAVAILABLE_MESSAGE } from "./virtualAudioDevices.ts";
 
 export const PERMISSION_JUST_GRANTED_RESTART_HINT =
   "Quit and reopen IIVO Glass after granting Screen/System Audio permission.";
@@ -35,7 +36,11 @@ export interface SystemAudioProbeInput {
   enumerationError?: string;
   videoSourceCount: number;
   videoThumbnailEmpty: boolean;
+  /** True when getDisplayMedia returned at least one audio track. */
   hasNativeAudioTrack?: boolean;
+  /** True after the user ran Test System Audio (renderer). */
+  nativeLoopbackTested?: boolean;
+  platform?: NodeJS.Platform;
 }
 
 export function isSourceEnumerationFailedMessage(message: string): boolean {
@@ -86,10 +91,21 @@ export function buildSystemAudioProbeDetail(
 export function resolveSystemAudioProbeStatus(
   input: SystemAudioProbeInput,
 ): { status: SystemAudioStatus; detail: string } {
-  if (input.hasNativeAudioTrack) {
+  if (input.hasNativeAudioTrack === true) {
     return {
       status: "available",
       detail: "Native loopback audio track detected.",
+    };
+  }
+
+  const nativeUnavailable =
+    input.hasNativeAudioTrack === false ||
+    (input.nativeLoopbackTested === true && input.hasNativeAudioTrack !== true);
+
+  if (nativeUnavailable) {
+    return {
+      status: "requires_virtual_device",
+      detail: NATIVE_SYSTEM_AUDIO_UNAVAILABLE_MESSAGE,
     };
   }
 
@@ -129,10 +145,16 @@ export function resolveSystemAudioProbeStatus(
     };
   }
 
+  if (input.screenCaptureReady && input.platform === "darwin") {
+    return {
+      status: "requires_virtual_device",
+      detail: NATIVE_SYSTEM_AUDIO_UNAVAILABLE_MESSAGE,
+    };
+  }
+
   return {
     status: "not_tested",
-    detail:
-      "Screen sources are available. Tap Retry System Audio or Test System Audio to verify loopback.",
+    detail: "Tap Test System Audio to verify loopback capture.",
   };
 }
 
