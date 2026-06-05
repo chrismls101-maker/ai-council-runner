@@ -18,9 +18,23 @@ asar: true
 
 mac:
   category: public.app-category.productivity
+  # Bundle id com.iivo.glass + display name IIVO Glass — required for macOS Privacy lists.
+  # Keep in sync with build/mac-extend-info.yml (verified by scripts/verify-mac-package-metadata.mjs).
   extendInfo:
-    NSAudioCaptureUsageDescription: "IIVO Glass captures system audio only when you press Start Listening."
-    NSScreenCaptureUsageDescription: "IIVO Glass captures your screen only when you press Capture."
+    CFBundleName: IIVO Glass
+    CFBundleDisplayName: IIVO Glass
+    NSMicrophoneUsageDescription: >-
+      IIVO Glass uses your microphone only when you tap the microphone button on the
+      command bar to dictate a question.
+    NSScreenCaptureUsageDescription: >-
+      IIVO Glass captures your screen only when you use Capture or ask a visual
+      question that needs to see your display.
+    NSAudioCaptureUsageDescription: >-
+      IIVO Glass captures system audio only when you choose System Audio and start
+      listening from the command bar.
+    NSCameraUsageDescription: >-
+      IIVO Glass does not use the camera. This description is required by macOS for
+      some media capture APIs.
   target:
     - dmg
     - zip
