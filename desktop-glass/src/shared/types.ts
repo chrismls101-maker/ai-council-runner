@@ -18,7 +18,8 @@ export type PanelTab =
   | "insights"
   | "context"
   | "hypotheses"
-  | "actions";
+  | "actions"
+  | "audio";
 
 /** Mirrors the server ContextItemType union (src/server/contextBridge/types.ts). */
 export type ServerContextItemType =

@@ -40,6 +40,10 @@ export interface GlassUserSettings {
   micAutoSendAfterSilence: boolean;
   /** Virtual audio input (e.g. BlackHole 2ch) for system-audio fallback. */
   selectedVirtualAudioDeviceId?: string;
+  /** User completed Mac output + BlackHole routing setup (WIP audio restore). */
+  audioRoutingConfigured?: boolean;
+  /** Saved Mac speaker/output device name for startup restore (WIP). */
+  savedMacOutputDeviceName?: string;
   /** Session Copilot mode + behavior. Default off (no auto extraction). */
   copilot: GlassCopilotConfig;
 }
@@ -164,4 +168,11 @@ export function hotkeyRegistrationMessage(
     return `${GLASS_HOTKEY_PRESETS[preset].label} registered`;
   }
   return `Hotkey unavailable (${GLASS_HOTKEY_PRESETS[preset].label}) — command bar still clickable`;
+}
+
+/** WIP panel default tab — audio setup until routing is marked configured. */
+export function resolveDefaultPanelTab(
+  settings: Pick<GlassUserSettings, "audioRoutingConfigured">,
+): import("./types.ts").PanelTab {
+  return settings.audioRoutingConfigured ? "summary" : "audio";
 }

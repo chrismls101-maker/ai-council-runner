@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { send } from "../useGlassState.ts";
-import { pickPreferredVirtualAudioDevice } from "../../shared/virtualAudioCapture.ts";
 import {
   computeRmsFromSamples,
   evaluateVirtualAudioProbe,
+  pickPreferredVirtualAudioDevice,
 } from "../../shared/virtualAudioCapture.ts";
 import { stopMediaStreamState } from "../../shared/systemAudioCapture.ts";
+import { detectVirtualAudioDevices } from "../../shared/virtualAudioDevices.ts";
 import { openVirtualAudioInputStream } from "./virtualAudioProbe.ts";
 import { reportVirtualAudioDevices } from "./virtualAudioScan.ts";
 
@@ -46,13 +47,17 @@ export function SystemAudioLiveMeter({
     const run = async (): Promise<void> => {
       let targetId = deviceId?.trim();
       if (!targetId) {
-        const scan = await reportVirtualAudioDevices({
-          requestPermission: true,
-          autoSelectPreferred: true,
-        });
-        const preferred = pickPreferredVirtualAudioDevice(scan.virtualDevices);
-        targetId = preferred?.deviceId;
-        deviceLabel = preferred?.label ?? deviceLabel;
+        if (navigator.mediaDevices?.enumerateDevices) {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const inputs = devices
+            .filter((d) => d.kind === "audioinput")
+            .map((d) => ({ deviceId: d.deviceId, label: d.label }));
+          void reportVirtualAudioDevices();
+          const virtual = detectVirtualAudioDevices(inputs);
+          const preferred = pickPreferredVirtualAudioDevice(virtual);
+          targetId = preferred?.deviceId;
+          deviceLabel = preferred?.label ?? deviceLabel;
+        }
       }
       if (!targetId) {
         finish("No BlackHole device found — tap Detect Devices first.");
