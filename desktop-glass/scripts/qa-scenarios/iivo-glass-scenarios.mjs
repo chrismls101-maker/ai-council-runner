@@ -21,6 +21,7 @@ export const SCENARIO_CATEGORIES = [
   "open_in_iivo",
   "visual_ask",
   "session_debrief",
+  "active_listening",
 ];
 
 export const PROMPT_VARIETY = [
@@ -491,6 +492,108 @@ function buildMeetingScenarios() {
     }),
   ];
   return defs;
+}
+
+/** Active Listening — contextual interruptions during live media/meetings (simulated). */
+function buildActiveListeningScenarios() {
+  const al = (base) =>
+    scenario({
+      category: "active_listening",
+      screenContextText: base.screenContextText ?? "Simulated active listening — NOT real audio playback",
+      appName: base.appName ?? "Google Chrome",
+      expectedSessionType: base.expectedSessionType ?? "video_learning",
+      expectedInsightTypes: ["key_idea", "action"],
+      expectedBehavior: "active_listening_answer",
+      passCriteria: ["uses_recent_transcript", "no_fake_audio_claim", "no_council", "contextual_not_generic"],
+      liveAllowed: true,
+      copilotMode: "coaching",
+      ...base,
+    });
+  return [
+    al({
+      id: "active_listening_01",
+      title: "Video tutorial — how does that work?",
+      userPrompt: "How does that work?",
+      transcriptChunks: [
+        "The instructor explains how transformers use self-attention to weigh every token against every other token.",
+        "Key idea: query, key, and value matrices project the embeddings before the softmax attention scores.",
+      ],
+      windowTitle: "AI tutorial — transformers (simulated)",
+      expectedSessionType: "video_learning",
+      expectedAnchors: ["self-attention", "query", "key", "value", "transformers"],
+    }),
+    al({
+      id: "active_listening_02",
+      title: "Business podcast — action steps",
+      userPrompt: "Turn that into action steps.",
+      transcriptChunks: [
+        "The host says churn spiked 2.1% after the pricing change and support tickets rose 18%.",
+        "They recommend a win-back email to annual customers and a 15-minute exec review this Friday.",
+      ],
+      windowTitle: "Business podcast — churn episode (simulated)",
+      expectedSessionType: "business_strategy",
+      expectedAnchors: ["churn", "2.1%", "win-back", "Friday"],
+    }),
+    al({
+      id: "active_listening_03",
+      title: "AI tutorial — Cursor prompt",
+      userPrompt: "Create a Cursor prompt from that.",
+      transcriptChunks: [
+        "The tutorial shows refactoring a React component to use useReducer for complex form state.",
+        "Step: extract action types ADD_FIELD, REMOVE_FIELD, and RESET_FORM with a typed dispatch.",
+      ],
+      windowTitle: "Cursor tutorial — useReducer (simulated)",
+      expectedSessionType: "coding_building",
+      expectedAnchors: ["useReducer", "ADD_FIELD", "RESET_FORM", "React"],
+    }),
+    al({
+      id: "active_listening_04",
+      title: "Sales call — what should I say next?",
+      userPrompt: "What should I say next?",
+      transcriptChunks: [
+        "Prospect Maya at Acme says the $42k price feels high compared to the incumbent.",
+        "She asked whether onboarding can finish before their Q3 launch in six weeks.",
+      ],
+      appName: "Zoom",
+      windowTitle: "Acme discovery call (simulated)",
+      expectedSessionType: "meeting_call",
+      expectedAnchors: ["Maya", "Acme", "price", "Q3", "onboarding"],
+    }),
+    al({
+      id: "active_listening_05",
+      title: "Sales call — objection handling",
+      userPrompt: "What objection is this?",
+      transcriptChunks: [
+        "Customer says they need SOC 2 Type II before any pilot and legal is reviewing the DPA.",
+        "They like the product but budget is frozen until next quarter.",
+      ],
+      appName: "Google Meet",
+      expectedSessionType: "meeting_call",
+      expectedAnchors: ["SOC 2", "DPA", "budget", "pilot"],
+    }),
+    al({
+      id: "active_listening_06",
+      title: "Webinar — what should I remember?",
+      userPrompt: "What should I remember?",
+      transcriptChunks: [
+        "Webinar module 2 covers cohort retention: track D1, D7, and D30 activation metrics.",
+        "The speaker warns against optimizing signup volume before activation is healthy.",
+      ],
+      windowTitle: "Growth webinar — retention (simulated)",
+      expectedAnchors: ["D1", "D7", "D30", "activation", "module 2"],
+    }),
+    al({
+      id: "active_listening_07",
+      title: "Product demo — what did I miss?",
+      userPrompt: "What did I miss?",
+      transcriptChunks: [
+        "Demo shows the new audit log export and role-based access for admin vs viewer.",
+        "The AE mentioned a 14-day trial with SSO available on the Enterprise plan only.",
+      ],
+      windowTitle: "Product demo recording (simulated)",
+      expectedAnchors: ["audit log", "role-based", "SSO", "Enterprise", "14-day"],
+    }),
+  ];
 }
 
 /**
@@ -1049,6 +1152,8 @@ function buildAllScenarios() {
   );
 
   all.push(...buildVideoLearningScenarios());
+
+  all.push(...buildActiveListeningScenarios());
 
   all.push(...buildMeetingScenarios());
 

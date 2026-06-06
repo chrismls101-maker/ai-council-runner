@@ -14,11 +14,12 @@ import {
   scoreGlassAnswerQuality,
   scoreMeetingAnswer,
   scoreCategoryAnswer,
+  scoreActiveListeningAnswer,
   visualFixtureFailReason,
 } from "./lib/glass-answer-quality.mjs";
 import { shouldRetryLiveAsk } from "./lib/glass-live-ask-retry.mjs";
 
-const CATEGORY_GRADED = new Set(["video_learning", "creator_content", "sales_review"]);
+const CATEGORY_GRADED = new Set(["video_learning", "creator_content", "sales_review", "active_listening"]);
 import { renderFixtureScreenshot } from "./lib/render-fixture-screenshot.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -100,11 +101,64 @@ function assertVisualFixtureAnswer(answer) {
   if (reason) throw new Error(reason);
 }
 
-const prompt = `${scenario.userPrompt}\n\nContext: ${scenario.screenContextText}\n${scenario.transcriptChunks.join(" ")}`.slice(0, 2000);
+function classifyActiveListeningIntent(prompt) {
+  const t = String(prompt ?? "");
+  if (/\bhow does that work\b/i.test(t)) return "explain_current_moment";
+  if (/\bturn that into action steps\b/i.test(t)) return "action_steps";
+  if (/\bcreate (?:a )?(?:cursor )?prompt\b/i.test(t)) return "prompt_generation";
+  if (/\bwhat should i say next\b/i.test(t)) return "sales_coaching";
+  if (/\bwhat objection is this\b/i.test(t)) return "objection_handling";
+  if (/\bwhat should i remember\b/i.test(t)) return "summarize_recent";
+  if (/\bwhat did i miss\b/i.test(t)) return "summarize_recent";
+  return "general_contextual";
+}
+
+/** @param {import('./qa-scenarios/iivo-glass-scenarios.mjs').QaScenario} scenario */
+function buildActiveListeningSession(scenario) {
+  const transcript = (scenario.transcriptChunks ?? []).join(" ");
+  const chunks = (scenario.transcriptChunks ?? []).map((text, i) => ({
+    text,
+    source: "system_audio",
+    timestamp: new Date(Date.now() - ((scenario.transcriptChunks?.length ?? 1) - i) * 45_000).toISOString(),
+  }));
+  const activeMode = scenario.expectedSessionType === "meeting_call" ? "meetings" : "listen";
+  return {
+    recentTranscript: transcript.slice(-1500),
+    currentSource: {
+      appName: scenario.appName,
+      windowTitle: scenario.windowTitle,
+    },
+    activeListening: {
+      enabled: true,
+      activeMode,
+      windowMinutes: 3,
+      chunkCount: chunks.length,
+      systemAudioChunkCount: chunks.length,
+      microphoneChunkCount: 0,
+      recentTranscriptWindow: transcript,
+      chunks,
+      sessionFocus: scenario.expectedSessionType,
+      copilotMode: "coaching",
+      detectedIntent: classifyActiveListeningIntent(scenario.userPrompt),
+      contextThin: transcript.trim().length < 40,
+    },
+  };
+}
+
+const prompt =
+  scenario.category === "active_listening"
+    ? scenario.userPrompt
+    : `${scenario.userPrompt}\n\nContext: ${scenario.screenContextText}\n${scenario.transcriptChunks.join(" ")}`.slice(0, 2000);
 
 /** @returns {Promise<{ body: object, expectRoute: string }>} */
 async function buildRequestBody() {
-  let body = { prompt, responseStyle: "overlay" };
+  let body = {
+    prompt,
+    responseStyle: "overlay",
+    ...(scenario.category === "active_listening"
+      ? { session: buildActiveListeningSession(scenario) }
+      : {}),
+  };
   let expectRoute = "glass_direct";
 
   if (scenario.testKind === "controlled_visual_fixture" && scenario.fixturePage) {
@@ -250,7 +304,9 @@ const meeting =
     : null;
 
 const categoryGrade = CATEGORY_GRADED.has(scenario.category)
-  ? scoreCategoryAnswer({ answer: data.answer, scenario })
+  ? scenario.category === "active_listening"
+    ? scoreActiveListeningAnswer({ answer: data.answer, scenario })
+    : scoreCategoryAnswer({ answer: data.answer, scenario })
   : null;
 
 appendResult({

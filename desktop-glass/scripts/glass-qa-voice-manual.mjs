@@ -55,6 +55,26 @@ const CHECKLIST = [
   "Confirm a debrief is generated and saved.",
 ];
 
+const ACTIVE_LISTENING_LISTEN = [
+  "Start Listen mode from the panel.",
+  "Start system audio (Configure Audio if needed).",
+  "Play any video, podcast, or webinar.",
+  'Ask: "How does that work?" — answer should use recent transcript.',
+  'Ask: "Create a quick action list from that." — asset from recent content.',
+  'Ask: "What did I miss?" — summary of last few minutes.',
+  "Generate report / debrief when done.",
+];
+
+const ACTIVE_LISTENING_MEETINGS = [
+  "Start Meetings mode from the panel.",
+  "Choose Microphone or Computer Audio.",
+  "Join or play a sales-call style audio source.",
+  'Ask: "What objection is this?" — must not invent customer quotes.',
+  'Ask: "What should I say next?" — short live-call talk track.',
+  'Ask: "How should I follow up?" — grounded in transcript.',
+  "Generate meeting debrief when done.",
+];
+
 const METADATA_FIELDS = [
   ["packaged_app_used", "packaged app used (yes/no/unverified)"],
   ["mic_permission", "mic permission granted (yes/no/unverified)"],
@@ -174,6 +194,18 @@ function buildReport({ apiUrl, health, results, metadata, notes }) {
     );
   });
   lines.push("");
+  lines.push("## Active Listening — Listen mode (manual)");
+  lines.push("");
+  ACTIVE_LISTENING_LISTEN.forEach((step, i) => {
+    lines.push(`${i + 1}. [ ] ${step}`);
+  });
+  lines.push("");
+  lines.push("## Active Listening — Meetings / sales (manual)");
+  lines.push("");
+  ACTIVE_LISTENING_MEETINGS.forEach((step, i) => {
+    lines.push(`${i + 1}. [ ] ${step}`);
+  });
+  lines.push("");
   lines.push("## Metadata (no raw audio / no screenshots / no base64)");
   lines.push("");
   lines.push("| Field | Value |");
@@ -235,6 +267,10 @@ if (interactive) {
 } else {
   console.log("\n--- Checklist (run in the packaged app) ---");
   CHECKLIST.forEach((s, i) => console.log(`${String(i + 1).padStart(2, " ")}. [ ] ${s}`));
+  console.log("\n--- Active Listening — Listen mode ---\n");
+  ACTIVE_LISTENING_LISTEN.forEach((s, i) => console.log(`  L${i + 1}. [ ] ${s}`));
+  console.log("\n--- Active Listening — Meetings ---\n");
+  ACTIVE_LISTENING_MEETINGS.forEach((s, i) => console.log(`  M${i + 1}. [ ] ${s}`));
   console.log("\n--- Capture these (metadata only — no raw audio/screenshots) ---");
   METADATA_FIELDS.forEach(([, label]) => console.log(`  - ${label}`));
   console.log("\nRe-run with --interactive to record pass/fail + metadata into the report.");

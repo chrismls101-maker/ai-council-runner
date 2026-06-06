@@ -142,6 +142,20 @@ import {
   detectDebriefTrigger,
 } from "../shared/copilotDebrief.ts";
 import {
+  buildActiveListeningContext,
+  deriveActiveListeningMode,
+  activeListeningMissingContextMessage,
+} from "../shared/activeListeningContext.ts";
+import { shouldShortCircuitThinContext } from "../shared/activeListeningGuidance.ts";
+import {
+  buildActiveListeningProactiveIntervention,
+  clearActiveListeningRuntime,
+  initialActiveListeningRuntime,
+  pickActiveListeningProactiveMoment,
+  proactiveShouldShowCard,
+  type ActiveListeningRuntimeState,
+} from "../shared/activeListeningProactive.ts";
+import {
   createListeningLimitState,
   extendListeningLimit,
   LISTENING_LIMIT_RESPONSE_TIMEOUT_MS,
@@ -387,6 +401,62 @@ let systemAudioLastSignalMs: number | undefined;
 let copilotVisualAskFailures = 0;
 const copilotRecentCommands: string[] = [];
 const copilotRecentResponses: string[] = [];
+let activeListeningRuntime: ActiveListeningRuntimeState = initialActiveListeningRuntime();
+
+function buildActiveListeningAskContext(userPrompt?: string) {
+  const session = sessions.current();
+  const config = copilot.getConfig();
+  const activeMode = deriveActiveListeningMode(config, sessionIsLive() && copilotModeIsActive(config.mode));
+  const screenshotMeta = state.latestScreenshot
+    ? {
+        capturedAt: state.latestScreenshot.capturedAt,
+        sourceTitle: state.latestScreenshot.sourceTitle,
+        label: state.latestScreenshot.displayLabel,
+        screenshotPath: state.latestScreenshot.screenshotPath,
+      }
+    : undefined;
+  return buildActiveListeningContext({
+    session: session ?? null,
+    sessionLive: sessionIsLive(),
+    runningTranscript: state.transcript,
+    copilotConfig: config,
+    activeMode,
+    recentQuestions: copilotRecentCommands,
+    lastAnswer: state.lastAskResponse?.fullAnswer ?? state.lastAskResponse?.answer,
+    screenshotMeta,
+    userPrompt,
+  });
+}
+
+function maybeShowActiveListeningProactive(newText: string): void {
+  const config = copilot.getConfig();
+  const activeMode = deriveActiveListeningMode(config, sessionIsLive() && copilotModeIsActive(config.mode));
+  if (activeMode !== "listen" && activeMode !== "meetings") return;
+  const moment = pickActiveListeningProactiveMoment({
+    newTranscript: newText,
+    recentCommands: copilotRecentCommands,
+    copilotConfig: config,
+    nowMs: Date.now(),
+    lastProactiveMs: activeListeningRuntime.lastProactiveMs,
+    recentShownTexts: activeListeningRuntime.recentProactiveTexts,
+  });
+  if (!moment) return;
+  if (!proactiveShouldShowCard(config)) {
+    state.lastNotice = `Active Listening noted: ${moment.title}`;
+    return;
+  }
+  const intervention = buildActiveListeningProactiveIntervention(moment, {
+    idFactory: () => `al-${Date.now()}`,
+    clock: () => new Date().toISOString(),
+  });
+  activeListeningRuntime.lastProactiveMs = Date.now();
+  activeListeningRuntime.recentProactiveTexts.push(moment.excerpt);
+  if (activeListeningRuntime.recentProactiveTexts.length > 12) {
+    activeListeningRuntime.recentProactiveTexts.shift();
+  }
+  pushFeed(createCommandFeedItem("response", intervention.body, { title: `Active Listening · ${intervention.title}` }));
+  push();
+}
 
 // --- Max listening duration --------------------------------------------------
 let listeningLimitState: ListeningLimitState = createListeningLimitState();
@@ -500,6 +570,7 @@ function bindCopilotToSession(): void {
   copilotVisualAskFailures = 0;
   copilotRecentCommands.length = 0;
   copilotRecentResponses.length = 0;
+  activeListeningRuntime = clearActiveListeningRuntime();
   copilot.bindSession(id);
   if (session?.copilot) {
     copilot.hydrate(session.id, session.copilot);
@@ -923,16 +994,21 @@ async function sendTranscript(): Promise<void> {
   }
 }
 
-function buildGlassAskSessionPayload(): GlassAskSessionPayload | undefined {
+function buildGlassAskSessionPayload(userPrompt?: string): GlassAskSessionPayload | undefined {
   const session = sessions.current();
   const live = sessionIsLive();
   const ctx = getCachedWindowContext();
+  const activeListening = buildActiveListeningAskContext(userPrompt);
 
   const payload: GlassAskSessionPayload = {
     sessionId: session?.id,
     title: session?.title,
     summary: live && session ? buildSessionSummary(session) : undefined,
-    recentTranscript: state.transcript.trim() ? state.transcript.trim().slice(-1500) : undefined,
+    recentTranscript: activeListening?.recentTranscriptWindow?.trim()
+      ? activeListening.recentTranscriptWindow.trim().slice(-1500)
+      : state.transcript.trim()
+        ? state.transcript.trim().slice(-1500)
+        : undefined,
     currentSource:
       ctx.status === "available"
         ? {
@@ -943,6 +1019,7 @@ function buildGlassAskSessionPayload(): GlassAskSessionPayload | undefined {
         : ctx.sourceName
           ? { sourceTitle: ctx.sourceName }
           : undefined,
+    activeListening,
   };
 
   if (live && session) {
@@ -961,7 +1038,8 @@ function buildGlassAskSessionPayload(): GlassAskSessionPayload | undefined {
     payload.recentTranscript ||
     payload.recentEvents?.length ||
     payload.recentInsights?.length ||
-    payload.currentSource;
+    payload.currentSource ||
+    payload.activeListening?.enabled;
   return hasContext ? payload : undefined;
 }
 
@@ -1267,6 +1345,23 @@ async function submitCommand(rawText: string): Promise<void> {
     await persistSessions(sessions);
   }
 
+  const activeCtx = buildActiveListeningAskContext(text);
+  if (shouldShortCircuitThinContext(activeCtx) && !visualIntent) {
+    state.askInFlight = false;
+    state.askStatus = "done";
+    const msg = activeListeningMissingContextMessage(activeCtx?.detectedIntent);
+    state.lastAskResponse = {
+      prompt: text,
+      answer: msg,
+      fullAnswer: msg,
+      at: new Date().toISOString(),
+      routeUsed: "glass_direct",
+    };
+    pushFeed(createCommandFeedItem("response", msg, { prompt: text, fullBody: msg }));
+    push();
+    return;
+  }
+
   let latestScreenshot: import("../shared/glassScreenContext.ts").GlassAskLatestScreenshot | undefined;
   let visualCaptureWarning: string | undefined;
   let usedVision = false;
@@ -1486,7 +1581,7 @@ async function submitCommand(rawText: string): Promise<void> {
       config,
       {
         prompt: text,
-        session: buildGlassAskSessionPayload(),
+        session: buildGlassAskSessionPayload(text),
         latestScreenshot,
         visualIntent: visualIntent || undefined,
         responseStyle: "overlay",
@@ -1810,6 +1905,7 @@ async function handleCommand(
       stopCopilotLoop();
       resetListeningLimitTracking();
       systemAudioLastSignalMs = undefined;
+      activeListeningRuntime = clearActiveListeningRuntime();
       push();
       return;
     }
@@ -1837,6 +1933,7 @@ async function handleCommand(
       } else if (!sessionIsLive()) {
         state.lastNotice = "Transcript saved. Start a session to keep chunks in the timeline.";
       }
+      maybeShowActiveListeningProactive(chunk);
       push();
       return;
     }

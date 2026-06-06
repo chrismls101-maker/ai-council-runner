@@ -45,6 +45,7 @@ export interface GlassAskSessionPayload {
     windowTitle?: string;
     sourceTitle?: string;
   };
+  activeListening?: import("./activeListeningPrompt.js").ActiveListeningContextPayload;
 }
 
 export interface GlassAskRequestBody {

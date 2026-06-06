@@ -43,6 +43,8 @@ export interface GlassModePreset {
   meetingIntelligence: boolean;
   /** Debrief generation enabled for this mode. */
   debriefEnabled: boolean;
+  /** Active Listening context + interruption routing enabled. */
+  activeListeningEnabled: boolean;
 }
 
 export const GLASS_MODE_PRESETS: Record<GlassModeId, GlassModePreset> = {
@@ -60,6 +62,7 @@ export const GLASS_MODE_PRESETS: Record<GlassModeId, GlassModePreset> = {
     startsListeningIfReady: true,
     meetingIntelligence: false,
     debriefEnabled: true,
+    activeListeningEnabled: true,
   },
   meetings: {
     id: "meetings",
@@ -75,6 +78,7 @@ export const GLASS_MODE_PRESETS: Record<GlassModeId, GlassModePreset> = {
     startsListeningIfReady: false,
     meetingIntelligence: true,
     debriefEnabled: true,
+    activeListeningEnabled: true,
   },
   work: {
     id: "work",
@@ -90,6 +94,7 @@ export const GLASS_MODE_PRESETS: Record<GlassModeId, GlassModePreset> = {
     startsListeningIfReady: false,
     meetingIntelligence: false,
     debriefEnabled: true,
+    activeListeningEnabled: true,
   },
   fix: {
     id: "fix",
@@ -105,6 +110,7 @@ export const GLASS_MODE_PRESETS: Record<GlassModeId, GlassModePreset> = {
     startsListeningIfReady: false,
     meetingIntelligence: false,
     debriefEnabled: true,
+    activeListeningEnabled: true,
   },
 };
 

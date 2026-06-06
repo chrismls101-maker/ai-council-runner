@@ -303,6 +303,45 @@ export function scoreCategoryAnswer(input) {
   };
 }
 
+const FAKE_AUDIO_CLAIM =
+  /\b(i (?:am |'m )?listening to (?:your|the)|from the (?:real )?(?:audio|video|youtube|podcast) you (?:are playing|played)|i watched the video)\b/i;
+
+/**
+ * Grade Active Listening answers — must use transcript anchors, not claim real audio.
+ *
+ * @param {object} input
+ * @param {string} input.answer
+ * @param {import('../qa-scenarios/iivo-glass-scenarios.mjs').QaScenario} input.scenario
+ */
+export function scoreActiveListeningAnswer(input) {
+  const answer = String(input.answer ?? "");
+  const text = answer.toLowerCase();
+  const s = input.scenario ?? {};
+  const anchors = s.expectedAnchors ?? [];
+  const mentionedAnchors = anchors.filter((a) => text.includes(String(a).toLowerCase()));
+  const thin = anchors.length === 0;
+  const needed = anchors.length >= 3 ? 2 : 1;
+  const hasFacts = !thin && mentionedAnchors.length >= needed;
+  const missingCalledOut = CATEGORY_MISSING_RE.test(answer);
+  const fakeAudioClaim = FAKE_AUDIO_CLAIM.test(answer);
+  const councilStub = /\b(Final Action Plan|IIVO Glass is working)\b/.test(answer);
+
+  let verdict;
+  if (fakeAudioClaim || councilStub) verdict = "weak";
+  else if (thin && missingCalledOut) verdict = "acceptable";
+  else if (!hasFacts && !missingCalledOut) verdict = "weak";
+  else if (hasFacts) verdict = "strong";
+  else verdict = "acceptable";
+
+  return {
+    verdict,
+    mentionedAnchors,
+    fakeAudioClaim,
+    missingCalledOut,
+    hasFacts,
+  };
+}
+
 /**
  * Hard fail reasons for controlled visual fixture live asks.
  * @param {object} input

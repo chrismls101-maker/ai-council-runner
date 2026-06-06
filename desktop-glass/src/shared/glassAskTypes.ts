@@ -22,6 +22,8 @@ export interface GlassAskSessionPayload {
     windowTitle?: string;
     sourceTitle?: string;
   };
+  /** Active Listening rolling context (text/metadata only — no raw audio/base64). */
+  activeListening?: import("./activeListeningTypes.ts").ActiveListeningContextPayload;
 }
 
 export interface GlassAskLatestScreenshot {

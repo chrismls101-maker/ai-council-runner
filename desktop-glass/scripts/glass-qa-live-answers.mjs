@@ -36,6 +36,7 @@ const REQUIRED_CATEGORIES = [
   "visual_ask",
   "video_learning",
   "general_user",
+  "active_listening",
 ];
 
 const MIN_VISUAL_FIXTURES = 5;

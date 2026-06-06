@@ -10,6 +10,7 @@ import {
 } from "../config/glassModels.js";
 import { callOpenAIWithModelChain, ProviderError } from "../providers/openai.js";
 import type { GlassAskRequestBody, GlassAskResponseBody, GlassAskSessionPayload } from "./glassAskTypes.js";
+import { buildActiveListeningPromptBlock } from "./activeListeningPrompt.js";
 
 export const GLASS_DIRECT_SYSTEM_PROMPT = `You are IIVO Glass, a fast conversational AI companion over the user's workspace. Answer naturally and directly, like ChatGPT. Use the provided session context only when relevant. Be concise unless the user asks for depth. Do not invent screen/audio details you were not given. Do not use council/report formatting.
 
@@ -420,7 +421,9 @@ export function buildGlassDirectUserPrompt(
   }
 
   const categoryGuidance = buildNonMeetingCategoryGuidance(prompt);
-  if (looksLikeMeeting(prompt, session)) {
+  if (session?.activeListening?.enabled) {
+    lines.push("", buildActiveListeningPromptBlock(session.activeListening, prompt));
+  } else if (looksLikeMeeting(prompt, session)) {
     lines.push("", buildMeetingAnswerGuidance(meetingWantsFullReport(prompt)));
   } else if (categoryGuidance) {
     lines.push("", categoryGuidance);

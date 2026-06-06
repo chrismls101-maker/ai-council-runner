@@ -18,6 +18,7 @@ export const SCENARIO_CATEGORY_LIST = [
   "open_in_iivo",
   "visual_ask",
   "session_debrief",
+  "active_listening",
 ] as const;
 
 export type ScenarioCategory = (typeof SCENARIO_CATEGORY_LIST)[number];
