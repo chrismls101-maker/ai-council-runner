@@ -1,5 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   buildAskTextFromMicDraft,
   composeCommandBarMicText,
@@ -13,6 +16,20 @@ import {
   transcriptionReducer,
 } from "../shared/transcriptionTypes.ts";
 import { stopMediaStreamState } from "../shared/systemAudioCapture.ts";
+import { COMMAND_BAR_HEIGHT } from "../shared/glassLayoutMath.ts";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const ROOT = join(__dirname, "..");
+
+test("command bar window height fits accessory strips above the composer pill", () => {
+  assert.ok(COMMAND_BAR_HEIGHT >= 240, "command bar window must fit stacked accessories");
+  const commandBar = readFileSync(join(ROOT, "renderer", "command", "CommandBar.tsx"), "utf8");
+  assert.ok(commandBar.includes("command-bar-stack"), "stack wrapper present");
+  assert.ok(commandBar.includes("command-bar-accessories"), "accessories sit above pill");
+  assert.ok(commandBar.includes('data-testid="glass-command-bar-stack"'), "stack test id for e2e");
+  assert.ok(commandBar.includes("<VoiceModePanel />"), "voice panel in accessory stack");
+  assert.match(commandBar, /composer-shell[\s\S]*composer-main/, "main pill keeps single composer row");
+});
 
 test("composeCommandBarMicText merges prefix, finalized, and interim", () => {
   assert.equal(composeCommandBarMicText("Hello", "world", " today"), "Hello world today");

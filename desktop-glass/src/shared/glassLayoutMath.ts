@@ -60,8 +60,8 @@ const DOCK_MAX_HEIGHT_RATIO = 0.25;
 const DOCK_MAX_HEIGHT_CAP = 960;
 const DOCK_DEFAULT_MAX_WIDTH = 720;
 const COMMAND_BAR_MAX_WIDTH = 760;
-/** Main row + optional secondary listen status / source row. */
-export const COMMAND_BAR_HEIGHT = 132;
+/** Main composer row + optional accessory strips (voice, listen status, screen context). */
+export const COMMAND_BAR_HEIGHT = 280;
 const COMMAND_BAR_BOTTOM_MARGIN = 28;
 const COMMAND_BAR_SIDE_MARGIN = 48;
 const DOCK_ABOVE_COMMAND_BAR_GAP = 0;

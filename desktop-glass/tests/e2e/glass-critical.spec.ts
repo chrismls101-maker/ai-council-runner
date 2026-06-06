@@ -75,6 +75,8 @@ test.describe("IIVO Glass Electron E2E", () => {
     const { command, overlay, dock } = await getGlassWindows(app.browser);
 
     await expect(command.locator('[data-testid="glass-command-bar"]')).toBeVisible();
+    await expect(command.locator('[data-testid="glass-command-bar-stack"]')).toBeVisible();
+    await expect(command.locator('[data-testid="glass-command-bar-accessories"]')).toHaveCount(0);
     await expect(overlay.locator('[data-testid="glass-overlay-root"]')).toBeVisible();
     await expect(dock.locator('[data-testid="glass-dock"]')).toBeVisible();
     expect(app.electronProcess.exitCode).toBeNull();
@@ -291,7 +293,7 @@ test.describe("IIVO Glass Electron E2E", () => {
   test("10 — setup reflects mic denied and virtual audio guidance", async () => {
     const { command, dock, panel } = await getGlassWindows(app.browser);
     await dock.locator('[data-testid="glass-dock-open-panel"]').click();
-    await openPanelTab(panel, "setup");
+    await openPanelTab(panel, "audio");
 
     await command.evaluate(() => {
       window.glass.send({ type: "report-mic-permission", status: "denied" });
@@ -424,8 +426,6 @@ test.describe("IIVO Glass Electron E2E", () => {
   test("15 — setup shows separate screen and system audio statuses", async () => {
     const { command, dock, panel } = await getGlassWindows(app.browser);
     await dock.locator('[data-testid="glass-dock-open-panel"]').click();
-    await openPanelTab(panel, "setup");
-    await expect(panel.locator('[data-testid="glass-panel-setup"]')).toBeVisible();
 
     await command.evaluate(() => {
       window.glass.send({
@@ -436,24 +436,30 @@ test.describe("IIVO Glass Electron E2E", () => {
       });
     });
 
+    await openPanelTab(panel, "audio");
+    await expect(panel.locator('[data-testid="glass-panel-audio-tab"]')).toBeVisible();
+
     await expect
       .poll(async () => {
-        const screen = (await readGlassState(command)).setupCapabilities?.find(
-          (r) => r.id === "screenRecording",
+        const sys = (await readGlassState(command)).setupCapabilities?.find(
+          (r) => r.id === "systemAudio",
         );
-        return screen?.label;
+        return sys?.label;
       })
-      .toBe("Ready");
+      .toBe("Source enumeration failed");
 
     const state = await readGlassState(command);
-    const screen = state.setupCapabilities?.find((r) => r.id === "screenRecording");
     const sys = state.setupCapabilities?.find((r) => r.id === "systemAudio");
-    expect(screen?.label).toBe("Ready");
     expect(sys?.label).toBe("Source enumeration failed");
     await expect(panel.locator('[data-testid="glass-system-audio-configure"]')).toContainText(
       /Enumeration failed|Source enumeration failed/i,
     );
     await expect(panel.locator('[data-testid="glass-setup-row-systemAudio"]')).toHaveCount(0);
+
+    await openPanelTab(panel, "setup");
+    await expect(panel.locator('[data-testid="glass-panel-setup"]')).toBeVisible();
+    const screen = state.setupCapabilities?.find((r) => r.id === "screenRecording");
+    expect(screen?.label).toBe("Ready");
     await expect(panel.locator('[data-testid="glass-setup-row-screenRecording"]')).toContainText(
       /Ready/i,
     );

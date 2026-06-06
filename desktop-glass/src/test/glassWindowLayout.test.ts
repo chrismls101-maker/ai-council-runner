@@ -83,7 +83,7 @@ test("formatGlassWindowDiagnostics includes click-through flag and command bar",
 
   assert.match(line, /overlay=.*clickThrough=true/);
   assert.match(line, /dock=x100,y49,640x72/);
-  assert.match(line, /commandBar=x900,y1450,760x132 clickThrough=false/);
+  assert.match(line, /commandBar=x900,y1450,760x280 clickThrough=false/);
   assert.match(line, /display=id1/);
 });
 

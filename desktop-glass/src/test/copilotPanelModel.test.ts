@@ -65,6 +65,7 @@ test("Voice Mode remains separate from Copilot panel", () => {
   const commandBar = readFileSync(join(ROOT, "renderer", "command", "CommandBar.tsx"), "utf8");
   const copilot = readFileSync(join(ROOT, "renderer", "panel", "CopilotPanel.tsx"), "utf8");
   assert.ok(commandBar.includes("VoiceModePanel"), "Voice Mode stays on command bar");
+  assert.ok(commandBar.includes("command-bar-accessories"), "Voice/accessories above composer pill");
   assert.ok(!copilot.includes("VoiceModePanel"), "Copilot panel does not embed Voice Mode");
   assert.ok(!copilot.toLowerCase().includes("start voice mode"), "Voice loop stays separate");
 });

@@ -1990,8 +1990,64 @@ html.glass-dock-window #root {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  padding: 0 0 6px;
+  padding: 0 0 4px;
   pointer-events: none;
+  box-sizing: border-box;
+}
+
+.command-bar-stack {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-end;
+  gap: 8px;
+  width: 100%;
+  max-width: 700px;
+  pointer-events: auto;
+}
+
+.command-bar-accessories {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.command-bar-accessory {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: rgba(8, 10, 16, 0.82);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+.command-bar-accessory.command-bar__screen-context {
+  padding: 6px 12px 8px;
+  font-size: 11px;
+  color: var(--glass-text-dim);
+  line-height: 1.35;
+}
+
+.command-bar-accessory.command-bar__secondary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+}
+
+.command-bar-accessories .voice-mode--active {
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: rgba(8, 10, 16, 0.88);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
 }
 
 /* ── IIVO landing composer shell (matches web ChatComposer) ── */
@@ -2001,7 +2057,8 @@ html.glass-dock-window #root {
   overflow: hidden;
   pointer-events: auto;
   width: 100%;
-  max-width: 700px;
+  max-width: none;
+  flex-shrink: 0;
   min-height: 58px;
   padding: 9px 10px 10px 8px;
   gap: 0;
@@ -2045,9 +2102,7 @@ html.glass-dock-window #root {
 }
 
 .command-bar.composer-shell .composer-main,
-.command-bar.composer-shell .command-bar__secondary,
-.command-bar.composer-shell .voice-mode,
-.command-bar.composer-shell .command-bar__screen-context {
+.command-bar.composer-shell .composer-led-rim {
   position: relative;
   z-index: 1;
 }
@@ -2145,28 +2200,27 @@ html.glass-dock-window #root {
   background: rgba(255, 255, 255, 0.22);
 }
 
-.command-bar--unlocked {
-  position: relative;
+.command-bar-stack--unlocked {
   outline: 1px dashed rgba(255, 255, 255, 0.48);
   outline-offset: 3px;
+  border-radius: 18px;
 }
 
-.command-bar--unlocked .command-bar__row,
-.command-bar--unlocked .composer-main,
-.command-bar--unlocked .command-bar__secondary {
+.command-bar-stack--unlocked .command-bar-accessories,
+.command-bar-stack--unlocked .command-bar.composer-shell .command-bar__row,
+.command-bar-stack--unlocked .command-bar.composer-shell .composer-main {
   pointer-events: none;
   opacity: 0.34;
   filter: saturate(0.35);
 }
 
-.command-bar--unlocked .command-bar__row,
-.command-bar--unlocked .composer-main {
+.command-bar-stack--unlocked .command-bar.composer-shell .command-bar__row,
+.command-bar-stack--unlocked .command-bar.composer-shell .composer-main {
   position: relative;
   z-index: 10;
-  pointer-events: none;
 }
 
-.command-bar--unlocked .command-chrome-lock {
+.command-bar-stack--unlocked .command-chrome-lock {
   pointer-events: auto;
   opacity: 1;
   filter: none;
@@ -2174,6 +2228,10 @@ html.glass-dock-window #root {
   z-index: 11;
   -webkit-app-region: no-drag;
   cursor: pointer;
+}
+
+.command-bar--unlocked {
+  position: relative;
 }
 
 .command-bar__row {
@@ -2416,7 +2474,6 @@ html.glass-dock-window #root {
 
 .command-bar__screen-context {
   margin: 0;
-  padding: 0 4px 4px;
   font-size: 11px;
   color: var(--glass-text-dim);
   line-height: 1.35;
@@ -2427,7 +2484,6 @@ html.glass-dock-window #root {
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  padding-top: 2px;
 }
 
 .command-listen-status {
