@@ -11,7 +11,10 @@ import type { ListenMoment } from "./listenMomentTypes.ts";
 import type { MediaContext } from "./mediaContextTypes.ts";
 import type { ListenSegmentKind } from "./listenSegmentClassifier.ts";
 import type { ListenCheckpointSummary } from "./listenCheckpoint.ts";
-import { checkpointSummaryToMarkdown } from "./listenCheckpoint.ts";
+import {
+  checkpointSummaryToMarkdown,
+  listenCheckpointsFromSessionEvents,
+} from "./listenCheckpoint.ts";
 import { buildListenReportPersonaGuidance } from "./listenModePersona.ts";
 import { buildListenLiveNotes } from "./listenLiveNotes.ts";
 
@@ -83,7 +86,9 @@ export function buildListenReportSections(input: ListenReportInput): GlassCopilo
   const media = input.mediaContext ?? mediaFromSession(input.session) ?? null;
   const moments = input.moments;
   const contentMoments = moments.filter(isMainContentListenMoment);
-  const liveNotes = buildListenLiveNotes({ moments: contentMoments });
+  const checkpoints =
+    input.checkpoints ?? listenCheckpointsFromSessionEvents(input.session.events);
+  const liveNotes = buildListenLiveNotes({ moments: contentMoments, checkpoints });
 
   const sourceLines: string[] = [];
   if (media?.title) sourceLines.push(`Title: ${media.title}`);
@@ -137,9 +142,12 @@ export function buildListenReportSections(input: ListenReportInput): GlassCopilo
       : keyIdeas[0] ?? "Review Live Notes and transcript for the main takeaway from this session.";
 
   const about =
-    liveNotes.currentTopic ??
-    media?.visibleTextSummary?.slice(0, 200) ??
-    "Summary from captured transcript and IIVO Live Notes.";
+    checkpoints.length > 0
+      ? checkpoints.map((cp) => cp.topicSummary).filter(Boolean).slice(-3).join(" · ") ||
+        liveNotes.currentTopic
+      : liveNotes.currentTopic ??
+        media?.visibleTextSummary?.slice(0, 200) ??
+        "Summary from Live Notes and session checkpoints — not full transcript replay.";
 
   const sections: GlassCopilotDebriefSection[] = [
     { heading: "Source", items: sourceLines },
@@ -175,7 +183,7 @@ export function buildListenReportSections(input: ListenReportInput): GlassCopilo
     { heading: "Final takeaway", items: [finalTakeaway] },
   ];
 
-  const thinReport = contentMoments.length === 0;
+  const thinReport = contentMoments.length === 0 && checkpoints.length === 0;
   if (thinReport) {
     sections[1]!.items = [
       "Not enough main-content moments were captured — audio may have been thin, muted, or mostly ads/intros.",
@@ -189,7 +197,12 @@ export function buildListenReportSections(input: ListenReportInput): GlassCopilo
     });
   }
 
-  if (input.checkpoints?.length) {
+  if (checkpoints.length) {
+    sections.splice(2, 0, {
+      heading: "Session checkpoints",
+      items: checkpoints.map((cp) => checkpointSummaryToMarkdown(cp).replace(/\n/g, " · ")),
+    });
+  } else if (input.checkpoints?.length) {
     sections.push({
       heading: "Session checkpoints",
       items: input.checkpoints.map((cp) => checkpointSummaryToMarkdown(cp).replace(/\n/g, " · ")),

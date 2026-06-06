@@ -194,7 +194,15 @@ import { listenThoughtFeedBodies } from "../shared/listenThoughtCards.ts";
 import {
   buildListenLiveNotes,
   listenTranscriptChunksFromEvents,
+  LIVE_NOTES_REFRESH_MS,
+  shouldRefreshStreamingLiveNotes,
 } from "../shared/listenLiveNotes.ts";
+import {
+  applyListenTranscriptFragment,
+  initialListenRollingTranscript,
+  rollingTranscriptWindow,
+  type ListenRollingTranscriptState,
+} from "../shared/listenStreamingTranscript.ts";
 import {
   decideListenCardSurface,
   type ListenCardSurfaceDecision,
@@ -208,7 +216,7 @@ import {
 import {
   buildListenCheckpointSummary,
   shouldWriteListenCheckpoint,
-  DEFAULT_LISTEN_CHECKPOINT_MINUTES,
+  STREAMING_LISTEN_CHECKPOINT_MINUTES,
 } from "../shared/listenCheckpoint.ts";
 import {
   pruneRunningTranscript,
@@ -518,16 +526,81 @@ const copilotRecentResponses: string[] = [];
 let activeListeningRuntime: ActiveListeningRuntimeState = initialActiveListeningRuntime();
 let listenMomentRuntime: ListenModeRuntime = initialListenMomentEngineState();
 let listenLastChunkMs: number | undefined;
+let listenRollingTranscript: ListenRollingTranscriptState = initialListenRollingTranscript();
+
+function listenCheckpointsForSession(): import("../shared/listenCheckpoint.ts").ListenCheckpointSummary[] {
+  const session = sessions.current();
+  if (!session) return [];
+  return listenCheckpointsFromSessionEvents(session.events);
+}
 
 function buildCurrentListenLiveNotes() {
   const session = sessions.current();
   const chunks = session ? listenTranscriptChunksFromEvents(session.events) : [];
+  const checkpoints = listenCheckpointsForSession();
+  const warmupCtx = {
+    attentionLevel: copilot.getConfig().listenAttentionLevel,
+    nowMs: Date.now(),
+    recentTranscriptChars: 0,
+    recentSurfacedTexts: [],
+    userReceivingAnswer: false,
+    muteSuggestions: copilot.getConfig().muteSuggestions,
+    surfacesInLast10Min: 0,
+    listenStartedMs: listenMomentRuntime.listenStartedMs,
+    listenWarmupMs: copilot.getConfig().listenWarmupMs,
+  };
+  const building =
+    isListenModeActive() &&
+    state.privacy.listening &&
+    isListenWarmupActive(warmupCtx);
   return buildListenLiveNotes({
     moments: listenMomentRuntime.moments,
     transcriptChunks: chunks,
+    rollingTranscript: listenRollingTranscript.rollingText,
     listenStartedMs: listenMomentRuntime.listenStartedMs,
     nowMs: Date.now(),
+    lastRefreshMs: listenMomentRuntime.lastLiveNotesRefreshMs,
+    checkpoints,
+    listeningStatus: building ? "building" : state.privacy.listening ? "listening" : "idle",
+    duplicateFragmentCount: listenRollingTranscript.duplicateFragmentCount,
   });
+}
+
+async function refreshStreamingListenNotes(nowMs: number, force = false): Promise<void> {
+  if (!isListenModeActive()) return;
+  const last = listenMomentRuntime.lastLiveNotesRefreshMs;
+  if (!force && !shouldRefreshStreamingLiveNotes(last, nowMs, LIVE_NOTES_REFRESH_MS)) {
+    return;
+  }
+
+  const rolling = rollingTranscriptWindow(listenRollingTranscript);
+  const prevLen = listenMomentRuntime.lastEvalTranscriptLen ?? 0;
+  const delta = rolling.length > prevLen ? rolling.slice(prevLen) : rolling.slice(-Math.min(200, rolling.length));
+
+  if (delta.trim().length >= 12) {
+    const config = copilot.getConfig();
+    const media = state.mediaContext;
+    const segment = classifyListenSegment({
+      transcript: delta,
+      visibleText: media?.visibleTextSummary,
+      mediaTitle: media?.title,
+      mediaChannel: media?.channelOrSource,
+    });
+
+    listenMomentRuntime.moments = evaluateListenMoments({
+      newText: delta,
+      recentTranscript: rolling.slice(0, Math.max(0, rolling.length - delta.length)),
+      existingMoments: listenMomentRuntime.moments,
+      nowMs,
+      idFactory: () => `lm-${nowMs}-${Math.random().toString(36).slice(2, 8)}`,
+      segmentKind: segment.kind,
+      mediaContext: media,
+    });
+    listenMomentRuntime.lastEvalTranscriptLen = rolling.length;
+  }
+
+  listenMomentRuntime.lastLiveNotesRefreshMs = nowMs;
+  push();
 }
 
 function buildActiveListeningAskContext(userPrompt?: string) {
@@ -714,7 +787,7 @@ async function pruneCurrentSessionEvents(): Promise<void> {
 
 async function maybeWriteListenCheckpoint(nowMs: number): Promise<void> {
   if (!listenMomentRuntime.listenStartedMs) return;
-  const checkpointMinutes = DEFAULT_LISTEN_CHECKPOINT_MINUTES;
+  const checkpointMinutes = STREAMING_LISTEN_CHECKPOINT_MINUTES;
   const cp = shouldWriteListenCheckpoint({
     listenStartedMs: listenMomentRuntime.listenStartedMs,
     nowMs,
@@ -758,7 +831,11 @@ async function persistListenMomentEvent(moment: ListenMoment): Promise<void> {
   await persistSessions(sessions);
 }
 
-async function processListenModeChunk(newText: string, tags?: string[]): Promise<void> {
+async function processListenModeChunk(
+  newText: string,
+  tags?: string[],
+  opts?: { interim?: boolean },
+): Promise<void> {
   if (!tags?.includes("system_audio")) return;
   const config = copilot.getConfig();
   if (config.mode === "off") return;
@@ -769,8 +846,22 @@ async function processListenModeChunk(newText: string, tags?: string[]): Promise
     listenMomentRuntime.listenStartedMs = nowMs;
   }
 
+  listenRollingTranscript = applyListenTranscriptFragment(listenRollingTranscript, {
+    text: newText,
+    isInterim: opts?.interim ?? false,
+    nowMs,
+    idFactory: () => `lf-${nowMs}-${Math.random().toString(36).slice(2, 8)}`,
+  });
+
+  if (opts?.interim) {
+    await refreshStreamingListenNotes(nowMs, true);
+    push();
+    return;
+  }
+
+  const rolling = rollingTranscriptWindow(listenRollingTranscript);
   const ctx = buildActiveListeningAskContext();
-  const recentTranscript = ctx?.recentTranscriptWindow ?? "";
+  const recentTranscript = rolling || (ctx?.recentTranscriptWindow ?? "");
   const media = state.mediaContext;
 
   const segment = classifyListenSegment({
@@ -822,6 +913,7 @@ async function processListenModeChunk(newText: string, tags?: string[]): Promise
   if (!candidate) {
     listenMomentRuntime.silenceReasons.push("No ready moment detected.");
     if (listenMomentRuntime.silenceReasons.length > 30) listenMomentRuntime.silenceReasons.shift();
+    await refreshStreamingListenNotes(nowMs);
     push();
     return;
   }
@@ -844,6 +936,8 @@ async function processListenModeChunk(newText: string, tags?: string[]): Promise
     };
     listenMomentRuntime.moments = markListenMomentStatus(listenMomentRuntime.moments, candidate.id, "saved_silently", updated);
     await persistListenMomentEvent(updated);
+    await refreshStreamingListenNotes(nowMs);
+    push();
     return;
   }
 
@@ -876,6 +970,7 @@ async function processListenModeChunk(newText: string, tags?: string[]): Promise
       );
       listenMomentRuntime.queuedMomentIds = [...listenMomentRuntime.queuedMomentIds, candidate.id].slice(-20);
       await persistListenMomentEvent(silent);
+      await refreshStreamingListenNotes(nowMs);
       push();
       return;
     }
@@ -893,8 +988,10 @@ async function processListenModeChunk(newText: string, tags?: string[]): Promise
     } else {
       state.lastNotice = `IIVO thought saved: ${thought.slice(0, 80)}…`;
     }
-    push();
   }
+
+  await refreshStreamingListenNotes(nowMs);
+  push();
 }
 
 // --- Max listening duration --------------------------------------------------
@@ -1046,6 +1143,8 @@ function bindCopilotToSession(): void {
   activeListeningRuntime = clearActiveListeningRuntime();
   listenMomentRuntime = clearListenModeRuntime();
   listenLastChunkMs = undefined;
+  listenRollingTranscript = initialListenRollingTranscript();
+  stopListenNotesLoop();
   copilot.bindSession(id);
   if (session?.copilot) {
     copilot.hydrate(session.id, session.copilot);
@@ -1065,6 +1164,22 @@ function stopCopilotLoop(): void {
   if (copilotTimer) {
     clearInterval(copilotTimer);
     copilotTimer = null;
+  }
+}
+
+let listenNotesTimer: ReturnType<typeof setInterval> | null = null;
+
+function startListenNotesLoop(): void {
+  if (listenNotesTimer) return;
+  listenNotesTimer = setInterval(() => {
+    void refreshStreamingListenNotes(Date.now());
+  }, 5_000);
+}
+
+function stopListenNotesLoop(): void {
+  if (listenNotesTimer) {
+    clearInterval(listenNotesTimer);
+    listenNotesTimer = null;
   }
 }
 
@@ -2398,8 +2513,12 @@ async function handleCommand(
         ) === "listen"
       ) {
         listenMomentRuntime = prepareListenModeSession(listenMomentRuntime, Date.now());
+        listenRollingTranscript = initialListenRollingTranscript();
+        listenMomentRuntime.lastLiveNotesRefreshMs = undefined;
+        listenMomentRuntime.lastEvalTranscriptLen = 0;
         copilot.clearPendingInterventions();
         clearListenCardState();
+        startListenNotesLoop();
       }
       resetListeningLimitTracking();
       state.operationDiagnostics = diagnosticsForListening(
@@ -2439,11 +2558,13 @@ async function handleCommand(
       state.lastNotice = stopped.lastNotice;
       state.lastError = stopped.lastError;
       stopCopilotLoop();
+      stopListenNotesLoop();
       resetListeningLimitTracking();
       systemAudioLastSignalMs = undefined;
       activeListeningRuntime = clearActiveListeningRuntime();
       listenMomentRuntime = clearListenModeRuntime();
       listenLastChunkMs = undefined;
+      listenRollingTranscript = initialListenRollingTranscript();
       state.mediaContext = null;
       push();
       return;
@@ -2460,17 +2581,28 @@ async function handleCommand(
       const chunk = command.text.trim();
       if (!chunk) return;
       const source = transcriptSourceFromTags(command.tags);
+      const isInterim = command.interim === true;
       const session = sessions.current();
       const recentEvents = (session?.events ?? []).filter((e) => e.kind === "transcript_note").slice(-40);
-      if (isDuplicateTranscriptChunk(chunk, source, recentEvents)) {
+      if (!isInterim && isDuplicateTranscriptChunk(chunk, source, recentEvents)) {
+        if (command.tags?.includes("system_audio") && isListenModeActive()) {
+          void processListenModeChunk(chunk, command.tags, { interim: false });
+        }
         push();
         return;
       }
       if (command.tags?.includes("system_audio")) {
         systemAudioLastSignalMs = Date.now();
       }
-      state.transcript = appendTranscriptDeduped(state.transcript, chunk);
-      state.transcript = pruneRunningTranscript(state.transcript);
+      if (!isInterim) {
+        state.transcript = appendTranscriptDeduped(state.transcript, chunk);
+        state.transcript = pruneRunningTranscript(state.transcript);
+      }
+      if (isInterim && isListenModeActive() && command.tags?.includes("system_audio")) {
+        void processListenModeChunk(chunk, command.tags, { interim: true });
+        push();
+        return;
+      }
       if (sessionIsLive() && sessions.current()?.status === "active") {
         const ctxFields = eventContextFields();
         sessions.addEvent({

@@ -119,6 +119,9 @@ export interface ListenMomentEngineState {
   queuedMomentIds: string[];
   /** Last written checkpoint index for long sessions. */
   lastCheckpointIndex?: number;
+  /** Rolling transcript + streaming note refresh. */
+  lastLiveNotesRefreshMs?: number;
+  lastEvalTranscriptLen?: number;
 }
 
 export function initialListenMomentEngineState(): ListenMomentEngineState {

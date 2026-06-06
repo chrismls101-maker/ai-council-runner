@@ -85,7 +85,7 @@ export type GlassCommand =
   | { type: "stop-everything" }
   | { type: "request-start-listening" }
   | { type: "append-transcript"; text: string }
-  | { type: "add-transcript-chunk"; text: string; tags?: string[] }
+  | { type: "add-transcript-chunk"; text: string; tags?: string[]; interim?: boolean }
   | { type: "clear-transcript" }
   | { type: "transcription-set-mode"; mode: TranscriptionMode }
   | { type: "system-audio-set-status"; status: SystemAudioStatus; detail?: string }

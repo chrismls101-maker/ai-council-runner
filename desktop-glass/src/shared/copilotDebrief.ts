@@ -31,6 +31,7 @@ import {
   listenMomentsFromSessionEvents,
 } from "./listenReport.ts";
 import { buildListenReportPersonaGuidance } from "./listenModePersona.ts";
+import { listenCheckpointsFromSessionEvents } from "./listenCheckpoint.ts";
 import type { ListenMoment } from "./listenMomentTypes.ts";
 import type { MediaContext } from "./mediaContextTypes.ts";
 
@@ -360,6 +361,7 @@ export function buildSessionDebrief(
             session,
             moments: listenMoments,
             mediaContext: options.mediaContext,
+            checkpoints: listenCheckpointsFromSessionEvents(session.events),
           })
         : sectionsForType(sessionType, session, insights, cap);
   // Concise reports drop empty sections (except the lead "what happened").

@@ -1,4 +1,3 @@
-import { useState } from "react";
 import type { GlassState } from "../../shared/ipc.ts";
 import type { LiveNoteSection } from "../../shared/listenLiveNotes.ts";
 import { liveNoteSectionLabel } from "../../shared/listenLiveNotes.ts";
@@ -17,11 +16,9 @@ const SECTION_ORDER: LiveNoteSection[] = [
 function NoteSection({
   title,
   items,
-  empty,
 }: {
   title: string;
   items: string[];
-  empty: string;
 }): JSX.Element | null {
   if (items.length === 0) return null;
   return (
@@ -38,9 +35,33 @@ function NoteSection({
   );
 }
 
+function ListenStatusBar({ state }: { state: GlassState }): JSX.Element {
+  const notes = state.listenLiveNotes;
+  const listening = notes?.listeningStatus === "listening";
+  const building = notes?.listeningStatus === "building";
+
+  return (
+    <div className="live-notes__status" data-testid="glass-live-notes-status">
+      <span className={`live-notes__pill ${listening ? "live-notes__pill--on" : ""}`}>
+        {building ? "Building context…" : listening ? "Listening" : "Idle"}
+      </span>
+      <span className="live-notes__pill live-notes__pill--muted" data-testid="glass-live-notes-mic-off">
+        Mic Off
+      </span>
+      <span className="live-notes__pill live-notes__pill--muted" data-testid="glass-live-notes-source">
+        {notes?.sourceLabel ?? "System Audio"}
+      </span>
+      {notes?.lastRefreshMs ? (
+        <span className="live-notes__pill live-notes__pill--muted live-notes__pill--time">
+          Notes updated {new Date(notes.lastUpdatedAt ?? notes.lastRefreshMs).toLocaleTimeString()}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 export function LiveNotesTab({ state }: { state: GlassState }): JSX.Element {
   const notes = state.listenLiveNotes;
-  const [showTranscript, setShowTranscript] = useState(false);
 
   if (!notes) {
     return (
@@ -54,9 +75,10 @@ export function LiveNotesTab({ state }: { state: GlassState }): JSX.Element {
 
   return (
     <div className="live-notes" data-testid="glass-live-notes">
+      <ListenStatusBar state={state} />
+
       <p className="live-notes__hint">
-        Quiet note-taking while you listen — insights save automatically. Ask IIVO from the command bar when you
-        want action steps or a report.
+        Notes refresh every ~15 seconds from what you&apos;re hearing — no need to wait for long transcript blocks.
       </p>
 
       {notes.currentTopic ? (
@@ -68,35 +90,39 @@ export function LiveNotesTab({ state }: { state: GlassState }): JSX.Element {
 
       {hasSections ? (
         SECTION_ORDER.map((section) => (
-          <NoteSection
-            key={section}
-            title={liveNoteSectionLabel(section)}
-            items={notes.sections[section]}
-            empty=""
-          />
+          <NoteSection key={section} title={liveNoteSectionLabel(section)} items={notes.sections[section]} />
         ))
       ) : (
         <p className="empty" data-testid="glass-live-notes-building">
-          Building notes from what you&apos;re hearing…
+          Building notes from live audio…
         </p>
       )}
 
-      <details
-        className="live-notes__transcript"
-        data-testid="glass-live-notes-transcript"
-        open={showTranscript}
-        onToggle={(e) => setShowTranscript((e.target as HTMLDetailsElement).open)}
-      >
-        <summary className="section-title">Raw transcript ({notes.transcriptChunkCount} chunks)</summary>
-        {state.transcript ? (
+      {notes.developingCount ? (
+        <p className="empty" data-testid="glass-live-notes-developing">
+          {notes.developingCount} idea{notes.developingCount === 1 ? "" : "s"} still developing.
+        </p>
+      ) : null}
+
+      {notes.checkpointCount ? (
+        <p className="empty" data-testid="glass-live-notes-checkpoints">
+          {notes.checkpointCount} topic checkpoint{notes.checkpointCount === 1 ? "" : "s"} saved for your report.
+        </p>
+      ) : null}
+
+      <details className="live-notes__transcript" data-testid="glass-live-notes-transcript">
+        <summary className="section-title">
+          Raw transcript ({notes.transcriptChunkCount} chunks) — collapsed by default
+        </summary>
+        {state.transcript || notes.rollingPreview ? (
           <div className="summary-box live-notes__transcript-body">
-            {collapseDuplicateTranscriptLines(state.transcript)}
+            {collapseDuplicateTranscriptLines(state.transcript || notes.rollingPreview || "")}
           </div>
         ) : (
-          <p className="empty">Transcript will appear here as system audio is captured.</p>
+          <p className="empty">Transcript fragments appear here as system audio is captured.</p>
         )}
         {notes.duplicateTranscriptCount > 0 ? (
-          <p className="empty">Deduped {notes.duplicateTranscriptCount} repeated line(s).</p>
+          <p className="empty">Deduped {notes.duplicateTranscriptCount} repeated fragment(s).</p>
         ) : null}
       </details>
     </div>

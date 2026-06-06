@@ -7,6 +7,9 @@ import type { ListenSegmentKind } from "./listenSegmentClassifier.ts";
 
 export const DEFAULT_LISTEN_CHECKPOINT_MINUTES = 30;
 
+/** Streaming Listen mode — topic checkpoints every 2–5 min (default 3). */
+export const STREAMING_LISTEN_CHECKPOINT_MINUTES = 3;
+
 const IGNORED_SEGMENT_KINDS: ListenSegmentKind[] = ["ad", "sponsor", "intro"];
 
 function isMainContentListenMoment(moment: ListenMoment): boolean {
@@ -20,10 +23,14 @@ export interface ListenCheckpointSummary {
   windowStartMs: number;
   windowEndMs: number;
   writtenAt: string;
+  topicSummary: string;
   bestIdeas: string[];
   topMoments: string[];
   openQuestions: string[];
   quotes: string[];
+  transcriptAnchors: string[];
+  actionIdeas: string[];
+  confidence: number;
   ignoredAds: string[];
   silentlySavedCount: number;
   surfacedCount: number;
@@ -33,7 +40,7 @@ export interface ListenCheckpointSummary {
 }
 
 export function checkpointIntervalMs(checkpointMinutes = DEFAULT_LISTEN_CHECKPOINT_MINUTES): number {
-  return Math.max(5, checkpointMinutes) * 60_000;
+  return Math.max(2, Math.min(120, checkpointMinutes)) * 60_000;
 }
 
 export function shouldWriteListenCheckpoint(opts: {
@@ -106,15 +113,39 @@ export function buildListenCheckpointSummary(opts: {
     .filter(Boolean)
     .slice(0, 4);
 
+  const transcriptAnchors = content
+    .flatMap((m) => m.transcriptAnchors)
+    .filter(Boolean)
+    .slice(0, 6);
+
+  const actionIdeas = content
+    .filter((m) => m.type === "action_step" || m.type === "prompt_idea" || m.suggestedAction)
+    .map((m) => m.suggestedAction ?? m.suggestedThought ?? m.summary)
+    .slice(0, 4);
+
+  const avgConfidence =
+    content.length > 0
+      ? content.reduce((sum, m) => sum + m.confidence, 0) / content.length
+      : 0;
+
+  const topicSummary =
+    bestIdeas[0] ??
+    topMoments[0] ??
+    (transcriptAnchors[0] ? `Discussing: ${transcriptAnchors[0].slice(0, 120)}` : "Topic still forming.");
+
   return {
     checkpointIndex: opts.checkpointIndex,
     windowStartMs,
     windowEndMs,
     writtenAt: new Date(opts.nowMs).toISOString(),
+    topicSummary,
     bestIdeas,
     topMoments,
     openQuestions,
     quotes,
+    transcriptAnchors,
+    actionIdeas,
+    confidence: Math.round(avgConfidence * 100) / 100,
     ignoredAds: ignoredInWindow(opts.moments, windowStartMs, windowEndMs),
     silentlySavedCount: inWindow.filter((m) => m.status === "saved_silently").length,
     surfacedCount: inWindow.filter((m) => m.status === "surfaced").length,
@@ -127,14 +158,18 @@ export function checkpointSummaryToMarkdown(checkpoint: ListenCheckpointSummary)
   const lines = [
     `### Checkpoint ${checkpoint.checkpointIndex} (${checkpoint.elapsedStartMin}–${checkpoint.elapsedEndMin} min)`,
     "",
-    `Surfaced ${checkpoint.surfacedCount} · saved silently ${checkpoint.silentlySavedCount}`,
+    `**Topic:** ${checkpoint.topicSummary}`,
+    `Confidence: ${checkpoint.confidence} · surfaced ${checkpoint.surfacedCount} · saved silently ${checkpoint.silentlySavedCount}`,
     "",
   ];
   if (checkpoint.bestIdeas.length) {
     lines.push("**Best ideas**", ...checkpoint.bestIdeas.map((i) => `- ${i}`), "");
   }
   if (checkpoint.openQuestions.length) {
-    lines.push("**Open questions**", ...checkpoint.openQuestions.map((i) => `- ${i}`), "");
+    lines.push("**Questions to revisit**", ...checkpoint.openQuestions.map((i) => `- ${i}`), "");
+  }
+  if (checkpoint.actionIdeas.length) {
+    lines.push("**Action ideas (notes)**", ...checkpoint.actionIdeas.map((i) => `- ${i}`), "");
   }
   if (checkpoint.ignoredAds.length) {
     lines.push("**Ignored ads/sponsors**", ...checkpoint.ignoredAds.map((i) => `- ${i}`), "");

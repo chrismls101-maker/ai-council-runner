@@ -10,6 +10,12 @@ import { countDuplicateTranscriptLines } from "./transcriptDedupe.ts";
 import type { GlassSessionEvent } from "./sessionTypes.ts";
 import type { ListenMoment, ListenMomentType } from "./listenMomentTypes.ts";
 import { isActionFirstListenCard } from "./listenInsightQuality.ts";
+import type { ListenCheckpointSummary } from "./listenCheckpoint.ts";
+
+/** Default live-notes refresh interval (10–20s target). */
+export const LIVE_NOTES_REFRESH_MS = 15_000;
+export const LIVE_NOTES_REFRESH_MIN_MS = 10_000;
+export const LIVE_NOTES_REFRESH_MAX_MS = 20_000;
 
 export type LiveNoteSection =
   | "keyIdeas"
@@ -40,6 +46,15 @@ export interface ListenLiveNotesState {
   transcriptChunkCount: number;
   duplicateTranscriptCount: number;
   lastUpdatedAt?: string;
+  /** Rolling transcript preview (not full spam). */
+  rollingPreview?: string;
+  lastRefreshMs?: number;
+  nextRefreshMs?: number;
+  developingCount?: number;
+  checkpointCount?: number;
+  listeningStatus?: "listening" | "building" | "idle";
+  sourceLabel?: string;
+  micStatus?: "off" | "on";
 }
 
 const SECTION_LABELS: Record<LiveNoteSection, string> = {
@@ -183,8 +198,95 @@ function buildSections(entries: ListenLiveNoteEntry[]): Record<LiveNoteSection, 
 export interface BuildListenLiveNotesInput {
   moments: ListenMoment[];
   transcriptChunks?: string[];
+  rollingTranscript?: string;
   listenStartedMs?: number;
   nowMs?: number;
+  lastRefreshMs?: number;
+  checkpoints?: ListenCheckpointSummary[];
+  listeningStatus?: ListenLiveNotesState["listeningStatus"];
+  duplicateFragmentCount?: number;
+}
+
+export function shouldRefreshStreamingLiveNotes(
+  lastRefreshMs: number | undefined,
+  nowMs: number,
+  intervalMs = LIVE_NOTES_REFRESH_MS,
+): boolean {
+  if (lastRefreshMs == null) return true;
+  return nowMs - lastRefreshMs >= intervalMs;
+}
+
+function splitNoteSentences(text: string): string[] {
+  return text
+    .replace(/\s+/g, " ")
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 16);
+}
+
+/** Extract developing notes from recent rolling transcript (no action prompts). */
+export function extractStreamingNoteCandidates(
+  rollingText: string,
+  existingEntries: ListenLiveNoteEntry[],
+  listenStartedMs?: number,
+  nowMs = Date.now(),
+): ListenLiveNoteEntry[] {
+  const window = rollingText.slice(-900).trim();
+  if (window.length < 24) return [];
+
+  const candidates: ListenLiveNoteEntry[] = [];
+  for (const sentence of splitNoteSentences(window).slice(-4)) {
+    if (sentence.length < 28) continue;
+    if (isActionFirstListenCard(sentence)) continue;
+    if (/\b(action item|turn it into|want me to)\b/i.test(sentence) && sentence.length < 80) {
+      continue;
+    }
+
+    const merged = existingEntries.some(
+      (e) => isDuplicateText(e.text, sentence) || (e.anchor && isDuplicateText(e.anchor, sentence)),
+    );
+    if (merged) continue;
+
+    const status: LiveNoteStatus =
+      sentence.length >= 72 && /[.!?]$/.test(sentence) ? "mature" : "developing";
+
+    candidates.push({
+      id: `stream-${hashNoteId(sentence)}`,
+      section: status === "mature" ? "keyIdeas" : "concepts",
+      text:
+        status === "developing"
+          ? `Following: ${sentence.slice(0, 140)}${sentence.length > 140 ? "…" : ""}`
+          : sentence,
+      anchor: sentence,
+      status,
+      updatedAt: new Date(nowMs).toISOString(),
+      elapsedLabel: formatElapsedLabel(listenStartedMs, nowMs),
+    });
+  }
+  return candidates;
+}
+
+function hashNoteId(text: string): string {
+  let h = 0;
+  for (let i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) | 0;
+  return Math.abs(h).toString(36);
+}
+
+/** Promote developing entries to key ideas when anchor is mature. */
+function promoteMatureStreamingEntries(entries: ListenLiveNoteEntry[]): ListenLiveNoteEntry[] {
+  return entries.map((e) => {
+    if (e.status !== "developing") return e;
+    const anchor = e.anchor ?? e.text;
+    if (anchor.length >= 72 && /[.!?]$/.test(anchor)) {
+      return {
+        ...e,
+        status: "mature" as const,
+        section: "keyIdeas" as const,
+        text: anchor.replace(/^Following:\s*/i, ""),
+      };
+    }
+    return e;
+  });
 }
 
 /** System-audio transcript chunks from session events (raw, deduped for display separately). */
@@ -202,7 +304,14 @@ export function listenTranscriptChunksFromEvents(events: GlassSessionEvent[]): s
 
 /** Build structured live notes from listen moments and transcript chunks. */
 export function buildListenLiveNotes(input: BuildListenLiveNotesInput): ListenLiveNotesState {
-  const { moments, transcriptChunks = [], listenStartedMs } = input;
+  const {
+    moments,
+    transcriptChunks = [],
+    rollingTranscript = "",
+    listenStartedMs,
+    lastRefreshMs,
+    checkpoints = [],
+  } = input;
   const nowMs = input.nowMs ?? Date.now();
 
   const activeMoments = moments.filter((m) => NOTE_STATUSES.includes(m.status) || m.status === "pending");
@@ -229,20 +338,41 @@ export function buildListenLiveNotes(input: BuildListenLiveNotesInput): ListenLi
     });
   }
 
-  const deduped = dedupeEntries(entries);
-  const currentTopic = pickCurrentTopic(activeMoments);
-
-  const duplicateTranscriptCount = countDuplicateTranscriptLines(
-    transcriptChunks.map((text) => ({ text })),
+  const momentEntries = dedupeEntries(entries);
+  const streamCandidates = extractStreamingNoteCandidates(
+    rollingTranscript,
+    momentEntries,
+    listenStartedMs,
+    nowMs,
   );
+  const deduped = dedupeEntries([...promoteMatureStreamingEntries(momentEntries), ...streamCandidates]);
+  const topicFallback = rollingTranscript.slice(-160).trim();
+  const currentTopic =
+    pickCurrentTopic(activeMoments) ??
+    checkpoints[checkpoints.length - 1]?.topicSummary ??
+    (topicFallback || undefined);
+
+  const duplicateTranscriptCount =
+    (input.duplicateFragmentCount ?? 0) +
+    countDuplicateTranscriptLines(transcriptChunks.map((text) => ({ text })));
+
+  const developingCount = deduped.filter((e) => e.status === "developing" || e.status === "uncertain").length;
 
   return {
-    currentTopic,
+    currentTopic: currentTopic?.slice(0, 160),
     entries: deduped,
     sections: buildSections(deduped),
     transcriptChunkCount: transcriptChunks.length,
     duplicateTranscriptCount,
-    lastUpdatedAt: deduped.length ? deduped[deduped.length - 1]!.updatedAt : undefined,
+    lastUpdatedAt: deduped.length ? deduped[deduped.length - 1]!.updatedAt : new Date(nowMs).toISOString(),
+    rollingPreview: rollingTranscript.slice(-280).trim() || undefined,
+    lastRefreshMs: lastRefreshMs ?? nowMs,
+    nextRefreshMs: (lastRefreshMs ?? nowMs) + LIVE_NOTES_REFRESH_MS,
+    developingCount,
+    checkpointCount: checkpoints.length,
+    listeningStatus: input.listeningStatus ?? "listening",
+    sourceLabel: "System Audio",
+    micStatus: "off",
   };
 }
 

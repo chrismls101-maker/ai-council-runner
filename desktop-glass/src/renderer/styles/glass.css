@@ -2736,6 +2736,36 @@ html.glass-dock-window #root {
   line-height: 1.45;
 }
 
+.live-notes__status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.live-notes__pill {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(210, 218, 232, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.live-notes__pill--on {
+  background: rgba(65, 224, 163, 0.12);
+  border-color: rgba(65, 224, 163, 0.35);
+  color: rgba(180, 255, 220, 0.95);
+}
+
+.live-notes__pill--muted {
+  opacity: 0.85;
+}
+
+.live-notes__pill--time {
+  margin-left: auto;
+}
+
 .live-notes__topic-text {
   margin: 4px 0 0;
   font-size: 13px;
