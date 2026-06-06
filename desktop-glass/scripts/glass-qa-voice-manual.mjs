@@ -56,16 +56,21 @@ const CHECKLIST = [
 ];
 
 const METADATA_FIELDS = [
-  ["mic_permission", "mic permission (granted/denied/unverified)"],
+  ["packaged_app_used", "packaged app used (yes/no/unverified)"],
+  ["mic_permission", "mic permission granted (yes/no/unverified)"],
+  ["mic_transcript_received", "mic transcript received (yes/no/unverified)"],
   ["system_audio_selected", "system audio selected (yes/no/unverified)"],
-  ["blackhole_signal", "BlackHole signal received (yes/no/unverified)"],
-  ["stt_transcript_received", "STT transcript received (yes/no/unverified)"],
+  ["blackhole_signal", "BlackHole signal detected (yes/no/unverified)"],
+  ["stt_transcript_received", "STT transcript chunks received (yes/no/unverified)"],
+  ["screen_capture_worked", "screen capture worked (yes/no/unverified)"],
+  ["visual_answer_produced", "visual answer produced (yes/no/unverified)"],
   ["route_used", "route used (glass_direct / glass_visual_direct)"],
   ["model_used", "model used (e.g. gpt-5.5-*) + fallback?"],
   ["latency", "latency (ms, listening→answer)"],
-  ["screen_capture_worked", "screen capture worked (yes/no/unverified)"],
   ["debrief_generated", "debrief generated (yes/no/unverified)"],
-  ["errors", "errors observed (source-specific message, if any)"],
+  ["raw_audio_stored", "raw audio stored (yes/no — expected: no)"],
+  ["screenshots_stored", "screenshots/base64 stored (yes/no — expected: no)"],
+  ["errors", "errors encountered (source-specific message, if any)"],
 ];
 
 function loadEnvFile(p) {
@@ -146,6 +151,18 @@ function buildReport({ apiUrl, health, results, metadata, notes }) {
   lines.push(
     `- Packaged screen capture: ${captureVerified ? "verified" : "**UNVERIFIED** (tester did not confirm)"}`,
   );
+  const rawAudioViolation = /^y(es)?$/i.test(String(metadata.raw_audio_stored ?? ""));
+  const screenshotViolation = /^y(es)?$/i.test(String(metadata.screenshots_stored ?? ""));
+  if (rawAudioViolation || screenshotViolation) {
+    lines.push(
+      `- ⛔ **PRIVACY VIOLATION**: ${[
+        rawAudioViolation ? "raw audio was stored" : null,
+        screenshotViolation ? "screenshots/base64 were stored" : null,
+      ]
+        .filter(Boolean)
+        .join("; ")} — expected NO. Investigate before shipping.`,
+    );
+  }
   lines.push("");
   lines.push("## Checklist");
   lines.push("");
