@@ -31,7 +31,7 @@ import { useTranscriptionContext } from "../TranscriptionProvider.tsx";
 import { IivoAnalysisPanel } from "../components/IivoAnalysisPanel.tsx";
 import { ListeningControls, OperationDiagnosticsFooter } from "../components/ListeningControls.tsx";
 import { SetupSection } from "./SetupSection.tsx";
-import { CopilotConfigure } from "./CopilotConfigure.tsx";
+import { CopilotPanel } from "./CopilotPanel.tsx";
 
 const TABS: { id: PanelTab; label: string }[] = [
   { id: "summary", label: "Summary" },
@@ -332,10 +332,6 @@ function SessionView({ session, state }: { session: GlassSession | null; state: 
 
       <WindowContextDisplay state={state} />
 
-      <CopilotConfigure
-        sessionLive={session.status === "active" || session.status === "paused"}
-      />
-
       <div className="filter-row">
         {EVENT_FILTERS.map((f) => (
           <button
@@ -489,19 +485,8 @@ function Transcript({ transcript }: { transcript: string }): JSX.Element {
   return (
     <div className="transcript">
       <p className="section-title">Live transcript</p>
-      <div className="filter-row">
-        {tx.modeOptions.map((mode) => (
-          <button
-            key={mode}
-            className={`tab ${tx.selectedMode === mode ? "tab--active" : ""}`}
-            onClick={() => tx.setMode(mode)}
-          >
-            {tx.modeLabels[mode]}
-          </button>
-        ))}
-      </div>
       <p className="empty">
-        Source: {tx.modeLabels[tx.selectedMode] ?? tx.selectedMode} · STT Provider:{" "}
+        Input source: use Session Copilot above · current: {tx.modeLabels[tx.selectedMode] ?? tx.selectedMode} · STT:{" "}
         {tx.sttProviderLabel}
       </p>
       <p className="empty">{tx.sttStatusMessage}</p>
@@ -874,6 +859,8 @@ export function Panel(): JSX.Element {
       </p>
 
       <StatusGrid state={state} />
+
+      <CopilotPanel sessionLive={sessionLive} />
 
       <div className="panel__tabs">
         {TABS.map((t) => (

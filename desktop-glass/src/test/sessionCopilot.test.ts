@@ -1029,12 +1029,12 @@ test("diagnostic card includes extended action buttons", () => {
   assert.ok(actions.includes("save-issue"));
 });
 
-test("panel stays compact: CopilotConfigure has no full insight list", () => {
-  const source = readFileSync(join(SRC, "renderer", "panel", "CopilotConfigure.tsx"), "utf8");
+test("panel stays compact: CopilotPanel has no full insight list", () => {
+  const source = readFileSync(join(SRC, "renderer", "panel", "CopilotPanel.tsx"), "utf8");
   // The panel shows a count + status, never iterates the insight history.
   assert.ok(!source.includes(".insights.map"), "panel must not render the full insight list");
-  assert.ok(source.includes("Session type"), "panel exposes session type selector");
-  assert.ok(source.includes("Report style"), "panel exposes report style selector");
+  assert.ok(source.includes("Session focus"), "panel exposes session focus selector");
+  assert.ok(source.includes("Report style"), "advanced drawer exposes report style selector");
 });
 
 // --- diagnostic depth ----------------------------------------------------

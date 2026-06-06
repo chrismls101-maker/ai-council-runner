@@ -2177,3 +2177,69 @@ html.glass-dock-window #root {
   gap: 8px;
   font-size: 12px;
 }
+
+/* ---------- Consolidated Session Copilot panel ---------- */
+.copilot-panel {
+  margin: 12px 0 16px;
+  padding: 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.copilot-panel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.copilot-panel__title-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.copilot-panel__title {
+  display: block;
+  font-size: 14px;
+}
+
+.copilot-panel__subtitle {
+  margin: 4px 0 0;
+  font-size: 12px;
+  opacity: 0.85;
+  line-height: 1.35;
+}
+
+.copilot-panel__controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.copilot-panel__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.copilot-panel__field select {
+  width: 100%;
+}
+
+.copilot-panel__source-hint {
+  margin: 0 0 10px;
+  font-size: 11px;
+  opacity: 0.75;
+  line-height: 1.35;
+}
+
+.copilot-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
