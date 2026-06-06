@@ -47,13 +47,15 @@ type RendererPage =
   | "overlay.html"
   | "command.html"
   | "splash.html"
-  | "splash-background.html";
+  | "splash-background.html"
+  | "notes.html";
 
 export interface GlassWindows {
   dock: BrowserWindow;
   panel: BrowserWindow;
   overlay: BrowserWindow;
   commandBar: BrowserWindow;
+  notesPad: BrowserWindow;
 }
 
 let windows: GlassWindows | null = null;
@@ -64,6 +66,7 @@ let overlayClickThrough = true;
 let commandBarClickThrough = false;
 let overlayMode: OverlayMode = "passive";
 let commandBarVisible = true;
+let notesPadVisible = false;
 let chromeLayoutLocked = true;
 let dockCustomOrigin: ChromeOrigin | null = null;
 let commandBarCustomOrigin: ChromeOrigin | null = null;
@@ -95,7 +98,8 @@ const OVERLAY_ALWAYS_ON_TOP_LEVEL = "screen-saver" as const;
 const OVERLAY_ALWAYS_ON_TOP_RELATIVE = 0;
 const DOCK_ALWAYS_ON_TOP_RELATIVE = 1;
 const COMMAND_BAR_ALWAYS_ON_TOP_RELATIVE = 2;
-const PANEL_ALWAYS_ON_TOP_RELATIVE = 3;
+const NOTES_PAD_ALWAYS_ON_TOP_RELATIVE = 3;
+const PANEL_ALWAYS_ON_TOP_RELATIVE = 4;
 
 function applyOverlayClickThrough(overlay: BrowserWindow, enabled: boolean): void {
   overlayClickThrough = enabled;
@@ -108,7 +112,7 @@ function applyOverlayClickThrough(overlay: BrowserWindow, enabled: boolean): voi
 
 function destroyGlassWindows(): void {
   if (windows) {
-    for (const win of [windows.dock, windows.panel, windows.overlay, windows.commandBar]) {
+    for (const win of [windows.dock, windows.panel, windows.overlay, windows.commandBar, windows.notesPad]) {
       if (!win.isDestroyed()) {
         win.destroy();
       }
@@ -148,7 +152,7 @@ function destroyTrackedGlassWindows(): void {
 /** Keep Glass on the active Space, including when another app (e.g. browser) is fullscreen. */
 function ensureVisibleOnAllWorkspaces(): void {
   if (!windows) return;
-  for (const win of [windows.dock, windows.panel, windows.overlay, windows.commandBar]) {
+  for (const win of [windows.dock, windows.panel, windows.overlay, windows.commandBar, windows.notesPad]) {
     if (!win.isDestroyed()) {
       win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     }
@@ -220,6 +224,16 @@ export function stackGlassWindows(w: GlassWindows): void {
   w.panel.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, PANEL_ALWAYS_ON_TOP_RELATIVE);
   if (w.panel.isVisible()) {
     w.panel.moveTop();
+  }
+
+  if (!w.notesPad.isDestroyed() && notesPadVisible) {
+    w.notesPad.setAlwaysOnTop(
+      true,
+      OVERLAY_ALWAYS_ON_TOP_LEVEL,
+      NOTES_PAD_ALWAYS_ON_TOP_RELATIVE,
+    );
+    w.notesPad.showInactive();
+    w.notesPad.moveTop();
   }
 }
 
@@ -371,6 +385,10 @@ function relayoutAllWindows(options?: { resetDock?: boolean }): void {
 
   applyDockLayout(options?.resetDock ?? false);
 
+  if (!windows.notesPad.isDestroyed() && notesPadVisible) {
+    windows.notesPad.setBounds(layoutManager.getNotesPadLayout());
+  }
+
   ensureVisibleOnAllWorkspaces();
   stackGlassWindows(windows);
   logDiagnostics();
@@ -386,6 +404,7 @@ function wireWindowStacking(w: GlassWindows): void {
   w.overlay.webContents.on("did-finish-load", restack);
   w.panel.webContents.on("did-finish-load", restack);
   w.commandBar.webContents.on("did-finish-load", restack);
+  w.notesPad.webContents.on("did-finish-load", restack);
 }
 
 function createOverlayWindow(): BrowserWindow {
@@ -513,6 +532,39 @@ function createCommandBarWindow(): BrowserWindow {
   return commandBar;
 }
 
+function createNotesPadWindow(): BrowserWindow {
+  const layout = layoutManager!.getNotesPadLayout();
+  const notesPad = new BrowserWindow({
+    x: layout.x,
+    y: layout.y,
+    width: layout.width,
+    height: layout.height,
+    minWidth: 300,
+    minHeight: 360,
+    frame: false,
+    transparent: true,
+    resizable: true,
+    movable: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    hasShadow: false,
+    fullscreenable: false,
+    show: false,
+    backgroundColor: "#00000000",
+    acceptFirstMouse: true,
+    webPreferences: {
+      preload: preloadPath,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+  notesPad.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  loadRenderer(notesPad, "notes.html");
+  trackGlassWindow(notesPad);
+  return notesPad;
+}
+
 export function createWindows(glassConfig: GlassConfig, displayTarget: GlassDisplayTarget = "primary"): GlassWindows {
   destroyGlassWindows();
   layoutManager?.dispose();
@@ -545,15 +597,16 @@ export function createWindows(glassConfig: GlassConfig, displayTarget: GlassDisp
   const dock = createDockWindow();
   const panel = createPanelWindow();
   const commandBar = createCommandBarWindow();
+  const notesPad = createNotesPadWindow();
 
-  for (const win of [dock, panel, overlay, commandBar]) {
+  for (const win of [dock, panel, overlay, commandBar, notesPad]) {
     win.webContents.setWindowOpenHandler(({ url }) => {
       void shell.openExternal(url);
       return { action: "deny" };
     });
   }
 
-  windows = { dock, panel, overlay, commandBar };
+  windows = { dock, panel, overlay, commandBar, notesPad };
 
   wireChromeMoveListeners(windows);
   applyChromeMovability();
@@ -910,7 +963,7 @@ export function toggleCommandBar(): boolean {
 
 export function broadcast(channel: string, payload: unknown): void {
   if (!windows) return;
-  for (const win of [windows.dock, windows.panel, windows.overlay, windows.commandBar]) {
+  for (const win of [windows.dock, windows.panel, windows.overlay, windows.commandBar, windows.notesPad]) {
     if (!win.isDestroyed()) {
       win.webContents.send(channel, payload);
     }
@@ -1104,4 +1157,22 @@ export function getChromeLayoutOrigins(): {
 export function refreshGlassDisplayLayout(): void {
   relayoutAllWindows({ resetDock: false });
   logDiagnostics();
+}
+
+export function setListenNotesPadVisible(active: boolean): void {
+  notesPadVisible = active;
+  if (!windows?.notesPad || windows.notesPad.isDestroyed() || !layoutManager) return;
+  if (active) {
+    windows.notesPad.setBounds(layoutManager.getNotesPadLayout());
+    windows.notesPad.showInactive();
+  } else {
+    windows.notesPad.hide();
+  }
+  stackGlassWindows(windows);
+  logDiagnostics();
+}
+
+/** @deprecated Use setListenNotesPadVisible — panel no longer morphs for notes. */
+export function setListenNotesPanelLayout(active: boolean): void {
+  setListenNotesPadVisible(active);
 }

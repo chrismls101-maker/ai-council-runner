@@ -8,7 +8,7 @@ import type { ListenSegmentKind } from "./listenSegmentClassifier.ts";
 export const DEFAULT_LISTEN_CHECKPOINT_MINUTES = 30;
 
 /** Streaming Listen mode — topic checkpoints every 2–5 min (default 3). */
-export const STREAMING_LISTEN_CHECKPOINT_MINUTES = 3;
+export const STREAMING_LISTEN_CHECKPOINT_MINUTES = 5;
 
 const IGNORED_SEGMENT_KINDS: ListenSegmentKind[] = ["ad", "sponsor", "intro"];
 

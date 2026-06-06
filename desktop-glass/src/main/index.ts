@@ -72,6 +72,7 @@ import {
   getConnectedDisplays,
   getDisplayLayoutSummary,
   refreshGlassDisplayLayout,
+  setListenNotesPadVisible,
   getGlassWindowState,
   getWindows,
   isPanelVisible,
@@ -195,6 +196,7 @@ import {
   buildListenLiveNotes,
   listenTranscriptChunksFromEvents,
   LIVE_NOTES_REFRESH_MS,
+  computeLiveNotesRefreshInterval,
   shouldRefreshStreamingLiveNotes,
 } from "../shared/listenLiveNotes.ts";
 import {
@@ -532,7 +534,16 @@ let listenRollingTranscript: ListenRollingTranscriptState = initialListenRolling
 function listenCheckpointsForSession(): import("../shared/listenCheckpoint.ts").ListenCheckpointSummary[] {
   const session = sessions.current();
   if (!session) return [];
-  return listenCheckpointsFromSessionEvents(session.events);
+  const all = listenCheckpointsFromSessionEvents(session.events);
+  const listenStartedMs = listenMomentRuntime.listenStartedMs;
+  if (!listenStartedMs) return all;
+  return all.filter((cp) => {
+    const writtenMs = Date.parse(cp.writtenAt);
+    return (
+      cp.windowEndMs >= listenStartedMs ||
+      (!Number.isNaN(writtenMs) && writtenMs >= listenStartedMs)
+    );
+  });
 }
 
 function buildCurrentListenLiveNotes() {
@@ -570,12 +581,14 @@ function buildCurrentListenLiveNotes() {
 async function refreshStreamingListenNotes(nowMs: number, force = false): Promise<void> {
   if (!isListenModeActive()) return;
   const last = listenMomentRuntime.lastLiveNotesRefreshMs;
-  if (!force && !shouldRefreshStreamingLiveNotes(last, nowMs, LIVE_NOTES_REFRESH_MS)) {
+  const rolling = rollingTranscriptWindow(listenRollingTranscript);
+  const prevLen = listenMomentRuntime.lastEvalTranscriptLen ?? 0;
+  const deltaLen = Math.max(0, rolling.length - prevLen);
+  const intervalMs = computeLiveNotesRefreshInterval(deltaLen);
+  if (!force && !shouldRefreshStreamingLiveNotes(last, nowMs, intervalMs)) {
     return;
   }
 
-  const rolling = rollingTranscriptWindow(listenRollingTranscript);
-  const prevLen = listenMomentRuntime.lastEvalTranscriptLen ?? 0;
   const delta = rolling.length > prevLen ? rolling.slice(prevLen) : rolling.slice(-Math.min(200, rolling.length));
 
   if (delta.trim().length >= 12) {
@@ -2510,14 +2523,6 @@ async function handleCommand(
       }
       return;
     case "request-start-listening": {
-      const listenConfig = copilot.getConfig();
-      const willListen =
-        deriveActiveListeningMode(
-          listenConfig,
-          sessionIsLive() && copilotModeIsActive(listenConfig.mode),
-        ) === "listen";
-      state.panelTab = willListen ? "live-notes" : "context";
-      if (!isPanelVisible()) togglePanel();
       state.operationDiagnostics = recordOperation(state.operationDiagnostics, "request-start-listening", "pending");
       push();
       beginListenCountdown();
@@ -2539,6 +2544,7 @@ async function handleCommand(
         copilot.clearPendingInterventions();
         clearListenCardState();
         startListenNotesLoop();
+        setListenNotesPadVisible(true);
       }
       resetListeningLimitTracking();
       state.operationDiagnostics = diagnosticsForListening(
@@ -2586,9 +2592,14 @@ async function handleCommand(
       listenLastChunkMs = undefined;
       listenRollingTranscript = initialListenRollingTranscript();
       state.mediaContext = null;
+      setListenNotesPadVisible(false);
       push();
       return;
     }
+    case "hide-notes-pad":
+      setListenNotesPadVisible(false);
+      push();
+      return;
     case "append-transcript": {
       const chunk = command.text.trim();
       if (!chunk) return;
@@ -3406,6 +3417,9 @@ async function handleCopilotCommand(command: GlassCommand): Promise<boolean> {
       persistCopilotConfig(next);
       copilot.setOffer(null);
       copilotOffered = true;
+      if (command.mode === "off") {
+        setListenNotesPadVisible(false);
+      }
       if (copilotModeIsActive(next.mode) && sessionIsLive()) {
         bindCopilotToSession();
         refreshCopilotLoop();
@@ -3975,8 +3989,10 @@ function registerIpc(): void {
         state.lastNotice = msg;
       },
       setLastError(msg) {
+        if (!state.privacy.listening) return;
         state.lastError = msg;
       },
+      shouldReportSttErrors: () => state.privacy.listening,
       push,
     });
     if (result.ok && result.text?.trim()) {

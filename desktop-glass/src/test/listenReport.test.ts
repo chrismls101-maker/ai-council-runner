@@ -38,12 +38,12 @@ function moment(overrides: Partial<ListenMoment> = {}): ListenMoment {
   };
 }
 
-test("report includes Key ideas from Live Notes", () => {
+test("report includes Core ideas from Live Notes", () => {
   const sections = buildListenReportSections({
     session: session(),
     moments: [moment()],
   });
-  const heading = sections.find((s) => s.heading === "Key ideas");
+  const heading = sections.find((s) => s.heading === "Core ideas");
   assert.ok(heading);
   assert.match(heading!.items[0]!, /distribution|founder/i);
 });

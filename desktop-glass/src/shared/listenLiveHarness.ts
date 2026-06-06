@@ -27,6 +27,8 @@ import {
   listenCardTextIsVague,
 } from "./listenThoughtCards.ts";
 import { buildListenLiveNotes } from "./listenLiveNotes.ts";
+import { countTranscriptLikeNotes } from "./listenMeaningNote.ts";
+import type { ListenCheckpointSummary } from "./listenCheckpoint.ts";
 import {
   buildListenReportMarkdown,
   buildListenReportSections,
@@ -130,6 +132,8 @@ export interface ListenHarnessRuntime {
   vagueCardCount: number;
   liveNotesUpdates: number;
   noAudioPromptsCount: number;
+  insightStripUpdates?: number;
+  checkpoints?: ListenCheckpointSummary[];
   listeningLimitFired: boolean;
   listeningLimitFiredAtMs?: number;
   warmupRespected: boolean;
@@ -866,6 +870,11 @@ export function buildListenHarnessNoteMetrics(opts: {
   transcriptChunksReceived: number;
   duplicateTranscriptCount: number;
   liveNotesCreated: number;
+  meaningNotesCount: number;
+  transcriptLikeNotesCount: number;
+  developingNotesCount: number;
+  insightStripUpdates: number;
+  checkpointSummaries: number;
   noteUpdates: number;
   actionCardsShown: number;
   proactiveThoughtCardsShown: number;
@@ -873,22 +882,34 @@ export function buildListenHarnessNoteMetrics(opts: {
   noAudioPromptsCount: number;
   noteExamples: string[];
   userInterruptedTooMuch: boolean;
+  notesMostlyTranscriptLike: boolean;
 } {
   const notes = buildListenLiveNotes({
     moments: opts.moments,
     transcriptChunks: opts.transcriptChunks,
+    checkpoints: opts.runtime.checkpoints ?? [],
   });
-  const examples = notes.entries
-    .filter((e) => e.status === "mature")
+  const meaningNotes = notes.meaningNotes ?? [];
+  const examples = meaningNotes
+    .filter((e) => e.status === "mature" || e.status === "saved")
     .slice(0, 3)
-    .map((e) => `[${e.section}] ${e.text.slice(0, 120)}`);
+    .map((e) => `[${e.kind}] ${e.note.slice(0, 120)}`);
+  const transcriptLikeNotesCount = countTranscriptLikeNotes(meaningNotes);
+  const developingNotesCount = meaningNotes.filter((n) => n.status === "developing").length;
   const proactiveThoughtCardsShown = opts.runtime.generatedThoughts.filter(
     (t) => t.disposition === "surfaced" && !t.actionFirst,
   ).length;
+  const notesMostlyTranscriptLike =
+    meaningNotes.length > 0 && transcriptLikeNotesCount / meaningNotes.length > 0.4;
   return {
     transcriptChunksReceived: opts.transcriptChunks.length,
     duplicateTranscriptCount: notes.duplicateTranscriptCount,
     liveNotesCreated: notes.entries.length,
+    meaningNotesCount: meaningNotes.length,
+    transcriptLikeNotesCount,
+    developingNotesCount,
+    insightStripUpdates: opts.runtime.insightStripUpdates ?? (notes.latestInsight ? 1 : 0),
+    checkpointSummaries: opts.runtime.checkpoints?.length ?? notes.checkpointCount ?? 0,
     noteUpdates: opts.runtime.liveNotesUpdates,
     actionCardsShown: opts.runtime.actionFirstCardCount,
     proactiveThoughtCardsShown,
@@ -899,6 +920,7 @@ export function buildListenHarnessNoteMetrics(opts: {
       opts.runtime.cardsSurfaced > 1 ||
       opts.runtime.actionFirstCardCount > 0 ||
       opts.runtime.maxSimultaneousCards > 1,
+    notesMostlyTranscriptLike,
   };
 }
 

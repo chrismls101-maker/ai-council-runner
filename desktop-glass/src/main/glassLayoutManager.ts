@@ -10,6 +10,7 @@ import {
   clampDockSize,
   commandBarLayoutFromDisplay,
   dockLayoutFromDisplay,
+  listenNotesPadLayoutFromDisplay,
   overlayLayoutFromDisplay,
   panelLayoutFromDisplay,
   repositionDockInWorkArea,
@@ -110,6 +111,10 @@ export class GlassLayoutManager {
 
   getPanelLayout(): PanelLayout {
     return panelLayoutFromDisplay(this.getDisplay(), this.preset);
+  }
+
+  getNotesPadLayout(): PanelLayout {
+    return listenNotesPadLayoutFromDisplay(this.getDisplay());
   }
 
   getCommandBarLayout(): CommandBarLayout {

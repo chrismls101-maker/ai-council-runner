@@ -114,6 +114,13 @@ export function buildListenReportSections(input: ListenReportInput): GlassCopilo
     ["ready", "surfaced", "saved_silently"],
     8,
   );
+  const concepts =
+    liveNotes.sections.concepts.length > 0
+      ? liveNotes.sections.concepts
+      : contentMoments
+          .filter((m) => m.type === "confusing_concept")
+          .map((m) => m.suggestedThought ?? m.summary)
+          .slice(0, 6);
   const keyIdeas =
     liveNotes.sections.keyIdeas.length > 0
       ? liveNotes.sections.keyIdeas
@@ -153,8 +160,12 @@ export function buildListenReportSections(input: ListenReportInput): GlassCopilo
     { heading: "Source", items: sourceLines },
     { heading: "What this was about", items: [aboutText] },
     {
-      heading: "Key ideas",
+      heading: "Core ideas",
       items: keyIdeas.length ? keyIdeas : ["No strong key ideas captured — audio may have been thin."],
+    },
+    {
+      heading: "Concepts explained",
+      items: concepts.length ? concepts : ["No concepts captured yet — keep listening or review transcript."],
     },
     {
       heading: "Best insights",

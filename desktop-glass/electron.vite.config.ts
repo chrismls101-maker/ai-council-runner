@@ -31,6 +31,8 @@ export default defineConfig({
           panel: resolve(__dirname, "panel.html"),
           overlay: resolve(__dirname, "overlay.html"),
           command: resolve(__dirname, "command.html"),
+          splash: resolve(__dirname, "splash.html"),
+          notes: resolve(__dirname, "notes.html"),
         },
       },
     },

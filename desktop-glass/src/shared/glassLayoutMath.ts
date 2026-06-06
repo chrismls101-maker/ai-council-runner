@@ -47,6 +47,9 @@ const PANEL_WIDTH_MIN = 720;
 /** Wide setup dashboard — use most of the display without covering the whole screen. */
 const PANEL_WIDTH_MAX = 1800;
 const PANEL_WIDTH_RATIO = 0.78;
+const LISTEN_NOTES_PANEL_WIDTH_MIN = 320;
+const LISTEN_NOTES_PANEL_WIDTH_MAX = 420;
+const LISTEN_NOTES_PANEL_WIDTH_RATIO = 0.26;
 const DOCK_MIN_WIDTH = 280;
 /** Narrow vertical pill — width hugs short action labels. */
 export const DOCK_MIN_WIDTH_VERTICAL = 128;
@@ -57,7 +60,8 @@ const DOCK_MAX_HEIGHT_RATIO = 0.25;
 const DOCK_MAX_HEIGHT_CAP = 960;
 const DOCK_DEFAULT_MAX_WIDTH = 720;
 const COMMAND_BAR_MAX_WIDTH = 760;
-const COMMAND_BAR_HEIGHT = 96;
+/** Main row + optional secondary listen status / source row. */
+export const COMMAND_BAR_HEIGHT = 132;
 const COMMAND_BAR_BOTTOM_MARGIN = 28;
 const COMMAND_BAR_SIDE_MARGIN = 48;
 const DOCK_ABOVE_COMMAND_BAR_GAP = 0;
@@ -96,6 +100,33 @@ export function panelLayoutFromDisplay(
     height,
   };
 }
+
+/** Compact left-side floating notepad during Listen mode — keeps video visible on the right. */
+export function listenNotesPadLayoutFromDisplay(ctx: DisplayLayoutContext): PanelLayout {
+  const width = Math.min(
+    LISTEN_NOTES_PANEL_WIDTH_MAX,
+    Math.max(
+      LISTEN_NOTES_PANEL_WIDTH_MIN,
+      Math.round(ctx.workArea.width * LISTEN_NOTES_PANEL_WIDTH_RATIO),
+    ),
+  );
+  const commandReserve =
+    COMMAND_BAR_HEIGHT + COMMAND_BAR_BOTTOM_MARGIN + EDGE_MARGIN;
+  const height = Math.max(
+    LISTEN_NOTES_PANEL_WIDTH_MIN,
+    ctx.workArea.height - TOP_INSET - commandReserve,
+  );
+
+  return {
+    x: ctx.workArea.x + EDGE_MARGIN,
+    y: ctx.workArea.y + TOP_INSET,
+    width,
+    height,
+  };
+}
+
+/** @deprecated Use listenNotesPadLayoutFromDisplay */
+export const listenNotesPanelLayoutFromDisplay = listenNotesPadLayoutFromDisplay;
 
 /** Bottom-centered command bar inside the visible work area. */
 export function commandBarLayoutFromDisplay(ctx: DisplayLayoutContext): CommandBarLayout {

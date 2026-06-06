@@ -11,6 +11,16 @@ import type { GlassSessionEvent } from "./sessionTypes.ts";
 import type { ListenMoment, ListenMomentType } from "./listenMomentTypes.ts";
 import { isActionFirstListenCard } from "./listenInsightQuality.ts";
 import type { ListenCheckpointSummary } from "./listenCheckpoint.ts";
+import {
+  dedupeMeaningNotes,
+  formatMeaningNoteForDisplay,
+  isTranscriptLikeNote,
+  meaningKindToSection,
+  meaningNoteFromMoment,
+  meaningNoteFromStreamingSentence,
+  pickLatestMatureInsight,
+  type ListenMeaningNote,
+} from "./listenMeaningNote.ts";
 
 /** Default live-notes refresh interval (10–20s target). */
 export const LIVE_NOTES_REFRESH_MS = 15_000;
@@ -24,7 +34,8 @@ export type LiveNoteSection =
   | "warnings"
   | "frameworks"
   | "questions"
-  | "actionIdeas";
+  | "actionIdeas"
+  | "developing";
 
 export type LiveNoteStatus = "developing" | "mature" | "uncertain";
 
@@ -42,6 +53,10 @@ export interface ListenLiveNoteEntry {
 export interface ListenLiveNotesState {
   currentTopic?: string;
   entries: ListenLiveNoteEntry[];
+  /** Structured meaning notes (interpretation-first). */
+  meaningNotes?: ListenMeaningNote[];
+  /** Latest mature insight for the lightbulb strip (one at a time). */
+  latestInsight?: ListenMeaningNote;
   sections: Record<LiveNoteSection, string[]>;
   transcriptChunkCount: number;
   duplicateTranscriptCount: number;
@@ -64,7 +79,8 @@ const SECTION_LABELS: Record<LiveNoteSection, string> = {
   warnings: "Warnings / risks",
   frameworks: "Frameworks / tactics",
   questions: "Questions to revisit",
-  actionIdeas: "Action ideas (notes only)",
+  actionIdeas: "Action ideas",
+  developing: "Developing",
 };
 
 export function liveNoteSectionLabel(section: LiveNoteSection): string {
@@ -123,23 +139,36 @@ function momentNoteText(moment: ListenMoment): string {
 }
 
 function momentToEntry(moment: ListenMoment, listenStartedMs?: number): ListenLiveNoteEntry | null {
-  const section = TYPE_TO_SECTION[moment.type];
-  if (!section) return null;
+  const meaning = meaningNoteFromMoment(moment);
+  if (!meaning) {
+    const section = TYPE_TO_SECTION[moment.type];
+    if (!section) return null;
+    const text = momentNoteText(moment);
+    if (!text || isTranscriptLikeNote(text, moment.transcriptAnchors[0])) return null;
+    const anchor = moment.transcriptAnchors[0]?.trim();
+    const momentMs = Date.parse(moment.lastUpdatedAt) || Date.now();
+    return {
+      id: moment.id,
+      section,
+      text,
+      anchor: anchor && anchor.length >= 12 ? anchor : undefined,
+      status: noteStatusForMoment(moment),
+      momentType: moment.type,
+      updatedAt: moment.lastUpdatedAt,
+      elapsedLabel: formatElapsedLabel(listenStartedMs, momentMs),
+    };
+  }
 
-  const text = momentNoteText(moment);
-  if (!text) return null;
-
-  const anchor = moment.transcriptAnchors[0]?.trim();
-  const momentMs = Date.parse(moment.lastUpdatedAt) || Date.now();
-
+  const section = meaningKindToSection(meaning.kind);
+  const momentMs = Date.parse(meaning.updatedAt) || Date.now();
   return {
-    id: moment.id,
+    id: meaning.id,
     section,
-    text,
-    anchor: anchor && anchor.length >= 12 ? anchor : undefined,
-    status: noteStatusForMoment(moment),
+    text: formatMeaningNoteForDisplay(meaning),
+    anchor: meaning.transcriptAnchor,
+    status: meaning.status === "developing" ? "developing" : "mature",
     momentType: moment.type,
-    updatedAt: moment.lastUpdatedAt,
+    updatedAt: meaning.updatedAt,
     elapsedLabel: formatElapsedLabel(listenStartedMs, momentMs),
   };
 }
@@ -170,7 +199,10 @@ function dedupeEntries(entries: ListenLiveNoteEntry[]): ListenLiveNoteEntry[] {
   return out;
 }
 
-function buildSections(entries: ListenLiveNoteEntry[]): Record<LiveNoteSection, string[]> {
+function buildSections(
+  entries: ListenLiveNoteEntry[],
+  meaningNotes: ListenMeaningNote[] = [],
+): Record<LiveNoteSection, string[]> {
   const sections: Record<LiveNoteSection, string[]> = {
     keyIdeas: [],
     quotes: [],
@@ -179,7 +211,16 @@ function buildSections(entries: ListenLiveNoteEntry[]): Record<LiveNoteSection, 
     frameworks: [],
     questions: [],
     actionIdeas: [],
+    developing: [],
   };
+
+  for (const mn of meaningNotes) {
+    const section = meaningKindToSection(mn.kind);
+    const line = formatMeaningNoteForDisplay(mn);
+    if (sections[section].some((existing) => isDuplicateText(existing, line))) continue;
+    sections[section].push(line);
+  }
+
   for (const entry of entries) {
     const prefix =
       entry.status === "developing"
@@ -188,8 +229,12 @@ function buildSections(entries: ListenLiveNoteEntry[]): Record<LiveNoteSection, 
           ? "(needs more context) "
           : "";
     const line = `${prefix}${entry.text}`;
-    if (!sections[entry.section].some((existing) => isDuplicateText(existing, line))) {
-      sections[entry.section].push(line);
+    const target =
+      entry.status === "developing" && !sections.developing.length
+        ? "developing"
+        : entry.section;
+    if (!sections[target].some((existing) => isDuplicateText(existing, line))) {
+      sections[target].push(line);
     }
   }
   return sections;
@@ -216,6 +261,13 @@ export function shouldRefreshStreamingLiveNotes(
   return nowMs - lastRefreshMs >= intervalMs;
 }
 
+/** Adaptive refresh: faster when transcript is flowing, capped at 10–20s. */
+export function computeLiveNotesRefreshInterval(newTranscriptChars: number): number {
+  if (newTranscriptChars >= 400) return LIVE_NOTES_REFRESH_MIN_MS;
+  if (newTranscriptChars >= 120) return LIVE_NOTES_REFRESH_MS;
+  return LIVE_NOTES_REFRESH_MAX_MS;
+}
+
 function splitNoteSentences(text: string): string[] {
   return text
     .replace(/\s+/g, " ")
@@ -237,29 +289,24 @@ export function extractStreamingNoteCandidates(
   const candidates: ListenLiveNoteEntry[] = [];
   for (const sentence of splitNoteSentences(window).slice(-4)) {
     if (sentence.length < 28) continue;
-    if (isActionFirstListenCard(sentence)) continue;
-    if (/\b(action item|turn it into|want me to)\b/i.test(sentence) && sentence.length < 80) {
-      continue;
-    }
+
+    const id = `stream-${hashNoteId(sentence)}`;
+    const meaning = meaningNoteFromStreamingSentence(sentence, id, new Date(nowMs).toISOString());
+    if (!meaning) continue;
 
     const merged = existingEntries.some(
-      (e) => isDuplicateText(e.text, sentence) || (e.anchor && isDuplicateText(e.anchor, sentence)),
+      (e) => isDuplicateText(e.text, meaning.note) || (e.anchor && isDuplicateText(e.anchor, sentence)),
     );
     if (merged) continue;
 
-    const status: LiveNoteStatus =
-      sentence.length >= 72 && /[.!?]$/.test(sentence) ? "mature" : "developing";
-
+    const section = meaningKindToSection(meaning.kind);
     candidates.push({
-      id: `stream-${hashNoteId(sentence)}`,
-      section: status === "mature" ? "keyIdeas" : "concepts",
-      text:
-        status === "developing"
-          ? `Following: ${sentence.slice(0, 140)}${sentence.length > 140 ? "…" : ""}`
-          : sentence,
-      anchor: sentence,
-      status,
-      updatedAt: new Date(nowMs).toISOString(),
+      id: meaning.id,
+      section: meaningKindToSection(meaning.kind),
+      text: formatMeaningNoteForDisplay(meaning),
+      anchor: meaning.transcriptAnchor,
+      status: meaning.status === "developing" ? "developing" : "mature",
+      updatedAt: meaning.updatedAt,
       elapsedLabel: formatElapsedLabel(listenStartedMs, nowMs),
     });
   }
@@ -338,6 +385,18 @@ export function buildListenLiveNotes(input: BuildListenLiveNotesInput): ListenLi
     });
   }
 
+  const meaningNotes: ListenMeaningNote[] = [];
+  for (const moment of activeMoments) {
+    const mn = meaningNoteFromMoment(moment);
+    if (mn) meaningNotes.push(mn);
+  }
+  for (const sentence of splitNoteSentences(rollingTranscript.slice(-900)).slice(-4)) {
+    const id = `stream-${hashNoteId(sentence)}`;
+    const mn = meaningNoteFromStreamingSentence(sentence, id, new Date(nowMs).toISOString());
+    if (mn) meaningNotes.push(mn);
+  }
+  const dedupedMeaning = dedupeMeaningNotes(meaningNotes);
+
   const momentEntries = dedupeEntries(entries);
   const streamCandidates = extractStreamingNoteCandidates(
     rollingTranscript,
@@ -346,6 +405,7 @@ export function buildListenLiveNotes(input: BuildListenLiveNotesInput): ListenLi
     nowMs,
   );
   const deduped = dedupeEntries([...promoteMatureStreamingEntries(momentEntries), ...streamCandidates]);
+  const latestInsight = pickLatestMatureInsight(dedupedMeaning);
   const topicFallback = rollingTranscript.slice(-160).trim();
   const currentTopic =
     pickCurrentTopic(activeMoments) ??
@@ -361,7 +421,9 @@ export function buildListenLiveNotes(input: BuildListenLiveNotesInput): ListenLi
   return {
     currentTopic: currentTopic?.slice(0, 160),
     entries: deduped,
-    sections: buildSections(deduped),
+    meaningNotes: dedupedMeaning,
+    latestInsight,
+    sections: buildSections(deduped, dedupedMeaning),
     transcriptChunkCount: transcriptChunks.length,
     duplicateTranscriptCount,
     lastUpdatedAt: deduped.length ? deduped[deduped.length - 1]!.updatedAt : new Date(nowMs).toISOString(),

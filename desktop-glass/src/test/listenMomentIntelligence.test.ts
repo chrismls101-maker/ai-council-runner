@@ -274,7 +274,7 @@ test("report includes silently saved moments", () => {
   };
   const moments = listenMomentsFromSessionEvents(session.events);
   const sections = buildListenReportSections({ session, moments });
-  const keyIdeas = sections.find((s) => s.heading === "Key ideas");
+  const keyIdeas = sections.find((s) => s.heading === "Core ideas");
   assert.ok(keyIdeas?.items.some((i) => i.includes("sales") || i.toLowerCase().includes("tactic")));
 });
 

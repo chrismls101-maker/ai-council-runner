@@ -124,6 +124,7 @@ export type GlassCommand =
   | { type: "open-chat" }
   | { type: "set-tab"; tab: PanelTab }
   | { type: "toggle-panel" }
+  | { type: "hide-notes-pad" }
   | { type: "toggle-overlay" }
   | { type: "set-overlay-mode"; mode: OverlayMode }
   | { type: "window-context-refresh" }

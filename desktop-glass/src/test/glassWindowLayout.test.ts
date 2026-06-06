@@ -7,7 +7,9 @@ import {
 import { parseOverlayMode } from "../shared/glassWindowTypes.ts";
 import {
   commandBarLayoutFromDisplay,
+  COMMAND_BAR_HEIGHT,
   dockLayoutFromDisplay,
+  listenNotesPadLayoutFromDisplay,
   overlayLayoutFromDisplay,
   panelLayoutFromDisplay,
   type DisplayLayoutContext,
@@ -76,13 +78,22 @@ test("formatGlassWindowDiagnostics includes click-through flag and command bar",
     dock: { x: 100, y: 49, width: 640, height: 72 },
     panel: null,
     panelVisible: false,
-    commandBar: { x: 900, y: 1450, width: 760, height: 96 },
+    commandBar: { x: 900, y: 1450, width: 760, height: COMMAND_BAR_HEIGHT },
   });
 
   assert.match(line, /overlay=.*clickThrough=true/);
   assert.match(line, /dock=x100,y49,640x72/);
-  assert.match(line, /commandBar=x900,y1450,760x96 clickThrough=false/);
+  assert.match(line, /commandBar=x900,y1450,760x132 clickThrough=false/);
   assert.match(line, /display=id1/);
+});
+
+test("listen notes panel docks on the left with a compact width", () => {
+  const panel = listenNotesPadLayoutFromDisplay(primaryDisplay);
+  const defaultPanel = panelLayoutFromDisplay(primaryDisplay);
+  assert.ok(panel.x < defaultPanel.x);
+  assert.ok(panel.width <= 420);
+  assert.ok(panel.width >= 320);
+  assert.ok(panel.height > 400);
 });
 
 test("buildWindowState exposes diagnostics + command bar visibility", () => {

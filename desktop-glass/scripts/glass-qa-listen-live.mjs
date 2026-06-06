@@ -320,6 +320,13 @@ function buildQaReport(listenReportMd) {
   lines.push(`| Warm-up respected | ${summary.warmupRespected ? "yes" : "no"} |`);
   lines.push(`| First proactive card | ${summary.firstProactiveCardMs != null ? `${Math.round(summary.firstProactiveCardMs / 1000)}s after start` : "_none_"} |`);
   lines.push(`| Live notes created | ${summary.liveNotesCreated ?? 0} |`);
+  lines.push(`| Meaning notes | ${summary.meaningNotesCount ?? 0} |`);
+  lines.push(`| Transcript-like notes (rejected) | ${summary.transcriptLikeNotesCount ?? 0} |`);
+  lines.push(`| Developing notes | ${summary.developingNotesCount ?? 0} |`);
+  lines.push(`| Insight strip updates | ${summary.insightStripUpdates ?? 0} |`);
+  lines.push(`| Checkpoint summaries | ${summary.checkpointSummaries ?? 0} |`);
+  lines.push(`| Final report generated | ${summary.finalReportGenerated ? "yes" : "no"} |`);
+  lines.push(`| Notes mostly transcript-like | ${summary.notesMostlyTranscriptLike ? "**YES — FAIL**" : "no"} |`);
   lines.push(`| Note updates | ${summary.noteUpdates ?? 0} |`);
   lines.push(`| No-audio prompts | ${summary.noAudioPromptsCount ?? 0} |`);
   lines.push(`| User interrupted too much | ${summary.userInterruptedTooMuch ? "**yes**" : "no"} |`);
@@ -892,6 +899,13 @@ const noteMetrics = buildListenHarnessNoteMetrics({
 });
 summary.liveNotesCreated = noteMetrics.liveNotesCreated;
 summary.noteUpdates = noteMetrics.noteUpdates;
+summary.meaningNotesCount = noteMetrics.meaningNotesCount;
+summary.transcriptLikeNotesCount = noteMetrics.transcriptLikeNotesCount;
+summary.developingNotesCount = noteMetrics.developingNotesCount;
+summary.insightStripUpdates = noteMetrics.insightStripUpdates;
+summary.checkpointSummaries = noteMetrics.checkpointSummaries;
+summary.notesMostlyTranscriptLike = noteMetrics.notesMostlyTranscriptLike;
+summary.finalReportGenerated = Boolean(listenReportMd?.includes("# Listen Report"));
 summary.proactiveThoughtCardsShown = noteMetrics.proactiveThoughtCardsShown;
 summary.noteExamples = noteMetrics.noteExamples;
 summary.userInterruptedTooMuch = noteMetrics.userInterruptedTooMuch;
@@ -918,10 +932,41 @@ summary.cardQualityFailures = cardQuality.failures;
 summary.cardQualityWarnings = cardQuality.warnings;
 summary.maxSimultaneousCards = Math.max(summary.maxSimultaneousCards, cardQuality.maxSimultaneousCards);
 summary.warmupRespected = !cardQuality.cardTooEarly;
-if (cardQuality.failures.length) {
-  for (const f of cardQuality.failures) {
-    summary.failures.push(diagnoseFailure("listen_card_quality", f, "Review warm-up, segment filter, and card copy."));
-  }
+if (noteMetrics.notesMostlyTranscriptLike) {
+  summary.failures.push(
+    diagnoseFailure(
+      "notes_transcript_like",
+      `${noteMetrics.transcriptLikeNotesCount}/${noteMetrics.meaningNotesCount} meaning notes look like copied transcript.`,
+      "Improve listenMeaningNote interpretation and isTranscriptLikeNote filtering.",
+    ),
+  );
+}
+if (noteMetrics.stackedCardsCount > 0 && attention === "balanced") {
+  summary.failures.push(
+    diagnoseFailure(
+      "insight_strip_stacked",
+      `Stacked cards/insights detected (${noteMetrics.stackedCardsCount}).`,
+      "Balanced Listen should show at most one lightbulb insight, no stacked cards.",
+    ),
+  );
+}
+if (noteMetrics.actionCardsShown > 0 && attention === "balanced") {
+  summary.failures.push(
+    diagnoseFailure(
+      "action_prompts_balanced",
+      `${noteMetrics.actionCardsShown} action-first card(s) during Balanced Listen.`,
+      "Suppress turn-into-action prompts in Balanced Listen.",
+    ),
+  );
+}
+if (listenReportMd && !/Core ideas|Concepts explained/i.test(listenReportMd)) {
+  summary.failures.push(
+    diagnoseFailure(
+      "report_ignores_notes",
+      "Listen Report missing Core Ideas / Concepts sections from Live Notes.",
+      "Ensure buildListenReportMarkdown uses meaning notes and insights.",
+    ),
+  );
 }
 
 if (!summary.results.some((r) => /report/i.test(r.question ?? ""))) {
@@ -963,7 +1008,13 @@ const exitFail =
   !summary.realSystemAudio ||
   !summary.preflightOk ||
   summary.rawAudioStored ||
-  summary.cardQualityFailures.length > 0;
+  summary.cardQualityFailures.length > 0 ||
+  summary.notesMostlyTranscriptLike ||
+  summary.failures.some((f) =>
+    ["notes_transcript_like", "insight_strip_stacked", "action_prompts_balanced", "report_ignores_notes"].includes(
+      f.category,
+    ),
+  );
 
 if (!keepGlass && glassSession) {
   await closeGlassSession(glassSession);

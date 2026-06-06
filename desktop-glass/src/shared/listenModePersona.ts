@@ -128,8 +128,9 @@ export function buildListenProactiveThought(
     case "key_idea":
     default:
       result = {
-        suggestedThought: `The important part here is that ${speaker} says ${lowerExcerpt}`,
-        reasonSelected: "This stood out as a high-signal idea in the recent transcript.",
+        suggestedThought: `What ${speaker} is really saying here: ${lowerExcerpt}. The important part is why this idea matters in the larger argument.`,
+        reasonSelected:
+          "This stood out as a high-signal idea — captured as interpretation, not transcript copy.",
       };
       break;
   }
