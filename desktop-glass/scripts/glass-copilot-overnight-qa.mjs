@@ -371,6 +371,16 @@ eq("research", detectSessionType({ appName: "Perplexity", transcript: "compare t
 eq("coding_building", detectSessionType({ appName: "Cursor", transcript: "let's refactor this function and commit" }), "coding_building");
 eq("business_strategy", detectSessionType({ transcript: "our go-to-market strategy depends on pricing and market positioning" }), "business_strategy");
 eq("sales_review", detectSessionType({ appName: "HubSpot", transcript: "follow up with the prospect about objections on the cold email outreach" }), "sales_review");
+eq(
+  "meeting_call_04 sales discovery stays meeting_call",
+  detectSessionType({
+    appName: "Google Meet",
+    windowTitle: "Acme — discovery",
+    transcript:
+      "Discovery call with prospect Acme. Deal size around $42k ARR. Objection: pricing. Next step: demo next Tuesday.",
+  }),
+  "meeting_call",
+);
 eq("studying", detectSessionType({ appName: "Canvas", transcript: "study for the exam and finish homework" }), "studying");
 eq("general_workflow", detectSessionType({ transcript: "the weather is nice and the coffee is warm" }), "general_workflow");
 {

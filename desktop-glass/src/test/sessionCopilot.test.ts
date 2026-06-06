@@ -32,6 +32,7 @@ import {
 import {
   detectSessionType,
   detectSessionTypeDetailed,
+  isInCallMeetingContext,
   resolveSessionType,
   scoreSessionTypes,
 } from "../shared/copilotSessionType.ts";
@@ -598,6 +599,59 @@ test("detectSessionType classifies meeting / research / sales / strategy", () =>
 
 test("detectSessionType falls back to general workflow", () => {
   assert.equal(detectSessionType({ transcript: "the weather is nice and the coffee is warm" }), "general_workflow");
+});
+
+test("meeting_call_04 sales discovery call stays meeting_call (not sales_review)", () => {
+  const transcript =
+    "Discovery call with prospect Acme. Deal size around $42k ARR. Objection: they're concerned the onboarding time is too long. Objection: pricing is higher than their current vendor. Next step: schedule a technical demo next Tuesday.";
+  const signals = {
+    appName: "Google Meet",
+    windowTitle: "Acme — discovery",
+    transcript,
+  };
+  assert.equal(isInCallMeetingContext(signals), true);
+  assert.equal(detectSessionType(signals), "meeting_call");
+});
+
+test("sales discovery in Zoom/Meet remains meeting_call", () => {
+  assert.equal(
+    detectSessionType({
+      appName: "Zoom",
+      transcript: "prospect Acme raised a pricing objection; demo scheduled next Tuesday",
+    }),
+    "meeting_call",
+  );
+  assert.equal(
+    detectSessionType({
+      appName: "Google Meet",
+      windowTitle: "Globex — discovery",
+      transcript: "deal size $42k ARR, onboarding blocker, next step demo",
+    }),
+    "meeting_call",
+  );
+});
+
+test("CRM pipeline review in HubSpot/Salesforce stays sales_review", () => {
+  assert.equal(
+    detectSessionType({
+      appName: "HubSpot",
+      transcript: "follow up with the prospect about objections on the cold email outreach pipeline",
+    }),
+    "sales_review",
+  );
+  assert.equal(
+    detectSessionType({
+      appName: "Salesforce",
+      windowTitle: "Q4 pipeline review",
+      transcript: "deal stage negotiation, quota, close the deal this quarter",
+    }),
+    "sales_review",
+  );
+  // Standalone pipeline language without call/meeting context.
+  assert.equal(
+    detectSessionType({ transcript: "the prospect in our pipeline needs a demo before we close the deal" }),
+    "sales_review",
+  );
 });
 
 test("resolveSessionType honors a pinned (non-auto) setting", () => {

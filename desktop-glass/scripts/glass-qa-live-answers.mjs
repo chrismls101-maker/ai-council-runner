@@ -9,7 +9,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { mkdirSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, writeFileSync, existsSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -155,6 +155,33 @@ function runScenarioAsk(scenarioId) {
   return r.status === 0;
 }
 
+function loadJsonlSince(sinceIso) {
+  if (!existsSync(RESULTS_JSONL)) return [];
+  return readFileSync(RESULTS_JSONL, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      try {
+        return JSON.parse(line);
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean)
+    .filter((r) => !sinceIso || (r.finishedAt && r.finishedAt >= sinceIso));
+}
+
+function summarizeTransientOutcomes(records) {
+  const hardFailures = records.filter((r) => r.pass === false);
+  const transientRecovered = records.filter((r) => r.pass === true && r.transientRecovered === true);
+  const timeoutUnrecovered = hardFailures.filter(
+    (r) =>
+      r.timeoutUnrecovered === true ||
+      /timeout|timed out|abort/i.test(String(r.failReason ?? "")),
+  );
+  return { hardFailures, transientRecovered, timeoutUnrecovered };
+}
+
 function main() {
   const { count, seed, category } = parseArgs();
   mkdirSync(OUT, { recursive: true });
@@ -203,6 +230,19 @@ function main() {
         else fail += 1;
       }
 
+      const runRecords = loadJsonlSince(startedAt);
+      const transient = summarizeTransientOutcomes(runRecords);
+      if (transient.transientRecovered.length > 0) {
+        console.log(
+          `\nTransient recoveries (${transient.transientRecovered.length}): ${transient.transientRecovered.map((r) => r.scenarioId).join(", ")}`,
+        );
+      }
+      if (transient.timeoutUnrecovered.length > 0) {
+        console.log(
+          `Timeout unrecovered (${transient.timeoutUnrecovered.length}): ${transient.timeoutUnrecovered.map((r) => r.scenarioId).join(", ")}`,
+        );
+      }
+
       const CATEGORY_GRADED = ["video_learning", "creator_content", "sales_review"];
       const auditScript =
         category === "meeting_call"
@@ -226,6 +266,11 @@ function main() {
             seed,
             pass,
             fail,
+            hardFailures: transient.hardFailures.length,
+            transientRecovered: transient.transientRecovered.length,
+            timeoutUnrecovered: transient.timeoutUnrecovered.length,
+            transientRecoveredIds: transient.transientRecovered.map((r) => r.scenarioId),
+            hardFailureIds: transient.hardFailures.map((r) => r.scenarioId),
             scenarioIds: sample.map((s) => s.id),
             categories: [...new Set(sample.map((s) => s.category))].sort(),
             requiredCategories: category ? [category] : REQUIRED_CATEGORIES,
@@ -238,7 +283,9 @@ function main() {
         ),
       );
 
-      console.log(`\nDone: ${pass} pass / ${fail} fail · jsonl=${RESULTS_JSONL}`);
+      console.log(
+        `\nDone: ${pass} pass / ${fail} hard fail · transient recovered=${transient.transientRecovered.length} · timeout unrecovered=${transient.timeoutUnrecovered.length} · jsonl=${RESULTS_JSONL}`,
+      );
       if (fail > 0) process.exit(1);
       if (audit.status !== 0) process.exit(audit.status ?? 1);
     })

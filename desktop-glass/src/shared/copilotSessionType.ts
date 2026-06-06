@@ -292,8 +292,66 @@ const KEYWORD_HINTS: { type: GlassCopilotSessionType; words: string[] }[] = [
   },
 ];
 
+const MEETING_APP_NAMES = [
+  "zoom",
+  "google meet",
+  "meet",
+  "microsoft teams",
+  "teams",
+  "webex",
+  "facetime",
+  "slack huddle",
+];
+
+/** Transcript/title phrases that indicate a live call/meeting (not CRM review). */
+const CALL_CONTEXT_CORPUS = [
+  "discovery call",
+  "sales call",
+  "customer call",
+  "prospect call",
+  "on the call",
+  "on this call",
+  "during the call",
+  "on a call",
+  "video call",
+  "zoom call",
+  "meet call",
+  "teams call",
+  "joining the call",
+  "left the call",
+  "call with",
+];
+
+const CALL_CONTEXT_TITLES = [
+  "zoom meeting",
+  "google meet",
+  "teams meeting",
+  "call with",
+  "standup",
+  "stand-up",
+  "discovery call",
+  "sales call",
+  "customer call",
+  " — discovery",
+];
+
 function lower(value: string | undefined): string {
   return (value ?? "").toLowerCase();
+}
+
+/** True when signals indicate a live meeting/call context (Zoom/Meet/call transcript). */
+export function isInCallMeetingContext(signals: SessionTypeSignals): boolean {
+  const app = lower(signals.appName);
+  const title = lower(signals.windowTitle);
+  const corpus = [
+    lower(signals.transcript),
+    ...(signals.recentCommands ?? []).map(lower),
+  ].join(" \n ");
+
+  if (MEETING_APP_NAMES.some((a) => app.includes(a))) return true;
+  if (CALL_CONTEXT_TITLES.some((t) => title.includes(t))) return true;
+  if (CALL_CONTEXT_CORPUS.some((p) => corpus.includes(p))) return true;
+  return false;
 }
 
 function countHits(haystack: string, needles: string[]): number {
@@ -342,6 +400,14 @@ export function scoreSessionTypes(signals: SessionTypeSignals): Record<GlassCopi
   for (const hint of KEYWORD_HINTS) {
     const hits = countHits(corpus, hint.words);
     if (hits > 0) bump(hint.type, hits);
+  }
+
+  // Sales language during a live call is meeting intelligence (with sales anchors),
+  // not a CRM/pipeline review. Keep sales_review for HubSpot/Salesforce workflows
+  // outside an active call/meeting context.
+  if (isInCallMeetingContext(signals) && scores.sales_review > 0) {
+    scores.meeting_call += scores.sales_review;
+    scores.sales_review = 0;
   }
 
   return scores;

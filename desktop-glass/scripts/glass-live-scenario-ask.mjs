@@ -16,6 +16,7 @@ import {
   scoreCategoryAnswer,
   visualFixtureFailReason,
 } from "./lib/glass-answer-quality.mjs";
+import { shouldRetryLiveAsk } from "./lib/glass-live-ask-retry.mjs";
 
 const CATEGORY_GRADED = new Set(["video_learning", "creator_content", "sales_review"]);
 import { renderFixtureScreenshot } from "./lib/render-fixture-screenshot.mjs";
@@ -101,61 +102,50 @@ function assertVisualFixtureAnswer(answer) {
 
 const prompt = `${scenario.userPrompt}\n\nContext: ${scenario.screenContextText}\n${scenario.transcriptChunks.join(" ")}`.slice(0, 2000);
 
-let body = { prompt, responseStyle: "overlay" };
-let expectRoute = "glass_direct";
+/** @returns {Promise<{ body: object, expectRoute: string }>} */
+async function buildRequestBody() {
+  let body = { prompt, responseStyle: "overlay" };
+  let expectRoute = "glass_direct";
 
-if (scenario.testKind === "controlled_visual_fixture" && scenario.fixturePage) {
-  const fix = FIXTURE_PAGES[scenario.fixturePage];
-  const fixPath = join(GLASS_ROOT, fix.path);
-  if (existsSync(fixPath)) {
-    const imageDataUrl = await renderFixtureScreenshot(fixPath);
-    body = {
-      prompt: `${scenario.userPrompt} What do you see on this screen?`,
-      visualIntent: true,
-      latestScreenshot: {
-        imageDataUrl,
-        label: `Fixture: ${fix.label}`,
-        capturedAt: new Date().toISOString(),
-        fixturePage: scenario.fixturePage,
-      },
-      responseStyle: "overlay",
-    };
-    expectRoute = "glass_visual_direct";
+  if (scenario.testKind === "controlled_visual_fixture" && scenario.fixturePage) {
+    const fix = FIXTURE_PAGES[scenario.fixturePage];
+    const fixPath = join(GLASS_ROOT, fix.path);
+    if (existsSync(fixPath)) {
+      const imageDataUrl = await renderFixtureScreenshot(fixPath);
+      body = {
+        prompt: `${scenario.userPrompt} What do you see on this screen?`,
+        visualIntent: true,
+        latestScreenshot: {
+          imageDataUrl,
+          label: `Fixture: ${fix.label}`,
+          capturedAt: new Date().toISOString(),
+          fixturePage: scenario.fixturePage,
+        },
+        responseStyle: "overlay",
+      };
+      expectRoute = "glass_visual_direct";
+    }
   }
+
+  return { body, expectRoute };
 }
 
-const started = Date.now();
-let data = {};
-let httpStatus = 0;
-try {
+/** @param {object} body @param {string} expectRoute */
+async function executeLiveAsk(body, expectRoute) {
   const res = await fetch(`${apiUrl}/api/glass/ask`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(120_000),
   });
-  httpStatus = res.status;
-  data = await res.json().catch(() => ({}));
+  const httpStatus = res.status;
+  const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-  appendResult({
-    scenarioId,
-    category: scenario.category,
-    testKind: scenario.testKind,
-    promptPreview: sanitizeText(scenario.userPrompt, 200),
-    contextSummary: contextSummary(scenario),
-    routeUsed: data.routeUsed ?? null,
-    model: data.modelUsed ?? data.model ?? null,
-    modelRequested: data.modelRequested ?? null,
-    modelUsed: data.modelUsed ?? data.model ?? null,
-    fallbackUsed: data.fallbackUsed ?? false,
-    latencyMs: Date.now() - started,
-    pass: false,
-    failReason: `HTTP ${res.status}`,
-    finishedAt: new Date().toISOString(),
-  });
-    console.error(`FAIL HTTP ${res.status}`);
-    process.exit(1);
+    const err = new Error(`HTTP ${res.status}`);
+    /** @type {Error & { httpStatus?: number, data?: object }} */ (err).httpStatus = httpStatus;
+    /** @type {Error & { httpStatus?: number, data?: object }} */ (err).data = data;
+    throw err;
   }
 
   if (scenario.testKind === "controlled_visual_fixture") {
@@ -175,26 +165,75 @@ try {
   if (expectRoute === "glass_direct" && /couldn't capture/i.test(data.answer ?? "")) {
     throw new Error("Text scenario routed to capture-first");
   }
-} catch (err) {
-  const ms = Date.now() - started;
-  appendResult({
-    scenarioId,
-    category: scenario.category,
-    testKind: scenario.testKind,
-    promptPreview: sanitizeText(scenario.userPrompt, 200),
-    contextSummary: contextSummary(scenario),
-    routeUsed: data.routeUsed ?? null,
-    model: data.model ?? null,
-    latencyMs: ms,
-    pass: false,
-    failReason: err instanceof Error ? err.message : String(err),
-    finishedAt: new Date().toISOString(),
-  });
-  console.error(`FAIL ${scenarioId}: ${err instanceof Error ? err.message : err}`);
-  process.exit(1);
+
+  return { data, httpStatus };
+}
+
+/** @param {unknown} err */
+function errorHttpStatus(err) {
+  return /** @type {{ httpStatus?: number }} */ (err)?.httpStatus ?? 0;
+}
+
+/** @param {unknown} err */
+function errorData(err) {
+  return /** @type {{ data?: object }} */ (err)?.data ?? {};
+}
+
+/** @param {string} reason */
+function isTimeoutFailure(reason) {
+  const lower = reason.toLowerCase();
+  return lower.includes("timeout") || lower.includes("timed out") || lower.includes("abort");
+}
+
+const started = Date.now();
+const { body, expectRoute } = await buildRequestBody();
+
+/** @type {{ data: object, httpStatus: number, attempt: number, transientRecovered: boolean, firstFailReason?: string }} */
+let result = { data: {}, httpStatus: 0, attempt: 0, transientRecovered: false };
+
+for (let attempt = 0; attempt < 2; attempt++) {
+  try {
+    const out = await executeLiveAsk(body, expectRoute);
+    result = {
+      data: out.data,
+      httpStatus: out.httpStatus,
+      attempt,
+      transientRecovered: attempt === 1,
+      firstFailReason: result.firstFailReason,
+    };
+    break;
+  } catch (err) {
+    const httpStatus = errorHttpStatus(err);
+    const failReason = err instanceof Error ? err.message : String(err);
+    if (attempt === 0 && shouldRetryLiveAsk(err, httpStatus, attempt)) {
+      result.firstFailReason = failReason;
+      console.warn(`RETRY ${scenarioId}: transient ${failReason} — retrying once…`);
+      continue;
+    }
+
+    appendResult({
+      scenarioId,
+      category: scenario.category,
+      testKind: scenario.testKind,
+      promptPreview: sanitizeText(scenario.userPrompt, 200),
+      contextSummary: contextSummary(scenario),
+      routeUsed: errorData(err).routeUsed ?? null,
+      model: errorData(err).modelUsed ?? errorData(err).model ?? null,
+      latencyMs: Date.now() - started,
+      pass: false,
+      failReason,
+      transientRecovered: false,
+      timeoutUnrecovered: isTimeoutFailure(failReason),
+      attempts: attempt + 1,
+      finishedAt: new Date().toISOString(),
+    });
+    console.error(`FAIL ${scenarioId}: ${failReason}`);
+    process.exit(1);
+  }
 }
 
 const ms = Date.now() - started;
+const data = result.data;
 const answerPreview = sanitizeText(data.answer, 500);
 const shortAnswer = sanitizeText(data.shortAnswer ?? data.answer?.slice(0, 200), 200);
 const qualityFlags = scoreGlassAnswerQuality({
@@ -249,11 +288,20 @@ appendResult({
       }
     : {}),
   pass: true,
+  transientRecovered: result.transientRecovered,
+  firstFailReason: result.firstFailReason ?? null,
+  attempts: result.attempt + 1,
   finishedAt: new Date().toISOString(),
 });
 
+if (result.transientRecovered) {
+  console.warn(
+    `RECOVERED ${scenarioId}: transient ${result.firstFailReason} — passed on retry (${ms}ms)`,
+  );
+}
+
 console.log(
-  `OK live scenario ${scenarioId} [${scenario.testKind}] · ${data.routeUsed} · ${data.modelUsed ?? data.model ?? "unknown-model"}${data.fallbackUsed ? " (fallback)" : ""} · ${ms}ms · category=${scenario.category}`,
+  `OK live scenario ${scenarioId} [${scenario.testKind}] · ${data.routeUsed} · ${data.modelUsed ?? data.model ?? "unknown-model"}${data.fallbackUsed ? " (fallback)" : ""} · ${ms}ms · category=${scenario.category}${result.transientRecovered ? " · transient_recovered" : ""}`,
 );
 console.log(`answer: ${sanitizeText(shortAnswer || answerPreview, 160)}`);
 process.exit(0);

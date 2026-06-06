@@ -224,6 +224,16 @@ function main() {
   lines.push(`| Unique scenarios in overnight logs | ${overnightUnique.size} |`);
   lines.push(`| **Answer records in jsonl (total)** | **${jsonl.length}** |`);
   lines.push(`| **Answer records in current audit window** | **${currentJsonl.length}** |`);
+  const transientRecovered = currentJsonl.filter((r) => r.pass === true && r.transientRecovered === true);
+  const hardFailures = currentJsonl.filter((r) => r.pass === false);
+  const timeoutUnrecovered = hardFailures.filter(
+    (r) =>
+      r.timeoutUnrecovered === true ||
+      /timeout|timed out|abort/i.test(String(r.failReason ?? "")),
+  );
+  lines.push(`| Hard failures (current window) | ${hardFailures.length} |`);
+  lines.push(`| Transient recovered (retry succeeded) | ${transientRecovered.length} |`);
+  lines.push(`| Timeout unrecovered | ${timeoutUnrecovered.length} |`);
   if (latestQuick) {
     lines.push(`| Latest quick QA session | ${latestQuick.start} → ${latestQuick.end ?? "?"} (${latestQuick.liveScenarioSteps} live-scenario steps) |`);
   }
