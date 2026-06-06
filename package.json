@@ -65,6 +65,8 @@
     "glass:qa:manual": "npm run qa:manual --prefix desktop-glass",
     "glass:qa:voice:manual": "npm run qa:voice:manual --prefix desktop-glass --",
     "glass:qa:listen:live": "npm run qa:listen:live --prefix desktop-glass --",
+    "glass:qa:listen:preflight": "npm run qa:listen:preflight --prefix desktop-glass --",
+    "glass:qa:listen:endurance:sim": "npm run qa:listen:endurance:sim --prefix desktop-glass --",
     "glass:qa:manual-report": "npm run glass:qa:manual-report --prefix desktop-glass",
     "glass:qa:auto": "npm run qa:auto --prefix desktop-glass",
     "glass:qa:live": "npm run qa:live --prefix desktop-glass",

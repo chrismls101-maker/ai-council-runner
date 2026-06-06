@@ -390,13 +390,26 @@ async function waitForListeningActive({ command, log }) {
  * Fast automate: Setup Check → System Audio → Listen card.
  * Open YouTube separately (before calling this) so you can press play during audio test.
  */
-export async function automateListenMode({ command, dock, panel, log = console.log }) {
+export async function automateListenMode({ command, dock, panel, endurance, log = console.log }) {
   log("Automating Listen mode (fast: setup check → audio → Listen)…");
 
-  await command.evaluate(() => {
-    window.glass.send({ type: "stop-everything" });
-    window.glass.send({ type: "copilot-set-mode", mode: "off" });
-  });
+  const maxListeningMin = endurance?.maxListeningMinutes ?? 0;
+  const attention = endurance?.attention ?? "balanced";
+
+  await command.evaluate(
+    ({ maxListeningMin, attention }) => {
+      window.glass.send({ type: "stop-everything" });
+      window.glass.send({ type: "copilot-set-mode", mode: "off" });
+      window.glass.send({
+        type: "copilot-set-config",
+        patch: {
+          maxListeningMin,
+          listenAttentionLevel: attention,
+        },
+      });
+    },
+    { maxListeningMin, attention },
+  );
   await sleep(150);
 
   await ensurePanelOpen(dock, panel);

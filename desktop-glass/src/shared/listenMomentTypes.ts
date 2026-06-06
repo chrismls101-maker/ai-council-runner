@@ -115,6 +115,8 @@ export interface ListenMomentEngineState {
   activeCardId?: string;
   activeMomentId?: string;
   queuedMomentIds: string[];
+  /** Last written checkpoint index for long sessions. */
+  lastCheckpointIndex?: number;
 }
 
 export function initialListenMomentEngineState(): ListenMomentEngineState {

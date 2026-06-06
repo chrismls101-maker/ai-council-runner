@@ -36,6 +36,7 @@ export function prepareListenModeSession(
     activeCardId: undefined,
     activeMomentId: undefined,
     queuedMomentIds: [],
+    lastCheckpointIndex: 0,
   };
 }
 

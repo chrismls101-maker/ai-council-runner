@@ -33,6 +33,21 @@ import {
 import type { ListenAttentionLevel, ListenMoment } from "./listenMomentTypes.ts";
 import type { MediaContext } from "./mediaContextTypes.ts";
 import { answerClaimsFacialRecognition, answerClaimsFakeAudio } from "./mediaContextExtract.ts";
+import type { ListenEnduranceConfig } from "./listenEnduranceConfig.ts";
+import {
+  parseListenEnduranceCli,
+  formatEnduranceConfig,
+  effectiveMaxListeningMinutes,
+  validateEnduranceConfig,
+} from "./listenEnduranceConfig.ts";
+
+export {
+  parseListenEnduranceCli,
+  formatEnduranceConfig,
+  effectiveMaxListeningMinutes,
+  validateEnduranceConfig,
+};
+export type { ListenEnduranceConfig };
 
 export const STUB_CANARY = "IIVO Glass is working";
 export const COUNCIL_MARKERS = [
@@ -151,35 +166,18 @@ export function parseListenLiveMinutes(argv: string[]): number {
   return minutes;
 }
 
-export interface ListenLiveCliOptions {
-  minutes: number;
-  /** User presses Enter at each step (legacy). Default false — harness automates Glass. */
-  manual: boolean;
-  /** Attach to Glass already running with IIVO_GLASS_E2E=1 on CDP :19222. */
-  attach: boolean;
-  /** Do not close Glass when the test finishes. */
-  keepGlass: boolean;
-  /** Override warm-up duration for faster QA (seconds). */
+export interface ListenLiveCliOptions extends ListenEnduranceConfig {
   warmupSeconds?: number;
 }
 
 export function parseListenLiveCli(argv: string[] = process.argv.slice(2)): ListenLiveCliOptions {
-  let minutes = 10;
-  let manual = false;
-  let attach = false;
-  let keepGlass = false;
+  const base = parseListenEnduranceCli(argv);
   let warmupSeconds: number | undefined;
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === "--minutes" && argv[i + 1]) minutes = Math.max(1, Number(argv[++i]) || 10);
-    else if (arg === "--manual") manual = true;
-    else if (arg === "--attach") attach = true;
-    else if (arg === "--keep-glass") keepGlass = true;
-    else if (arg === "--warmup-seconds" && argv[i + 1]) {
-      warmupSeconds = Math.max(0, Number(argv[++i]) || 0);
-    }
+  const i = argv.indexOf("--warmup-seconds");
+  if (i >= 0 && argv[i + 1]) {
+    warmupSeconds = Math.max(0, Number(argv[i + 1]) || 0);
   }
-  return { minutes, manual, attach, keepGlass, warmupSeconds };
+  return { ...base, warmupSeconds };
 }
 
 export async function runServerPreflight(apiUrl: string): Promise<ServerPreflightResult> {

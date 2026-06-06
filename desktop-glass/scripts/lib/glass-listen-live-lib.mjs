@@ -4,7 +4,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { readFileSync, existsSync, mkdirSync, appendFileSync, writeFileSync } from "node:fs";
+import { readFileSync, existsSync, mkdirSync, appendFileSync, writeFileSync, openSync, fsyncSync, closeSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { extractMediaContext } from "../../src/shared/mediaContextExtract.ts";
@@ -29,6 +29,9 @@ import {
   gradeListenHarnessQuality,
   LISTEN_INTERRUPT_QA_QUESTIONS,
   countDuplicateTranscriptLines,
+  formatEnduranceConfig,
+  effectiveMaxListeningMinutes,
+  validateEnduranceConfig,
 } from "../../src/shared/listenLiveHarness.ts";
 
 export {
@@ -50,6 +53,9 @@ export {
   gradeListenHarnessQuality,
   countDuplicateTranscriptLines,
   LISTEN_INTERRUPT_QA_QUESTIONS,
+  formatEnduranceConfig,
+  effectiveMaxListeningMinutes,
+  validateEnduranceConfig,
 };
 
 export const OUT_DIR = "/tmp/iivo-glass-listen-live";
@@ -261,6 +267,13 @@ export function buildListenLiveAskSession({ mediaContext, systemAudioChunks, run
 export function appendResult(record) {
   mkdirSync(OUT_DIR, { recursive: true });
   appendFileSync(RESULTS_JSONL, `${JSON.stringify(record)}\n`);
+  try {
+    const fd = openSync(RESULTS_JSONL, "a");
+    fsyncSync(fd);
+    closeSync(fd);
+  } catch {
+    /* best-effort flush */
+  }
 }
 
 export function writeReport(markdown, path = REPORT_MD) {

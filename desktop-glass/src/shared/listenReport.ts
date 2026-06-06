@@ -10,12 +10,15 @@ import type { GlassSession, GlassSessionEvent } from "./sessionTypes.ts";
 import type { ListenMoment } from "./listenMomentTypes.ts";
 import type { MediaContext } from "./mediaContextTypes.ts";
 import type { ListenSegmentKind } from "./listenSegmentClassifier.ts";
+import type { ListenCheckpointSummary } from "./listenCheckpoint.ts";
+import { checkpointSummaryToMarkdown } from "./listenCheckpoint.ts";
 import { buildListenReportPersonaGuidance } from "./listenModePersona.ts";
 
 export interface ListenReportInput {
   session: GlassSession;
   moments: ListenMoment[];
   mediaContext?: MediaContext | null;
+  checkpoints?: ListenCheckpointSummary[];
 }
 
 function mediaFromSession(session: GlassSession): MediaContext | undefined {
@@ -143,6 +146,13 @@ export function buildListenReportSections(input: ListenReportInput): GlassCopilo
     sections.push({
       heading: "Ignored / possible ad · sponsor · intro",
       items: ignored,
+    });
+  }
+
+  if (input.checkpoints?.length) {
+    sections.push({
+      heading: "Session checkpoints",
+      items: input.checkpoints.map((cp) => checkpointSummaryToMarkdown(cp).replace(/\n/g, " · ")),
     });
   }
 

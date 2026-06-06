@@ -58,7 +58,9 @@ import {
   writeReport,
   sleep,
   sanitize,
-  diagnoseFailure,
+  formatEnduranceConfig,
+  effectiveMaxListeningMinutes,
+  validateEnduranceConfig,
 } from "./lib/glass-listen-live-lib.mjs";
 import {
   automateListenMode,
@@ -70,14 +72,36 @@ import {
 } from "./lib/glass-listen-live-glass.mjs";
 
 const cli = parseListenLiveArgs();
-const { minutes, manual, attach, keepGlass, warmupSeconds } = cli;
+const {
+  minutes,
+  manual,
+  attach,
+  keepGlass,
+  warmupSeconds,
+  attention,
+  realAudioRequired,
+  failOnMicChunks,
+  failOnDuplicateTranscriptSpam,
+} = cli;
+
+console.log(formatEnduranceConfig(cli));
+console.log("");
+
+const enduranceValidation = validateEnduranceConfig(cli);
+for (const w of enduranceValidation.warnings) console.warn(`WARN: ${w}`);
+if (!enduranceValidation.ok) {
+  for (const e of enduranceValidation.errors) console.error(`BLOCKED: ${e}`);
+  process.exit(1);
+}
+
+const effectiveMaxListeningMin = effectiveMaxListeningMinutes(cli);
 const listenWarmupMs =
-  warmupSeconds != null ? warmupSeconds * 1000 : 120_000;
+  warmupSeconds != null ? warmupSeconds * 1000 : cli.warmupMinutes * 60_000;
 const apiUrl = (process.env.IIVO_API_URL ?? "http://localhost:3001").replace(/\/$/, "");
 const sessionsPath = resolveSessionsPath();
 const runStarted = Date.now();
 const runEnds = runStarted + minutes * 60_000;
-const harnessRuntime = createListenHarnessRuntime("balanced");
+const harnessRuntime = createListenHarnessRuntime(attention);
 
 const summary = {
   preflightOk: false,
@@ -521,6 +545,10 @@ log("\nSTEP 3 — Activate Listen mode (computer audio only, mic off)…");
 if (glassSession) {
   const listenResult = await automateListenMode({
     ...glassSession.pages,
+    endurance: {
+      maxListeningMinutes: effectiveMaxListeningMin,
+      attention,
+    },
     log,
   });
   if (!listenResult.ok) {
@@ -783,9 +811,27 @@ const cardQuality = gradeListenHarnessQuality({
   duplicateTranscriptLines: countDuplicateTranscriptLines(finalChunks),
   listeningLimitFired: summary.listeningLimitFired,
   listeningElapsedMs: Date.now() - runStarted,
-  maxListeningMin: 120,
+  maxListeningMin: effectiveMaxListeningMin,
   micChunks: summary.micChunks,
 });
+if (failOnMicChunks && summary.micChunks > 0) {
+  summary.failures.push(
+    diagnoseFailure(
+      "mic_in_listen",
+      `${summary.micChunks} microphone chunk(s) during Listen mode.`,
+      "Listen endurance requires system audio only.",
+    ),
+  );
+}
+if (failOnDuplicateTranscriptSpam && cardQuality.duplicateTranscriptLines > 3) {
+  summary.failures.push(
+    diagnoseFailure(
+      "duplicate_transcript_spam",
+      `Duplicate transcript lines: ${cardQuality.duplicateTranscriptLines}`,
+      "Check transcript dedupe in sttChunkHandler and add-transcript-chunk.",
+    ),
+  );
+}
 summary.cardQualityFailures = cardQuality.failures;
 summary.cardQualityWarnings = cardQuality.warnings;
 summary.maxSimultaneousCards = Math.max(summary.maxSimultaneousCards, cardQuality.maxSimultaneousCards);

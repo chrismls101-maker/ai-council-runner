@@ -136,6 +136,22 @@ Call **`listenModePersona.ts`** from:
 
 ---
 
+## 6-hour endurance prep
+
+| Concern | Mechanism |
+|---------|-----------|
+| Listening limit | `--max-listening-minutes 0` disables; else enforce ≥360 for 6h runs (`listenEnduranceConfig.ts`) |
+| Transcript retention | `listenSessionRetention.ts` caps events (2000) + running transcript (50k chars) |
+| Ask context | Rolling 3–5 min window (`activeListeningContext.ts`); checkpoints for long memory |
+| Checkpoints | Every 30 min → session event `listen_checkpoint` (`listenCheckpoint.ts`, main `maybeWriteListenCheckpoint`) |
+| Cards | One-card rule unchanged; harness caps surfaces per 10 min |
+| GPT budget | `listenGptCallBudget.ts` — cap per hour + transient retry once |
+| Preflight | `npm run glass:qa:listen:preflight` |
+| Fast sim (no audio) | `npm run glass:qa:listen:endurance:sim -- --hours 6 --speed fast` |
+| Live 6h (manual) | `npm run glass:qa:listen:live -- --minutes 360 --real-audio-required --max-listening-minutes 0` |
+
+---
+
 ## Remaining manual QA
 
 1. Live QA with BlackHole + YouTube: `npm run glass:qa:listen:live -- --minutes 10`

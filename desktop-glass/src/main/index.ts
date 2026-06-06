@@ -189,6 +189,15 @@ import {
   isDuplicateTranscriptChunk,
   transcriptSourceFromTags,
 } from "../shared/transcriptDedupe.ts";
+import {
+  buildListenCheckpointSummary,
+  shouldWriteListenCheckpoint,
+  DEFAULT_LISTEN_CHECKPOINT_MINUTES,
+} from "../shared/listenCheckpoint.ts";
+import {
+  pruneRunningTranscript,
+  pruneTranscriptSessionEvents,
+} from "../shared/listenSessionRetention.ts";
 import { isListeningLimitEnabled } from "../shared/listeningLimit.ts";
 import {
   buildSessionDebrief,
@@ -623,6 +632,43 @@ function upsertListenInsightCard(moment: ListenMoment, surfaceDecision: ListenCa
   pushFeed(item);
 }
 
+async function pruneCurrentSessionEvents(): Promise<void> {
+  const session = sessions.current();
+  if (!session) return;
+  session.events = pruneTranscriptSessionEvents(session.events);
+}
+
+async function maybeWriteListenCheckpoint(nowMs: number): Promise<void> {
+  if (!listenMomentRuntime.listenStartedMs) return;
+  const checkpointMinutes = DEFAULT_LISTEN_CHECKPOINT_MINUTES;
+  const cp = shouldWriteListenCheckpoint({
+    listenStartedMs: listenMomentRuntime.listenStartedMs,
+    nowMs,
+    lastCheckpointIndex: listenMomentRuntime.lastCheckpointIndex ?? 0,
+    checkpointMinutes,
+  });
+  if (!cp.write) return;
+  listenMomentRuntime.lastCheckpointIndex = cp.checkpointIndex;
+  const summary = buildListenCheckpointSummary({
+    checkpointIndex: cp.checkpointIndex,
+    listenStartedMs: listenMomentRuntime.listenStartedMs,
+    nowMs,
+    moments: listenMomentRuntime.moments,
+    checkpointMinutes,
+  });
+  if (!sessionIsLive()) return;
+  sessions.addEvent({
+    kind: "manual_note",
+    title: `Listen checkpoint ${cp.checkpointIndex}`,
+    text: summary.bestIdeas[0] ?? "Checkpoint saved.",
+    tags: ["listen_checkpoint"],
+    ...eventContextFields(),
+    metadata: { listenCheckpoint: summary },
+  });
+  await pruneCurrentSessionEvents();
+  await persistSessions(sessions);
+}
+
 async function persistListenMomentEvent(moment: ListenMoment): Promise<void> {
   if (!sessionIsLive()) return;
   sessions.addEvent({
@@ -634,6 +680,7 @@ async function persistListenMomentEvent(moment: ListenMoment): Promise<void> {
     ...eventContextFields(),
     metadata: { listenMoment: moment },
   });
+  await pruneCurrentSessionEvents();
   await persistSessions(sessions);
 }
 
@@ -693,6 +740,8 @@ async function processListenModeChunk(newText: string, tags?: string[]): Promise
   if (isListenWarmupActive(surfaceContext)) {
     state.lastNotice = "Listening… building context";
   }
+
+  await maybeWriteListenCheckpoint(nowMs);
 
   const candidate = pickBestListenMomentForSurface(listenMomentRuntime.moments);
   if (!candidate) {
@@ -2289,6 +2338,7 @@ async function handleCommand(
       const chunk = command.text.trim();
       if (!chunk) return;
       state.transcript = appendTranscriptDeduped(state.transcript, chunk);
+      state.transcript = pruneRunningTranscript(state.transcript);
       push();
       return;
     }
@@ -2306,6 +2356,7 @@ async function handleCommand(
         systemAudioLastSignalMs = Date.now();
       }
       state.transcript = appendTranscriptDeduped(state.transcript, chunk);
+      state.transcript = pruneRunningTranscript(state.transcript);
       if (sessionIsLive() && sessions.current()?.status === "active") {
         const ctxFields = eventContextFields();
         sessions.addEvent({
@@ -2315,6 +2366,7 @@ async function handleCommand(
           tags: command.tags,
           ...ctxFields,
         });
+        await pruneCurrentSessionEvents();
         await persistSessions(sessions);
       } else if (!sessionIsLive()) {
         state.lastNotice = "Transcript saved. Start a session to keep chunks in the timeline.";
