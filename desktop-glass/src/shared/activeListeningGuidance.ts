@@ -5,6 +5,7 @@
  * transcript context instead of generic assistant answers.
  */
 
+import { buildListenInterruptPersonaGuidance } from "./listenModePersona.ts";
 import type { ActiveListeningContextPayload, ActiveListeningIntent } from "./activeListeningTypes.ts";
 
 const SHARED_RULES =
@@ -149,6 +150,10 @@ export function buildActiveListeningGuidance(
 
   if (modeGuidance) {
     lines.push("", "Intent-specific guidance:", modeGuidance);
+  }
+
+  if (ctx.activeMode === "listen") {
+    lines.push("", "Persona:", buildListenInterruptPersonaGuidance({ intent, ctx: { mediaContext: ctx.mediaContext } }));
   }
 
   if (ctx.activeMode === "meetings" && ctx.salesSignals) {

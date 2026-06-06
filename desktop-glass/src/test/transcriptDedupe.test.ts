@@ -59,6 +59,14 @@ test("collapseDuplicateTranscriptLines removes consecutive repeats", () => {
   assert.equal(collapseDuplicateTranscriptLines(raw), "Line one\nLine two");
 });
 
+test("append-transcript IPC path uses dedupe semantics", () => {
+  let t = appendTranscriptDeduped("", "Welcome to the show.");
+  for (let i = 0; i < 5; i++) {
+    t = appendTranscriptDeduped(t, "Welcome to the show.");
+  }
+  assert.equal(t, "Welcome to the show.");
+});
+
 test("transcriptChunkKey is stable for same source text and bucket", () => {
   const ms = 90_000;
   const a = transcriptChunkKey("Hello world", "system_audio", ms);

@@ -169,9 +169,13 @@ import {
 } from "../shared/listenMomentTiming.ts";
 import { classifyListenSegment } from "../shared/listenSegmentClassifier.ts";
 import {
-  clearListenMomentEngineState,
+  clearListenModeRuntime,
+  hasActiveListenCard,
+  prepareListenModeSession,
+  type ListenModeRuntime,
+} from "../shared/listenModeRuntime.ts";
+import {
   initialListenMomentEngineState,
-  type ListenMomentEngineState,
   type ListenMoment,
 } from "../shared/listenMomentTypes.ts";
 import { buildListenThoughtFeedContent, listenThoughtFeedBodies } from "../shared/listenThoughtCards.ts";
@@ -440,7 +444,7 @@ let copilotVisualAskFailures = 0;
 const copilotRecentCommands: string[] = [];
 const copilotRecentResponses: string[] = [];
 let activeListeningRuntime: ActiveListeningRuntimeState = initialActiveListeningRuntime();
-let listenMomentRuntime: ListenMomentEngineState = initialListenMomentEngineState();
+let listenMomentRuntime: ListenModeRuntime = initialListenMomentEngineState();
 let listenLastChunkMs: number | undefined;
 
 function buildActiveListeningAskContext(userPrompt?: string) {
@@ -582,9 +586,7 @@ function isListenModeActive(): boolean {
 }
 
 function hasVisibleListenCard(): boolean {
-  const id = listenMomentRuntime.activeCardId;
-  if (!id) return false;
-  return state.commandFeed.some((f) => f.id === id && f.listenMomentId);
+  return hasActiveListenCard(listenMomentRuntime, state.commandFeed);
 }
 
 function clearListenCardState(): void {
@@ -914,7 +916,7 @@ function bindCopilotToSession(): void {
   copilotRecentCommands.length = 0;
   copilotRecentResponses.length = 0;
   activeListeningRuntime = clearActiveListeningRuntime();
-  listenMomentRuntime = clearListenMomentEngineState();
+  listenMomentRuntime = clearListenModeRuntime();
   listenLastChunkMs = undefined;
   copilot.bindSession(id);
   if (session?.copilot) {
@@ -2235,8 +2237,7 @@ async function handleCommand(
           sessionIsLive() && copilotModeIsActive(copilot.getConfig().mode),
         ) === "listen"
       ) {
-        listenMomentRuntime.listenStartedMs = Date.now();
-        clearListenCardState();
+        listenMomentRuntime = prepareListenModeSession(listenMomentRuntime, Date.now());
       }
       resetListeningLimitTracking();
       state.operationDiagnostics = diagnosticsForListening(
@@ -2277,17 +2278,19 @@ async function handleCommand(
       resetListeningLimitTracking();
       systemAudioLastSignalMs = undefined;
       activeListeningRuntime = clearActiveListeningRuntime();
-      listenMomentRuntime = clearListenMomentEngineState();
+      listenMomentRuntime = clearListenModeRuntime();
       listenLastChunkMs = undefined;
-      clearListenCardState();
       state.mediaContext = null;
       push();
       return;
     }
-    case "append-transcript":
-      state.transcript = `${state.transcript}${state.transcript ? " " : ""}${command.text}`.trim();
+    case "append-transcript": {
+      const chunk = command.text.trim();
+      if (!chunk) return;
+      state.transcript = appendTranscriptDeduped(state.transcript, chunk);
       push();
       return;
+    }
     case "add-transcript-chunk": {
       const chunk = command.text.trim();
       if (!chunk) return;

@@ -7,7 +7,7 @@
 
 import { isDuplicateText } from "./sessionIntelligence.ts";
 import { withMomentMaturity } from "./listenMomentMaturity.ts";
-import { buildGroundedListenThought } from "./listenInsightQuality.ts";
+import { buildListenProactiveThought } from "./listenModePersona.ts";
 import type { ListenSegmentKind } from "./listenSegmentClassifier.ts";
 import type {
   ListenMoment,
@@ -105,7 +105,7 @@ export function generateListenThought(
   suggestedAction?: string;
   reasonSelected: string;
 } {
-  const grounded = buildGroundedListenThought(moment, { userGoalContext });
+  const grounded = buildListenProactiveThought({ moment, ctx: { userGoalContext } });
   return {
     suggestedThought: grounded.suggestedThought,
     reasonSelected: grounded.reasonSelected,
