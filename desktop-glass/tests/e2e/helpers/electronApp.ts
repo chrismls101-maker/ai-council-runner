@@ -99,3 +99,10 @@ export async function getE2eCaptureTarget(page: Page): Promise<{ id: number; lab
 export async function readGlassState(page: Page) {
   return page.evaluate(async () => window.glass.getState());
 }
+
+export async function openPanelTab(
+  panel: Page,
+  tab: "summary" | "setup" | "session" | "insights" | "context" | "hypotheses" | "actions" | "diagnostics",
+): Promise<void> {
+  await panel.locator(`[data-testid="glass-panel-tab-${tab}"]`).click();
+}

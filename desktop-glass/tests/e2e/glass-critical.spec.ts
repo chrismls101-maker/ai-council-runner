@@ -12,6 +12,7 @@ import {
   launchGlassApp,
   readGlassState,
   resetE2eExternalUrls,
+  openPanelTab,
   verifyHandoffUrlReachable,
   type LaunchedGlass,
 } from "./helpers/electronApp.ts";
@@ -133,6 +134,7 @@ test.describe("IIVO Glass Electron E2E", () => {
 
     await dock.locator('[data-testid="glass-dock-open-panel"]').click();
     await expect(panel.locator('[data-testid="glass-panel"]')).toBeVisible();
+    await openPanelTab(panel, "setup");
     await expect(panel.locator('[data-testid="glass-panel-status-grid"]')).toBeVisible();
 
     for (const key of SPEC_STATUS_KEYS) {
@@ -287,7 +289,9 @@ test.describe("IIVO Glass Electron E2E", () => {
   });
 
   test("10 — setup reflects mic denied and virtual audio guidance", async () => {
-    const { command, panel } = await getGlassWindows(app.browser);
+    const { command, dock, panel } = await getGlassWindows(app.browser);
+    await dock.locator('[data-testid="glass-dock-open-panel"]').click();
+    await openPanelTab(panel, "setup");
 
     await command.evaluate(() => {
       window.glass.send({ type: "report-mic-permission", status: "denied" });
@@ -316,6 +320,7 @@ test.describe("IIVO Glass Electron E2E", () => {
   test("11 — stub vision disabled shows setup row", async () => {
     const { command, dock, panel } = await getGlassWindows(app.browser);
     await dock.locator('[data-testid="glass-dock-open-panel"]').click();
+    await openPanelTab(panel, "setup");
 
     await command.evaluate(() => {
       window.glass.send({
@@ -345,6 +350,7 @@ test.describe("IIVO Glass Electron E2E", () => {
   test("12 — visual ask capture permission shows settings action", async () => {
     const { command, overlay, dock, panel } = await getGlassWindows(app.browser);
     await dock.locator('[data-testid="glass-dock-open-panel"]').click();
+    await openPanelTab(panel, "setup");
     await expect(panel.locator('[data-testid="glass-panel-setup"]')).toBeVisible();
 
     await command.evaluate(() => window.glass.simulateE2eCaptureFail());
@@ -418,6 +424,7 @@ test.describe("IIVO Glass Electron E2E", () => {
   test("15 — setup shows separate screen and system audio statuses", async () => {
     const { command, dock, panel } = await getGlassWindows(app.browser);
     await dock.locator('[data-testid="glass-dock-open-panel"]').click();
+    await openPanelTab(panel, "setup");
     await expect(panel.locator('[data-testid="glass-panel-setup"]')).toBeVisible();
 
     await command.evaluate(() => {

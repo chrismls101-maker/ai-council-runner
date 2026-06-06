@@ -14,11 +14,13 @@ export type GlassMomentKind = "screenshot" | "transcript" | "note";
 
 export type PanelTab =
   | "summary"
+  | "setup"
   | "session"
   | "insights"
   | "context"
   | "hypotheses"
-  | "actions";
+  | "actions"
+  | "diagnostics";
 
 /** Mirrors the server ContextItemType union (src/server/contextBridge/types.ts). */
 export type ServerContextItemType =

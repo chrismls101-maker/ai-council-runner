@@ -2454,9 +2454,18 @@ async function handleCommand(
       state.screenCaptureDetail = result.screenCaptureDetail;
       state.windowCaptureProbe = result.windowCaptureProbe;
       state.windowCaptureDetail = result.windowCaptureDetail;
-      if (!state.privacy.listening && process.env.IIVO_GLASS_E2E !== "1") {
-        state.systemAudioStatus = result.systemAudioStatus;
-        state.systemAudioDetail = result.systemAudioDetail;
+      if (
+        !state.privacy.listening &&
+        (process.env.IIVO_GLASS_E2E !== "1" || process.env.IIVO_GLASS_LIVE_E2E === "1")
+      ) {
+        const skipSystemAudioDowngrade =
+          process.env.IIVO_GLASS_LIVE_E2E === "1" &&
+          result.systemAudioStatus === "not_tested" &&
+          state.systemAudioStatus === "available";
+        if (!skipSystemAudioDowngrade) {
+          state.systemAudioStatus = result.systemAudioStatus;
+          state.systemAudioDetail = result.systemAudioDetail;
+        }
       }
       refreshSetupCapabilities();
       state.setupCheckSummary = formatSetupCheckSummary(state.setupCapabilities);
@@ -2560,14 +2569,14 @@ async function handleCommand(
       return;
     }
     case "test-microphone":
-      state.panelTab = "context";
+      state.panelTab = "setup";
       if (!isPanelVisible()) togglePanel();
       broadcastTranscriptionControl({ type: "probe-microphone" });
       state.lastNotice = "Testing microphone — approve the macOS prompt if shown.";
       push();
       return;
     case "test-system-audio":
-      state.panelTab = "context";
+      state.panelTab = "setup";
       if (!isPanelVisible()) togglePanel();
       broadcastTranscriptionControl({ type: "test-system-audio" });
       state.lastNotice =

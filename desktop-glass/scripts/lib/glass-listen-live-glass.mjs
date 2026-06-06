@@ -9,6 +9,7 @@ import { execSync, spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { pickPreferredVirtualAudioDevice } from "../../src/shared/virtualAudioCapture.ts";
 import { chromium } from "@playwright/test";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -165,6 +166,106 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+function findBlackHoleDevice(devices) {
+  if (!devices?.length) return undefined;
+  return pickPreferredVirtualAudioDevice(devices);
+}
+
+/**
+ * Open panel Setup → System Audio, detect BlackHole, select it, and test signal.
+ * Requires video/audio playing on the Mac during the test step.
+ */
+export async function configureSystemAudioForListen({ command, panel, log = console.log }) {
+  log("  Configuring system audio (detect BlackHole → select → test)…");
+
+  await panel.locator('[data-testid="glass-panel-tab-setup"]').click();
+  await panel.waitForSelector('[data-testid="glass-panel-setup"]', { timeout: 10_000 });
+  await panel.locator('[data-testid="glass-panel-setup"]').scrollIntoViewIfNeeded().catch(() => undefined);
+
+  const toggle = panel.locator('[data-testid="glass-system-audio-configure-toggle"]');
+  await toggle.click();
+  await panel.waitForSelector('[data-testid="glass-system-audio-drawer"]', { timeout: 10_000 });
+
+  async function detectDevices() {
+    await panel.locator('[data-testid="glass-detect-audio-devices"]').click();
+    await sleep(2500);
+  }
+
+  await detectDevices();
+
+  let state = await readGlassState(command);
+  const deadline = Date.now() + 20_000;
+  while (Date.now() < deadline) {
+    const device = findBlackHoleDevice(state.virtualAudioDevices);
+    if (device?.deviceId) break;
+    await detectDevices();
+    state = await readGlassState(command);
+  }
+
+  let device = findBlackHoleDevice(state.virtualAudioDevices);
+  const savedId = state.selectedVirtualAudioDeviceId?.trim();
+
+  if (!device && savedId) {
+    device = state.virtualAudioDevices?.find((d) => d.deviceId === savedId);
+    if (device) log(`  Using previously saved device: ${device.label}`);
+  }
+
+  if (!device?.deviceId) {
+    const labels = (state.virtualAudioDevices ?? []).map((d) => d.label).join(", ") || "none";
+    return {
+      ok: false,
+      category: "blackhole_no_signal",
+      cause: `No BlackHole device found (detected: ${labels}).`,
+      fix:
+        "Install BlackHole 2ch, route Mac output through Multi-Output Device, then re-run. " +
+        "Play audio before the test runs.",
+      state,
+    };
+  }
+
+  log(`  Selecting: ${device.label}`);
+  await panel.locator('[data-testid="glass-system-audio-source-select"]').selectOption(device.deviceId);
+  await sleep(800);
+
+  log("  Testing system audio — keep your video playing with sound…");
+  await panel.locator('[data-testid="glass-test-system-audio"]').click();
+  await sleep(6000);
+  state = await readGlassState(command);
+  log(`  System audio status after test: ${state.systemAudioStatus ?? "unknown"}`);
+
+  if (state.systemAudioStatus !== "available") {
+    log("  Retrying system audio test once…");
+    await panel.locator('[data-testid="glass-test-system-audio"]').click();
+    await sleep(6000);
+    state = await readGlassState(command);
+    log(`  System audio status (retry): ${state.systemAudioStatus ?? "unknown"}`);
+  }
+
+  if (state.systemAudioStatus === "available") {
+    return { ok: true, state, device };
+  }
+
+  if (state.systemAudioStatus === "requires_permission") {
+    return {
+      ok: false,
+      category: "screen_capture_failed",
+      cause: state.systemAudioDetail ?? "Screen/System Audio permission not granted to IIVO Glass.",
+      fix:
+        "Grant Screen Recording to IIVO Glass/Electron in System Settings → Privacy, then re-run. " +
+        "For BlackHole-only capture, ensure BlackHole is selected above.",
+      state,
+    };
+  }
+
+  return {
+    ok: false,
+    category: "blackhole_no_signal",
+    cause: state.systemAudioDetail ?? `System audio not ready (status: ${state.systemAudioStatus}).`,
+    fix: "Confirm Multi-Output Device includes BlackHole and video is playing with sound during the test.",
+    state,
+  };
+}
+
 /**
  * Automate Listen mode: session + coaching + video_learning + system audio + Listen click.
  * Does NOT enable microphone or Voice mode.
@@ -182,46 +283,39 @@ export async function automateListenMode({ command, dock, panel, log = console.l
   await dock.locator('[data-testid="glass-dock-open-panel"]').click();
   await panel.waitForSelector('[data-testid="glass-mode-panel"]', { timeout: 15_000 });
 
+  const audioConfig = await configureSystemAudioForListen({ command, panel, log });
+  if (!audioConfig.ok) {
+    return audioConfig;
+  }
+
+  await panel.locator('[data-testid="glass-panel-tab-summary"]').click();
+  await panel.waitForSelector('[data-testid="glass-mode-panel"]', { timeout: 10_000 });
+
   log("  Running setup check (virtual audio / STT probes)…");
   await command.evaluate(() => window.glass.send({ type: "run-setup-check" }));
-  await sleep(4000);
+  await sleep(3000);
 
   let state = await readGlassState(command);
   log(`  System audio status: ${state.systemAudioStatus ?? "unknown"}`);
 
-  if (state.systemAudioStatus === "requires_virtual_device") {
-    return {
-      ok: false,
-      category: "blackhole_no_signal",
-      cause: state.systemAudioDetail ?? "Virtual audio device not detected.",
-      fix: "Install BlackHole, create Multi-Output Device, select BlackHole in Glass Advanced → Audio.",
-      state,
-    };
-  }
-
   await panel.locator('[data-testid="glass-mode-card-listen"]').click();
-  await sleep(1500);
+  await sleep(2000);
 
   state = await readGlassState(command);
-  if (state.copilot?.config?.sessionType !== "video_learning" && !state.copilot?.active) {
-    await sleep(1000);
+
+  if (!state.privacy?.listening) {
+    log("  Starting system audio listening…");
+    await command.evaluate(() => {
+      window.glass.send({ type: "transcription-set-mode", mode: "system_audio" });
+      window.glass.send({ type: "capture-media-context" });
+      window.glass.send({ type: "request-start-listening" });
+    });
+    await sleep(3000);
     state = await readGlassState(command);
   }
 
   if (!state.privacy?.listening) {
-    if (state.systemAudioStatus === "available") {
-      log("  Starting system audio listening via request-start-listening…");
-      await command.evaluate(() => window.glass.send({ type: "request-start-listening" }));
-      await sleep(2000);
-      state = await readGlassState(command);
-    }
-  }
-
-  if (!state.privacy?.listening && state.systemAudioStatus === "available") {
-    await command.evaluate(() => {
-      window.glass.send({ type: "transcription-set-mode", mode: "system_audio" });
-      window.glass.send({ type: "start-listening" });
-    });
+    await command.evaluate(() => window.glass.send({ type: "start-listening" }));
     await command.evaluate(() => window.glass.send({ type: "request-start-listening" }));
     await sleep(2500);
     state = await readGlassState(command);
@@ -233,23 +327,17 @@ export async function automateListenMode({ command, dock, panel, log = console.l
       ok: false,
       category: "mic_accidentally_active",
       cause: "Transcription mode is microphone, not system_audio.",
-      fix: "Click Listen again; harness will force system_audio.",
+      fix: "Listen mode must use computer audio only.",
       state,
     };
   }
 
   if (!state.privacy?.listening) {
-    const setupVisible = await panel
-      .locator('[data-testid="glass-listen-setup-needed"]')
-      .isVisible()
-      .catch(() => false);
     return {
       ok: false,
-      category: setupVisible ? "system_audio_not_selected" : "transcript_chunks_missing",
-      cause: setupVisible
-        ? "Listen mode needs system audio setup."
-        : `Listening not active (systemAudio=${state.systemAudioStatus}).`,
-      fix: "Confirm BlackHole is routing Mac audio and video is playing with sound.",
+      category: "system_audio_not_selected",
+      cause: `Listening did not start (systemAudio=${state.systemAudioStatus}, mode=${state.transcriptionMode}).`,
+      fix: "BlackHole may be silent — play video with sound and re-run.",
       state,
     };
   }
@@ -285,12 +373,12 @@ export function printSetupInstructions(log = console.log) {
   log("  2. You do NOT need a separate test server.");
   log("     This harness is the test — it calls your real server.");
   log("");
-  log("  3. BlackHole (or Loopback) routing Mac audio to Glass.");
+  log("  3. BlackHole routing Mac audio — harness auto-selects BlackHole in panel Setup.");
   log("");
-  log("  4. YouTube (or your video) playing with the tab frontmost.");
+  log("  4. Start YouTube/video BEFORE or during Step 1 (audio must play during BlackHole test).");
   log("     Vision is optional — window title + audio are enough.");
   log("");
-  log("  AUTO MODE (default): harness launches Glass and clicks Listen.");
+  log("  AUTO MODE: harness launches Glass, selects BlackHole, clicks Listen.");
   log("  You do NOT need to open the app manually unless using --attach.");
   log("");
   log("══════════════════════════════════════════════════════════════");

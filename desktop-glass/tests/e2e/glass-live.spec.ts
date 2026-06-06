@@ -9,6 +9,7 @@ import {
   launchGlassApp,
   readGlassState,
   resetE2eExternalUrls,
+  openPanelTab,
   type LaunchedGlass,
 } from "./helpers/electronApp.ts";
 import { resetE2eSetupState } from "./helpers/e2eSetupReset.ts";
@@ -61,6 +62,7 @@ test.describe("IIVO Glass LIVE UI (real server)", () => {
   test("server setup row is Online after setup check", async () => {
     const { command, dock, panel } = await getGlassWindows(app.browser);
     await dock.locator('[data-testid="glass-dock-open-panel"]').click();
+    await openPanelTab(panel, "setup");
     await expect(panel.locator('[data-testid="glass-panel-setup"]')).toBeVisible();
 
     await command.evaluate(() => window.glass.send({ type: "run-setup-check" }));

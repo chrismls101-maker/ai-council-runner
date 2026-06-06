@@ -38,7 +38,7 @@ export function Dock(): JSX.Element {
     state.lastError,
   ]);
 
-  const openPanelTab = (tab: "summary" | "session" | "context" | "insights"): void => {
+  const openPanelTab = (tab: "summary" | "setup" | "session" | "context" | "insights" | "diagnostics"): void => {
     send({ type: "set-tab", tab });
     if (!state.panelVisible) send({ type: "toggle-panel" });
   };

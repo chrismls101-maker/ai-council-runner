@@ -641,6 +641,70 @@ html.glass-dock-window #root {
   flex-wrap: wrap;
 }
 
+.panel__shell {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.panel__nav {
+  -webkit-app-region: no-drag;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 108px;
+  padding: 8px 6px;
+  gap: 2px;
+  border-right: 1px solid var(--glass-border);
+  background: rgba(0, 0, 0, 0.12);
+  overflow-y: auto;
+}
+
+.panel__nav-tab {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--glass-text-dim);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 9px;
+  cursor: pointer;
+  line-height: 1.25;
+}
+
+.panel__nav-tab:hover {
+  color: var(--glass-text);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.panel__nav-tab--active {
+  color: var(--glass-text);
+  background: rgba(56, 225, 255, 0.14);
+  box-shadow: 0 0 14px var(--glow-cyan) inset;
+}
+
+.panel__stage {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.panel__footer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--glass-border);
+  padding: 8px 12px 10px;
+}
+
+.panel__privacy-note {
+  margin-top: 12px;
+}
+
 .tab {
   -webkit-app-region: no-drag;
   appearance: none;
@@ -667,6 +731,7 @@ html.glass-dock-window #root {
 
 .panel__body {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 12px 14px;
 }

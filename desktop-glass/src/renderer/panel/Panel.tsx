@@ -35,11 +35,13 @@ import { CopilotPanel } from "./CopilotPanel.tsx";
 
 const TABS: { id: PanelTab; label: string }[] = [
   { id: "summary", label: "Summary" },
+  { id: "setup", label: "Setup" },
   { id: "session", label: "Session" },
   { id: "insights", label: "Insights" },
   { id: "context", label: "Context" },
   { id: "hypotheses", label: "Hypotheses" },
   { id: "actions", label: "Actions" },
+  { id: "diagnostics", label: "Diagnostics" },
 ];
 
 async function copyText(text: string): Promise<void> {
@@ -853,51 +855,87 @@ export function Panel(): JSX.Element {
       {state.lastError ? <div className="error-banner">{state.lastError}</div> : null}
       {state.lastNotice ? <div className="notice-banner">{state.lastNotice}</div> : null}
 
-      <p className="empty panel__hint">
-        Ask IIVO from the command bar at the bottom of your screen. This panel shows
-        status, session detail, and diagnostics.
-      </p>
+      <div className="panel__shell">
+        <nav className="panel__nav" aria-label="Panel sections">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              className={`panel__nav-tab ${t.id === tab ? "panel__nav-tab--active" : ""}`}
+              data-testid={`glass-panel-tab-${t.id}`}
+              aria-current={t.id === tab ? "page" : undefined}
+              onClick={() => {
+                setTab(t.id);
+                send({ type: "set-tab", tab: t.id });
+              }}
+            >
+              {t.label}
+            </button>
+          ))}
+        </nav>
 
-      <StatusGrid state={state} />
+        <div className="panel__stage">
+          {tab === "summary" ? (
+            <>
+              <CopilotPanel sessionLive={sessionLive} />
+              <div className="panel__body">
+                <p className="empty panel__hint">
+                  Ask IIVO from the command bar. Use the mode cards above for Listen, Meetings,
+                  Work, and Fix.
+                </p>
+                <SummaryView state={state} />
+              </div>
+            </>
+          ) : null}
 
-      <CopilotPanel sessionLive={sessionLive} />
+          {tab === "setup" ? (
+            <div className="panel__body">
+              <StatusGrid state={state} />
+            </div>
+          ) : null}
 
-      <div className="panel__tabs">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            className={`tab ${t.id === tab ? "tab--active" : ""}`}
-            onClick={() => {
-              setTab(t.id);
-              send({ type: "set-tab", tab: t.id });
-            }}
-          >
-            {t.label}
-          </button>
-        ))}
+          {tab === "diagnostics" ? (
+            <div className="panel__body panel__body--diagnostics">
+              <ListeningControls compact={false} />
+              <OperationDiagnosticsFooter />
+              <p className="hint panel__privacy-note">
+                Glass captures screen/audio only when you start it. Audio chunks may be sent to
+                OpenAI for transcription when STT is enabled. Transcript stays local until you
+                send or analyze.
+              </p>
+            </div>
+          ) : null}
+
+          {tab === "session" ? (
+            <div className="panel__body">
+              <SessionView session={state.session} state={state} />
+            </div>
+          ) : null}
+
+          {tab === "insights" ? (
+            <div className="panel__body">
+              <InsightsView session={state.session} />
+            </div>
+          ) : null}
+
+          {tab === "context" || tab === "hypotheses" || tab === "actions" ? (
+            <div className="panel__body">
+              <NotesTab tab={tab} notes={state.notes} />
+              <Transcript transcript={state.transcript} />
+              <p className="section-title" style={{ marginTop: 16 }}>
+                Saved moments ({state.moments.length})
+              </p>
+              {state.moments.length === 0 ? (
+                <p className="empty">No saved moments yet.</p>
+              ) : (
+                state.moments.map((m) => <MomentCard key={m.id} moment={m} />)
+              )}
+            </div>
+          ) : null}
+        </div>
       </div>
 
-      <div className="panel__body">
-        {tab === "summary" ? <SummaryView state={state} /> : null}
-        {tab === "session" ? <SessionView session={state.session} state={state} /> : null}
-        {tab === "insights" ? <InsightsView session={state.session} /> : null}
-        {tab === "context" || tab === "hypotheses" || tab === "actions" ? (
-          <>
-            <NotesTab tab={tab} notes={state.notes} />
-            <Transcript transcript={state.transcript} />
-            <p className="section-title" style={{ marginTop: 16 }}>
-              Saved moments ({state.moments.length})
-            </p>
-            {state.moments.length === 0 ? (
-              <p className="empty">No saved moments yet.</p>
-            ) : (
-              state.moments.map((m) => <MomentCard key={m.id} moment={m} />)
-            )}
-          </>
-        ) : null}
-      </div>
-
-      <div className="privacy">
+      <div className="panel__footer privacy">
         {sessionLive ? (
           <div className="privacy__warning">● IIVO Glass is collecting session events locally.</div>
         ) : null}
@@ -914,16 +952,6 @@ export function Panel(): JSX.Element {
           <button className="gbtn gbtn--danger" onClick={() => send({ type: "stop-everything" })}>
             Stop everything
           </button>
-        </div>
-        <ListeningControls compact />
-        <OperationDiagnosticsFooter />
-        <div>
-          Glass captures screen/audio only when you start it. IIVO Glass does not capture
-          audio on launch. Audio chunks may be sent to OpenAI for transcription when STT is
-          enabled. System audio capture only starts when you press Start Listening and may
-          require macOS Screen Recording permission or a virtual audio device. Audio and
-          transcript stay local until you send or analyze. Stop Listening stops microphone
-          and system audio tracks.
         </div>
       </div>
     </div>
