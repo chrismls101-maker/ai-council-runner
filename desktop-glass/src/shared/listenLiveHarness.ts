@@ -723,6 +723,7 @@ export interface ListenHarnessQualityResult {
   listeningLimitFiredEarly: boolean;
   actionFirstCardCount: number;
   micChunksInListen: number;
+  proactiveThoughtCardsShown: number;
 }
 
 const DUPLICATE_TRANSCRIPT_THRESHOLD = 3;
@@ -791,6 +792,20 @@ export function gradeListenHarnessQuality(opts: {
     );
   }
 
+  const proactiveThoughtCardsShown = opts.runtime.generatedThoughts.filter(
+    (t) => t.disposition === "surfaced" && !t.actionFirst,
+  ).length;
+  if (opts.runtime.attentionLevel === "balanced" && proactiveThoughtCardsShown > 0) {
+    failures.push(
+      `Balanced Listen surfaced ${proactiveThoughtCardsShown} proactive thought card(s) — expected 0.`,
+    );
+  }
+  if (opts.runtime.attentionLevel === "active" && proactiveThoughtCardsShown > 1) {
+    failures.push(
+      `Active Listen surfaced ${proactiveThoughtCardsShown} proactive thought cards — expected at most 1.`,
+    );
+  }
+
   if (
     opts.transcriptChunkCount != null &&
     opts.transcriptChunkCount > 0 &&
@@ -838,6 +853,7 @@ export function gradeListenHarnessQuality(opts: {
     listeningLimitFiredEarly,
     actionFirstCardCount,
     micChunksInListen,
+    proactiveThoughtCardsShown,
   };
 }
 
@@ -852,6 +868,7 @@ export function buildListenHarnessNoteMetrics(opts: {
   liveNotesCreated: number;
   noteUpdates: number;
   actionCardsShown: number;
+  proactiveThoughtCardsShown: number;
   stackedCardsCount: number;
   noAudioPromptsCount: number;
   noteExamples: string[];
@@ -865,12 +882,16 @@ export function buildListenHarnessNoteMetrics(opts: {
     .filter((e) => e.status === "mature")
     .slice(0, 3)
     .map((e) => `[${e.section}] ${e.text.slice(0, 120)}`);
+  const proactiveThoughtCardsShown = opts.runtime.generatedThoughts.filter(
+    (t) => t.disposition === "surfaced" && !t.actionFirst,
+  ).length;
   return {
     transcriptChunksReceived: opts.transcriptChunks.length,
     duplicateTranscriptCount: notes.duplicateTranscriptCount,
     liveNotesCreated: notes.entries.length,
     noteUpdates: opts.runtime.liveNotesUpdates,
     actionCardsShown: opts.runtime.actionFirstCardCount,
+    proactiveThoughtCardsShown,
     stackedCardsCount: Math.max(0, opts.runtime.maxSimultaneousCards - 1),
     noAudioPromptsCount: opts.runtime.noAudioPromptsCount,
     noteExamples: examples,

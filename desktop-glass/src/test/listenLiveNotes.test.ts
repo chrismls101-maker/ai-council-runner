@@ -9,69 +9,120 @@ import type { ListenMoment } from "../shared/listenMomentTypes.ts";
 import { isActionFirstListenCard } from "../shared/listenInsightQuality.ts";
 import { shouldSurfaceListenMoment } from "../shared/listenMomentTiming.ts";
 import { withMomentMaturity } from "../shared/listenMomentMaturity.ts";
+import {
+  analyzeListenMomentWithHarness,
+  applyHarnessMomentDecision,
+  createListenHarnessRuntime,
+} from "../shared/listenLiveHarness.ts";
 import { DEFAULT_LISTEN_WARMUP_MS } from "../shared/listenMomentTypes.ts";
 import type { ListenSurfaceContext } from "../shared/listenMomentTypes.ts";
 
 function readyMoment(overrides: Partial<ListenMoment> = {}): ListenMoment {
-  const now = new Date().toISOString();
-  return {
+  const nowMs = Date.now();
+  const anchor = "Desire is the starting point of all achievement for practical success.";
+  const base: ListenMoment = {
     id: "m1",
     type: "key_idea",
     summary: "Desire is the starting point of all achievement.",
-    transcriptAnchors: ["Desire is the starting point of all achievement for practical success."],
-    firstSeenAt: now,
-    lastUpdatedAt: now,
+    transcriptAnchors: [anchor, `${anchor} Again.`, `${anchor} Third time.`],
+    firstSeenAt: new Date(nowMs - 50_000).toISOString(),
+    lastUpdatedAt: new Date(nowMs).toISOString(),
     confidence: 0.85,
     importance: "high",
-    suggestedThought:
-      "The speaker frames success as beginning with a definite desire, not effort alone.",
+    suggestedThought: `The important part here is that the speaker says ${anchor.charAt(0).toLowerCase()}${anchor.slice(1)}`,
     reasonSelected: "This stood out as a high-signal idea in the recent transcript.",
     status: "ready",
     ...overrides,
   };
+  return withMomentMaturity(base, nowMs, "content");
 }
 
 function baseSurfaceContext(overrides: Partial<ListenSurfaceContext> = {}): ListenSurfaceContext {
+  const nowMs = Date.now();
   return {
     attentionLevel: "balanced",
-    nowMs: Date.now(),
-    recentTranscriptChars: 200,
+    nowMs,
+    recentTranscriptChars: 300,
     recentSurfacedTexts: [],
     userReceivingAnswer: false,
     muteSuggestions: false,
     surfacesInLast10Min: 0,
     liveThoughtsEnabled: true,
+    listenStartedMs: nowMs - DEFAULT_LISTEN_WARMUP_MS - 5_000,
+    listenWarmupMs: DEFAULT_LISTEN_WARMUP_MS,
     ...overrides,
   };
 }
 
-test("Listen Mode balanced default does not surface action cards", () => {
-  const moment = withMomentMaturity(readyMoment(), Date.now(), "content");
-  const now = Date.now();
+test("Quiet Listen saves silently with zero proactive cards", () => {
+  const moment = readyMoment();
+  const result = shouldSurfaceListenMoment(
+    moment,
+    baseSurfaceContext({ attentionLevel: "quiet" }),
+  );
+  assert.equal(result.decision, "save_silently");
+});
+
+test("Active Listen may surface one mature non-action thought card", () => {
+  const moment = readyMoment();
   const result = shouldSurfaceListenMoment(
     moment,
     baseSurfaceContext({
-      attentionLevel: "balanced",
-      nowMs: now,
-      listenStartedMs: now - DEFAULT_LISTEN_WARMUP_MS - 5_000,
-      listenWarmupMs: DEFAULT_LISTEN_WARMUP_MS,
+      attentionLevel: "active",
+      liveThoughtsEnabled: true,
     }),
   );
-  assert.notEqual(result.decision, "surface_now");
-  if (result.decision === "save_silently") {
-    assert.match(result.reason, /Live Notes/i);
+  assert.equal(result.decision, "surface_now");
+  assert.equal(isActionFirstListenCard(moment.suggestedThought ?? ""), false);
+});
+
+test("Balanced harness produces Live Notes but zero proactive cards", () => {
+  const runtime = createListenHarnessRuntime("balanced");
+  const now = Date.now();
+  runtime.listenStartedMs = now - DEFAULT_LISTEN_WARMUP_MS - 5_000;
+  const moment = readyMoment();
+  const analysis = analyzeListenMomentWithHarness({
+    moments: [moment],
+    runtime,
+    recentTranscriptChars: 300,
+    nowMs: now,
+    listenWarmupMs: DEFAULT_LISTEN_WARMUP_MS,
+  });
+  assert.notEqual(analysis.decision, "surface_now");
+  applyHarnessMomentDecision(analysis, runtime, now);
+  assert.equal(runtime.cardsSurfaced, 0);
+  assert.equal(runtime.surfacedMoments.length, 0);
+  if (analysis.decision === "save_silently") {
+    assert.ok(runtime.liveNotesUpdates >= 1);
   }
+  const notes = buildListenLiveNotes({ moments: [moment], transcriptChunks: ["Desire is the starting point."] });
+  assert.ok(notes.entries.length >= 1);
+});
+
+test("Listen Mode balanced default does not surface proactive cards", () => {
+  const moment = readyMoment();
+  const result = shouldSurfaceListenMoment(moment, baseSurfaceContext({ attentionLevel: "balanced" }));
+  assert.notEqual(result.decision, "surface_now");
+  assert.equal(result.decision, "save_silently");
 });
 
 test("incomplete action fragment saved as note not card", () => {
-  const moment = readyMoment({
-    type: "action_step",
-    summary: "of two sealed envelopes",
-    transcriptAnchors: ["of two sealed envelopes"],
-    suggestedThought: "Want me to turn it into an action plan?",
-    confidence: 0.5,
-    isStillDeveloping: true,
-  });
+  const moment = withMomentMaturity(
+    {
+      id: "m-action",
+      type: "action_step",
+      summary: "of two sealed envelopes",
+      transcriptAnchors: ["of two sealed envelopes"],
+      suggestedThought: "Want me to turn it into an action plan?",
+      firstSeenAt: new Date(Date.now() - 5_000).toISOString(),
+      lastUpdatedAt: new Date().toISOString(),
+      confidence: 0.5,
+      importance: "medium",
+      status: "developing",
+    },
+    Date.now(),
+    "content",
+  );
   const result = shouldSurfaceListenMoment(moment, baseSurfaceContext({ attentionLevel: "active" }));
   assert.notEqual(result.decision, "surface_now");
   assert.ok(["save_silently", "wait_for_more_context"].includes(result.decision));
@@ -99,15 +150,27 @@ test("notes dedupe repeated transcript chunks", () => {
 });
 
 test("clear action item saved as note not action-first card text", () => {
-  const moment = readyMoment({
-    type: "action_step",
-    summary: "Send the proposal to the client by Friday",
-    transcriptAnchors: ["Send the proposal to the client by Friday before the standup."],
-    suggestedThought: "Action: send the proposal to the client by Friday.",
-    status: "ready",
-    confidence: 0.9,
-    importance: "high",
-  });
+  const moment = withMomentMaturity(
+    {
+      id: "m-action-clear",
+      type: "action_step",
+      summary: "Send the proposal to the client by Friday",
+      transcriptAnchors: [
+        "Send the proposal to the client by Friday before the standup.",
+        "Send the proposal to the client by Friday before the standup. Again.",
+        "Send the proposal to the client by Friday before the standup. Third.",
+      ],
+      firstSeenAt: new Date(Date.now() - 50_000).toISOString(),
+      lastUpdatedAt: new Date().toISOString(),
+      suggestedThought: "Action: send the proposal to the client by Friday.",
+      reasonSelected: "Clear action from transcript.",
+      confidence: 0.9,
+      importance: "high",
+      status: "ready",
+    },
+    Date.now(),
+    "content",
+  );
   const notes = buildListenLiveNotes({ moments: [moment] });
   assert.ok(notes.sections.actionIdeas.length >= 1);
   assert.equal(isActionFirstListenCard(notes.sections.actionIdeas[0] ?? ""), false);
@@ -118,7 +181,7 @@ test("raw transcript and notes are separate", () => {
     {
       id: "e1",
       sessionId: "s1",
-      kind: "transcript" as const,
+      kind: "transcript_note" as const,
       title: "chunk",
       text: "Raw transcript line one.",
       timestamp: new Date().toISOString(),
@@ -128,7 +191,7 @@ test("raw transcript and notes are separate", () => {
   const chunks = listenTranscriptChunksFromEvents(events);
   const notes = buildListenLiveNotes({ moments: [readyMoment()], transcriptChunks: chunks });
   assert.equal(chunks[0], "Raw transcript line one.");
-  assert.ok(notes.sections.keyIdeas[0]!.includes("definite desire"));
+  assert.ok(notes.sections.keyIdeas[0]!.includes("definite desire") || notes.sections.keyIdeas[0]!.includes("starting point"));
 });
 
 test("unclear transcript fragment note does not become action", () => {

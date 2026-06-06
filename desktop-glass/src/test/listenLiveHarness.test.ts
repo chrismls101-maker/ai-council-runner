@@ -162,6 +162,22 @@ test("parseListenLiveCli supports video URL and auto-fix", () => {
   assert.equal(cli.autoFix, true);
 });
 
+test("gradeListenHarnessQuality fails balanced proactive thought cards", () => {
+  const runtime = createListenHarnessRuntime("balanced");
+  runtime.cardsSurfaced = 1;
+  runtime.generatedThoughts.push({
+    momentId: "m1",
+    thought: "Balanced should not show this",
+    disposition: "surfaced",
+    reasonSelected: "test",
+    at: new Date().toISOString(),
+    actionFirst: false,
+  });
+  const grade = gradeListenHarnessQuality({ runtime });
+  assert.ok(grade.failures.some((f) => /Balanced Listen surfaced.*proactive thought/i.test(f)));
+  assert.equal(grade.proactiveThoughtCardsShown, 1);
+});
+
 test("gradeListenHarnessQuality fails early proactive card", () => {
   const runtime = createListenHarnessRuntime("balanced");
   runtime.listenStartedMs = Date.now() - 60_000;

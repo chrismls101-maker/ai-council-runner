@@ -29,7 +29,7 @@ export const LISTEN_SURFACE_COOLDOWN_MS: Record<ListenSurfaceContext["attentionL
 /** Max proactive surfaces per 10 minutes by attention level. */
 export const LISTEN_MAX_SURFACES_PER_10_MIN: Record<ListenSurfaceContext["attentionLevel"], number> = {
   quiet: 0,
-  balanced: 3,
+  balanced: 0,
   active: 6,
 };
 

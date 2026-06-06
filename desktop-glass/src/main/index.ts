@@ -217,6 +217,7 @@ import {
   buildListenCheckpointSummary,
   shouldWriteListenCheckpoint,
   STREAMING_LISTEN_CHECKPOINT_MINUTES,
+  listenCheckpointsFromSessionEvents,
 } from "../shared/listenCheckpoint.ts";
 import {
   pruneRunningTranscript,
@@ -942,6 +943,25 @@ async function processListenModeChunk(
   }
 
   if (decision.decision === "surface_now") {
+    // Defense in depth: only Active attention may show overlay thought cards.
+    if (config.listenAttentionLevel !== "active") {
+      const silent = {
+        ...candidate,
+        status: "saved_silently" as const,
+        disposition: "saved_silently" as const,
+      };
+      listenMomentRuntime.moments = markListenMomentStatus(
+        listenMomentRuntime.moments,
+        candidate.id,
+        "saved_silently",
+        silent,
+      );
+      await persistListenMomentEvent(silent);
+      await refreshStreamingListenNotes(nowMs);
+      push();
+      return;
+    }
+
     const thought = candidate.suggestedThought ?? candidate.summary;
     const updated = {
       ...candidate,

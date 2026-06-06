@@ -141,17 +141,17 @@ export function buildListenReportSections(input: ListenReportInput): GlassCopilo
       ? whatThisMeans[0]!
       : keyIdeas[0] ?? "Review Live Notes and transcript for the main takeaway from this session.";
 
-  const about =
-    checkpoints.length > 0
+  const aboutText =
+    (checkpoints.length > 0
       ? checkpoints.map((cp) => cp.topicSummary).filter(Boolean).slice(-3).join(" · ") ||
         liveNotes.currentTopic
       : liveNotes.currentTopic ??
         media?.visibleTextSummary?.slice(0, 200) ??
-        "Summary from Live Notes and session checkpoints — not full transcript replay.";
+        "Summary from Live Notes and session checkpoints — not full transcript replay.") ?? "Summary from Live Notes.";
 
   const sections: GlassCopilotDebriefSection[] = [
     { heading: "Source", items: sourceLines },
-    { heading: "What this was about", items: [about] },
+    { heading: "What this was about", items: [aboutText] },
     {
       heading: "Key ideas",
       items: keyIdeas.length ? keyIdeas : ["No strong key ideas captured — audio may have been thin."],

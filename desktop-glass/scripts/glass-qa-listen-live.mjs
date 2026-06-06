@@ -156,6 +156,7 @@ const summary = {
   listeningLimitFired: false,
   listeningLimitFiredAtMs: null,
   actionFirstCardCount: 0,
+  proactiveThoughtCardsShown: 0,
   vagueCardCount: 0,
   interruptQuestionsAsked: 0,
   autoFixAttempts: [],
@@ -314,6 +315,7 @@ function buildQaReport(listenReportMd) {
   lines.push(`| Duplicate transcript lines | ${summary.duplicateTranscriptLines} |`);
   lines.push(`| Listening limit fired | ${summary.listeningLimitFired ? "yes" : "no"} |`);
   lines.push(`| Action-first cards | ${summary.actionFirstCardCount} |`);
+  lines.push(`| Proactive thought cards | ${summary.proactiveThoughtCardsShown ?? 0} |`);
   lines.push(`| Vague cards | ${summary.vagueCardCount} |`);
   lines.push(`| Warm-up respected | ${summary.warmupRespected ? "yes" : "no"} |`);
   lines.push(`| First proactive card | ${summary.firstProactiveCardMs != null ? `${Math.round(summary.firstProactiveCardMs / 1000)}s after start` : "_none_"} |`);
@@ -890,6 +892,7 @@ const noteMetrics = buildListenHarnessNoteMetrics({
 });
 summary.liveNotesCreated = noteMetrics.liveNotesCreated;
 summary.noteUpdates = noteMetrics.noteUpdates;
+summary.proactiveThoughtCardsShown = noteMetrics.proactiveThoughtCardsShown;
 summary.noteExamples = noteMetrics.noteExamples;
 summary.userInterruptedTooMuch = noteMetrics.userInterruptedTooMuch;
 summary.noAudioPromptsCount = noteMetrics.noAudioPromptsCount;

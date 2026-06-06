@@ -69,7 +69,10 @@ test("enough anchors + stable topic can become ready", () => {
   );
   assert.equal(moment.isActionableNow, true);
   assert.equal(isMomentMatureForSurface(moment), true);
-  const decision = shouldSurfaceListenMoment(moment, surfaceContext({ nowMs }));
+  const decision = shouldSurfaceListenMoment(
+    moment,
+    surfaceContext({ nowMs, attentionLevel: "active", liveThoughtsEnabled: true }),
+  );
   assert.equal(decision.decision, "surface_now");
 });
 
