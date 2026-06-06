@@ -3326,6 +3326,18 @@ html.glass-dock-window #root {
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
   text-align: center;
+  transition: opacity 0.15s ease;
+}
+
+.live-translate-captions__inner--interim {
+  opacity: 0.88;
+  border-style: dashed;
+}
+
+.live-translate-captions__text--interim,
+.live-translate-captions__original--interim {
+  opacity: 0.82;
+  font-style: italic;
 }
 
 .live-translate-captions__meta {
@@ -3377,6 +3389,33 @@ html.glass-dock-window #root {
 
 .live-notes__translate-toggle {
   padding: 0 0 8px;
+}
+
+.mode-panel__quick-tools {
+  margin: 12px 0 14px;
+}
+
+.mode-panel__quick-tools-label {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.65;
+  margin-bottom: 6px;
+}
+
+.mode-panel__quick-tools-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mode-panel__quick-tool.gbtn--active {
+  border-color: rgba(100, 180, 255, 0.45);
+}
+
+.mode-panel__meetings-translate {
+  margin-top: 8px;
 }
 
 .mode-card--translate.mode-card--active {

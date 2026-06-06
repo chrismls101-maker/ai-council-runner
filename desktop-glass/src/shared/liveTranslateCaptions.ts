@@ -10,7 +10,10 @@ import type {
   LiveTranslateConfig,
   LiveTranslateLanguage,
 } from "./liveTranslateTypes.ts";
-import { liveTranslateLanguagePairLabel } from "./liveTranslateTypes.ts";
+import {
+  LIVE_TRANSLATE_LANGUAGE_CODES,
+  liveTranslateLanguagePairLabel,
+} from "./liveTranslateTypes.ts";
 
 const MAX_HISTORY = 12;
 const MAX_VISIBLE_CHARS = 220;
@@ -105,37 +108,57 @@ export function applyCaptionChunk(
   };
 }
 
+function shortLanguageCode(
+  lang: LiveTranslateLanguage | undefined,
+  fallback: string,
+): string {
+  if (lang && lang !== "auto" && lang !== "other") {
+    return LIVE_TRANSLATE_LANGUAGE_CODES[lang] ?? fallback;
+  }
+  return fallback;
+}
+
 /** Format caption for bottom-center overlay (max ~2 lines). */
 export function formatCaptionForOverlay(
   line: LiveTranslateCaptionLine | undefined,
   displayMode: LiveTranslateConfig["displayMode"],
-  languageLabels: { original?: string; translated?: string } = {},
-): { primary: string; secondary?: string; note?: string } | null {
+  languageLabels: {
+    original?: string;
+    translated?: string;
+    originalCode?: string;
+    translatedCode?: string;
+  } = {},
+): { primary: string; secondary?: string; note?: string; interim?: boolean } | null {
   if (!line) return null;
 
   if (line.alreadyTargetLanguage) {
     return {
       primary: line.original.slice(0, MAX_VISIBLE_CHARS),
       note: `Already ${languageLabels.translated ?? "target language"}`,
+      interim: line.interim,
     };
   }
 
   if (displayMode === "original_and_translation") {
-    const origLabel = languageLabels.original ?? "Original";
-    const transLabel = languageLabels.translated ?? "Translation";
+    const origLabel = languageLabels.originalCode ?? languageLabels.original ?? "Original";
+    const transLabel = languageLabels.translatedCode ?? languageLabels.translated ?? "Translation";
     const orig = line.original.slice(0, MAX_VISIBLE_CHARS);
     const trans = line.translated.slice(0, MAX_VISIBLE_CHARS);
     return {
       primary: `${transLabel}: ${trans}`,
       secondary: `${origLabel}: ${orig}`,
+      interim: line.interim,
     };
   }
 
   return {
     primary: line.translated.slice(0, MAX_VISIBLE_CHARS),
     secondary: line.languageUncertain ? "Language detection uncertain…" : undefined,
+    interim: line.interim,
   };
 }
+
+export { shortLanguageCode };
 
 /** Hide overlay captions without stopping translation engine. */
 export function hideCaptionsOverlay(state: LiveTranslateCaptionsState): LiveTranslateCaptionsState {

@@ -10,18 +10,36 @@ console.log(`
 
 Run with: npm run dev (Glass) + npm run dev (server) in another terminal.
 
-## Checklist
+## Media Captions
 
-1. Open an English video (YouTube, podcast, course).
-2. Open IIVO Glass panel → click **Translate** mode card.
-3. Select **Spanish** as target language → **Start Translate**.
-4. Confirm Spanish captions appear bottom-center while video plays.
-5. Confirm **Mic: Off** and **Source: Computer Audio** in status row.
-6. Start a WhatsApp/Zoom/Meet call (or Spanish audio source).
-7. Choose **Spanish → English** (or Auto → English).
-8. Confirm English captions appear for Spanish speech.
-9. Confirm **private mode** (conversation/mic): no new transcript events saved to session.
-10. Click **Stop Translation** — captions clear; **Stop Everything** ends all capture.
+1. Open IIVO Glass panel → Quick Tools → **Translate**.
+2. Select **Media Captions**.
+3. Source: **Computer Audio**.
+4. Target: **English → Spanish** (or Auto → Spanish).
+5. Play an English video (YouTube, podcast, course, webinar).
+6. Confirm Spanish captions appear bottom-center.
+7. Confirm **Mic: Off** in status row.
+8. Confirm **Save: Off** (private_no_save default).
+9. Switch Display to **Original + translation**.
+10. Confirm both lines show (ES: / EN: short labels).
+
+## Conversation Captions
+
+1. Quick Tools → **Translate** → **Conversation Captions**.
+2. Source: **Computer Audio**.
+3. Target: **Spanish → English** (or Auto → English).
+4. Play Spanish audio or join WhatsApp/Zoom/Meet call audio.
+5. Confirm English captions appear naturally (not over-formal).
+6. Confirm **Save: Off** / private_no_save — no silent session saves.
+7. Confirm **Mic: Off** unless microphone explicitly enabled.
+8. Click **Stop Translation** — captions clear.
+9. Click **Stop Everything** — all sources and translate state clear.
+
+## Listen / Meetings integration
+
+- In **Listen** mode: toggle **Show translated captions** — notes remain; captions parallel.
+- In **Meetings** mode: toggle **Show translated captions** — meeting intelligence uses original transcript.
+- Saving requires explicit opt-in: **Save translation only** or **Save original + translation**.
 
 ## Privacy checks
 
@@ -29,6 +47,7 @@ Run with: npm run dev (Glass) + npm run dev (server) in another terminal.
 - Translation starts only after explicit Start Translate.
 - Raw audio not stored.
 - Microphone requires explicit enable with visible warning.
+- Translated text labeled as translation when saved (never treated as original speaker quote).
 
-Report issues in session notes or /tmp/iivo-glass-manual-qa.md
+Report issues in session notes — do not commit /tmp reports or raw audio.
 `);

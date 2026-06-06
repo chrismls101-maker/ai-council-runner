@@ -19,14 +19,18 @@ import {
 import {
   GLASS_MODE_ORDER,
   GLASS_MODE_PRESETS,
+  GLASS_QUICK_TOOLS,
+  GLASS_QUICK_TOOL_COPY,
+  GLASS_QUICK_TOOL_LABELS,
   MODE_PRIVACY_NOTES,
   MODE_STATUS_LABELS,
-  VOICE_MODE_COPY,
+  getModePreset,
   modePrimaryActionLabel,
   planModeActivation,
   resolveModeStatus,
   type GlassModeId,
   type GlassModePreset,
+  type GlassQuickToolId,
 } from "../../shared/glassModePresets.ts";
 import {
   LISTEN_ATTENTION_LABELS,
@@ -36,6 +40,7 @@ import { selectedDeviceMayIncludeMicrophone } from "../../shared/virtualAudioDev
 import {
   TranslateActiveStatus,
   TranslateModeSetup,
+  MeetingsTranslateToggle,
 } from "./TranslateModeSetup.tsx";
 
 const COPILOT_MODES: GlassCopilotMode[] = ["off", "passive", "coaching", "diagnostic"];
@@ -70,7 +75,6 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
 
   // Derive which simple mode is active from copilot mode + focus.
   const activeMode = useMemo<GlassModeId | null>(() => {
-    if (state.liveTranslate?.active) return "translate";
     if (!copilot.active || copilot.mode === "off") return null;
     if (copilot.mode === "diagnostic") return "fix";
     if (config.sessionType === "meeting_call") return "meetings";
@@ -100,11 +104,6 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
     setPendingMeetingChoice(false);
     setPendingTranslateSetup(false);
     setListenNeedsAudio(false);
-
-    if (preset.id === "translate") {
-      setPendingTranslateSetup(true);
-      return;
-    }
 
     if (preset.id === "listen") {
       send({ type: "capture-media-context" });
@@ -136,19 +135,25 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
     if (tx.canListen) queueMicrotask(() => tx.startListening());
   };
 
+  const openTranslateSetup = () => {
+    applyModePreset(getModePreset("translate"));
+    setPendingMeetingChoice(false);
+    setListenNeedsAudio(false);
+    setPendingTranslateSetup(true);
+  };
+
+  const onQuickToolClick = (tool: GlassQuickToolId) => {
+    if (tool === "voice") {
+      send({ type: "voice-mode-start" });
+      return;
+    }
+    openTranslateSetup();
+  };
+
   return (
     <section className="mode-panel" data-testid="glass-mode-panel">
       <div className="mode-panel__head">
         <h2 className="mode-panel__title">What do you want IIVO to do?</h2>
-        <button
-          type="button"
-          className="gbtn gbtn--ghost mode-panel__voice"
-          data-testid="glass-mode-voice"
-          onClick={() => send({ type: "voice-mode-start" })}
-          title={VOICE_MODE_COPY}
-        >
-          🎙 Voice
-        </button>
       </div>
 
       <div className="mode-cards" data-testid="glass-mode-cards">
@@ -182,6 +187,27 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
             </button>
           );
         })}
+      </div>
+
+      <div className="mode-panel__quick-tools" data-testid="glass-quick-tools">
+        <span className="mode-panel__quick-tools-label">Quick Tools</span>
+        <div className="mode-panel__quick-tools-row">
+          {GLASS_QUICK_TOOLS.map((tool) => (
+            <button
+              key={tool}
+              type="button"
+              className={`gbtn gbtn--ghost mode-panel__quick-tool${
+                tool === "translate" && state.liveTranslate?.active ? " gbtn--active" : ""
+              }`}
+              data-testid={tool === "voice" ? "glass-mode-voice" : "glass-quick-tool-translate"}
+              title={GLASS_QUICK_TOOL_COPY[tool]}
+              onClick={() => onQuickToolClick(tool)}
+            >
+              {tool === "voice" ? "🎙 " : "🌐 "}
+              {GLASS_QUICK_TOOL_LABELS[tool]}
+            </button>
+          ))}
+        </div>
       </div>
 
       {pendingTranslateSetup ? (
@@ -279,6 +305,12 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
               Listen mode requires computer audio only — switch back to System Audio.
             </p>
           ) : null}
+        </div>
+      ) : null}
+
+      {activeMode === "meetings" ? (
+        <div className="mode-panel__meetings-translate" data-testid="glass-meetings-translate">
+          <MeetingsTranslateToggle state={state} />
         </div>
       ) : null}
 

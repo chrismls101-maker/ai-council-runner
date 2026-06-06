@@ -1,12 +1,11 @@
 import { send } from "../useGlassState.ts";
 import {
-  LIVE_TRANSLATE_LANGUAGE_LABELS,
+  LIVE_TRANSLATE_LANGUAGE_CODES,
+  liveTranslateOverlayPairLabel,
   type LiveTranslateTargetLanguage,
 } from "../../shared/liveTranslateTypes.ts";
-import { formatCaptionForOverlay } from "../../shared/liveTranslateCaptions.ts";
+import { formatCaptionForOverlay, shortLanguageCode } from "../../shared/liveTranslateCaptions.ts";
 import type { LiveTranslateRuntimeState } from "../../shared/liveTranslateTypes.ts";
-
-const TARGET_LANGUAGES: LiveTranslateTargetLanguage[] = ["en", "es", "pt", "fr", "de", "it"];
 
 /** Bottom-center live translation captions — max ~2 lines, non-blocking. */
 export function LiveTranslateCaptionsOverlay({
@@ -23,14 +22,19 @@ export function LiveTranslateCaptionsOverlay({
 
   const line = runtime.captions.current;
   const formatted = formatCaptionForOverlay(line, runtime.config.displayMode, {
-    original:
-      runtime.detectedSourceLanguage && runtime.detectedSourceLanguage !== "auto"
-        ? LIVE_TRANSLATE_LANGUAGE_LABELS[runtime.detectedSourceLanguage]
-        : "Original",
-    translated: LIVE_TRANSLATE_LANGUAGE_LABELS[runtime.config.targetLanguage],
+    originalCode: shortLanguageCode(runtime.detectedSourceLanguage, "Original"),
+    translatedCode:
+      LIVE_TRANSLATE_LANGUAGE_CODES[runtime.config.targetLanguage as LiveTranslateTargetLanguage] ??
+      "Translation",
   });
 
   if (!formatted) return null;
+
+  const pairLabel = liveTranslateOverlayPairLabel(
+    runtime.config.sourceLanguage,
+    runtime.config.targetLanguage,
+    runtime.detectedSourceLanguage,
+  );
 
   return (
     <div
@@ -39,17 +43,34 @@ export function LiveTranslateCaptionsOverlay({
       onMouseEnter={enterInteractive}
       onMouseLeave={leaveInteractive}
     >
-      <div className="live-translate-captions__inner">
+      <div
+        className={`live-translate-captions__inner${
+          formatted.interim ? " live-translate-captions__inner--interim" : ""
+        }`}
+      >
         <div className="live-translate-captions__meta" data-testid="glass-translate-language-pair">
-          {runtime.captions.languagePairLabel}
+          {pairLabel}
           {runtime.languageUncertain ? " · detecting…" : ""}
         </div>
-        {formatted.secondary ? (
-          <p className="live-translate-captions__original" data-testid="glass-translate-caption-original">
+        {formatted.secondary && runtime.config.displayMode === "original_and_translation" ? (
+          <p
+            className={`live-translate-captions__original${
+              formatted.interim ? " live-translate-captions__original--interim" : ""
+            }`}
+            data-testid="glass-translate-caption-original"
+          >
             {formatted.secondary}
           </p>
+        ) : formatted.secondary ? (
+          <p className="live-translate-captions__note">{formatted.secondary}</p>
         ) : null}
-        <p className="live-translate-captions__text" data-testid="glass-translate-caption-text">
+        <p
+          className={`live-translate-captions__text${
+            formatted.interim ? " live-translate-captions__text--interim" : ""
+          }`}
+          data-testid="glass-translate-caption-text"
+          data-interim={formatted.interim ? "true" : "false"}
+        >
           {formatted.primary}
         </p>
         {formatted.note ? (

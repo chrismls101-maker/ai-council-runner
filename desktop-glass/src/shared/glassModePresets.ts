@@ -130,10 +130,25 @@ export const GLASS_MODE_PRESETS: Record<GlassModeId, GlassModePreset> = {
   },
 };
 
-export const GLASS_MODE_ORDER: GlassModeId[] = ["listen", "meetings", "translate", "work", "fix"];
-
 /** Voice is a separate primary action, not a Copilot card. */
 export const VOICE_MODE_COPY = "Talk to IIVO hands-free.";
+
+export const GLASS_MODE_ORDER: GlassModeId[] = ["listen", "meetings", "work", "fix"];
+
+/** Quick Tools — universal capabilities outside the main mode grid. */
+export type GlassQuickToolId = "voice" | "translate";
+
+export const GLASS_QUICK_TOOLS: GlassQuickToolId[] = ["voice", "translate"];
+
+export const GLASS_QUICK_TOOL_LABELS: Record<GlassQuickToolId, string> = {
+  voice: "Voice",
+  translate: "Translate",
+};
+
+export const GLASS_QUICK_TOOL_COPY: Record<GlassQuickToolId, string> = {
+  voice: VOICE_MODE_COPY,
+  translate: "Live captions for media, calls, and conversations.",
+};
 
 export function getModePreset(id: GlassModeId): GlassModePreset {
   return GLASS_MODE_PRESETS[id];

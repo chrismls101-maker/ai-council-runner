@@ -3,13 +3,24 @@
  */
 
 import type { GlassConfig } from "../shared/config.ts";
-import type { LiveTranslateLanguage, LiveTranslateTargetLanguage } from "../shared/liveTranslateTypes.ts";
+import type {
+  LiveTranslateGlossaryTerm,
+  LiveTranslateLanguage,
+  LiveTranslateLatencyMode,
+  LiveTranslateTargetLanguage,
+  LiveTranslateWorkflowMode,
+} from "../shared/liveTranslateTypes.ts";
 
 export interface TranslateViaServerRequest {
   text: string;
   sourceLanguage: LiveTranslateLanguage;
   targetLanguage: LiveTranslateTargetLanguage;
   interim?: boolean;
+  mode?: LiveTranslateWorkflowMode;
+  latencyMode?: LiveTranslateLatencyMode;
+  previousCaptions?: Array<{ original: string; translated: string }>;
+  glossaryTerms?: LiveTranslateGlossaryTerm[];
+  appContext?: string;
 }
 
 export interface TranslateViaServerResult {
@@ -37,6 +48,11 @@ export async function translateViaServer(
         sourceLanguage: request.sourceLanguage === "auto" ? undefined : request.sourceLanguage,
         targetLanguage: request.targetLanguage,
         interim: request.interim === true,
+        mode: request.mode,
+        latencyMode: request.latencyMode,
+        previousCaptions: request.previousCaptions,
+        glossaryTerms: request.glossaryTerms,
+        appContext: request.appContext,
       }),
       signal: AbortSignal.timeout(25_000),
     });

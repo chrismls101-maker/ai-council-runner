@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import {
   GLASS_MODE_ORDER,
   GLASS_MODE_PRESETS,
+  GLASS_QUICK_TOOLS,
   MODE_PRIVACY_NOTES,
   getModePreset,
   modePrimaryActionLabel,
@@ -16,8 +17,10 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
 
-test("presets exist for listen, meetings, translate, work, fix", () => {
-  assert.deepEqual(GLASS_MODE_ORDER, ["listen", "meetings", "translate", "work", "fix"]);
+test("presets exist for listen, meetings, work, fix plus translate quick tool", () => {
+  assert.deepEqual(GLASS_MODE_ORDER, ["listen", "meetings", "work", "fix"]);
+  assert.ok(GLASS_MODE_PRESETS.translate, "translate preset retained for setup flow");
+  assert.deepEqual(GLASS_QUICK_TOOLS, ["voice", "translate"]);
   for (const id of GLASS_MODE_ORDER) {
     assert.ok(GLASS_MODE_PRESETS[id], `preset ${id} exists`);
   }
@@ -130,16 +133,20 @@ test("privacy notes cover audio/storage/screen/stop guarantees", () => {
   assert.ok(joined.includes("stop everything"));
 });
 
-test("panel renders four mode cards, separate Voice, hidden Advanced by default", () => {
+test("panel renders four mode cards, Quick Tools, hidden Advanced by default", () => {
   const panel = readFileSync(join(ROOT, "renderer", "panel", "CopilotPanel.tsx"), "utf8");
   assert.ok(panel.includes("What do you want IIVO to do?"), "simple title present");
   assert.ok(panel.includes("glass-mode-card-${id}"), "renders a card per mode id");
   assert.ok(panel.includes("GLASS_MODE_ORDER"), "iterates the four-mode order");
   assert.ok(panel.includes("glass-mode-cards"), "mode card grid present");
-  assert.ok(panel.includes("glass-mode-voice"), "Voice is a separate button");
+  assert.ok(panel.includes("glass-quick-tools"), "Quick Tools section present");
+  assert.ok(panel.includes("glass-quick-tool-translate"), "Translate in Quick Tools");
+  assert.ok(panel.includes("glass-mode-voice"), "Voice in Quick Tools");
   assert.ok(panel.includes("voice-mode-start"), "Voice triggers separate loop");
   assert.ok(panel.includes("glass-advanced-toggle"), "advanced is behind a toggle");
-  // Advanced labels should not appear as top-level card text.
+  assert.ok(panel.includes("MeetingsTranslateToggle"), "Meetings translate toggle wired");
+  const translateSetup = readFileSync(join(ROOT, "renderer", "panel", "TranslateModeSetup.tsx"), "utf8");
+  assert.ok(translateSetup.includes("Show translated captions"), "Listen translate toggle wording");
   assert.ok(!panel.includes("Session Focus<"), "no top-level Session Focus label");
 });
 

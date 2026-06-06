@@ -55,12 +55,15 @@ test("no audio/capture starts on initial launch", async () => {
   expect(state.privacy.capturing).toBe(false);
 });
 
-test("panel shows five mode cards and a separate Voice button", async () => {
+test("panel shows four mode cards and Quick Tools Voice + Translate", async () => {
   await expect(panelPage.locator('[data-testid="glass-mode-panel"]')).toBeVisible();
-  for (const id of ["listen", "meetings", "translate", "work", "fix"]) {
+  for (const id of ["listen", "meetings", "work", "fix"]) {
     await expect(panelPage.locator(`[data-testid="glass-mode-card-${id}"]`)).toBeVisible();
   }
+  await expect(panelPage.locator('[data-testid="glass-mode-card-translate"]')).toHaveCount(0);
+  await expect(panelPage.locator('[data-testid="glass-quick-tools"]')).toBeVisible();
   await expect(panelPage.locator('[data-testid="glass-mode-voice"]')).toBeVisible();
+  await expect(panelPage.locator('[data-testid="glass-quick-tool-translate"]')).toBeVisible();
 });
 
 test("Work activates immediately without audio", async () => {

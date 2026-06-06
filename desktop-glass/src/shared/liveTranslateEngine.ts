@@ -60,20 +60,3 @@ export function isAlreadyTargetLanguage(
   return resolved !== "auto" && resolved !== "other" && resolved === target;
 }
 
-export function buildTranslateSystemPrompt(
-  sourceLanguage: LiveTranslateLanguage,
-  targetLanguage: LiveTranslateTargetLanguage,
-): string {
-  const from =
-    sourceLanguage === "auto"
-      ? "the detected source language"
-      : sourceLanguage;
-  return `You translate live speech captions from ${from} to ${targetLanguage}. Return ONLY the translated text — no quotes, labels, or commentary. Keep names and numbers. Be natural and concise for subtitles.`;
-}
-
-export function buildTranslateUserPrompt(text: string, interim?: boolean): string {
-  if (interim) {
-    return `Partial caption (may be incomplete — translate naturally, do not invent missing words):\n${text}`;
-  }
-  return text;
-}

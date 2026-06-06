@@ -7,22 +7,20 @@ import {
   type LiveTranslateRuntimeState,
   liveTranslateLanguagePairLabel,
 } from "./liveTranslateTypes.ts";
+import {
+  DEFAULT_LIVE_TRANSLATE_CONFIG,
+  normalizeLiveTranslateConfig,
+  normalizeSaveMode,
+  saveModeStatusLabel,
+} from "./liveTranslateConfig.ts";
 import { initialLiveTranslateCaptions } from "./liveTranslateCaptions.ts";
 
-export const DEFAULT_LIVE_TRANSLATE_CONFIG: LiveTranslateConfig = {
-  enabled: false,
-  source: "system_audio",
-  sourceLanguage: "auto",
-  targetLanguage: "en",
-  displayMode: "translation_only",
-  captionPosition: "bottom_center",
-  saveMode: "private_no_save",
-};
+export { DEFAULT_LIVE_TRANSLATE_CONFIG };
 
 export function initialLiveTranslateRuntime(
   overrides: Partial<LiveTranslateConfig> = {},
 ): LiveTranslateRuntimeState {
-  const config = { ...DEFAULT_LIVE_TRANSLATE_CONFIG, ...overrides };
+  const config = normalizeLiveTranslateConfig(overrides);
   return {
     active: false,
     status: "idle",
@@ -37,7 +35,7 @@ export function startLiveTranslate(
   runtime: LiveTranslateRuntimeState,
   patch: Partial<LiveTranslateConfig> = {},
 ): LiveTranslateRuntimeState {
-  const config = { ...runtime.config, ...patch, enabled: true };
+  const config = normalizeLiveTranslateConfig({ ...runtime.config, ...patch, enabled: true });
   return {
     ...runtime,
     active: true,
@@ -61,7 +59,7 @@ export function updateLiveTranslateConfig(
   runtime: LiveTranslateRuntimeState,
   patch: Partial<LiveTranslateConfig>,
 ): LiveTranslateRuntimeState {
-  const config = { ...runtime.config, ...patch };
+  const config = normalizeLiveTranslateConfig({ ...runtime.config, ...patch });
   return {
     ...runtime,
     config,
@@ -86,11 +84,11 @@ export function setLiveTranslateStatus(
 
 /** Private mode default — do not persist transcript/translation to session. */
 export function shouldPersistTranslateChunk(config: LiveTranslateConfig): boolean {
-  return config.saveMode !== "private_no_save";
+  return normalizeSaveMode(config.saveMode) !== "private_no_save";
 }
 
 export function shouldPersistTranslationOnly(config: LiveTranslateConfig): boolean {
-  return config.saveMode === "save_translation";
+  return normalizeSaveMode(config.saveMode) === "save_translation";
 }
 
 /** Mic only after explicit user opt-in for conversation translation. */
@@ -109,7 +107,7 @@ export function translateRequiresSystemAudio(config: LiveTranslateConfig): boole
 export function translateSourceStatusLabel(
   runtime: LiveTranslateRuntimeState,
   micOn: boolean,
-): { translationActive: string; source: string; mic: string } {
+): { translationActive: string; source: string; mic: string; save: string } {
   const source =
     runtime.config.source === "system_audio"
       ? "Computer Audio"
@@ -122,5 +120,6 @@ export function translateSourceStatusLabel(
     mic: micOn && translateAllowsMicrophone(runtime.config, runtime.micExplicitlyEnabled)
       ? "Mic: On"
       : "Mic: Off",
+    save: saveModeStatusLabel(runtime.config.saveMode),
   };
 }

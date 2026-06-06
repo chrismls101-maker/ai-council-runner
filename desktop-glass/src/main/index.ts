@@ -202,13 +202,14 @@ import {
 import {
   initialLiveTranslateRuntime,
   shouldPersistTranslateChunk,
+  shouldPersistTranslationOnly,
   startLiveTranslate,
   stopLiveTranslate,
   updateLiveTranslateConfig,
   translateAllowsMicrophone,
 } from "../shared/liveTranslateState.ts";
 import type { LiveTranslateRuntimeState } from "../shared/liveTranslateTypes.ts";
-import { processTranslateTranscriptChunk } from "./liveTranslateMain.ts";
+import { processTranslateTranscriptChunk, translateEventMetadata } from "./liveTranslateMain.ts";
 import { applyCaptionChunk } from "../shared/liveTranslateCaptions.ts";
 import {
   applyListenTranscriptFragment,
@@ -797,10 +798,43 @@ async function ingestTranslateChunk(
     push();
     return;
   }
-  liveTranslateRuntime = await processTranslateTranscriptChunk(
-    { text, interim: opts?.interim, chunkId: `tr-${Date.now()}`, tags: opts?.tags },
+  const appContext =
+    state.mediaContext?.title ?? state.mediaContext?.channelOrSource ?? undefined;
+  const result = await processTranslateTranscriptChunk(
+    {
+      text,
+      interim: opts?.interim,
+      chunkId: `tr-${Date.now()}`,
+      tags: opts?.tags,
+      appContext: appContext ?? undefined,
+    },
     { config, runtime: liveTranslateRuntime },
   );
+  liveTranslateRuntime = result.runtime;
+  if (
+    !opts?.interim &&
+    result.translated &&
+    sessionIsLive() &&
+    sessions.current()?.status === "active" &&
+    shouldPersistTranslateChunk(liveTranslateRuntime.config)
+  ) {
+    const translateMeta = translateEventMetadata(liveTranslateRuntime, result.original, result.translated);
+    if (translateMeta) {
+      const ctxFields = eventContextFields();
+      sessions.addEvent({
+        kind: "transcript_note",
+        title: result.original.length > 70 ? `${result.original.slice(0, 69)}…` : result.original,
+        text: shouldPersistTranslationOnly(liveTranslateRuntime.config)
+          ? result.translated
+          : result.original,
+        tags: [...(opts?.tags ?? []), "live_translate"],
+        ...ctxFields,
+        metadata: { ...(ctxFields.metadata ?? {}), ...translateMeta },
+      });
+      await pruneCurrentSessionEvents();
+      await persistSessions(sessions);
+    }
+  }
   push();
 }
 
