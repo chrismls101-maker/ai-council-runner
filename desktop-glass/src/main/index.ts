@@ -87,6 +87,7 @@ import {
   setOverlayClickThrough,
   setOverlayMode,
   toggleCommandBar,
+  focusCommandBar,
   toggleOverlay,
   togglePanel,
   unregisterCommandBarHotkeys,
@@ -314,6 +315,7 @@ interface AppState {
   virtualAudioDevices: VirtualAudioDeviceMatch[];
   selectedVirtualAudioDeviceId?: string;
   nativeLoopbackTested: boolean;
+  voiceModeStartNonce: number;
 }
 
 let askAbortController: AbortController | null = null;
@@ -354,6 +356,7 @@ const state: AppState = {
   duplicateAppBundles: [],
   virtualAudioDevices: [],
   nativeLoopbackTested: false,
+  voiceModeStartNonce: 0,
 };
 
 let moments = new SavedMomentsStore();
@@ -678,6 +681,7 @@ function snapshot(): GlassState {
     selectedVirtualAudioDeviceId: state.selectedVirtualAudioDeviceId,
     micPermission: state.micPermission,
     copilot: copilotRuntime(),
+    voiceModeStartNonce: state.voiceModeStartNonce,
   };
 }
 
@@ -2088,6 +2092,13 @@ async function handleCommand(
       return;
     case "toggle-command-bar":
       toggleCommandBar();
+      push();
+      return;
+    case "voice-mode-start":
+      // Surface the command bar (where Voice Mode lives) and signal it to start.
+      // Mic only starts after the command-bar hook reacts — never on launch.
+      focusCommandBar();
+      state.voiceModeStartNonce += 1;
       push();
       return;
     case "clear-command-feed":

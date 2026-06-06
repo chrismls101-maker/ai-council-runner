@@ -120,6 +120,19 @@ export function useVoiceMode(): VoiceModeController {
     }
   }, [glass.askStatus, glass.lastError, state.active, restartListening]);
 
+  // Cross-window start: the panel's Voice button bumps voiceModeStartNonce.
+  // Start only on an actual increment (never on initial mount / launch).
+  const prevNonceRef = useRef<number | undefined>(glass.voiceModeStartNonce);
+  useEffect(() => {
+    const nonce = glass.voiceModeStartNonce;
+    const prev = prevNonceRef.current;
+    prevNonceRef.current = nonce;
+    if (nonce == null || prev == null) return;
+    if (nonce > prev && !stateRef.current.active) {
+      start();
+    }
+  }, [glass.voiceModeStartNonce, start]);
+
   // Always release the bridge handler on unmount.
   useEffect(() => () => clearVoiceModeAutoSubmit(), []);
 

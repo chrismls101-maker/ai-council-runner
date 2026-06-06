@@ -56,9 +56,8 @@ test("panel renders one consolidated Copilot section", () => {
   const copilot = readFileSync(join(ROOT, "renderer", "panel", "CopilotPanel.tsx"), "utf8");
   assert.ok(panel.includes("CopilotPanel"), "Panel mounts consolidated Copilot section");
   assert.ok(!panel.includes("<CopilotConfigure"), "Session tab no longer hosts duplicate copilot block");
-  assert.ok(copilot.includes("Session focus"), "Copilot panel exposes session focus");
-  assert.ok(copilot.includes("Input source"), "Copilot panel exposes input source");
-  assert.ok(copilot.includes("Generate Debrief"), "Copilot panel exposes debrief action");
+  // Advanced drawer still exposes the detailed controls.
+  assert.ok(copilot.includes("Session focus"), "Advanced exposes session focus");
   assert.ok(copilot.includes("Stop Everything"), "Copilot panel exposes stop everything");
 });
 

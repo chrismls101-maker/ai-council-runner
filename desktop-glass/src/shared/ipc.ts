@@ -117,6 +117,7 @@ export type GlassCommand =
   | { type: "save-feed-moment"; id: string }
   | { type: "command-bar-blur" }
   | { type: "toggle-command-bar" }
+  | { type: "voice-mode-start" }
   | { type: "clear-command-feed" }
   | { type: "pin-command-feed-item"; id: string; pinned: boolean }
   | { type: "open-chat" }
@@ -246,6 +247,8 @@ export interface GlassState {
   selectedVirtualAudioDeviceId?: string;
   micPermission: import("./glassCapabilities.ts").MicPermissionReport;
   copilot: import("./copilotTypes.ts").GlassCopilotRuntimeState;
+  /** Incremented when the panel requests Voice Mode; the command bar starts it. */
+  voiceModeStartNonce?: number;
 }
 
 export interface SttProcessChunkRequest {
