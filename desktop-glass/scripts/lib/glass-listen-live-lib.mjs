@@ -21,6 +21,7 @@ import {
   gradeMediaExtraction,
   hasEnoughTranscriptForQuestion,
   parseListenLiveMinutes,
+  parseListenLiveCli,
   pickContextAwareQuestion,
   runServerPreflight,
   sessionHasRawAudioOrBase64,
@@ -51,7 +52,7 @@ export const REPORT_MD = join(OUT_DIR, "LISTEN_LIVE_REPORT.md");
 export const LISTEN_REPORT_MD = join(OUT_DIR, "LISTEN_REPORT.md");
 
 export function parseListenLiveArgs(argv = process.argv.slice(2)) {
-  return { minutes: parseListenLiveMinutes(argv) };
+  return parseListenLiveCli(argv);
 }
 
 export function resolveSessionsPath() {

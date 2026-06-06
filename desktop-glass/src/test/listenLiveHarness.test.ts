@@ -11,6 +11,7 @@ import {
   hasEnoughTranscriptForQuestion,
   pickContextAwareQuestion,
   summarizeMomentStats,
+  parseListenLiveCli,
 } from "../shared/listenLiveHarness.ts";
 import { extractMediaContext } from "../shared/mediaContextExtract.ts";
 
@@ -119,6 +120,22 @@ test("gradeMediaExtraction reports extraction without hardcoding channel", () =>
   assert.ok(grade.captured);
   assert.ok(grade.notes.some((n) => /YouTube/i.test(n)));
   assert.ok(grade.notes.some((n) => /Title extracted/i.test(n)));
+});
+
+test("parseListenLiveCli defaults to auto mode", () => {
+  const cli = parseListenLiveCli(["--minutes", "15"]);
+  assert.equal(cli.minutes, 15);
+  assert.equal(cli.manual, false);
+  assert.equal(cli.attach, false);
+  assert.equal(cli.keepGlass, false);
+});
+
+test("parseListenLiveCli supports manual attach keep-glass", () => {
+  const cli = parseListenLiveCli(["--manual", "--attach", "--keep-glass", "--minutes", "60"]);
+  assert.equal(cli.minutes, 60);
+  assert.equal(cli.manual, true);
+  assert.equal(cli.attach, true);
+  assert.equal(cli.keepGlass, true);
 });
 
 test("summarizeMomentStats counts lifecycle buckets", () => {

@@ -10,6 +10,9 @@
  * Usage:
  *   npm run glass:qa:listen:live -- --minutes 10
  *   npm run glass:qa:listen:live -- --minutes 60
+ *   npm run glass:qa:listen:live -- --attach --minutes 10   # Glass already running (IIVO_GLASS_E2E=1)
+ *   npm run glass:qa:listen:live -- --manual --minutes 10    # legacy: you click everything
+ *   npm run glass:qa:listen:live -- --keep-glass             # leave Glass open after test
  *
  * Output:
  *   /tmp/iivo-glass-listen-live/LISTEN_LIVE_RESULTS.jsonl
@@ -53,8 +56,16 @@ import {
   sanitize,
   diagnoseFailure,
 } from "./lib/glass-listen-live-lib.mjs";
+import {
+  automateListenMode,
+  attachGlassForListenLive,
+  closeGlassSession,
+  launchGlassForListenLive,
+  printSetupInstructions,
+} from "./lib/glass-listen-live-glass.mjs";
 
-const { minutes } = parseListenLiveArgs();
+const cli = parseListenLiveArgs();
+const { minutes, manual, attach, keepGlass } = cli;
 const apiUrl = (process.env.IIVO_API_URL ?? "http://localhost:3001").replace(/\/$/, "");
 const sessionsPath = resolveSessionsPath();
 const runStarted = Date.now();
@@ -63,6 +74,9 @@ const harnessRuntime = createListenHarnessRuntime("balanced");
 
 const summary = {
   preflightOk: false,
+  glassAutomated: !manual,
+  glassLaunched: false,
+  listenModeActivated: false,
   realSystemAudio: false,
   screenContextCaptured: false,
   mediaSourceType: "unknown",
@@ -288,11 +302,14 @@ function buildQaReport(listenReportMd) {
 
 // --- Main -------------------------------------------------------------------
 
-log("\n=== IIVO Glass Live Listen QA ===\n");
-log(`Duration: ${minutes} min · Sessions: ${sessionsPath}`);
+printSetupInstructions(log);
+
+log("=== IIVO Glass Live Listen QA ===\n");
+log(`Duration: ${minutes} min · Mode: ${manual ? "manual" : attach ? "attach" : "auto"}`);
+log(`Sessions: ${sessionsPath}`);
 log(`Output: ${OUT_DIR}\n`);
 
-log("PREFLIGHT — Server (health, GPT-5.5, STT, vision)…");
+log("PREFLIGHT — Server (health, GPT-5.5, STT)…");
 const preflight = await runServerPreflight(apiUrl);
 summary.preflightOk = preflight.ok;
 if (preflight.failures.length) {
@@ -312,25 +329,66 @@ if (!preflight.ok) {
 }
 log("  OK: server healthy · GPT-5.5 · STT configured\n");
 
-if (!existsSync(sessionsPath)) {
+const webUrl = (process.env.IIVO_WEB_URL ?? "http://localhost:5173").replace(/\/$/, "");
+let glassSession = null;
+
+if (!manual) {
+  try {
+    glassSession = attach
+      ? await attachGlassForListenLive({ log })
+      : await launchGlassForListenLive({ apiUrl, webUrl, log });
+    summary.glassLaunched = glassSession.launched;
+    log("");
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    summary.failures.push(
+      diagnoseFailure("app_not_running", msg, "Run npm run glass:build or use --manual."),
+    );
+    log(`FAIL: Could not launch/attach Glass — ${msg}`);
+    writeReport(buildQaReport(""));
+    process.exit(1);
+  }
+} else if (!existsSync(sessionsPath)) {
   summary.failures.push(
     diagnoseFailure(
       "app_not_running",
       `No sessions file at ${sessionsPath}`,
-      "Open IIVO Glass (packaged or dev) before running this test.",
+      "Open IIVO Glass before running with --manual.",
     ),
   );
-  log(`WARN: ${sessionsPath} not found — start IIVO Glass first.\n`);
+  log(`WARN: ${sessionsPath} not found — open IIVO Glass first.\n`);
 }
 
-log("STEP 1 — Open the YouTube video (tab frontmost). Example:");
-log('  Channel: Silicon Valley Girl');
-log('  Title: "$4 billion founder: the next three years will make 100 new founders rich"');
-log("  Route Mac audio through BlackHole. Keep playing — do not pause.\n");
-await waitForEnter("Video tab is frontmost and playing?");
+async function waitForYouTubeFrontmost(maxWaitMs = 120_000) {
+  if (manual) {
+    log("STEP 1 — Open YouTube video (tab frontmost). Example:");
+    log('  Silicon Valley Girl — "$4 billion founder: the next three years will make 100 new founders rich"');
+    await waitForEnter("Video tab frontmost and playing?");
+    return captureMacMediaContext();
+  }
 
-log("\nSTEP 2 — Extracting screen/media context (no facial recognition)…");
-const screen = captureMacMediaContext();
+  log("STEP 1 — Open YouTube/video tab frontmost (harness will detect it)…");
+  const deadline = Date.now() + maxWaitMs;
+  let lastLog = 0;
+  while (Date.now() < deadline) {
+    const captured = captureMacMediaContext();
+    if (captured.media?.sourceType === "youtube" || captured.windowTitle?.includes("YouTube")) {
+      log(`  Detected: ${captured.media?.title ?? captured.windowTitle}`);
+      return captured;
+    }
+    if (Date.now() - lastLog > 15_000) {
+      log("  … keep your video tab frontmost with audio playing");
+      lastLog = Date.now();
+    }
+    await sleep(3000);
+  }
+  log("  WARN: YouTube not detected — continuing with best-effort context");
+  return captureMacMediaContext();
+}
+
+const screen = await waitForYouTubeFrontmost();
+
+log("\nSTEP 2 — Screen/media context (no facial recognition)…");
 if (screen.error) {
   summary.failures.push(
     diagnoseFailure("screen_capture_failed", screen.error, "Grant Accessibility / ensure browser is frontmost."),
@@ -364,12 +422,31 @@ if (media) {
   log("  WARN: media context missing — continuing if audio works.");
 }
 
-log("\nSTEP 3 — In IIVO Glass:");
-log("  1. Click **Listen** (not Voice).");
-log("  2. Confirm **Computer Audio** / System Audio is selected.");
-log("  3. Confirm listening is active.");
-log("  4. Do NOT start Voice Mode — mic must stay OFF.\n");
-await waitForEnter("Listen mode active, system audio listening, Voice OFF?");
+log("\nSTEP 3 — Activate Listen mode (computer audio only, mic off)…");
+
+if (glassSession) {
+  const listenResult = await automateListenMode({
+    ...glassSession.pages,
+    log,
+  });
+  if (!listenResult.ok) {
+    summary.failures.push(
+      diagnoseFailure(listenResult.category, listenResult.cause, listenResult.fix),
+    );
+    log(`FAIL: ${listenResult.cause}`);
+    log(`Fix: ${listenResult.fix}`);
+    if (!keepGlass) await closeGlassSession(glassSession);
+    writeReport(buildQaReport(""));
+    process.exit(1);
+  }
+  summary.listenModeActivated = true;
+  const st = listenResult.state;
+  log(`  Copilot active: ${st.copilot?.active} · focus: ${st.copilot?.config?.sessionType}`);
+  log(`  Listening: ${st.privacy?.listening} · mode: ${st.transcriptionMode}`);
+} else {
+  log("  Manual mode — ensure you clicked Listen, system audio on, Voice OFF.");
+  await waitForEnter("Listen mode active, system audio listening, Voice OFF?");
+}
 
 log("\nSTEP 4 — Waiting for ≥2 real system_audio transcript chunks…");
 log("  (Not simulated — chunks must appear in glass-sessions.json)\n");
@@ -400,6 +477,7 @@ if (!summary.realSystemAudio) {
     ),
   );
   log(`\nFAIL: only ${chunks.length} real system_audio chunk(s).`);
+  if (!keepGlass && glassSession) await closeGlassSession(glassSession);
   writeReport(buildQaReport(""));
   process.exit(1);
 }
@@ -603,11 +681,15 @@ log(`  QA Report: ${REPORT_MD}`);
 log(`  Listen Report: ${LISTEN_REPORT_MD}`);
 log(`  JSONL: ${RESULTS_JSONL}`);
 
-const weakCount = summary.results.filter((r) => r.verdict === "weak").length;
 const exitFail =
   weakCount > 0 ||
   !summary.micStayedOff ||
   !summary.realSystemAudio ||
   !summary.preflightOk ||
   summary.rawAudioStored;
+
+if (!keepGlass && glassSession) {
+  await closeGlassSession(glassSession);
+}
+
 process.exit(exitFail ? 1 : 0);
