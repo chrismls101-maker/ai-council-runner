@@ -123,7 +123,7 @@ export function resolveMomentContextStatus(opts: {
     return {
       status: "thin",
       message:
-        "I'm still building context from the video. I need a little more transcript, or ask about a specific line.",
+        "I'm still building context from the audio. I need a little more transcript, or ask about a specific line.",
       lastTranscriptAtMs: lastMs,
       pausedForMs,
     };
@@ -133,7 +133,7 @@ export function resolveMomentContextStatus(opts: {
     return {
       status: "stale",
       message:
-        "I can answer based on the last captured part, but the video may have moved on.",
+        "I can answer based on the last captured part, but the content may have moved on.",
       lastTranscriptAtMs: lastMs,
       pausedForMs,
     };
@@ -150,7 +150,7 @@ export function resolveMomentContextStatus(opts: {
 
   return {
     status: "ready",
-    message: "Using recent video context…",
+    message: "Using recent audio context…",
     lastTranscriptAtMs: lastMs,
     pausedForMs,
   };

@@ -325,7 +325,9 @@ function FeedCard({
   const isError = item.kind === "error";
   const displayBody =
     expanded && item.fullBody ? item.fullBody : item.body;
-  const canExpand = Boolean(item.fullBody && item.fullBody !== item.body);
+  const canExpand = isListenInsight
+    ? Boolean(item.fullBody)
+    : Boolean(item.fullBody && item.fullBody !== item.body);
   const bodyOverflows = canExpand && !expanded;
 
   return (
@@ -339,7 +341,7 @@ function FeedCard({
               ? "glass-overlay-response-card"
               : "glass-overlay-card"
       }
-      className={`overlay-feed-card overlay-feed-card--${item.kind}${item.pinned ? " overlay-feed-card--pinned" : ""}`}
+      className={`overlay-feed-card overlay-feed-card--${item.kind}${item.pinned ? " overlay-feed-card--pinned" : ""}${isListenInsight ? " overlay-feed-card--listen" : ""}${expanded ? " overlay-feed-card--expanded" : ""}`}
       onMouseEnter={enterInteractive}
       onMouseLeave={leaveInteractive}
     >

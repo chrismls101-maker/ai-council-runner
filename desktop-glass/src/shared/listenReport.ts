@@ -10,6 +10,7 @@ import type { GlassSession, GlassSessionEvent } from "./sessionTypes.ts";
 import type { ListenMoment } from "./listenMomentTypes.ts";
 import type { MediaContext } from "./mediaContextTypes.ts";
 import type { ListenSegmentKind } from "./listenSegmentClassifier.ts";
+import { buildListenReportPersonaGuidance } from "./listenModePersona.ts";
 
 export interface ListenReportInput {
   session: GlassSession;
@@ -54,6 +55,26 @@ function ignoredSegmentLines(moments: ListenMoment[], max = 6): string[] {
     });
 }
 
+function whatThisMeansLines(moments: ListenMoment[], max = 3): string[] {
+  const ranked = moments
+    .filter(isMainContentListenMoment)
+    .filter((m) => ["ready", "surfaced", "saved_silently"].includes(m.status))
+    .slice(0, max * 2);
+
+  const lines: string[] = [];
+  for (const m of ranked) {
+    const why = m.reasonSelected?.trim();
+    const thought = m.suggestedThought?.trim();
+    if (why && why.length >= 24) {
+      lines.push(why);
+    } else if (thought) {
+      lines.push(thought);
+    }
+    if (lines.length >= max) break;
+  }
+  return lines.slice(0, max);
+}
+
 export function buildListenReportSections(input: ListenReportInput): GlassCopilotDebriefSection[] {
   const media = input.mediaContext ?? mediaFromSession(input.session) ?? null;
   const moments = input.moments;
@@ -92,11 +113,22 @@ export function buildListenReportSections(input: ListenReportInput): GlassCopilo
     .slice(0, 6);
   const ignored = ignoredSegmentLines(moments);
 
+  const whatThisMeans = whatThisMeansLines(contentMoments);
+  const thinReport = contentMoments.length === 0;
+
   const about = media?.visibleTextSummary?.slice(0, 200) ?? "Summary from captured transcript and IIVO moments.";
 
   const sections: GlassCopilotDebriefSection[] = [
     { heading: "Source", items: sourceLines },
     { heading: "What this was about", items: [about] },
+    {
+      heading: "What this means",
+      items: thinReport
+        ? ["Not enough main-content moments were captured — audio may have been thin, muted, or mostly ads/intros."]
+        : whatThisMeans.length
+          ? whatThisMeans
+          : ["Review surfaced thoughts below for the main takeaways from this session."],
+    },
     { heading: "Best ideas", items: bestIdeas.length ? bestIdeas : ["No strong ideas captured — transcript may have been thin."] },
     { heading: "IIVO thoughts", items: iivoThoughts.length ? iivoThoughts : ["No proactive thoughts surfaced — check Quiet mode or thin audio."] },
     { heading: "Action steps", items: actions.length ? actions : ["No explicit action steps detected."] },
@@ -118,7 +150,13 @@ export function buildListenReportSections(input: ListenReportInput): GlassCopilo
 }
 
 export function buildListenReportMarkdown(sections: GlassCopilotDebriefSection[]): string {
-  const lines = ["# Listen Report", ""];
+  const personaNote = buildListenReportPersonaGuidance();
+  const lines = [
+    "# Listen Report",
+    "",
+    `_${personaNote}_`,
+    "",
+  ];
   for (const section of sections) {
     lines.push(`## ${section.heading}`, "");
     for (const item of section.items) lines.push(`- ${item}`);

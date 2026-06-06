@@ -7,6 +7,7 @@
 
 import { isDuplicateText } from "./sessionIntelligence.ts";
 import { withMomentMaturity } from "./listenMomentMaturity.ts";
+import type { MediaContext } from "./mediaContextTypes.ts";
 import { buildListenProactiveThought } from "./listenModePersona.ts";
 import type { ListenSegmentKind } from "./listenSegmentClassifier.ts";
 import type {
@@ -24,6 +25,7 @@ export interface ListenMomentEvalInput {
   idFactory?: () => string;
   segmentKind?: ListenSegmentKind;
   userGoalContext?: string;
+  mediaContext?: MediaContext | null;
 }
 
 interface MomentPattern {
@@ -98,14 +100,17 @@ function findMatchingMoment(
 /** Generate a contextual IIVO thought from moment type + anchor text. */
 export function generateListenThought(
   moment: Pick<ListenMoment, "type" | "transcriptAnchors" | "summary">,
-  userGoalContext?: string,
+  ctx: { userGoalContext?: string; mediaContext?: MediaContext | null } = {},
 ): {
   suggestedThought: string;
   suggestedQuestion?: string;
   suggestedAction?: string;
   reasonSelected: string;
 } {
-  const grounded = buildListenProactiveThought({ moment, ctx: { userGoalContext } });
+  const grounded = buildListenProactiveThought({
+    moment,
+    ctx: { userGoalContext: ctx.userGoalContext, mediaContext: ctx.mediaContext },
+  });
   return {
     suggestedThought: grounded.suggestedThought,
     reasonSelected: grounded.reasonSelected,
@@ -172,7 +177,7 @@ export function evaluateListenMoments(input: ListenMomentEvalInput): ListenMomen
         transcriptAnchors: [candidate.anchor],
         summary: shortSummary(candidate.anchor),
       },
-      input.userGoalContext,
+      { userGoalContext: input.userGoalContext, mediaContext: input.mediaContext },
     );
 
     if (existing) {

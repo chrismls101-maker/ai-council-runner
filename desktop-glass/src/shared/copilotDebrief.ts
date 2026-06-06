@@ -30,6 +30,7 @@ import {
   buildListenReportSections,
   listenMomentsFromSessionEvents,
 } from "./listenReport.ts";
+import { buildListenReportPersonaGuidance } from "./listenModePersona.ts";
 import type { ListenMoment } from "./listenMomentTypes.ts";
 import type { MediaContext } from "./mediaContextTypes.ts";
 
@@ -427,6 +428,13 @@ export function buildDebriefAiPrompt(
     "differences from this session.",
     "If context is thin, say exactly what is missing instead of producing a generic template.",
   ];
+  if (options.sessionType === "video_learning") {
+    lines.push(
+      "",
+      buildListenReportPersonaGuidance({ mediaContext: options.mediaContext ?? undefined }),
+      "Ground every section in transcript-backed moments. Use source-agnostic language.",
+    );
+  }
   if (options.sessionType === "meeting_call") {
     const missing = detectMissingMeetingFields(meetingIntelligenceForSession(session));
     lines.push(

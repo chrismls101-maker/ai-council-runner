@@ -1,0 +1,67 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import {
+  buildListenReportMarkdown,
+  buildListenReportSections,
+} from "../shared/listenReport.ts";
+import type { GlassSession } from "../shared/sessionTypes.ts";
+import type { ListenMoment } from "../shared/listenMomentTypes.ts";
+
+function session(): GlassSession {
+  const now = new Date().toISOString();
+  return {
+    id: "s1",
+    title: "Listen session",
+    status: "ended",
+    startedAt: now,
+    updatedAt: now,
+    events: [],
+    insights: [],
+  };
+}
+
+function moment(overrides: Partial<ListenMoment> = {}): ListenMoment {
+  const now = new Date().toISOString();
+  return {
+    id: "m1",
+    type: "key_idea",
+    summary: "Distribution beats speed.",
+    transcriptAnchors: ["Distribution beats speed for founders building in public."],
+    firstSeenAt: now,
+    lastUpdatedAt: now,
+    confidence: 0.9,
+    importance: "high",
+    suggestedThought: "The speaker argues distribution beats speed for founders.",
+    reasonSelected: "High-signal founder insight about go-to-market.",
+    status: "surfaced",
+    ...overrides,
+  };
+}
+
+test("report includes What this means section from reasonSelected", () => {
+  const sections = buildListenReportSections({
+    session: session(),
+    moments: [moment()],
+  });
+  const heading = sections.find((s) => s.heading === "What this means");
+  assert.ok(heading);
+  assert.match(heading!.items[0], /go-to-market|founder/i);
+});
+
+test("thin report explains missing content moments", () => {
+  const sections = buildListenReportSections({
+    session: session(),
+    moments: [moment({ segmentKind: "ad", status: "saved_silently" })],
+  });
+  const heading = sections.find((s) => s.heading === "What this means");
+  assert.ok(heading);
+  assert.match(heading!.items[0], /Not enough main-content moments/i);
+});
+
+test("markdown includes persona intro note", () => {
+  const sections = buildListenReportSections({ session: session(), moments: [moment()] });
+  const md = buildListenReportMarkdown(sections);
+  assert.match(md, /Listen Report/);
+  assert.match(md, /Thought Partner/i);
+  assert.match(md, /## What this means/);
+});

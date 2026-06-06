@@ -234,12 +234,12 @@ test("Listen mode excludes microphone chunks from context", () => {
 
 test("missing context returns warm-up message when inWarmup", () => {
   const msg = activeListeningMissingContextMessage(undefined, true);
-  assert.match(msg, /building context from the video/i);
+  assert.match(msg, /building context from the audio/i);
 });
 
 test("missing context returns missing-context response", () => {
   const msg = activeListeningMissingContextMessage(classifyActiveListeningIntent("How does that work?"));
-  assert.match(msg, /building context from the video/i);
+  assert.match(msg, /building context from the audio/i);
 });
 
 test("report includes silently saved moments", () => {

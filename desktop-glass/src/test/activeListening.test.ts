@@ -188,7 +188,7 @@ test("guidance includes recent transcript for explain intent", () => {
     "How does that work?",
   );
   assert.ok(guidance.toLowerCase().includes("self-attention"));
-  assert.ok(guidance.toLowerCase().includes("active listening"));
+  assert.ok(guidance.includes("Thought Partner"));
 });
 
 test("sales coaching extracts objection from transcript without inventing names", () => {

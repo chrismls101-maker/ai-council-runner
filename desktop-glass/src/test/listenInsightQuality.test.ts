@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  buildGroundedListenThought,
   isActionFirstListenCard,
   isGroundedListenInsight,
   isShallowListenThought,
@@ -11,6 +10,7 @@ import {
   listenThoughtHasWhyItMatters,
   mentionsAiToolWithoutContext,
 } from "../shared/listenInsightQuality.ts";
+import { buildListenProactiveThought } from "../shared/listenModePersona.ts";
 import type { ListenMoment } from "../shared/listenMomentTypes.ts";
 
 function groundedMoment(overrides: Partial<ListenMoment> = {}): ListenMoment {
@@ -71,10 +71,12 @@ test("no your AI tool unless userGoalContext includes it", () => {
 
 test("insight includes transcript anchor and meaning", () => {
   const anchor = "Speed alone may not be enough — distribution and trust are the real leverage.";
-  const out = buildGroundedListenThought({
-    type: "warning",
-    transcriptAnchors: [anchor],
-    summary: anchor,
+  const out = buildListenProactiveThought({
+    moment: {
+      type: "warning",
+      transcriptAnchors: [anchor],
+      summary: anchor,
+    },
   });
   assert.match(out.suggestedThought, /speaker/i);
   assert.match(out.suggestedThought, /distribution|trust|speed/i);
@@ -82,10 +84,12 @@ test("insight includes transcript anchor and meaning", () => {
 });
 
 test("insight does not over-personalize without userGoalContext", () => {
-  const out = buildGroundedListenThought({
-    type: "key_idea",
-    transcriptAnchors: ["Founders should focus on distribution early."],
-    summary: "Founders should focus on distribution early.",
+  const out = buildListenProactiveThought({
+    moment: {
+      type: "key_idea",
+      transcriptAnchors: ["Founders should focus on distribution early."],
+      summary: "Founders should focus on distribution early.",
+    },
   });
   assert.ok(!/\byour AI tool\b/i.test(out.suggestedThought));
 });

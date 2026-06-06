@@ -38,7 +38,7 @@ export function listenSpeakerLabel(ctx: ListenSpeakerContext): string {
   if (channel) return `the speaker (${channel})`;
   const title = ctx.mediaContext?.title?.trim();
   if (title && title.length < 80) {
-    return "the speaker in this video";
+    return "the speaker in this content";
   }
   return "the speaker";
 }
@@ -48,7 +48,7 @@ export function listenSourceAttribution(ctx: ListenSpeakerContext): string | und
   if (ctx.mediaContext?.channelOrSource) parts.push(ctx.mediaContext.channelOrSource);
   else if (ctx.mediaContext?.title) parts.push(ctx.mediaContext.title);
   if (!parts.length) return undefined;
-  return `This video/source appears to be from ${parts[0]}.`;
+  return `This source appears to be from ${parts[0]}.`;
 }
 
 export function isShallowListenThought(text: string): boolean {
@@ -99,43 +99,3 @@ export function isGroundedListenInsight(
   return true;
 }
 
-/** Build a thoughtful, grounded observation from moment + media context. */
-export function buildGroundedListenThought(
-  moment: Pick<ListenMoment, "type" | "transcriptAnchors" | "summary" | "suggestedThought">,
-  ctx: ListenSpeakerContext = {},
-): { suggestedThought: string; reasonSelected: string } {
-  const speaker = listenSpeakerLabel(ctx);
-  const anchor = moment.transcriptAnchors[0] ?? moment.summary;
-  const excerpt =
-    anchor.length <= 100 ? anchor : `${anchor.slice(0, 97).trim()}…`;
-
-  switch (moment.type) {
-    case "warning":
-      return {
-        suggestedThought: `${speaker} is warning that ${excerpt.charAt(0).toLowerCase()}${excerpt.slice(1)} — worth noting before the video moves on.`,
-        reasonSelected: "The speaker flagged a caution that may affect how you interpret the rest of the segment.",
-      };
-    case "framework":
-      return {
-        suggestedThought: `What ${speaker} is laying out here is a framework: "${excerpt}". The important part is how the pieces connect.`,
-        reasonSelected: "Structured frameworks are easier to reuse later if you capture them while the explanation is fresh.",
-      };
-    case "claim":
-      return {
-        suggestedThought: `${speaker} makes a claim worth examining: "${excerpt}". I'd keep listening for the evidence behind it.`,
-        reasonSelected: "Strong claims are most useful when you note both the assertion and what supports it.",
-      };
-    case "business_opportunity":
-    case "sales_tactic":
-      return {
-        suggestedThought: `${speaker} highlights a business angle: "${excerpt}". This could matter for positioning or go-to-market later.`,
-        reasonSelected: "Market and distribution language often signals ideas worth revisiting in a report.",
-      };
-    case "key_idea":
-    default:
-      return {
-        suggestedThought: `The important part here is that ${speaker} says ${excerpt.charAt(0).toLowerCase()}${excerpt.slice(1)}`,
-        reasonSelected: "This stood out as a high-signal idea in the recent transcript.",
-      };
-  }
-}

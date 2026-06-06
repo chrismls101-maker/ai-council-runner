@@ -1391,7 +1391,16 @@ html.glass-dock-window #root {
   position: relative;
   max-height: 220px;
   overflow-y: auto;
+  overflow-x: hidden;
   margin-bottom: 8px;
+}
+
+.overlay-feed-card--listen .overlay-feed-card__body-wrap {
+  max-height: 140px;
+}
+
+.overlay-feed-card--listen.overlay-feed-card--expanded .overlay-feed-card__body-wrap {
+  max-height: min(50vh, 360px);
 }
 
 .overlay-feed-card__body-wrap--fade::after {
@@ -1429,6 +1438,7 @@ html.glass-dock-window #root {
   line-height: 1.45;
   color: var(--glass-text-dim);
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .overlay-feed-card__actions {

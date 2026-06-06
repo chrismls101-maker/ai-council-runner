@@ -4,12 +4,13 @@
  * Thought-first cards with specific titles and context — never vague "this" prompts.
  */
 
+import type { MediaContext } from "./mediaContextTypes.ts";
 import type { GlassCopilotIntervention } from "./copilotTypes.ts";
 import type { ListenMoment, ListenMomentType } from "./listenMomentTypes.ts";
 
 const TYPE_TITLES: Record<ListenMomentType, string> = {
   key_idea: "Founder insight",
-  framework: "Framework moment",
+  framework: "Key distinction",
   tactic: "Tactic worth noting",
   warning: "Useful warning",
   example: "Example captured",
@@ -47,8 +48,20 @@ function anchorLine(moment: ListenMoment): string {
   return excerpt(anchor, 100);
 }
 
+/** Source-agnostic anchor label for card preview and full body. */
+export function sourceAnchorLabel(mediaContext?: MediaContext | null): string {
+  const channel = mediaContext?.channelOrSource?.trim();
+  if (channel) return `From ${channel}:`;
+  const title = mediaContext?.title?.trim();
+  if (title && title.length < 80) return `From "${title}":`;
+  return "From what was said:";
+}
+
 /** Build card copy with specific referent — no naked "this". */
-export function buildListenThoughtFeedContent(moment: ListenMoment): ListenThoughtFeedContent {
+export function buildListenThoughtFeedContent(
+  moment: ListenMoment,
+  mediaContext?: MediaContext | null,
+): ListenThoughtFeedContent {
   const title = TYPE_TITLES[moment.type] ?? "IIVO thought";
   const anchor = anchorLine(moment);
   const thought = (moment.suggestedThought ?? moment.summary).replace(/\s+/g, " ").trim();
@@ -56,24 +69,34 @@ export function buildListenThoughtFeedContent(moment: ListenMoment): ListenThoug
     moment.reasonSelected ??
     "This stood out in what you were listening to and may be worth revisiting later.";
 
-  const contextLine = `From the video: "${anchor}"`;
+  const anchorPrefix = sourceAnchorLabel(mediaContext);
+  const contextLine = `${anchorPrefix} "${anchor}"`;
   const sourceAnchor = contextLine;
-  const body = `${thought} I saved this for your Listen Report.`;
+
+  const previewLines = [thought, "", `Why it matters: ${whyItMatters}`, "", sourceAnchor];
+  const previewBody = previewLines.join("\n");
+
   const fullBody = [
     title,
     "",
-    contextLine,
+    sourceAnchor,
     "",
     thought,
     "",
     `Why it matters: ${whyItMatters}`,
     "",
-    "Saved automatically — expand for full text. Actions are optional.",
+    "Saved for your Listen Report. Actions are optional — use More actions if you want them.",
   ].join("\n");
+
+  const collapsedCap = 280;
+  const body =
+    previewBody.length > collapsedCap
+      ? `${previewBody.slice(0, collapsedCap - 1).trim()}…`
+      : previewBody;
 
   return {
     title,
-    body: body.length > 160 ? `${body.slice(0, 157)}…` : body,
+    body: body.length < fullBody.length ? body : previewBody,
     fullBody,
     contextLine,
     whyItMatters,
@@ -86,7 +109,7 @@ export function listenCardTextIsVague(text: string): boolean {
   const t = text.trim();
   if (!t) return true;
   if (VAGUE_THIS_RE.test(t)) return true;
-  if (/\bturn this into\b/i.test(t) && !/From the video:/i.test(t)) return true;
+  if (/\bturn this into\b/i.test(t) && !/From what was said:|From .+:/i.test(t)) return true;
   if (/\bcreate .+ from this\b/i.test(t)) return true;
   if (/^that sounds like a risk/i.test(t)) return true;
   if (/should we take action/i.test(t)) return true;
@@ -96,8 +119,9 @@ export function listenCardTextIsVague(text: string): boolean {
 export function buildListenThoughtIntervention(
   moment: ListenMoment,
   deps: { idFactory: () => string; clock: () => string },
+  mediaContext?: MediaContext | null,
 ): GlassCopilotIntervention {
-  const feed = buildListenThoughtFeedContent(moment);
+  const feed = buildListenThoughtFeedContent(moment, mediaContext);
   return {
     id: deps.idFactory(),
     kind: "generic",
@@ -113,11 +137,14 @@ export function buildListenThoughtIntervention(
 }
 
 /** Collapsed + full bodies for overlay feed cards. */
-export function listenThoughtFeedBodies(moment: ListenMoment): {
+export function listenThoughtFeedBodies(
+  moment: ListenMoment,
+  mediaContext?: MediaContext | null,
+): {
   title: string;
   body: string;
   fullBody: string;
 } {
-  const feed = buildListenThoughtFeedContent(moment);
+  const feed = buildListenThoughtFeedContent(moment, mediaContext);
   return { title: feed.title, body: feed.body, fullBody: feed.fullBody };
 }

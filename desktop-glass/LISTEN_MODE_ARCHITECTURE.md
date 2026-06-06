@@ -2,7 +2,7 @@
 
 IIVO Glass Listen Mode captures **computer audio only**, builds transcript context, detects meaningful moments, and optionally surfaces **one** thought card — while always supporting user-initiated “Ask About This Moment” questions.
 
-This document is the source-of-truth map before adding a Listen persona / thought-partner prompt.
+This document is the source-of-truth map for Listen Mode behavior and the thought-partner persona.
 
 ---
 
@@ -126,17 +126,17 @@ See tables in repo history / audit report. Key overlaps resolved:
 
 ## Persona integration point
 
+**Implemented** in **`listenModePersona.ts`** — synced to server via duplicated strings in `src/server/glass/activeListeningPrompt.ts` (contract test: `tests/server/listenModePersonaSync.test.ts`).
+
 Call **`listenModePersona.ts`** from:
 
 1. **Proactive thoughts** — `listenMomentIntelligence.generateListenThought()` → `buildListenProactiveThought()`
 2. **Interrupt answers** — `activeListeningGuidance.buildActiveListeningGuidance()` → `buildListenInterruptPersonaGuidance()`
-3. **Listen report** — (future) `listenReport.ts` → `buildListenReportPersonaGuidance()`
+3. **Listen report** — `listenReport.ts` → `buildListenReportPersonaGuidance()`; debrief AI when `sessionType === video_learning`
 
 ---
 
-## Remaining work before full thought-partner persona
+## Remaining manual QA
 
-1. Author full persona prompt in `listenModePersona.ts`.
-2. Sync server `activeListeningPrompt.ts`.
-3. Live QA with BlackHole + YouTube.
-4. Overlay card expand/CSS polish.
+1. Live QA with BlackHole + YouTube: `npm run glass:qa:listen:live -- --minutes 10`
+2. Overlay expand in headed Electron if e2e CDP is unavailable in CI

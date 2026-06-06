@@ -191,9 +191,9 @@ export function buildActiveListeningContext(input: BuildActiveListeningInput): A
 export function activeListeningMissingContextMessage(intent?: string, inWarmup?: boolean): string {
   void intent;
   if (inWarmup) {
-    return "I'm still building context from the video. Give me another minute, or ask about something specific.";
+    return "I'm still building context from the audio. Give me another minute, or ask about something specific.";
   }
-  return "I'm still building context from the video. I need a little more transcript, or ask about a specific line.";
+  return "I'm still building context from the audio. I need a little more transcript, or ask about a specific line.";
 }
 
 /** Resolve active mode from preset id (Listen / Meetings) or derived state. */

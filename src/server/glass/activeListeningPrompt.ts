@@ -1,5 +1,7 @@
 /**
  * Active Listening — server-side prompt block (mirrors desktop-glass guidance).
+ *
+ * SYNC: desktop-glass/src/shared/listenModePersona.ts
  */
 
 export type ActiveListeningIntent =
@@ -67,6 +69,34 @@ export interface ActiveListeningContextPayload {
   };
 }
 
+const LISTEN_MODE_PERSONA_NAME = "IIVO Listen Mode Thought Partner";
+
+function getListenModePersonaCore(): string {
+  return [
+    `You are the ${LISTEN_MODE_PERSONA_NAME}.`,
+    "You listen alongside the user to media or workflow audio — videos, podcasts, webinars, courses, or system audio.",
+    "Your job is to notice meaningful ideas, explain why they matter, and answer questions grounded in what was actually said.",
+    "Sound like a thoughtful person sitting next to them — not a notification bot, coach, or action planner.",
+    "Default behavior: stay quiet unless you have something specific and grounded to add.",
+    "When you speak: quote or paraphrase the transcript, name the idea clearly, and explain why it matters.",
+    "Use \"the speaker\" unless channel or title appears in media context. Never identify people from faces.",
+    "Do not invent quotes, names, claims, or audio the transcript does not support.",
+  ].join(" ");
+}
+
+function getListenModePersonaHardRules(): string[] {
+  return [
+    "Stay quiet unless the moment is grounded and worth surfacing.",
+    "Do not identify people from facial recognition or screenshots.",
+    "Do not claim microphone input in Listen mode — system audio only.",
+    "Do not say \"your AI tool\" unless the user goal context mentions an AI tool.",
+    "Do not surface ads, sponsor reads, or intros as main insights.",
+    "Do not lead with action buttons or \"should we take action\" phrasing.",
+    "Do not invent transcript lines or speaker names.",
+    "Use source-agnostic language — never \"YouTube Mode\" or assume video-only.",
+  ];
+}
+
 const SHARED =
   "Active Listening: answer about what is happening RIGHT NOW using recent transcript/context. " +
   "Do not invent audio, video, or customer statements. If unsupported, say what is missing. " +
@@ -74,7 +104,7 @@ const SHARED =
 
 const LISTEN_INTENT_HINTS: Partial<Record<ActiveListeningIntent, string>> = {
   ask_thoughts:
-    "Give a thoughtful take grounded in transcript. Say what the speaker appears to argue and why it matters.",
+    "Give a thoughtful take grounded in transcript. Quote or paraphrase specific lines. Explain why it matters.",
   explain_current_moment: "Explain what was meant using specific terms from transcript.",
   agree_disagree: "Balanced take — separate speaker claims from your interpretation.",
   apply_current_moment: "Explain how the point might apply, grounded in what was said.",
@@ -84,23 +114,78 @@ const LISTEN_INTENT_HINTS: Partial<Record<ActiveListeningIntent, string>> = {
   what_did_i_miss: "Key points from recent transcript — specific, not generic.",
 };
 
+function buildListenInterruptPersonaBlock(
+  ctx: ActiveListeningContextPayload,
+  intent: ActiveListeningIntent,
+): string {
+  const lines: string[] = [
+    getListenModePersonaCore(),
+    "",
+    "Hard rules:",
+    ...getListenModePersonaHardRules().map((r) => `- ${r}`),
+  ];
+
+  const cm = ctx.currentMoment;
+  if (cm?.momentContextStatus === "thin") {
+    lines.push(
+      "",
+      'Context is thin — tell the user: "I\'m still building context from the audio. I need a little more transcript, or ask about a specific line."',
+    );
+  } else if (cm?.momentContextStatus === "stale") {
+    lines.push(
+      "",
+      "Start by noting you are answering from the last captured part and the content may have moved on.",
+    );
+  } else if (cm?.momentContextStatus === "paused") {
+    lines.push("", "Answering from the last captured moment — the audio may have paused.");
+  } else if (cm?.momentContextStatus === "ready") {
+    lines.push("", "Use the recent transcript window (last ~30–120 seconds) as your primary source.");
+  }
+
+  const hint = LISTEN_INTENT_HINTS[intent];
+  if (hint) {
+    lines.push("", `Intent (${intent}):`, hint);
+  }
+
+  lines.push(
+    "",
+    "Answer template:",
+    "- If ready: quote or paraphrase what was said → your take → why it matters.",
+    "- If thin: say you need more transcript; invite a specific line or wait for more audio.",
+    "- If stale: note you are answering from the last captured part; the content may have moved on.",
+  );
+
+  return lines.join("\n");
+}
+
 export function buildActiveListeningPromptBlock(
   ctx: ActiveListeningContextPayload,
   prompt: string,
 ): string {
-  const lines: string[] = [SHARED, "", `Active mode: ${ctx.activeMode}`];
+  const lines: string[] =
+    ctx.activeMode === "listen"
+      ? [getListenModePersonaCore(), "", `Active mode: ${ctx.activeMode}`]
+      : [SHARED, "", `Active mode: ${ctx.activeMode}`];
+
   if (ctx.contextThin) {
     lines.push(
       "",
-      'Context is thin — tell the user: "I\'m still building context from the video. I need a little more transcript, or ask about a specific line."',
+      'Context is thin — tell the user: "I\'m still building context from the audio. I need a little more transcript, or ask about a specific line."',
     );
+    if (ctx.activeMode === "listen") {
+      const intent = ctx.detectedIntent ?? "general_contextual";
+      lines.push("", "Persona:", buildListenInterruptPersonaBlock(ctx, intent));
+    }
     return lines.join("\n");
   }
 
   if (ctx.currentMoment) {
     const cm = ctx.currentMoment;
+    lines.push("", `Current moment status: ${cm.momentContextStatus ?? "ready"}`);
     if (cm.momentContextStatus === "stale") {
-      lines.push("", "Note: video may have moved on — answer from last captured part.");
+      lines.push(
+        "Start your answer by noting you are answering from the last captured part and the content may have moved on.",
+      );
     }
     if (cm.recentMomentTranscript?.trim()) {
       lines.push("", "Current moment transcript:", cm.recentMomentTranscript.trim().slice(-1400));
@@ -122,8 +207,13 @@ export function buildActiveListeningPromptBlock(
   if (ctx.lastAnswer?.trim()) lines.push("", "Last answer (do not repeat structure):", ctx.lastAnswer.slice(0, 280));
 
   const intent = ctx.detectedIntent ?? "general_contextual";
-  const hint = ctx.activeMode === "listen" ? LISTEN_INTENT_HINTS[intent] : undefined;
-  if (hint) lines.push("", "Intent guidance:", hint);
+
+  if (ctx.activeMode === "listen") {
+    lines.push("", "Persona:", buildListenInterruptPersonaBlock(ctx, intent));
+  } else {
+    const hint = LISTEN_INTENT_HINTS[intent];
+    if (hint) lines.push("", "Intent guidance:", hint);
+  }
 
   if (ctx.activeMode === "meetings" && intent === "sales_coaching") {
     lines.push("", "Suggest 1–2 short sentences to say next — no pressure, no fabricated quotes.");
@@ -154,3 +244,6 @@ export function buildActiveListeningPromptBlock(
   }
   return lines.join("\n");
 }
+
+/** Exported for contract tests — mirrors desktop persona name. */
+export { LISTEN_MODE_PERSONA_NAME, getListenModePersonaCore, getListenModePersonaHardRules };

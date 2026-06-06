@@ -178,7 +178,7 @@ import {
   initialListenMomentEngineState,
   type ListenMoment,
 } from "../shared/listenMomentTypes.ts";
-import { buildListenThoughtFeedContent, listenThoughtFeedBodies } from "../shared/listenThoughtCards.ts";
+import { listenThoughtFeedBodies } from "../shared/listenThoughtCards.ts";
 import {
   decideListenCardSurface,
   type ListenCardSurfaceDecision,
@@ -596,7 +596,7 @@ function clearListenCardState(): void {
 }
 
 function upsertListenInsightCard(moment: ListenMoment, surfaceDecision: ListenCardSurfaceDecision): void {
-  const feed = listenThoughtFeedBodies(moment);
+  const feed = listenThoughtFeedBodies(moment, state.mediaContext);
   if (surfaceDecision === "update_existing" && listenMomentRuntime.activeCardId) {
     state.commandFeed = state.commandFeed.map((item) =>
       item.id === listenMomentRuntime.activeCardId
@@ -671,6 +671,7 @@ async function processListenModeChunk(newText: string, tags?: string[]): Promise
     nowMs,
     idFactory: () => `lm-${nowMs}-${Math.random().toString(36).slice(2, 8)}`,
     segmentKind: segment.kind,
+    mediaContext: state.mediaContext,
   });
 
   const surfaceContext = {
