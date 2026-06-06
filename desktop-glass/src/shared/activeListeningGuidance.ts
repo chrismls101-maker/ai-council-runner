@@ -13,15 +13,27 @@ const SHARED_RULES =
   "If the transcript does not support a claim, say what is missing. Keep answers short enough to use live.";
 
 const LISTEN_INTENT_GUIDANCE: Partial<Record<ActiveListeningIntent, string>> = {
+  ask_thoughts:
+    "Give your thoughtful take on what the speaker just said. Quote or paraphrase specific lines from the recent transcript. Explain why it matters. Do not ask the user to take action unless they asked for it.",
   explain_current_moment:
-    "Explain the concept or step from the recent transcript/media. Use specific terms from what was just said. If the transcript is thin, say you need more recent audio context.",
+    "Explain what the speaker meant using specific terms from the recent transcript/media. Say what they appear to be arguing and why it matters.",
+  agree_disagree:
+    "Give a balanced take. Separate what the speaker said (from transcript) from your interpretation. Do not overclaim certainty. Do not invent quotes.",
+  apply_current_moment:
+    "Explain how the recent point might apply in general terms. Ground it in what was actually said. Do not assume a specific product unless the user or transcript mentions it.",
   summarize_recent:
-    "Extract 3–5 key points from the last few minutes of transcript. Mention specific terms/topics heard. If thin, list what details are missing.",
+    "Extract 3–5 key points from the last few minutes of transcript. Mention specific terms/topics heard.",
+  what_did_i_miss:
+    "Summarize the most important ideas from the recent transcript window. Be specific — no generic advice.",
   create_asset:
-    "Generate the requested asset (script, outline, checklist, plan) using ONLY content from the recent transcript. Do not pad with generic advice.",
+    "Generate the requested asset using ONLY content from the recent transcript. Do not pad with generic advice.",
+  create_script:
+    "Write a short script grounded in what the speaker just said. Use their key phrases where possible.",
   prompt_generation:
     "Create a practical prompt the user can paste into their AI tool, grounded in the recent transcript moment.",
   action_steps:
+    "Turn the recent content into concrete action steps tied to what was actually said.",
+  turn_into_action:
     "Turn the recent content into concrete action steps tied to what was actually said.",
   save_moment:
     "Confirm what to save and summarize the moment in one sentence from the transcript.",
@@ -47,8 +59,40 @@ export function buildActiveListeningGuidance(
   const lines: string[] = [SHARED_RULES, "", `Active mode: ${ctx.activeMode}`];
 
   if (ctx.contextThin) {
-    lines.push("", "Context is thin — tell the user: \"I need more recent transcript to answer that.\"");
+    lines.push("", "Context is thin — tell the user: \"I'm still building context from the video. I need a little more transcript, or ask about a specific line.\"");
     return lines.join("\n");
+  }
+
+  if (ctx.currentMoment) {
+    const cm = ctx.currentMoment;
+    lines.push("", `Current moment status: ${cm.momentContextStatus}`);
+    if (cm.momentContextStatus === "stale") {
+      lines.push(
+        "Start your answer by noting you are answering from the last captured part and the video may have moved on.",
+      );
+    }
+    if (cm.recentMomentTranscript.trim()) {
+      lines.push("", "Current moment transcript (last ~2 minutes, system audio):", cm.recentMomentTranscript.trim().slice(-1400));
+    }
+    if (cm.activeMoment) {
+      lines.push("", "Active moment:", `- ${cm.activeMoment.summary}`, `- Anchors: ${cm.activeMoment.anchors.slice(0, 2).join(" | ")}`);
+    }
+    if (cm.recentMatureMoment && cm.recentMatureMoment.id !== cm.activeMoment?.id) {
+      lines.push("", "Recent mature moment:", `- ${cm.recentMatureMoment.summary}`);
+    }
+    if (cm.latestSurfacedThought) {
+      lines.push("", "Latest IIVO thought (if any):", cm.latestSurfacedThought.slice(0, 400));
+    }
+    if (cm.savedMomentsSilently.length) {
+      lines.push("", "Silently saved moments (for report):");
+      for (const s of cm.savedMomentsSilently.slice(-3)) {
+        lines.push(`- ${s.summary.slice(0, 120)}`);
+      }
+    }
+    lines.push(
+      "",
+      "Speaker/source: use \"the speaker\" unless channel/title is in media context. Never claim identity from faces.",
+    );
   }
 
   if (ctx.recentTranscriptWindow.trim()) {

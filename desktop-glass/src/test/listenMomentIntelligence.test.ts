@@ -12,6 +12,8 @@ import {
   LISTEN_MIN_TRANSCRIPT_CHARS,
   shouldSurfaceListenMoment,
 } from "../shared/listenMomentTiming.ts";
+import { withMomentMaturity } from "../shared/listenMomentMaturity.ts";
+import { DEFAULT_LISTEN_WARMUP_MS } from "../shared/listenMomentTypes.ts";
 import type { ListenMoment, ListenSurfaceContext } from "../shared/listenMomentTypes.ts";
 import {
   buildListenReportSections,
@@ -50,8 +52,24 @@ function readyMoment(overrides: Partial<ListenMoment> = {}): ListenMoment {
   };
 }
 
+function matureReadyMoment(overrides: Partial<ListenMoment> = {}): ListenMoment {
+  const nowMs = Date.now();
+  const anchor =
+    "Distribution may matter more than software speed for early founders building in public.";
+  const base = readyMoment({
+    transcriptAnchors: [anchor, `${anchor} Repeated for emphasis.`, `${anchor} Third anchor line.`],
+    firstSeenAt: new Date(nowMs - 50_000).toISOString(),
+    lastUpdatedAt: new Date(nowMs).toISOString(),
+    suggestedThought: `The important part here is that the speaker says ${anchor.charAt(0).toLowerCase()}${anchor.slice(1)}`,
+    reasonSelected: "This stood out as a high-signal idea in the recent transcript.",
+    status: "ready",
+    ...overrides,
+  });
+  return withMomentMaturity(base, nowMs, "content");
+}
+
 test("thin transcript → stay quiet (wait_for_more_context)", () => {
-  const moment = readyMoment();
+  const moment = matureReadyMoment();
   const result = shouldSurfaceListenMoment(
     moment,
     baseSurfaceContext({ recentTranscriptChars: LISTEN_MIN_TRANSCRIPT_CHARS - 1 }),
@@ -60,35 +78,85 @@ test("thin transcript → stay quiet (wait_for_more_context)", () => {
 });
 
 test("developing idea → wait", () => {
-  const moment = readyMoment({ status: "developing", confidence: 0.6 });
+  const moment = withMomentMaturity(
+    readyMoment({ status: "developing", confidence: 0.6, transcriptAnchors: ["Still forming."] }),
+    Date.now(),
+    "content",
+  );
   const result = shouldSurfaceListenMoment(moment, baseSurfaceContext());
   assert.equal(result.decision, "wait_for_more_context");
 });
 
 test("high-value ready moment → surface in Balanced", () => {
-  const moment = readyMoment();
-  const result = shouldSurfaceListenMoment(moment, baseSurfaceContext({ attentionLevel: "balanced" }));
+  const moment = matureReadyMoment();
+  const now = Date.now();
+  const result = shouldSurfaceListenMoment(
+    moment,
+    baseSurfaceContext({
+      attentionLevel: "balanced",
+      nowMs: now,
+      listenStartedMs: now - DEFAULT_LISTEN_WARMUP_MS - 5_000,
+      listenWarmupMs: DEFAULT_LISTEN_WARMUP_MS,
+    }),
+  );
   assert.equal(result.decision, "surface_now");
 });
 
+test("warm-up phase → save silently", () => {
+  const moment = matureReadyMoment();
+  const now = Date.now();
+  const result = shouldSurfaceListenMoment(
+    moment,
+    baseSurfaceContext({
+      nowMs: now,
+      listenStartedMs: now - 30_000,
+      listenWarmupMs: DEFAULT_LISTEN_WARMUP_MS,
+    }),
+  );
+  assert.equal(result.decision, "save_silently");
+  assert.match(result.reason, /warm-up/i);
+});
+
+test("ad segment → save silently", () => {
+  const moment = matureReadyMoment({ segmentKind: "ad" });
+  const now = Date.now();
+  const result = shouldSurfaceListenMoment(
+    moment,
+    baseSurfaceContext({
+      nowMs: now,
+      listenStartedMs: now - DEFAULT_LISTEN_WARMUP_MS - 5_000,
+      listenWarmupMs: DEFAULT_LISTEN_WARMUP_MS,
+      segmentKind: "ad",
+      segmentSuppressProactive: true,
+    }),
+  );
+  assert.equal(result.decision, "save_silently");
+});
+
 test("Quiet mode → save silently", () => {
-  const moment = readyMoment();
+  const moment = matureReadyMoment();
   const result = shouldSurfaceListenMoment(moment, baseSurfaceContext({ attentionLevel: "quiet" }));
   assert.equal(result.decision, "save_silently");
 });
 
 test("cooldown active → save silently", () => {
-  const moment = readyMoment();
+  const moment = matureReadyMoment();
   const now = Date.now();
   const result = shouldSurfaceListenMoment(
     moment,
-    baseSurfaceContext({ nowMs: now, lastSurfaceMs: now - 30_000, attentionLevel: "balanced" }),
+    baseSurfaceContext({
+      nowMs: now,
+      lastSurfaceMs: now - 30_000,
+      attentionLevel: "balanced",
+      listenStartedMs: now - DEFAULT_LISTEN_WARMUP_MS - 5_000,
+      listenWarmupMs: DEFAULT_LISTEN_WARMUP_MS,
+    }),
   );
   assert.equal(result.decision, "save_silently");
 });
 
 test("stale moment → mark_stale", () => {
-  const moment = readyMoment({ status: "stale" });
+  const moment = matureReadyMoment({ status: "stale" });
   const result = shouldSurfaceListenMoment(moment, baseSurfaceContext());
   assert.equal(result.decision, "mark_stale");
 });
@@ -115,7 +183,7 @@ test("generated thought updates when more transcript arrives", () => {
 });
 
 test("repeated thought is suppressed", () => {
-  const moment = readyMoment();
+  const moment = matureReadyMoment();
   const thought = moment.suggestedThought!;
   const result = shouldSurfaceListenMoment(
     moment,
@@ -164,9 +232,14 @@ test("Listen mode excludes microphone chunks from context", () => {
   assert.ok(!ctx?.recentTranscriptWindow.includes("privately"));
 });
 
+test("missing context returns warm-up message when inWarmup", () => {
+  const msg = activeListeningMissingContextMessage(undefined, true);
+  assert.match(msg, /building context from the video/i);
+});
+
 test("missing context returns missing-context response", () => {
   const msg = activeListeningMissingContextMessage(classifyActiveListeningIntent("How does that work?"));
-  assert.match(msg, /more recent transcript/i);
+  assert.match(msg, /building context from the video/i);
 });
 
 test("report includes silently saved moments", () => {
@@ -204,11 +277,14 @@ test("report includes silently saved moments", () => {
 });
 
 test("pickBestListenMoment prefers ready high-importance moments", () => {
-  const moments = [
+  const nowMs = Date.now();
+  const mature = matureReadyMoment({ id: "b", importance: "high" });
+  const immature = withMomentMaturity(
     readyMoment({ id: "a", importance: "low", status: "developing" }),
-    readyMoment({ id: "b", importance: "high", status: "ready" }),
-  ];
-  const best = pickBestListenMomentForSurface(moments);
+    nowMs,
+    "content",
+  );
+  const best = pickBestListenMomentForSurface([immature, mature]);
   assert.equal(best?.id, "b");
 });
 

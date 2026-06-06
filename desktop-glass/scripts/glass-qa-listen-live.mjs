@@ -47,9 +47,13 @@ import {
   runServerPreflight,
   sessionHasRawAudioOrBase64,
   summarizeMomentStats,
+  gradeListenHarnessQuality,
+  countDuplicateTranscriptLines,
+  LISTEN_INTERRUPT_QA_QUESTIONS,
   buildListenLiveAskSession,
   captureMacMediaContext,
   mediaContextFromSession,
+  openYouTubeForListenTest,
   appendResult,
   writeReport,
   sleep,
@@ -62,10 +66,13 @@ import {
   closeGlassSession,
   launchGlassForListenLive,
   printSetupInstructions,
+  readGlassState,
 } from "./lib/glass-listen-live-glass.mjs";
 
 const cli = parseListenLiveArgs();
-const { minutes, manual, attach, keepGlass } = cli;
+const { minutes, manual, attach, keepGlass, warmupSeconds } = cli;
+const listenWarmupMs =
+  warmupSeconds != null ? warmupSeconds * 1000 : 120_000;
 const apiUrl = (process.env.IIVO_API_URL ?? "http://localhost:3001").replace(/\/$/, "");
 const sessionsPath = resolveSessionsPath();
 const runStarted = Date.now();
@@ -105,6 +112,21 @@ const summary = {
   gptAnswers: 0,
   failures: [],
   results: [],
+  listenWarmupMs,
+  segmentCounts: {},
+  firstProactiveCardMs: null,
+  suppressedMoments: [],
+  cardQualityFailures: [],
+  cardQualityWarnings: [],
+  maxSimultaneousCards: 0,
+  cardsSurfaced: 0,
+  duplicateTranscriptLines: 0,
+  listeningLimitFired: false,
+  listeningLimitFiredAtMs: null,
+  actionFirstCardCount: 0,
+  vagueCardCount: 0,
+  interruptQuestionsAsked: 0,
+  warmupRespected: true,
 };
 
 function log(msg) {
@@ -146,16 +168,35 @@ async function askLive(question, sessionPayload) {
   throw new Error("ask failed");
 }
 
-async function waitForTranscriptChunks(minChunks = 2, timeoutMs = 10 * 60_000) {
+async function waitForTranscriptChunks(minChunks = 2, timeoutMs = 10 * 60_000, commandPage = null) {
   const deadline = Date.now() + timeoutMs;
   let lastCount = 0;
+  let lastSttLog = "";
   while (Date.now() < deadline && Date.now() < runEnds) {
     const store = readSessionsStore(sessionsPath);
     const session = getActiveSession(store);
     const chunks = collectSystemAudioChunks(session);
     if (chunks.length !== lastCount) {
       log(`  … ${chunks.length} system_audio transcript chunk(s) in session`);
+      if (chunks.length > 0) {
+        const sample = (chunks[chunks.length - 1].text ?? chunks[chunks.length - 1].title ?? "").slice(0, 80);
+        log(`  … latest: "${sample}${sample.length >= 80 ? "…" : ""}"`);
+      }
       lastCount = chunks.length;
+    }
+    if (commandPage) {
+      try {
+        const st = await readGlassState(commandPage);
+        const err = st.stt?.lastError ?? st.lastError ?? "";
+        const elapsed = st.stt?.listeningElapsedMs ?? 0;
+        const statusLine = `listening ${Math.round(elapsed / 1000)}s · transcribing=${st.stt?.transcribing ? "yes" : "no"}${err ? ` · ${err}` : ""}`;
+        if (statusLine !== lastSttLog) {
+          log(`  … ${statusLine}`);
+          lastSttLog = statusLine;
+        }
+      } catch {
+        /* Glass may have closed */
+      }
     }
     if (chunks.length >= minChunks) return chunks;
     await sleep(5000);
@@ -181,6 +222,17 @@ function refreshMomentMetrics(moments, session) {
   summary.momentsSavedSilently = stats.savedSilently + harnessRuntime.savedSilently.length;
   summary.momentsStale = stats.stale + harnessRuntime.staleMoments.length;
   summary.generatedThoughts = harnessRuntime.generatedThoughts;
+  summary.maxSimultaneousCards = harnessRuntime.maxSimultaneousCards;
+  summary.cardsSurfaced = harnessRuntime.cardsSurfaced;
+  summary.actionFirstCardCount = harnessRuntime.actionFirstCardCount;
+  summary.vagueCardCount = harnessRuntime.vagueCardCount;
+  if (session?.events) {
+    const limitEvent = session.events.find((e) => e.kind === "listening_limit_reached");
+    if (limitEvent) {
+      summary.listeningLimitFired = true;
+      summary.listeningLimitFiredAtMs = Date.parse(limitEvent.timestamp);
+    }
+  }
 }
 
 function buildQaReport(listenReportMd) {
@@ -188,6 +240,7 @@ function buildQaReport(listenReportMd) {
   lines.push("# IIVO Glass — Live Listen Mode QA Report");
   lines.push("");
   lines.push(`Duration target: ${minutes} minutes`);
+  lines.push(`Warm-up duration: ${summary.listenWarmupMs / 1000}s`);
   lines.push(`Finished: ${new Date().toISOString()}`);
   lines.push(`Results JSONL: ${RESULTS_JSONL}`);
   lines.push(`Listen Report: ${LISTEN_REPORT_MD}`);
@@ -222,7 +275,17 @@ function buildQaReport(listenReportMd) {
   lines.push(`| Surfaced | ${summary.momentsSurfaced} |`);
   lines.push(`| Saved silently | ${summary.momentsSavedSilently} |`);
   lines.push(`| Stale | ${summary.momentsStale} |`);
+  lines.push(`| Cards surfaced (harness) | ${summary.cardsSurfaced} |`);
+  lines.push(`| Max simultaneous cards | ${summary.maxSimultaneousCards} |`);
+  lines.push(`| Duplicate transcript lines | ${summary.duplicateTranscriptLines} |`);
+  lines.push(`| Listening limit fired | ${summary.listeningLimitFired ? "yes" : "no"} |`);
+  lines.push(`| Action-first cards | ${summary.actionFirstCardCount} |`);
+  lines.push(`| Vague cards | ${summary.vagueCardCount} |`);
+  lines.push(`| Warm-up respected | ${summary.warmupRespected ? "yes" : "no"} |`);
+  lines.push(`| First proactive card | ${summary.firstProactiveCardMs != null ? `${Math.round(summary.firstProactiveCardMs / 1000)}s after start` : "_none_"} |`);
+  lines.push(`| Segment counts | ${JSON.stringify(summary.segmentCounts)} |`);
   lines.push(`| Questions asked | ${summary.questionsAsked} |`);
+  lines.push(`| Interrupt questions (current moment) | ${summary.interruptQuestionsAsked} |`);
   lines.push(`| GPT-5.5 answers | ${summary.gptAnswers} |`);
   lines.push("");
 
@@ -251,8 +314,27 @@ function buildQaReport(listenReportMd) {
   if (summary.generatedThoughts.length) {
     lines.push("## IIVO thoughts (harness)");
     for (const t of summary.generatedThoughts.slice(-15)) {
-      lines.push(`- [${t.disposition}] ${t.thought} _(${t.reasonSelected})_`);
+      const cardNote =
+        t.disposition === "surfaced"
+          ? ` · card vague=${t.cardVague ? "yes" : "no"} · fullText=${t.hasFullText !== false ? "yes" : "no"}`
+          : "";
+      lines.push(`- [${t.disposition}] ${t.thought} _(${t.reasonSelected})_${cardNote}`);
     }
+    lines.push("");
+  }
+
+  if (summary.suppressedMoments.length) {
+    lines.push("## Moments suppressed");
+    for (const s of summary.suppressedMoments.slice(-12)) {
+      lines.push(`- ${s.reason}${s.segmentKind ? ` [${s.segmentKind}]` : ""}`);
+    }
+    lines.push("");
+  }
+
+  if (summary.cardQualityFailures.length || summary.cardQualityWarnings.length) {
+    lines.push("## Card / timing quality");
+    summary.cardQualityFailures.forEach((f) => lines.push(`- **FAIL:** ${f}`));
+    summary.cardQualityWarnings.forEach((w) => lines.push(`- **WARN:** ${w}`));
     lines.push("");
   }
 
@@ -293,7 +375,8 @@ function buildQaReport(listenReportMd) {
     summary.realSystemAudio &&
     summary.micStayedOff &&
     !summary.rawAudioStored &&
-    weak === 0;
+    weak === 0 &&
+    summary.cardQualityFailures.length === 0;
 
   lines.push("## Verdict");
   lines.push(passed ? "**PASS** — Live Listen workflow verified." : "**FAIL or INCOMPLETE** — see above.");
@@ -339,6 +422,9 @@ if (!manual) {
       : await launchGlassForListenLive({ apiUrl, webUrl, log });
     summary.glassLaunched = glassSession.launched;
     log("");
+    log("Opening YouTube now — press play while Glass runs setup…");
+    openYouTubeForListenTest(log);
+    log("");
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     summary.failures.push(
@@ -359,7 +445,7 @@ if (!manual) {
   log(`WARN: ${sessionsPath} not found — open IIVO Glass first.\n`);
 }
 
-async function waitForYouTubeFrontmost(maxWaitMs = 120_000) {
+async function waitForYouTubeFrontmost(maxWaitMs = 20_000) {
   if (manual) {
     log("STEP 1 — Open YouTube video (tab frontmost). Example:");
     log('  Silicon Valley Girl — "$4 billion founder: the next three years will make 100 new founders rich"');
@@ -367,22 +453,30 @@ async function waitForYouTubeFrontmost(maxWaitMs = 120_000) {
     return captureMacMediaContext();
   }
 
-  log("STEP 1 — Open YouTube/video tab frontmost (harness will detect it)…");
+  log("STEP 1 — YouTube/video tab (opened at launch — press play if needed)…");
+  if (!glassSession) openYouTubeForListenTest(log);
+  await sleep(1500);
+  const captured = captureMacMediaContext();
+  if (captured.media?.sourceType === "youtube" || captured.windowTitle?.includes("YouTube")) {
+    log(`  Detected: ${captured.media?.title ?? captured.windowTitle}`);
+    return captured;
+  }
+
   const deadline = Date.now() + maxWaitMs;
   let lastLog = 0;
   while (Date.now() < deadline) {
-    const captured = captureMacMediaContext();
-    if (captured.media?.sourceType === "youtube" || captured.windowTitle?.includes("YouTube")) {
-      log(`  Detected: ${captured.media?.title ?? captured.windowTitle}`);
-      return captured;
+    const next = captureMacMediaContext();
+    if (next.media?.sourceType === "youtube" || next.windowTitle?.includes("YouTube")) {
+      log(`  Detected: ${next.media?.title ?? next.windowTitle}`);
+      return next;
     }
-    if (Date.now() - lastLog > 15_000) {
-      log("  … keep your video tab frontmost with audio playing");
+    if (Date.now() - lastLog > 8_000) {
+      log("  … bring Chrome/YouTube frontmost and press play");
       lastLog = Date.now();
     }
-    await sleep(3000);
+    await sleep(1500);
   }
-  log("  WARN: YouTube not detected — continuing with best-effort context");
+  log("  WARN: YouTube not detected — continuing (audio may still work)");
   return captureMacMediaContext();
 }
 
@@ -450,7 +544,11 @@ if (glassSession) {
 
 log("\nSTEP 4 — Waiting for ≥2 real system_audio transcript chunks…");
 log("  (Not simulated — chunks must appear in glass-sessions.json)\n");
-const chunks = await waitForTranscriptChunks(2, Math.min(10 * 60_000, runEnds - Date.now()));
+const chunks = await waitForTranscriptChunks(
+  2,
+  Math.min(10 * 60_000, runEnds - Date.now()),
+  glassSession?.pages?.command ?? null,
+);
 summary.transcriptChunks = chunks.length;
 summary.transcriptSource = chunks.length > 0 ? "system_audio" : "none";
 summary.realSystemAudio = chunks.length >= 2;
@@ -497,6 +595,7 @@ log(`\nOK: ${chunks.length} real system_audio chunks · mic off: ${summary.micSt
 
 let runtimeMoments = evaluateListenMomentsFromChunks(chunks);
 let fallbackIndex = 0;
+let interruptIndex = 0;
 let nextMomentEval = Date.now() + 40_000;
 let lastChunkMs = Date.now();
 let lastAnalysis = { decision: "wait_for_more_context", reason: "Starting listen loop.", thought: undefined };
@@ -512,19 +611,31 @@ while (Date.now() < runEnds) {
   refreshPrivacyMetrics(session);
 
   const transcriptText = freshChunks.map((c) => (c.text ?? c.title ?? "").trim()).join(" ");
+  summary.duplicateTranscriptLines = countDuplicateTranscriptLines(freshChunks);
   runtimeMoments = evaluateListenMomentsFromChunks(freshChunks, runtimeMoments);
   refreshMomentMetrics(runtimeMoments, session);
 
   if (Date.now() >= nextMomentEval) {
+    const latestChunk = freshChunks.at(-1);
+    const latestText = (latestChunk?.text ?? latestChunk?.title ?? "").trim();
+    if (!harnessRuntime.listenStartedMs) harnessRuntime.listenStartedMs = Date.now();
+
     lastAnalysis = analyzeListenMomentWithHarness({
       moments: runtimeMoments,
       runtime: harnessRuntime,
       recentTranscriptChars: transcriptText.length,
       lastChunkMs,
       userReceivingAnswer: false,
+      listenWarmupMs,
+      newTranscript: latestText,
+      visibleText: media?.visibleTextSummary,
+      mediaTitle: media?.title ?? summary.extractedTitle ?? undefined,
     });
 
     applyHarnessMomentDecision(lastAnalysis, harnessRuntime);
+    summary.segmentCounts = { ...harnessRuntime.segmentCounts };
+    summary.firstProactiveCardMs = harnessRuntime.firstProactiveCardMs ?? summary.firstProactiveCardMs;
+    summary.suppressedMoments = harnessRuntime.suppressedMoments.slice(-20);
     refreshMomentMetrics(runtimeMoments, session);
 
     summary.momentEvaluations.push({
@@ -549,13 +660,30 @@ while (Date.now() < runEnds) {
     (summary.questionsAsked === 0 && transcriptText.length >= 80);
 
   if (shouldAsk) {
-    const generated = pickContextAwareQuestion({
-      moments: runtimeMoments,
-      transcriptText,
-      runtime: harnessRuntime,
-      allowReport: nearEnd,
-      fallbackIndex,
-    });
+    let generated = null;
+    if (
+      interruptIndex < LISTEN_INTERRUPT_QA_QUESTIONS.length &&
+      transcriptText.length >= 80
+    ) {
+      const question = LISTEN_INTERRUPT_QA_QUESTIONS[interruptIndex++];
+      generated = {
+        question,
+        reasonSelected: "User-like Listen interruption — current moment ask.",
+        transcriptAnchors: [transcriptText.slice(-220)],
+        expectedAnswerAnchors: [transcriptText.slice(-120)],
+        disposition: "ask_now",
+        source: "interrupt",
+      };
+      summary.interruptQuestionsAsked += 1;
+    } else {
+      generated = pickContextAwareQuestion({
+        moments: runtimeMoments,
+        transcriptText,
+        runtime: harnessRuntime,
+        allowReport: nearEnd,
+        fallbackIndex,
+      });
+    }
 
     if (generated) {
       fallbackIndex += 1;
@@ -649,6 +777,25 @@ const listenReportMd = buildHarnessListenReport({
 });
 writeReport(listenReportMd, LISTEN_REPORT_MD);
 
+const cardQuality = gradeListenHarnessQuality({
+  runtime: harnessRuntime,
+  listenWarmupMs,
+  duplicateTranscriptLines: countDuplicateTranscriptLines(finalChunks),
+  listeningLimitFired: summary.listeningLimitFired,
+  listeningElapsedMs: Date.now() - runStarted,
+  maxListeningMin: 120,
+  micChunks: summary.micChunks,
+});
+summary.cardQualityFailures = cardQuality.failures;
+summary.cardQualityWarnings = cardQuality.warnings;
+summary.maxSimultaneousCards = Math.max(summary.maxSimultaneousCards, cardQuality.maxSimultaneousCards);
+summary.warmupRespected = !cardQuality.cardTooEarly;
+if (cardQuality.failures.length) {
+  for (const f of cardQuality.failures) {
+    summary.failures.push(diagnoseFailure("listen_card_quality", f, "Review warm-up, segment filter, and card copy."));
+  }
+}
+
 if (!summary.results.some((r) => /report/i.test(r.question ?? ""))) {
   summary.questionsAsked += 1;
   log(`Q${summary.questionsAsked}: Give me the report`);
@@ -681,12 +828,14 @@ log(`  QA Report: ${REPORT_MD}`);
 log(`  Listen Report: ${LISTEN_REPORT_MD}`);
 log(`  JSONL: ${RESULTS_JSONL}`);
 
+const weakCount = summary.results.filter((r) => r.verdict === "weak").length;
 const exitFail =
   weakCount > 0 ||
   !summary.micStayedOff ||
   !summary.realSystemAudio ||
   !summary.preflightOk ||
-  summary.rawAudioStored;
+  summary.rawAudioStored ||
+  summary.cardQualityFailures.length > 0;
 
 if (!keepGlass && glassSession) {
   await closeGlassSession(glassSession);

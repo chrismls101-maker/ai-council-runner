@@ -14,6 +14,7 @@ import {
 import type { GlassCopilotSessionTypeSetting } from "./copilotSessionType.ts";
 import {
   DEFAULT_LISTEN_ATTENTION_LEVEL,
+  DEFAULT_LISTEN_WARMUP_MS,
   type ListenAttentionLevel,
 } from "./listenMomentTypes.ts";
 
@@ -87,6 +88,14 @@ function parseListenAttentionLevel(value: unknown): ListenAttentionLevel {
     : DEFAULT_LISTEN_ATTENTION_LEVEL;
 }
 
+function parseListenWarmupMs(value: unknown): number {
+  const n =
+    typeof value === "number" && Number.isFinite(value)
+      ? Math.round(value)
+      : DEFAULT_LISTEN_WARMUP_MS;
+  return Math.min(600_000, Math.max(0, n));
+}
+
 /** Build a validated config from an untrusted (persisted/IPC) partial. */
 export function parseCopilotConfig(raw: unknown): GlassCopilotConfig {
   const record = (raw && typeof raw === "object" ? raw : {}) as Partial<GlassCopilotConfig>;
@@ -101,6 +110,7 @@ export function parseCopilotConfig(raw: unknown): GlassCopilotConfig {
     sessionType: parseSessionTypeSetting(record.sessionType),
     reportStyle: parseReportStyle(record.reportStyle),
     listenAttentionLevel: parseListenAttentionLevel(record.listenAttentionLevel),
+    listenWarmupMs: parseListenWarmupMs(record.listenWarmupMs),
   };
 }
 

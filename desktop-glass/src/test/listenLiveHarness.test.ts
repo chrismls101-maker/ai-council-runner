@@ -6,6 +6,7 @@ import {
   applyHarnessMomentDecision,
   createListenHarnessRuntime,
   generateQuestionFromMoment,
+  gradeListenHarnessQuality,
   gradeListenLiveAnswer,
   gradeMediaExtraction,
   hasEnoughTranscriptForQuestion,
@@ -13,26 +14,29 @@ import {
   summarizeMomentStats,
   parseListenLiveCli,
 } from "../shared/listenLiveHarness.ts";
+import { withMomentMaturity } from "../shared/listenMomentMaturity.ts";
 import { extractMediaContext } from "../shared/mediaContextExtract.ts";
 
 function readyMoment(overrides: Partial<ListenMoment> = {}): ListenMoment {
-  const now = new Date().toISOString();
-  return {
+  const nowMs = Date.now();
+  const anchor =
+    "Distribution beats pure software speed when you are an early-stage founder building in public.";
+  const base: ListenMoment = {
     id: "m1",
     type: "key_idea",
     summary: "Distribution beats pure software speed for early founders.",
-    transcriptAnchors: [
-      "Distribution beats pure software speed when you are an early-stage founder building in public.",
-    ],
-    firstSeenAt: now,
-    lastUpdatedAt: now,
+    transcriptAnchors: [anchor, `${anchor} Again.`, `${anchor} Third time.`],
+    firstSeenAt: new Date(nowMs - 50_000).toISOString(),
+    lastUpdatedAt: new Date(nowMs).toISOString(),
     confidence: 0.85,
     importance: "high",
-    suggestedThought: "Useful founder insight about distribution.",
+    suggestedThought:
+      "The important part here is that the speaker says distribution beats pure software speed when you are an early-stage founder building in public.",
     status: "ready",
-    reasonSelected: "High-signal idea.",
+    reasonSelected: "This stood out as a high-signal idea in the recent transcript.",
     ...overrides,
   };
+  return withMomentMaturity(base, nowMs, "content");
 }
 
 test("pickContextAwareQuestion uses moment type, not blind rotation", () => {
@@ -65,20 +69,22 @@ test("hasEnoughTranscriptForQuestion blocks 'turn that into' without context", (
   assert.equal(hasEnoughTranscriptForQuestion("Turn that into action steps.", "x".repeat(140)), true);
 });
 
-test("harness enforces 90s min between surfaced thoughts", () => {
+test("harness enforces min interval between surfaced thoughts", () => {
   const runtime = createListenHarnessRuntime("balanced");
   const now = Date.now();
   runtime.lastSurfaceMs = now - 30_000;
   runtime.surfaceTimestamps.push(now - 30_000);
+  runtime.listenStartedMs = now - 130_000;
 
   const analysis = analyzeListenMomentWithHarness({
     moments: [readyMoment()],
     runtime,
     recentTranscriptChars: 300,
     nowMs: now,
+    listenWarmupMs: 120_000,
   });
   assert.equal(analysis.decision, "save_silently");
-  assert.ok(/90s|Cooldown/i.test(analysis.reason));
+  assert.ok(/90s|Cooldown|Harness|warm-up/i.test(analysis.reason));
 });
 
 test("applyHarnessMomentDecision records surfaced and silent thoughts", () => {
@@ -136,6 +142,28 @@ test("parseListenLiveCli supports manual attach keep-glass", () => {
   assert.equal(cli.manual, true);
   assert.equal(cli.attach, true);
   assert.equal(cli.keepGlass, true);
+});
+
+test("parseListenLiveCli supports warmup override", () => {
+  const cli = parseListenLiveCli(["--minutes", "5", "--warmup-seconds", "30"]);
+  assert.equal(cli.warmupSeconds, 30);
+});
+
+test("gradeListenHarnessQuality fails early proactive card", () => {
+  const runtime = createListenHarnessRuntime("balanced");
+  runtime.listenStartedMs = Date.now() - 60_000;
+  runtime.firstProactiveCardMs = 30_000;
+  runtime.generatedThoughts.push({
+    momentId: "m1",
+    thought: "Early thought",
+    disposition: "surfaced",
+    reasonSelected: "test",
+    at: new Date().toISOString(),
+    cardVague: false,
+    hasFullText: true,
+  });
+  const grade = gradeListenHarnessQuality({ runtime, listenWarmupMs: 120_000 });
+  assert.ok(grade.failures.some((f) => /before warm-up/i.test(f)));
 });
 
 test("summarizeMomentStats counts lifecycle buckets", () => {

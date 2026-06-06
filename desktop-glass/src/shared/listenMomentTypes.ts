@@ -61,7 +61,20 @@ export interface ListenMoment {
   reasonSelected?: string;
   surfacedAt?: string;
   disposition?: ListenMomentDisposition;
+  /** Maturity scoring — updated each evaluation pass. */
+  maturityScore?: number;
+  contextSpanSeconds?: number;
+  anchorCount?: number;
+  topicStability?: number;
+  isStillDeveloping?: boolean;
+  isActionableNow?: boolean;
+  segmentKind?: import("./listenSegmentClassifier.ts").ListenSegmentKind;
+  topicShifted?: boolean;
+  staleBecause?: string;
+  updatedSuggestedThought?: string;
 }
+
+export const DEFAULT_LISTEN_WARMUP_MS = 120_000;
 
 export type SurfaceDecision =
   | "surface_now"
@@ -80,6 +93,13 @@ export interface ListenSurfaceContext {
   userReceivingAnswer: boolean;
   muteSuggestions: boolean;
   surfacesInLast10Min: number;
+  /** When Listen mode started (ms since epoch). */
+  listenStartedMs?: number;
+  /** Observe-only warm-up duration before proactive cards. */
+  listenWarmupMs?: number;
+  /** Current segment classification suppresses proactive cards when true. */
+  segmentSuppressProactive?: boolean;
+  segmentKind?: import("./listenSegmentClassifier.ts").ListenSegmentKind;
 }
 
 export interface ListenMomentEngineState {
@@ -89,6 +109,12 @@ export interface ListenMomentEngineState {
   recentSurfacedTexts: string[];
   surfaceTimestamps: number[];
   silenceReasons: string[];
+  listenStartedMs?: number;
+  lastSegmentKind?: import("./listenSegmentClassifier.ts").ListenSegmentKind;
+  segmentCounts?: Partial<Record<import("./listenSegmentClassifier.ts").ListenSegmentKind, number>>;
+  activeCardId?: string;
+  activeMomentId?: string;
+  queuedMomentIds: string[];
 }
 
 export function initialListenMomentEngineState(): ListenMomentEngineState {
@@ -97,6 +123,7 @@ export function initialListenMomentEngineState(): ListenMomentEngineState {
     recentSurfacedTexts: [],
     surfaceTimestamps: [],
     silenceReasons: [],
+    queuedMomentIds: [],
   };
 }
 

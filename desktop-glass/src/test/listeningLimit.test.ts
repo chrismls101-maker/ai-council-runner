@@ -109,6 +109,45 @@ test("auto-stop fires after response timeout with no user action", () => {
   assert.equal(shouldAutoStopListeningLimit(state, 1_000 + LISTENING_LIMIT_RESPONSE_TIMEOUT_MS), true);
 });
 
+test("60-minute limit does not fire at 3 minutes", () => {
+  assert.equal(
+    shouldTriggerListeningLimit({
+      elapsedMs: 3 * 60_000,
+      maxListeningMin: 60,
+      extensionMs: 0,
+      limitReached: false,
+      listening: true,
+    }),
+    false,
+  );
+});
+
+test("fresh Listen session starts at 0 elapsed — stale elapsed above 1.5x limit is ignored", () => {
+  const maxMin = 120;
+  const staleElapsed = maxMin * 60_000 * 2;
+  assert.equal(isListeningLimitEnabled(maxMin), true);
+  assert.equal(
+    shouldTriggerListeningLimit({
+      elapsedMs: staleElapsed,
+      maxListeningMin: maxMin,
+      extensionMs: 0,
+      limitReached: false,
+      listening: true,
+    }),
+    true,
+  );
+  assert.equal(
+    shouldTriggerListeningLimit({
+      elapsedMs: 0,
+      maxListeningMin: maxMin,
+      extensionMs: 0,
+      limitReached: false,
+      listening: true,
+    }),
+    false,
+  );
+});
+
 test("session event listening_limit_reached is saved", () => {
   const store = new GlassSessionStore();
   store.startSession("Limit test");

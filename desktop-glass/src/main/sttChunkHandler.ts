@@ -14,6 +14,9 @@ import {
 } from "../shared/sttTypes.ts";
 import { saveSessionAudioChunk } from "./audioStorage.ts";
 import { getSttConfig, transcribeWithProvider } from "./sttProvider.ts";
+import {
+  isDuplicateTranscriptChunk,
+} from "../shared/transcriptDedupe.ts";
 import type { WindowContext } from "../shared/windowContextTypes.ts";
 import type { GlassConfig } from "../shared/config.ts";
 
@@ -115,6 +118,24 @@ export async function processSttChunk(
     const ctxFields = deps.eventContextFields();
 
     if (deps.sessionIsLive() && session?.status === "active") {
+      const recentEvents = (session.events ?? [])
+        .filter((e) => e.kind === "transcript_note")
+        .slice(-40);
+      const source = payload.source === "system_audio" ? "system_audio" : "microphone";
+      if (
+        isDuplicateTranscriptChunk(result.text, source, recentEvents)
+      ) {
+        deps.setSttState(
+          buildGlassSttState(config, {
+            ...deps.getSttState(),
+            transcribing: false,
+            lastTranscript: result.text,
+            lastError: undefined,
+          }),
+        );
+        deps.push();
+        return { ok: true, text: result.text, eventId };
+      }
       deps.sessions.addEvent({
         kind: "transcript_note",
         title: result.text.length > 70 ? `${result.text.slice(0, 69)}…` : result.text,

@@ -3,6 +3,7 @@ import type { GlassState } from "../../shared/ipc.ts";
 import type { OverlayMode } from "../../shared/glassWindowTypes.ts";
 import type { GlassSessionInsight } from "../../shared/sessionTypes.ts";
 import type { GlassCommandFeedItem } from "../../shared/commandFeed.ts";
+import { filterFeedToSingleListenCard } from "../../shared/listenCardState.ts";
 import {
   isOverlayCardEventKind,
   overlayCardFromEvent,
@@ -221,9 +222,10 @@ function useCommandFeedCards(state: GlassState, enabled: boolean): GlassCommandF
   }, [enabled, state.commandFeed]);
 
   if (!enabled) return [];
-  return (state.commandFeed ?? [])
+  const visible = (state.commandFeed ?? [])
     .filter((item) => item.pinned || !aged.has(item.id))
     .slice(-MAX_FEED_CARDS);
+  return filterFeedToSingleListenCard(visible);
 }
 
 function useOverlayToasts(state: GlassState, enabled: boolean): Toast[] {
@@ -315,6 +317,8 @@ function FeedCard({
 }): JSX.Element {
   const state = useGlassState();
   const [expanded, setExpanded] = useState(false);
+  const [showActions, setShowActions] = useState(false);
+  const isListenInsight = Boolean(item.listenMomentId);
   const isLooking = item.kind === "looking";
   const isThinking = item.kind === "thinking";
   const isResponse = item.kind === "response";
@@ -322,6 +326,7 @@ function FeedCard({
   const displayBody =
     expanded && item.fullBody ? item.fullBody : item.body;
   const canExpand = Boolean(item.fullBody && item.fullBody !== item.body);
+  const bodyOverflows = canExpand && !expanded;
 
   return (
     <article
@@ -342,8 +347,13 @@ function FeedCard({
         <span className="overlay-feed-card__dot" aria-hidden="true" />
         {item.title}
       </div>
-      <div className="overlay-feed-card__body-wrap">
+      <div className={`overlay-feed-card__body-wrap${bodyOverflows ? " overlay-feed-card__body-wrap--fade" : ""}`}>
         <p className="overlay-feed-card__body">{displayBody}</p>
+        {bodyOverflows ? (
+          <span className="overlay-feed-card__more-hint" aria-hidden="true">
+            More…
+          </span>
+        ) : null}
       </div>
       {isResponse ? <VisualAskRetentionHint /> : null}
       {!isThinking && !isLooking ? (
@@ -353,47 +363,84 @@ function FeedCard({
               Copy
             </button>
           ) : null}
-          <button
-            type="button"
-            className="gbtn gbtn--ghost"
-            onClick={() => send({ type: "pin-command-feed-item", id: item.id, pinned: !item.pinned })}
-          >
-            {item.pinned ? "Unpin" : "Pin"}
-          </button>
-          {isResponse ? (
+          {canExpand ? (
+            <button
+              type="button"
+              className="gbtn gbtn--ghost"
+              data-testid="glass-overlay-feed-expand"
+              onClick={() => setExpanded((v) => !v)}
+            >
+              {expanded ? "Collapse" : "Expand"}
+            </button>
+          ) : null}
+          {isListenInsight && !showActions ? (
+            <button
+              type="button"
+              className="gbtn gbtn--ghost"
+              data-testid="glass-overlay-listen-more-actions"
+              onClick={() => setShowActions(true)}
+            >
+              More actions
+            </button>
+          ) : null}
+          {isListenInsight && showActions ? (
             <>
               <button type="button" className="gbtn gbtn--ghost" onClick={() => send({ type: "save-feed-moment", id: item.id })}>
-                Save Moment
+                Save
               </button>
-              {state.visualAskRetention?.kind === "not_saved" && state.session ? (
-                <button
-                  type="button"
-                  className="gbtn gbtn--ghost"
-                  data-testid="glass-save-visual-capture"
-                  onClick={() => send({ type: "save-last-visual-capture" })}
-                >
-                  Save screen
-                </button>
-              ) : null}
               <button
                 type="button"
+                className="gbtn gbtn--ghost"
                 data-testid="glass-overlay-open-iivo"
-                className="gbtn gbtn--primary"
                 onClick={() => send({ type: "open-feed-in-iivo", id: item.id })}
               >
-                Open in IIVO
+                Turn into action
+              </button>
+              <button type="button" className="gbtn gbtn--ghost" onClick={() => setShowActions(false)}>
+                Dismiss actions
               </button>
             </>
           ) : null}
-          {isError ? (
-            <button type="button" className="gbtn gbtn--primary" onClick={() => send({ type: "open-feed-in-iivo", id: item.id })}>
-              Open in IIVO
-            </button>
-          ) : null}
-          {canExpand ? (
-            <button type="button" className="gbtn gbtn--ghost" onClick={() => setExpanded((v) => !v)}>
-              {expanded ? "Collapse" : "Expand"}
-            </button>
+          {!isListenInsight ? (
+            <>
+              <button
+                type="button"
+                className="gbtn gbtn--ghost"
+                onClick={() => send({ type: "pin-command-feed-item", id: item.id, pinned: !item.pinned })}
+              >
+                {item.pinned ? "Unpin" : "Pin"}
+              </button>
+              {isResponse ? (
+                <>
+                  <button type="button" className="gbtn gbtn--ghost" onClick={() => send({ type: "save-feed-moment", id: item.id })}>
+                    Save Moment
+                  </button>
+                  {state.visualAskRetention?.kind === "not_saved" && state.session ? (
+                    <button
+                      type="button"
+                      className="gbtn gbtn--ghost"
+                      data-testid="glass-save-visual-capture"
+                      onClick={() => send({ type: "save-last-visual-capture" })}
+                    >
+                      Save screen
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    data-testid="glass-overlay-open-iivo"
+                    className="gbtn gbtn--primary"
+                    onClick={() => send({ type: "open-feed-in-iivo", id: item.id })}
+                  >
+                    Open in IIVO
+                  </button>
+                </>
+              ) : null}
+              {isError ? (
+                <button type="button" className="gbtn gbtn--primary" onClick={() => send({ type: "open-feed-in-iivo", id: item.id })}>
+                  Open in IIVO
+                </button>
+              ) : null}
+            </>
           ) : null}
         </div>
       ) : null}

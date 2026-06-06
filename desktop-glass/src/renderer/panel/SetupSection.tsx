@@ -44,7 +44,12 @@ export function SetupSection(): JSX.Element {
       <div className="setup-section__head">
         <p className="section-title">Setup</p>
         <div className="setup-section__head-actions">
-          <button type="button" className="gbtn gbtn--small" onClick={() => void runSetupCheck()}>
+          <button
+            type="button"
+            className="gbtn gbtn--small"
+            data-testid="glass-run-setup-check"
+            onClick={() => void runSetupCheck()}
+          >
             Run Setup Check
           </button>
           <button

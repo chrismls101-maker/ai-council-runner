@@ -10,6 +10,7 @@ import {
   micPermissionDeniedMessage,
   shouldShowMicPermissionDenied,
 } from "../../shared/commandBarMic.ts";
+import { formatListeningDuration } from "../../shared/audioChunks.ts";
 
 /**
  * Bottom-centered Glass command bar. Direct ask renders inline on the overlay;
@@ -27,7 +28,13 @@ export function CommandBar(): JSX.Element {
   const micInputTouchedRef = useRef(false);
   const wasListeningRef = useRef(false);
 
-  const listening = state.privacy.listening || tx.status === "listening";
+  const listening = tx.status === "listening";
+  const listeningDesynced = !listening && state.privacy.listening;
+  const listenElapsedMs = Math.max(state.stt?.listeningElapsedMs ?? 0, 0);
+  const listenDurationLabel = formatListeningDuration(
+    listening ? Math.max(listenElapsedMs, 0) : listenElapsedMs,
+  );
+  const buildingContext = state.copilot?.listenBuildingContext === true;
   const micListening = listening && tx.isMicrophoneCapture;
   const systemListening = listening && tx.isSystemAudioCapture;
   const transcribing = state.stt?.transcribing === true;
@@ -302,12 +309,27 @@ export function CommandBar(): JSX.Element {
                 </button>
               </>
             ) : null}
-            {listening ? (
+            {listeningDesynced ? (
               <>
-                <span className="command-listen-status">
+                <span className="command-listen-status command-listen-status--error">
+                  Audio capture did not start — open Glass panel and click Listen again.
+                </span>
+                <button
+                  type="button"
+                  className="command-mini command-mini--danger"
+                  onClick={() => send({ type: "stop-everything" })}
+                >
+                  Reset
+                </button>
+              </>
+            ) : null}
+            {listening || (state.privacy.listening && systemListening) ? (
+              <>
+                <span className="command-listen-status" data-testid="glass-command-listen-status">
                   <span className="command-listen-status__pulse" aria-hidden="true" />
-                  Listening {tx.listeningDuration} ·{" "}
-                  {systemListening ? "system audio" : "microphone"}
+                  {buildingContext
+                    ? "Listening… building context"
+                    : `Listening ${tx.listeningDuration || listenDurationLabel} · ${systemListening ? "system audio" : "microphone"}`}
                   {tx.transcribing ? " · transcribing…" : ""}
                 </span>
                 <button

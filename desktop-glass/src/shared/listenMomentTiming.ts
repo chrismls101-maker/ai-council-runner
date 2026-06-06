@@ -1,10 +1,12 @@
 /**
  * Listen mode — when to surface, wait, save silently, or stay quiet.
  *
- * IIVO should not interrupt because a timer fired. Pure — no electron / fs.
+ * IIVO can think immediately but should not speak until context is mature.
  */
 
 import { isDuplicateText } from "./sessionIntelligence.ts";
+import { isMomentMatureForSurface } from "./listenMomentMaturity.ts";
+import { isGroundedListenInsight } from "./listenInsightQuality.ts";
 import type { ListenMoment, ListenSurfaceContext, SurfaceDecision } from "./listenMomentTypes.ts";
 
 export const LISTEN_MIN_TRANSCRIPT_CHARS = 80;
@@ -14,7 +16,7 @@ export const LISTEN_CHUNK_SETTLE_MS = 8_000;
 /** Cooldown between proactive surfaces by attention level. */
 export const LISTEN_SURFACE_COOLDOWN_MS: Record<ListenSurfaceContext["attentionLevel"], number> = {
   quiet: Infinity,
-  balanced: 200_000,
+  balanced: 120_000,
   active: 90_000,
 };
 
@@ -28,6 +30,16 @@ export const LISTEN_MAX_SURFACES_PER_10_MIN: Record<ListenSurfaceContext["attent
 export interface SurfaceDecisionResult {
   decision: SurfaceDecision;
   reason: string;
+}
+
+export function isListenWarmupActive(context: ListenSurfaceContext): boolean {
+  if (context.listenStartedMs == null || context.listenWarmupMs == null) return false;
+  return context.nowMs - context.listenStartedMs < context.listenWarmupMs;
+}
+
+export function listenWarmupRemainingMs(context: ListenSurfaceContext): number {
+  if (context.listenStartedMs == null || context.listenWarmupMs == null) return 0;
+  return Math.max(0, context.listenWarmupMs - (context.nowMs - context.listenStartedMs));
 }
 
 export function shouldSurfaceListenMoment(
@@ -52,17 +64,33 @@ export function shouldSurfaceListenMoment(
     return { decision: "save_silently", reason: "User is receiving an answer." };
   }
 
+  if (isListenWarmupActive(context)) {
+    if (moment.type !== "warning" || moment.importance !== "high" || moment.confidence < 0.85) {
+      return { decision: "save_silently", reason: "Warm-up phase — building context." };
+    }
+  }
+
+  if (context.segmentSuppressProactive) {
+    return {
+      decision: "save_silently",
+      reason: `Segment is ${context.segmentKind ?? "non-content"} — not main video content.`,
+    };
+  }
+
   if (context.recentTranscriptChars < LISTEN_MIN_TRANSCRIPT_CHARS) {
     return { decision: "wait_for_more_context", reason: "Transcript too thin." };
   }
 
-  if (moment.status === "pending" || moment.status === "developing") {
-    if (lastChunkTooRecent(context)) {
-      return { decision: "wait_for_more_context", reason: "Idea still developing — waiting for more transcript." };
-    }
-    if (moment.status === "developing" && moment.confidence < LISTEN_MIN_CONFIDENCE) {
-      return { decision: "wait_for_more_context", reason: "Confidence still building." };
-    }
+  if (moment.isStillDeveloping) {
+    return { decision: "wait_for_more_context", reason: "Idea still developing — waiting for more transcript." };
+  }
+
+  if (!isMomentMatureForSurface(moment)) {
+    return { decision: "save_silently", reason: "Moment not mature enough to surface yet." };
+  }
+
+  if (!isGroundedListenInsight(moment)) {
+    return { decision: "save_silently", reason: "Thought not grounded enough — saving for report." };
   }
 
   if (moment.confidence < LISTEN_MIN_CONFIDENCE) {
@@ -97,11 +125,7 @@ export function shouldSurfaceListenMoment(
   }
 
   if (moment.status === "ready" && moment.importance !== "low") {
-    return { decision: "surface_now", reason: "Ready high-value moment with enough context." };
-  }
-
-  if (attentionLevel === "active" && moment.status === "developing" && moment.importance === "high") {
-    return { decision: "surface_now", reason: "Active mode — surfacing developing high-importance moment." };
+    return { decision: "surface_now", reason: "Ready mature moment with enough context." };
   }
 
   if (moment.status === "ready") {

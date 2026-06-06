@@ -127,6 +127,8 @@ export interface GlassCopilotConfig {
   reportStyle: GlassCopilotReportStyle;
   /** Listen mode proactive feedback frequency (Quiet / Balanced / Active). */
   listenAttentionLevel: ListenAttentionLevel;
+  /** Observe-only warm-up before proactive Listen cards (ms). Internal default 120s. */
+  listenWarmupMs: number;
 }
 
 export interface GlassCopilotDebriefSection {
@@ -186,12 +188,15 @@ export interface GlassCopilotRuntimeState {
   listeningLimitReached: boolean;
   /** UI label when semantic refine is available, e.g. "Auto-detected as Research + Strategy. Refine?" */
   sessionTypeRefineLabel?: string;
-  /** True when user may request optional semantic session-type refine. */
+  /** True when optional semantic session-type refine is available. */
   sessionTypeRefineAvailable?: boolean;
   sessionTypeRefining?: boolean;
   semanticSessionType?: SemanticSessionClassification | null;
   diagnosticResult?: GlassCopilotDiagnosticResult | null;
   diagnosticAnalyzing?: boolean;
+  /** Listen mode warm-up — observe only, no proactive cards. */
+  listenBuildingContext?: boolean;
+  listenWarmupRemainingMs?: number;
 }
 
 export const COPILOT_INTERVAL_OPTIONS = [60, 90, 120] as const;
@@ -233,6 +238,7 @@ export const DEFAULT_COPILOT_CONFIG: GlassCopilotConfig = {
   sessionType: "auto",
   reportStyle: "concise",
   listenAttentionLevel: "balanced",
+  listenWarmupMs: 120_000,
 };
 
 export function copilotModeIsActive(mode: GlassCopilotMode): boolean {

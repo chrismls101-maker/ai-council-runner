@@ -151,6 +151,7 @@ export function useTranscription(): TranscriptionController {
   const lastBlobRef = useRef<Blob | null>(null);
   const lastMimeRef = useRef<string>("audio/webm");
   const timerRef = useRef<number | null>(null);
+  const chunkSegmentTimerRef = useRef<number | null>(null);
   const chunkSourceRef = useRef<"microphone" | "system_audio">("microphone");
   const isListeningRef = useRef(false);
 
@@ -220,6 +221,10 @@ export function useTranscription(): TranscriptionController {
   }, [glassState.stt.autoStopEnabled, glassState.stt.autoStopMs, stopTimer]);
 
   const stopAllStreams = useCallback(() => {
+    if (chunkSegmentTimerRef.current != null) {
+      window.clearTimeout(chunkSegmentTimerRef.current);
+      chunkSegmentTimerRef.current = null;
+    }
     recognitionRef.current?.stop();
     recognitionRef.current = null;
     if (mediaRecorderRef.current?.state !== "inactive") {
@@ -349,6 +354,7 @@ export function useTranscription(): TranscriptionController {
   );
 
   const stopListeningLocal = useCallback(() => {
+    isListeningRef.current = false;
     stopAllStreams();
     stopTimer();
     dispatch({ type: "STOP_LISTENING" });
@@ -365,19 +371,42 @@ export function useTranscription(): TranscriptionController {
     (stream: MediaStream, source: "microphone" | "system_audio") => {
       chunkSourceRef.current = source;
       const mimeType = pickRecorderMime();
-      const recorder = new MediaRecorder(stream, { mimeType });
-      recorder.ondataavailable = (event) => {
-        if (!event.data || event.data.size < 512) return;
-        void processBlob(event.data, mimeType, source);
+
+      const beginSegment = () => {
+        if (mediaStreamRef.current !== stream || !isListeningRef.current) return;
+        const recorder = new MediaRecorder(stream, { mimeType });
+        recorder.ondataavailable = (event) => {
+          if (!event.data || event.data.size < 512) return;
+          void processBlob(event.data, mimeType, source);
+        };
+        recorder.onstop = () => {
+          if (mediaRecorderRef.current === recorder) {
+            mediaRecorderRef.current = null;
+          }
+          if (mediaStreamRef.current === stream && isListeningRef.current) {
+            beginSegment();
+          }
+        };
+        mediaRecorderRef.current = recorder;
+        try {
+          recorder.start();
+          chunkSegmentTimerRef.current = window.setTimeout(() => {
+            chunkSegmentTimerRef.current = null;
+            if (recorder.state === "recording") recorder.stop();
+          }, DEFAULT_CHUNK_MS);
+        } catch (err) {
+          dispatch({
+            type: "SET_ERROR",
+            message: err instanceof Error ? err.message : "Could not start audio recorder.",
+          });
+        }
       };
-      recorder.onstop = () => {
-        mediaRecorderRef.current = null;
-      };
-      mediaRecorderRef.current = recorder;
-      recorder.start(DEFAULT_CHUNK_MS);
+
       dispatch({ type: "START_LISTENING" });
+      isListeningRef.current = true;
       send({ type: "start-listening" });
       startTimer();
+      beginSegment();
     },
     [processBlob, startTimer],
   );
@@ -857,7 +886,9 @@ export function useTranscription(): TranscriptionController {
         ? systemAudioFixHint(systemAudioStatus)
         : "",
     micPathLabel: resolveMicPathLabel(effectiveMode),
-    listeningDuration: formatListeningDuration(elapsedMs),
+    listeningDuration: formatListeningDuration(
+      Math.max(elapsedMs, glassState.stt.listeningElapsedMs ?? 0),
+    ),
     transcribing: !!glassState.stt.transcribing,
     lastTranscript: glassState.stt.lastTranscript,
     lastError: state.lastError ?? glassState.stt.lastError,

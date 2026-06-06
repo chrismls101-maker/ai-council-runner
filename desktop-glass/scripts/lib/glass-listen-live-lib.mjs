@@ -26,6 +26,9 @@ import {
   runServerPreflight,
   sessionHasRawAudioOrBase64,
   summarizeMomentStats,
+  gradeListenHarnessQuality,
+  LISTEN_INTERRUPT_QA_QUESTIONS,
+  countDuplicateTranscriptLines,
 } from "../../src/shared/listenLiveHarness.ts";
 
 export {
@@ -44,6 +47,9 @@ export {
   runServerPreflight,
   sessionHasRawAudioOrBase64,
   summarizeMomentStats,
+  gradeListenHarnessQuality,
+  countDuplicateTranscriptLines,
+  LISTEN_INTERRUPT_QA_QUESTIONS,
 };
 
 export const OUT_DIR = "/tmp/iivo-glass-listen-live";
@@ -114,14 +120,50 @@ export function collectListenMomentEvents(session) {
   return session.events.filter((e) => e.tags?.includes("listen_moment"));
 }
 
-/** @deprecated use analyzeListenMomentWithHarness */
-export function analyzeListenMomentEngine(opts) {
-  const runtime = createListenHarnessRuntime(opts.attentionLevel ?? "balanced");
-  return analyzeListenMomentWithHarness({
-    moments: opts.moments,
-    runtime,
-    recentTranscriptChars: opts.recentTranscriptChars ?? 0,
-  });
+const DEFAULT_LISTEN_YOUTUBE_URL = "https://www.youtube.com/watch?v=ExgNR94SrfI";
+
+/** Open a YouTube video in Chrome and bring it frontmost for live Listen QA. */
+export function openYouTubeForListenTest(log = console.log, url = DEFAULT_LISTEN_YOUTUBE_URL, opts = {}) {
+  const { tryPlay = true } = opts;
+  if (process.platform !== "darwin") {
+    log("  (Skipping YouTube auto-open — not macOS)");
+    return false;
+  }
+  const script = `
+tell application "Google Chrome"
+  activate
+  set targetUrl to "${url}"
+  set found to false
+  repeat with w in windows
+    set ti to 1
+    repeat with t in tabs of w
+      if (URL of t) contains "youtube.com/watch" then
+        set active tab index of w to ti
+        set index of w to 1
+        set found to true
+        exit repeat
+      end if
+      set ti to ti + 1
+    end repeat
+    if found then exit repeat
+  end repeat
+  if not found then
+    open location targetUrl
+    delay 1.5
+  end if
+end tell
+tell application "Google Chrome" to activate
+delay 0.3
+${tryPlay ? 'tell application "System Events" to keystroke "k"' : ""}
+`;
+  try {
+    execFileSync("osascript", ["-e", script]);
+    log(`  Opened YouTube in Chrome — press play if paused: ${url}`);
+    return true;
+  } catch (err) {
+    log(`  WARN: could not auto-open YouTube (${err instanceof Error ? err.message : err})`);
+    return false;
+  }
 }
 
 export function macFrontWindowContext() {

@@ -6,6 +6,9 @@
  */
 
 import { isDuplicateText } from "./sessionIntelligence.ts";
+import { withMomentMaturity } from "./listenMomentMaturity.ts";
+import { buildGroundedListenThought } from "./listenInsightQuality.ts";
+import type { ListenSegmentKind } from "./listenSegmentClassifier.ts";
 import type {
   ListenMoment,
   ListenMomentImportance,
@@ -19,6 +22,8 @@ export interface ListenMomentEvalInput {
   existingMoments: ListenMoment[];
   nowMs?: number;
   idFactory?: () => string;
+  segmentKind?: ListenSegmentKind;
+  userGoalContext?: string;
 }
 
 interface MomentPattern {
@@ -91,84 +96,20 @@ function findMatchingMoment(
 }
 
 /** Generate a contextual IIVO thought from moment type + anchor text. */
-export function generateListenThought(moment: Pick<ListenMoment, "type" | "transcriptAnchors" | "summary">): {
+export function generateListenThought(
+  moment: Pick<ListenMoment, "type" | "transcriptAnchors" | "summary">,
+  userGoalContext?: string,
+): {
   suggestedThought: string;
   suggestedQuestion?: string;
   suggestedAction?: string;
   reasonSelected: string;
 } {
-  const anchor = moment.transcriptAnchors[0] ?? moment.summary;
-  const excerpt = shortSummary(anchor, 80);
-
-  switch (moment.type) {
-    case "framework":
-      return {
-        suggestedThought: `Useful framework moment: "${excerpt}" — worth mapping to your workflow.`,
-        suggestedQuestion: "How would this framework apply to what I'm building?",
-        reasonSelected: "Speaker introduced a structured framework.",
-      };
-    case "tactic":
-    case "sales_tactic":
-      return {
-        suggestedThought: `Good ${moment.type === "sales_tactic" ? "sales " : ""}tactic: "${excerpt}". Worth saving.`,
-        suggestedAction: "Turn into a qualification question or talk track.",
-        reasonSelected: "Actionable tactic detected in transcript.",
-      };
-    case "warning":
-      return {
-        suggestedThought: `Important warning: "${excerpt}".`,
-        suggestedQuestion: "What assumption is the speaker challenging here?",
-        reasonSelected: "Speaker flagged a risk or caution.",
-      };
-    case "claim":
-      return {
-        suggestedThought: `Claim to test: "${excerpt}". What would make this true or false?`,
-        suggestedQuestion: "What evidence supports or contradicts this?",
-        reasonSelected: "Strong claim detected — worth examining.",
-      };
-    case "business_opportunity":
-      return {
-        suggestedThought: `Business angle: "${excerpt}" — could connect to positioning or GTM.`,
-        suggestedAction: "Note a sales or product angle to explore later.",
-        reasonSelected: "Market or opportunity language detected.",
-      };
-    case "implementation_idea":
-    case "prompt_idea":
-      return {
-        suggestedThought: `Implementation opportunity: turn "${excerpt}" into a Cursor prompt or task later.`,
-        suggestedAction: "Create prompt from this moment.",
-        reasonSelected: "Build/automation language detected.",
-      };
-    case "confusing_concept":
-      return {
-        suggestedThought: `This part may need a plain-English recap: "${excerpt}".`,
-        suggestedQuestion: "Can you explain that in simpler terms?",
-        reasonSelected: "Complex or unclear concept in recent transcript.",
-      };
-    case "number_stat":
-      return {
-        suggestedThought: `Notable stat/number: "${excerpt}" — verify before reusing.`,
-        reasonSelected: "Quantitative claim detected.",
-      };
-    case "action_step":
-      return {
-        suggestedThought: `Concrete action step: "${excerpt}".`,
-        suggestedAction: "Add to action list.",
-        reasonSelected: "Speaker outlined a next step.",
-      };
-    case "quote":
-      return {
-        suggestedThought: `Notable line worth saving: "${excerpt}".`,
-        reasonSelected: "Memorable quote detected.",
-      };
-    case "key_idea":
-    default:
-      return {
-        suggestedThought: `This is a useful insight: "${excerpt}".`,
-        suggestedQuestion: "Why does this matter for my work?",
-        reasonSelected: "High-signal idea in recent transcript.",
-      };
-  }
+  const grounded = buildGroundedListenThought(moment, { userGoalContext });
+  return {
+    suggestedThought: grounded.suggestedThought,
+    reasonSelected: grounded.reasonSelected,
+  };
 }
 
 function detectCandidates(text: string): Array<{
@@ -225,11 +166,14 @@ export function evaluateListenMoments(input: ListenMomentEvalInput): ListenMomen
 
   for (const candidate of detectCandidates(input.newText)) {
     const existing = findMatchingMoment(candidate.anchor, moments);
-    const generated = generateListenThought({
-      type: candidate.type,
-      transcriptAnchors: [candidate.anchor],
-      summary: shortSummary(candidate.anchor),
-    });
+    const generated = generateListenThought(
+      {
+        type: candidate.type,
+        transcriptAnchors: [candidate.anchor],
+        summary: shortSummary(candidate.anchor),
+      },
+      input.userGoalContext,
+    );
 
     if (existing) {
       existing.lastUpdatedAt = nowIso;
@@ -239,8 +183,10 @@ export function evaluateListenMoments(input: ListenMomentEvalInput): ListenMomen
       }
       existing.suggestedThought = generated.suggestedThought;
       existing.suggestedQuestion = generated.suggestedQuestion;
-      existing.suggestedAction = generated.suggestedAction;
       existing.reasonSelected = generated.reasonSelected;
+      if (existing.suggestedThought !== generated.suggestedThought) {
+        existing.updatedSuggestedThought = generated.suggestedThought;
+      }
       existing.status = nextStatus(existing, candidate.anchor.length, false, nowIso);
     } else {
       moments.push({
@@ -254,12 +200,13 @@ export function evaluateListenMoments(input: ListenMomentEvalInput): ListenMomen
         importance: candidate.importance,
         suggestedThought: generated.suggestedThought,
         suggestedQuestion: generated.suggestedQuestion,
-        suggestedAction: generated.suggestedAction,
         reasonSelected: generated.reasonSelected,
         status: candidate.anchor.length >= 80 ? "ready" : "developing",
       });
     }
   }
+
+  const segmentKind = input.segmentKind ?? "content";
 
   for (const moment of moments) {
     if (moment.status === "surfaced" || moment.status === "dismissed" || moment.status === "saved_silently") {
@@ -270,20 +217,26 @@ export function evaluateListenMoments(input: ListenMomentEvalInput): ListenMomen
       anchor.length > 20 &&
       !recentTail.toLowerCase().includes(anchor.slice(0, 24).toLowerCase()) &&
       nowMs - Date.parse(moment.lastUpdatedAt) > 120_000;
+    if (topicMovedOn) {
+      moment.topicShifted = true;
+      moment.staleBecause = "Topic moved on — saved for report instead of interrupting.";
+    }
     moment.status = nextStatus(moment, anchor.length, topicMovedOn, nowIso);
   }
 
   return moments
+    .map((m) => withMomentMaturity(m, nowMs, segmentKind))
     .sort((a, b) => (TYPE_RANK[b.type] ?? 0) - (TYPE_RANK[a.type] ?? 0))
     .slice(0, 40);
 }
 
 /** Pick the best moment eligible for surfacing evaluation. */
 export function pickBestListenMomentForSurface(moments: ListenMoment[]): ListenMoment | null {
-  const pool = moments.filter((m) => m.status === "ready" || m.status === "developing");
+  const pool = moments.filter(
+    (m) => m.status === "ready" && m.isActionableNow === true && m.isStillDeveloping !== true,
+  );
   if (!pool.length) return null;
-  const ready = pool.filter((m) => m.status === "ready");
-  const sorted = [...(ready.length ? ready : pool)].sort((a, b) => {
+  const sorted = [...pool].sort((a, b) => {
     const imp = { high: 3, medium: 2, low: 1 };
     return imp[b.importance] - imp[a.importance] || b.confidence - a.confidence;
   });

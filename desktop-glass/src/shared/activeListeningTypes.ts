@@ -15,14 +15,20 @@ import type { MediaContext } from "./mediaContextTypes.ts";
 export type ActiveListeningChunkSource = "system_audio" | "microphone" | "screen" | "session";
 
 export type ActiveListeningIntent =
+  | "ask_thoughts"
   | "explain_current_moment"
+  | "agree_disagree"
+  | "apply_current_moment"
   | "summarize_recent"
   | "create_asset"
+  | "create_script"
   | "sales_coaching"
   | "save_moment"
   | "objection_handling"
   | "prompt_generation"
   | "action_steps"
+  | "turn_into_action"
+  | "what_did_i_miss"
   | "debrief_request"
   | "general_contextual";
 
@@ -72,6 +78,8 @@ export interface ActiveListeningContextPayload {
   salesSignals?: SalesActiveSignals;
   /** Visible screen/media page context (title, channel, URL — no faces). */
   mediaContext?: MediaContext;
+  /** Listen mode — current moment for user-initiated interruptions. */
+  currentMoment?: import("./currentMomentContext.ts").CurrentMomentContextPayload;
 }
 
 /** Sales / customer-call signals extracted from recent transcript (never invented). */

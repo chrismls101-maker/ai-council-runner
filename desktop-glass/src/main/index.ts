@@ -137,7 +137,10 @@ import {
 } from "../shared/copilotTypes.ts";
 import { shouldOfferCopilot, withCopilotConfig } from "../shared/copilotConfig.ts";
 import {
-  buildActiveListeningContext,
+  buildCurrentMomentContext,
+  listenInterruptStatusLabel,
+} from "../shared/currentMomentContext.ts";
+import {
   deriveActiveListeningMode,
   activeListeningMissingContextMessage,
 } from "../shared/activeListeningContext.ts";
@@ -160,15 +163,29 @@ import {
 } from "../shared/listenMomentIntelligence.ts";
 import {
   countSurfacesInLast10Min,
+  isListenWarmupActive,
+  listenWarmupRemainingMs,
   shouldSurfaceListenMoment,
 } from "../shared/listenMomentTiming.ts";
+import { classifyListenSegment } from "../shared/listenSegmentClassifier.ts";
 import {
   clearListenMomentEngineState,
   initialListenMomentEngineState,
   type ListenMomentEngineState,
   type ListenMoment,
 } from "../shared/listenMomentTypes.ts";
-import { buildListenThoughtIntervention } from "../shared/listenThoughtCards.ts";
+import { buildListenThoughtFeedContent, listenThoughtFeedBodies } from "../shared/listenThoughtCards.ts";
+import {
+  decideListenCardSurface,
+  type ListenCardSurfaceDecision,
+} from "../shared/listenCardState.ts";
+import {
+  appendTranscriptDeduped,
+  dedupeTranscriptEventsForDisplay,
+  isDuplicateTranscriptChunk,
+  transcriptSourceFromTags,
+} from "../shared/transcriptDedupe.ts";
+import { isListeningLimitEnabled } from "../shared/listeningLimit.ts";
 import {
   buildSessionDebrief,
   buildDebriefAiPrompt,
@@ -438,7 +455,7 @@ function buildActiveListeningAskContext(userPrompt?: string) {
         screenshotPath: state.latestScreenshot.screenshotPath,
       }
     : undefined;
-  return buildActiveListeningContext({
+  return buildCurrentMomentContext({
     session: session ?? null,
     sessionLive: sessionIsLive(),
     runningTranscript: state.transcript,
@@ -449,6 +466,9 @@ function buildActiveListeningAskContext(userPrompt?: string) {
     screenshotMeta,
     userPrompt,
     mediaContext: state.mediaContext,
+    listenMoments: listenMomentRuntime.moments,
+    activeMomentId: listenMomentRuntime.activeMomentId,
+    lastSystemAudioChunkMs: listenLastChunkMs,
   });
 }
 
@@ -553,6 +573,54 @@ function maybeShowActiveListeningProactive(newText: string, tags?: string[]): vo
   push();
 }
 
+function isListenModeActive(): boolean {
+  const config = copilot.getConfig();
+  return (
+    deriveActiveListeningMode(config, sessionIsLive() && copilotModeIsActive(config.mode)) ===
+    "listen"
+  );
+}
+
+function hasVisibleListenCard(): boolean {
+  const id = listenMomentRuntime.activeCardId;
+  if (!id) return false;
+  return state.commandFeed.some((f) => f.id === id && f.listenMomentId);
+}
+
+function clearListenCardState(): void {
+  listenMomentRuntime.activeCardId = undefined;
+  listenMomentRuntime.activeMomentId = undefined;
+  listenMomentRuntime.queuedMomentIds = [];
+}
+
+function upsertListenInsightCard(moment: ListenMoment, surfaceDecision: ListenCardSurfaceDecision): void {
+  const feed = listenThoughtFeedBodies(moment);
+  if (surfaceDecision === "update_existing" && listenMomentRuntime.activeCardId) {
+    state.commandFeed = state.commandFeed.map((item) =>
+      item.id === listenMomentRuntime.activeCardId
+        ? {
+            ...item,
+            title: feed.title,
+            body: feed.body,
+            fullBody: feed.fullBody,
+            listenMomentId: moment.id,
+          }
+        : item,
+    );
+    listenMomentRuntime.activeMomentId = moment.id;
+    return;
+  }
+
+  const item = createCommandFeedItem("response", feed.body, {
+    title: feed.title,
+    fullBody: feed.fullBody,
+    listenMomentId: moment.id,
+  });
+  listenMomentRuntime.activeCardId = item.id;
+  listenMomentRuntime.activeMomentId = moment.id;
+  pushFeed(item);
+}
+
 async function persistListenMomentEvent(moment: ListenMoment): Promise<void> {
   if (!sessionIsLive()) return;
   sessions.addEvent({
@@ -574,8 +642,25 @@ async function processListenModeChunk(newText: string, tags?: string[]): Promise
 
   const nowMs = Date.now();
   listenLastChunkMs = nowMs;
+  if (!listenMomentRuntime.listenStartedMs) {
+    listenMomentRuntime.listenStartedMs = nowMs;
+  }
+
   const ctx = buildActiveListeningAskContext();
   const recentTranscript = ctx?.recentTranscriptWindow ?? "";
+  const media = state.mediaContext;
+
+  const segment = classifyListenSegment({
+    transcript: newText,
+    visibleText: media?.visibleTextSummary,
+    mediaTitle: media?.title,
+    mediaChannel: media?.channelOrSource,
+  });
+  listenMomentRuntime.lastSegmentKind = segment.kind;
+  listenMomentRuntime.segmentCounts = {
+    ...listenMomentRuntime.segmentCounts,
+    [segment.kind]: (listenMomentRuntime.segmentCounts?.[segment.kind] ?? 0) + 1,
+  };
 
   listenMomentRuntime.moments = evaluateListenMoments({
     newText,
@@ -583,17 +668,10 @@ async function processListenModeChunk(newText: string, tags?: string[]): Promise
     existingMoments: listenMomentRuntime.moments,
     nowMs,
     idFactory: () => `lm-${nowMs}-${Math.random().toString(36).slice(2, 8)}`,
+    segmentKind: segment.kind,
   });
 
-  const candidate = pickBestListenMomentForSurface(listenMomentRuntime.moments);
-  if (!candidate) {
-    listenMomentRuntime.silenceReasons.push("No ready moment detected.");
-    if (listenMomentRuntime.silenceReasons.length > 30) listenMomentRuntime.silenceReasons.shift();
-    return;
-  }
-
-  const surfacesInLast10Min = countSurfacesInLast10Min(listenMomentRuntime.surfaceTimestamps, nowMs);
-  const decision = shouldSurfaceListenMoment(candidate, {
+  const surfaceContext = {
     attentionLevel: config.listenAttentionLevel,
     nowMs,
     lastSurfaceMs: listenMomentRuntime.lastSurfaceMs,
@@ -602,8 +680,26 @@ async function processListenModeChunk(newText: string, tags?: string[]): Promise
     recentSurfacedTexts: listenMomentRuntime.recentSurfacedTexts,
     userReceivingAnswer: state.askStatus === "pending",
     muteSuggestions: config.muteSuggestions,
-    surfacesInLast10Min,
-  });
+    surfacesInLast10Min: countSurfacesInLast10Min(listenMomentRuntime.surfaceTimestamps, nowMs),
+    listenStartedMs: listenMomentRuntime.listenStartedMs,
+    listenWarmupMs: config.listenWarmupMs,
+    segmentSuppressProactive: segment.suppressProactive,
+    segmentKind: segment.kind,
+  };
+
+  if (isListenWarmupActive(surfaceContext)) {
+    state.lastNotice = "Listening… building context";
+  }
+
+  const candidate = pickBestListenMomentForSurface(listenMomentRuntime.moments);
+  if (!candidate) {
+    listenMomentRuntime.silenceReasons.push("No ready moment detected.");
+    if (listenMomentRuntime.silenceReasons.length > 30) listenMomentRuntime.silenceReasons.shift();
+    push();
+    return;
+  }
+
+  const decision = shouldSurfaceListenMoment(candidate, surfaceContext);
 
   listenMomentRuntime.silenceReasons.push(`${decision.decision}: ${decision.reason}`);
   if (listenMomentRuntime.silenceReasons.length > 40) listenMomentRuntime.silenceReasons.shift();
@@ -632,6 +728,31 @@ async function processListenModeChunk(newText: string, tags?: string[]): Promise
       disposition: "surfaced" as const,
       surfacedAt: new Date(nowMs).toISOString(),
     };
+
+    const activeMoment = listenMomentRuntime.moments.find(
+      (m) => m.id === listenMomentRuntime.activeMomentId,
+    );
+    const cardDecision = decideListenCardSurface({
+      runtime: listenMomentRuntime,
+      moment: updated,
+      hasVisibleListenCard: hasVisibleListenCard(),
+      activeMoment,
+    });
+
+    if (cardDecision === "save_silently" || cardDecision === "queue_silent") {
+      const silent = { ...updated, status: "saved_silently" as const, disposition: "saved_silently" as const };
+      listenMomentRuntime.moments = markListenMomentStatus(
+        listenMomentRuntime.moments,
+        candidate.id,
+        "saved_silently",
+        silent,
+      );
+      listenMomentRuntime.queuedMomentIds = [...listenMomentRuntime.queuedMomentIds, candidate.id].slice(-20);
+      await persistListenMomentEvent(silent);
+      push();
+      return;
+    }
+
     listenMomentRuntime.moments = markListenMomentStatus(listenMomentRuntime.moments, candidate.id, "surfaced", updated);
     listenMomentRuntime.lastSurfaceMs = nowMs;
     listenMomentRuntime.surfaceTimestamps.push(nowMs);
@@ -641,11 +762,7 @@ async function processListenModeChunk(newText: string, tags?: string[]): Promise
     await persistListenMomentEvent(updated);
 
     if (config.showOverlaySuggestions && !config.muteSuggestions) {
-      const intervention = buildListenThoughtIntervention(updated, {
-        idFactory: () => `lt-${nowMs}`,
-        clock: () => new Date(nowMs).toISOString(),
-      });
-      pushFeed(createCommandFeedItem("response", intervention.body, { title: intervention.title }));
+      upsertListenInsightCard(updated, cardDecision);
     } else {
       state.lastNotice = `IIVO thought saved: ${thought.slice(0, 80)}…`;
     }
@@ -702,10 +819,18 @@ async function triggerListeningLimitReached(): Promise<void> {
 }
 
 function checkListeningLimit(elapsedMs: number): void {
+  const maxMin = copilot.getConfig().maxListeningMin;
+  if (!isListeningLimitEnabled(maxMin)) return;
+  if (!state.privacy.listening) return;
+  // Guard against stale/inherited elapsed from a prior run.
+  if (elapsedMs < 0 || elapsedMs > maxMin * 60_000 * 1.5) {
+    state.stt = { ...state.stt, listeningElapsedMs: 0 };
+    return;
+  }
   if (
     shouldTriggerListeningLimit({
       elapsedMs,
-      maxListeningMin: copilot.getConfig().maxListeningMin,
+      maxListeningMin: maxMin,
       extensionMs: listeningLimitState.extensionMs,
       limitReached: listeningLimitState.limitReached,
       listening: state.privacy.listening,
@@ -749,9 +874,32 @@ function syncCopilotToSession(): void {
 }
 
 function copilotRuntime(): GlassCopilotRuntimeState {
+  const config = copilot.getConfig();
+  const activeMode = deriveActiveListeningMode(
+    config,
+    sessionIsLive() && copilotModeIsActive(config.mode),
+  );
+  const nowMs = Date.now();
+  const warmupCtx = {
+    attentionLevel: config.listenAttentionLevel,
+    nowMs,
+    recentTranscriptChars: 0,
+    recentSurfacedTexts: [],
+    userReceivingAnswer: false,
+    muteSuggestions: config.muteSuggestions,
+    surfacesInLast10Min: 0,
+    listenStartedMs: listenMomentRuntime.listenStartedMs,
+    listenWarmupMs: config.listenWarmupMs,
+  };
+  const building =
+    activeMode === "listen" &&
+    state.privacy.listening &&
+    isListenWarmupActive(warmupCtx);
   return {
     ...copilot.runtimeState(sessionIsLive()),
     listeningLimitReached: listeningLimitState.limitReached,
+    listenBuildingContext: building,
+    listenWarmupRemainingMs: building ? listenWarmupRemainingMs(warmupCtx) : 0,
   };
 }
 
@@ -812,11 +960,13 @@ async function runCopilotTick(): Promise<void> {
   });
   if (!result.ran && !result.systemAudioSilenceWarning) return;
   if (result.intervention) {
-    pushFeed(
-      createCommandFeedItem("response", result.intervention.body, {
-        title: `Copilot · ${result.intervention.title}`,
-      }),
-    );
+    if (!isListenModeActive()) {
+      pushFeed(
+        createCommandFeedItem("response", result.intervention.body, {
+          title: `Copilot · ${result.intervention.title}`,
+        }),
+      );
+    }
   } else if (copilot.getConfig().mode === "passive" && result.newInsights.length > 0) {
     // Passive mode is near-silent: a tiny status, never a suggestion card.
     const n = result.newInsights.length;
@@ -831,8 +981,12 @@ async function runCopilotTick(): Promise<void> {
 function maybeOfferCopilotForSystemAudio(): void {
   if (!systemAudioActive()) return;
   systemAudioLastSignalMs = Date.now();
+  const config = copilot.getConfig();
+  if (config.mode !== "off" || config.sessionType === "video_learning") {
+    return;
+  }
   const offer = shouldOfferCopilot({
-    mode: copilot.getConfig().mode,
+    mode: config.mode,
     sessionLive: sessionIsLive(),
     systemAudioActive: systemAudioActive(),
     alreadyOffered: copilotOffered,
@@ -1547,7 +1701,15 @@ async function submitCommand(rawText: string): Promise<void> {
   if (shouldShortCircuitThinContext(activeCtx) && !visualIntent) {
     state.askInFlight = false;
     state.askStatus = "done";
-    const msg = activeListeningMissingContextMessage(activeCtx?.detectedIntent);
+    const listenConfig = copilot.getConfig();
+    const listenMode =
+      deriveActiveListeningMode(listenConfig, sessionIsLive() && copilotModeIsActive(listenConfig.mode)) ===
+      "listen";
+    const inWarmup =
+      listenMode &&
+      listenMomentRuntime.listenStartedMs != null &&
+      Date.now() - listenMomentRuntime.listenStartedMs < listenConfig.listenWarmupMs;
+    const msg = activeListeningMissingContextMessage(activeCtx?.detectedIntent, inWarmup);
     state.lastAskResponse = {
       prompt: text,
       answer: msg,
@@ -1766,10 +1928,12 @@ async function submitCommand(rawText: string): Promise<void> {
   }
 
   thinkingStartedAtMs = Date.now();
+  const interruptLabel = listenInterruptStatusLabel(activeCtx);
   pushFeed(
     createCommandFeedItem(
       "thinking",
-      visualIntent ? "Analyzing screen…" : "IIVO is thinking…",
+      interruptLabel ??
+        (visualIntent ? "Analyzing screen…" : "IIVO is thinking…"),
     ),
   );
   push();
@@ -2065,6 +2229,15 @@ async function handleCommand(
     case "start-listening":
       dispatchPrivacy({ type: "START_LISTENING", at: new Date().toISOString() });
       state.stt = { ...state.stt, listeningElapsedMs: 0, lastError: undefined };
+      if (
+        deriveActiveListeningMode(
+          copilot.getConfig(),
+          sessionIsLive() && copilotModeIsActive(copilot.getConfig().mode),
+        ) === "listen"
+      ) {
+        listenMomentRuntime.listenStartedMs = Date.now();
+        clearListenCardState();
+      }
       resetListeningLimitTracking();
       state.operationDiagnostics = diagnosticsForListening(
         recordOperation(state.operationDiagnostics, "start-listening", "ok"),
@@ -2104,8 +2277,9 @@ async function handleCommand(
       resetListeningLimitTracking();
       systemAudioLastSignalMs = undefined;
       activeListeningRuntime = clearActiveListeningRuntime();
-  listenMomentRuntime = clearListenMomentEngineState();
-  listenLastChunkMs = undefined;
+      listenMomentRuntime = clearListenMomentEngineState();
+      listenLastChunkMs = undefined;
+      clearListenCardState();
       state.mediaContext = null;
       push();
       return;
@@ -2117,10 +2291,17 @@ async function handleCommand(
     case "add-transcript-chunk": {
       const chunk = command.text.trim();
       if (!chunk) return;
+      const source = transcriptSourceFromTags(command.tags);
+      const session = sessions.current();
+      const recentEvents = (session?.events ?? []).filter((e) => e.kind === "transcript_note").slice(-40);
+      if (isDuplicateTranscriptChunk(chunk, source, recentEvents)) {
+        push();
+        return;
+      }
       if (command.tags?.includes("system_audio")) {
         systemAudioLastSignalMs = Date.now();
       }
-      state.transcript = `${state.transcript}${state.transcript ? " " : ""}${chunk}`.trim();
+      state.transcript = appendTranscriptDeduped(state.transcript, chunk);
       if (sessionIsLive() && sessions.current()?.status === "active") {
         const ctxFields = eventContextFields();
         sessions.addEvent({
@@ -3417,8 +3598,8 @@ function registerScreenshotProtocol(): void {
 function registerIpc(): void {
   ipcMain.handle(IPC.getState, () => snapshot());
   ipcMain.handle(IPC.windowContextGet, () => getCurrentWindowContext());
-  ipcMain.handle(IPC.sttProcessChunk, (_event, payload: SttProcessChunkPayload) =>
-    processSttChunk(payload, {
+  ipcMain.handle(IPC.sttProcessChunk, async (_event, payload: SttProcessChunkPayload) => {
+    const result = await processSttChunk(payload, {
       userDataPath: app.getPath("userData"),
       glassConfig: config,
       sessions,
@@ -3426,7 +3607,7 @@ function registerIpc(): void {
       eventContextFields,
       persistSessions,
       appendTranscript(text: string) {
-        state.transcript = `${state.transcript}${state.transcript ? " " : ""}${text}`.trim();
+        state.transcript = appendTranscriptDeduped(state.transcript, text);
       },
       getSttState: () => state.stt,
       setSttState(next: GlassSttState) {
@@ -3439,8 +3620,13 @@ function registerIpc(): void {
         state.lastError = msg;
       },
       push,
-    }),
-  );
+    });
+    if (result.ok && result.text?.trim()) {
+      const tags = payload.source === "system_audio" ? ["system_audio"] : ["microphone"];
+      maybeShowActiveListeningProactive(result.text.trim(), tags);
+    }
+    return result;
+  });
 
   ipcMain.on(IPC.command, (event, command: GlassCommand) => {
     void handleCommand(command, event.sender).catch((err) => {

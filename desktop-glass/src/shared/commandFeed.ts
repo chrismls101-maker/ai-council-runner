@@ -24,6 +24,8 @@ export interface GlassCommandFeedItem {
   contextId?: string;
   prompt?: string;
   fullBody?: string;
+  /** Listen mode — ties card to a moment; only one listen card visible at a time. */
+  listenMomentId?: string;
 }
 
 export const MAX_COMMAND_FEED_ITEMS = 12;
@@ -52,6 +54,7 @@ export function createCommandFeedItem(
     contextId?: string;
     prompt?: string;
     fullBody?: string;
+    listenMomentId?: string;
   } = {},
 ): GlassCommandFeedItem {
   feedSeq += 1;
@@ -66,6 +69,7 @@ export function createCommandFeedItem(
     contextId: opts.contextId,
     prompt: opts.prompt,
     fullBody: opts.fullBody,
+    listenMomentId: opts.listenMomentId,
   };
 }
 

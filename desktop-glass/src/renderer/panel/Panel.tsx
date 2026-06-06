@@ -9,6 +9,7 @@ import {
 import { StatusPill } from "../components/StatusPill.tsx";
 import { SessionPill } from "../components/SessionPill.tsx";
 import type { GlassState } from "../../shared/ipc.ts";
+import { collapseDuplicateTranscriptLines, dedupeTranscriptEventsForDisplay } from "../../shared/transcriptDedupe.ts";
 import type { PanelTab, SavedMoment } from "../../shared/types.ts";
 import type { ExtractedNotes } from "../../shared/types.ts";
 import type {
@@ -318,7 +319,9 @@ function SessionView({ session, state }: { session: GlassSession | null; state: 
     ? session.insights.filter((i) => (filter in insightFilter ? i.type === insightFilter[filter] : true))
     : [];
   const events = !showInsights
-    ? [...session.events].reverse().filter((e) => eventMatchesFilter(e, filter))
+    ? dedupeTranscriptEventsForDisplay(
+        [...session.events].reverse().filter((e) => eventMatchesFilter(e, filter)),
+      )
     : [];
 
   return (
@@ -506,7 +509,7 @@ function Transcript({ transcript }: { transcript: string }): JSX.Element {
       ) : null}
       {transcript ? (
         <div className="summary-box" style={{ whiteSpace: "pre-wrap" }}>
-          {transcript}
+          {collapseDuplicateTranscriptLines(transcript)}
         </div>
       ) : null}
       {tx.interimText ? (

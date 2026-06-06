@@ -96,10 +96,10 @@ test('"how does that work?" classifies as explain_current_moment', () => {
   assert.ok(intentNeedsRecentTranscript("explain_current_moment"));
 });
 
-test('"create a quick script from that" classifies as create_asset', () => {
+test('"create a quick script from that" classifies as create_script', () => {
   assert.equal(
     classifyActiveListeningIntent("Create me a quick script from that."),
-    "create_asset",
+    "create_script",
   );
 });
 

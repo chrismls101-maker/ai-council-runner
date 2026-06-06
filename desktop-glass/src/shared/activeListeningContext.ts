@@ -24,6 +24,7 @@ import {
 } from "./activeListeningIntent.ts";
 import { extractSalesActiveSignals, looksLikeSalesCallContext } from "./salesActiveCoaching.ts";
 import type { MediaContext } from "./mediaContextTypes.ts";
+import { classifyListenSegment } from "./listenSegmentClassifier.ts";
 
 export interface BuildActiveListeningInput {
   session: GlassSession | null;
@@ -66,6 +67,15 @@ function withinWindow(timestamp: string, cutoffMs: number, nowMs: number): boole
   return t >= cutoffMs && t <= nowMs;
 }
 
+/** Exclude ad/sponsor/intro transcript from Listen mode ask context. */
+function chunkIsMainListenContent(chunk: ActiveListeningChunk, mediaTitle?: string): boolean {
+  const classification = classifyListenSegment({
+    transcript: chunk.text,
+    mediaTitle,
+  });
+  return classification.kind === "content" || classification.kind === "transition" || classification.kind === "outro";
+}
+
 /** Derive simple active mode from copilot config when not explicitly set. */
 export function deriveActiveListeningMode(
   config: GlassCopilotConfig,
@@ -94,6 +104,7 @@ export function buildActiveListeningContext(input: BuildActiveListeningInput): A
     screenshotMeta,
     userPrompt,
     nowMs = Date.now(),
+    mediaContext,
   } = input;
 
   if (!sessionLive || !activeListeningEnabledForMode(activeMode)) return undefined;
@@ -115,19 +126,27 @@ export function buildActiveListeningContext(input: BuildActiveListeningInput): A
     chunks.push(chunk);
   }
 
+  let contextChunks =
+    activeMode === "listen"
+      ? chunks.filter((c) => chunkIsMainListenContent(c, mediaContext?.title))
+      : chunks;
+
   // Fallback: if no timed chunks, use tail of running transcript (text only).
-  if (chunks.length === 0 && runningTranscript.trim()) {
+  if (contextChunks.length === 0 && runningTranscript.trim()) {
     const tail = runningTranscript.trim().slice(-2000);
-    chunks.push({
+    const fallback: ActiveListeningChunk = {
       text: tail,
       source: "session",
       timestamp: new Date(nowMs).toISOString(),
-    });
+    };
+    if (activeMode !== "listen" || chunkIsMainListenContent(fallback, mediaContext?.title)) {
+      contextChunks = [fallback];
+    }
   }
 
-  const recentTranscriptWindow = chunks.map((c) => c.text).join(" ").trim();
-  const systemAudioChunkCount = chunks.filter((c) => c.source === "system_audio").length;
-  const microphoneChunkCount = chunks.filter((c) => c.source === "microphone").length;
+  const recentTranscriptWindow = contextChunks.map((c) => c.text).join(" ").trim();
+  const systemAudioChunkCount = contextChunks.filter((c) => c.source === "system_audio").length;
+  const microphoneChunkCount = contextChunks.filter((c) => c.source === "microphone").length;
 
   const copilotInsights = session?.insights?.slice(-5).map((i) => `${i.type}: ${i.text}`) ?? [];
 
@@ -150,11 +169,11 @@ export function buildActiveListeningContext(input: BuildActiveListeningInput): A
     enabled: true,
     activeMode,
     windowMinutes: windowMin,
-    chunkCount: chunks.length,
+    chunkCount: contextChunks.length,
     systemAudioChunkCount,
     microphoneChunkCount,
     recentTranscriptWindow,
-    chunks: chunks.slice(-40),
+    chunks: contextChunks.slice(-40),
     sessionFocus: copilotConfig.sessionType,
     copilotMode: copilotConfig.mode,
     recentInsights: copilotInsights.length ? copilotInsights : undefined,
@@ -169,9 +188,12 @@ export function buildActiveListeningContext(input: BuildActiveListeningInput): A
 }
 
 /** User-facing message when contextual question lacks recent transcript. */
-export function activeListeningMissingContextMessage(intent?: string): string {
+export function activeListeningMissingContextMessage(intent?: string, inWarmup?: boolean): string {
   void intent;
-  return "I need more recent transcript to answer that. Keep listening for a moment, then ask again.";
+  if (inWarmup) {
+    return "I'm still building context from the video. Give me another minute, or ask about something specific.";
+  }
+  return "I'm still building context from the video. I need a little more transcript, or ask about a specific line.";
 }
 
 /** Resolve active mode from preset id (Listen / Meetings) or derived state. */

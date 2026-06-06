@@ -3,7 +3,13 @@
  * and report building. Shared by the live QA script and unit tests.
  */
 
-import { isDuplicateText } from "./sessionIntelligence.ts";
+import {
+  decideListenCardSurface,
+  initialListenCardRuntimeState,
+  type ListenCardRuntimeState,
+} from "./listenCardState.ts";
+import { isActionFirstListenCard } from "./listenInsightQuality.ts";
+import { countDuplicateTranscriptLines } from "./transcriptDedupe.ts";
 import {
   evaluateListenMoments,
   generateListenThought,
@@ -14,6 +20,12 @@ import {
   LISTEN_MIN_TRANSCRIPT_CHARS,
   shouldSurfaceListenMoment,
 } from "./listenMomentTiming.ts";
+import { DEFAULT_LISTEN_WARMUP_MS } from "./listenMomentTypes.ts";
+import { classifyListenSegment, type ListenSegmentKind } from "./listenSegmentClassifier.ts";
+import {
+  buildListenThoughtFeedContent,
+  listenCardTextIsVague,
+} from "./listenThoughtCards.ts";
 import {
   buildListenReportMarkdown,
   buildListenReportSections,
@@ -30,6 +42,14 @@ export const COUNCIL_MARKERS = [
   "Product Decision",
   "Final Judge",
 ];
+
+export const LISTEN_INTERRUPT_QA_QUESTIONS = [
+  "What are your thoughts on what he just said?",
+  "How does that work?",
+  "Turn that into action steps.",
+  "Create a quick prompt from that.",
+  "What did I miss?",
+] as const;
 
 /** Fallback questions — only used when no moment-driven question is viable. */
 export const CONTEXT_FALLBACK_QUESTIONS = [
@@ -59,7 +79,7 @@ export interface GeneratedQuestion {
   transcriptAnchors: string[];
   expectedAnswerAnchors: string[];
   disposition: "ask_now" | "deferred" | "none";
-  source: "moment" | "fallback" | "report";
+  source: "moment" | "fallback" | "report" | "interrupt";
 }
 
 export interface ListenHarnessRuntime {
@@ -71,13 +91,30 @@ export interface ListenHarnessRuntime {
   surfacedMoments: ListenMoment[];
   savedSilently: ListenMoment[];
   staleMoments: ListenMoment[];
+  suppressedMoments: Array<{ reason: string; thought?: string; segmentKind?: ListenSegmentKind }>;
+  segmentCounts: Partial<Record<ListenSegmentKind, number>>;
+  listenStartedMs?: number;
+  firstProactiveCardMs?: number;
   generatedThoughts: Array<{
     momentId: string;
     thought: string;
     disposition: "surfaced" | "saved_silently" | "deferred";
     reasonSelected: string;
     at: string;
+    cardPreview?: string;
+    cardVague?: boolean;
+    hasFullText?: boolean;
+    actionFirst?: boolean;
+    anchorCount?: number;
   }>;
+  listenCardRuntime: ListenCardRuntimeState;
+  maxSimultaneousCards: number;
+  cardsSurfaced: number;
+  actionFirstCardCount: number;
+  vagueCardCount: number;
+  listeningLimitFired: boolean;
+  listeningLimitFiredAtMs?: number;
+  warmupRespected: boolean;
 }
 
 export function createListenHarnessRuntime(
@@ -91,7 +128,16 @@ export function createListenHarnessRuntime(
     surfacedMoments: [],
     savedSilently: [],
     staleMoments: [],
+    suppressedMoments: [],
+    segmentCounts: {},
     generatedThoughts: [],
+    listenCardRuntime: initialListenCardRuntimeState(),
+    maxSimultaneousCards: 0,
+    cardsSurfaced: 0,
+    actionFirstCardCount: 0,
+    vagueCardCount: 0,
+    listeningLimitFired: false,
+    warmupRespected: true,
   };
 }
 
@@ -113,6 +159,8 @@ export interface ListenLiveCliOptions {
   attach: boolean;
   /** Do not close Glass when the test finishes. */
   keepGlass: boolean;
+  /** Override warm-up duration for faster QA (seconds). */
+  warmupSeconds?: number;
 }
 
 export function parseListenLiveCli(argv: string[] = process.argv.slice(2)): ListenLiveCliOptions {
@@ -120,14 +168,18 @@ export function parseListenLiveCli(argv: string[] = process.argv.slice(2)): List
   let manual = false;
   let attach = false;
   let keepGlass = false;
+  let warmupSeconds: number | undefined;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--minutes" && argv[i + 1]) minutes = Math.max(1, Number(argv[++i]) || 10);
     else if (arg === "--manual") manual = true;
     else if (arg === "--attach") attach = true;
     else if (arg === "--keep-glass") keepGlass = true;
+    else if (arg === "--warmup-seconds" && argv[i + 1]) {
+      warmupSeconds = Math.max(0, Number(argv[++i]) || 0);
+    }
   }
-  return { minutes, manual, attach, keepGlass };
+  return { minutes, manual, attach, keepGlass, warmupSeconds };
 }
 
 export async function runServerPreflight(apiUrl: string): Promise<ServerPreflightResult> {
@@ -211,8 +263,27 @@ export function analyzeListenMomentWithHarness(opts: {
   lastChunkMs?: number;
   userReceivingAnswer?: boolean;
   nowMs?: number;
+  listenWarmupMs?: number;
+  segmentKind?: ListenSegmentKind;
+  segmentSuppressProactive?: boolean;
+  newTranscript?: string;
+  visibleText?: string;
+  mediaTitle?: string;
 }): HarnessMomentAnalysis {
   const nowMs = opts.nowMs ?? Date.now();
+  if (!opts.runtime.listenStartedMs) opts.runtime.listenStartedMs = nowMs;
+
+  if (opts.newTranscript) {
+    const segment = classifyListenSegment({
+      transcript: opts.newTranscript,
+      visibleText: opts.visibleText,
+      mediaTitle: opts.mediaTitle,
+    });
+    opts.runtime.segmentCounts[segment.kind] = (opts.runtime.segmentCounts[segment.kind] ?? 0) + 1;
+    opts.segmentKind = segment.kind;
+    opts.segmentSuppressProactive = segment.suppressProactive;
+  }
+
   const candidate = pickBestListenMomentForSurface(opts.moments);
   if (!candidate) {
     return { candidate: null, decision: "do_nothing", reason: "No candidate moment." };
@@ -229,6 +300,10 @@ export function analyzeListenMomentWithHarness(opts: {
     userReceivingAnswer: opts.userReceivingAnswer ?? false,
     muteSuggestions: false,
     surfacesInLast10Min,
+    listenStartedMs: opts.runtime.listenStartedMs,
+    listenWarmupMs: opts.listenWarmupMs ?? DEFAULT_LISTEN_WARMUP_MS,
+    segmentKind: opts.segmentKind,
+    segmentSuppressProactive: opts.segmentSuppressProactive,
   });
 
   let effectiveDecision = decision;
@@ -267,10 +342,57 @@ export function applyHarnessMomentDecision(
   const thought = analysis.thought ?? moment.suggestedThought ?? moment.summary;
 
   if (analysis.decision === "surface_now") {
+    const activeMoment = runtime.surfacedMoments.find(
+      (m) => m.id === runtime.listenCardRuntime.activeMomentId,
+    );
+    const cardDecision = decideListenCardSurface({
+      runtime: runtime.listenCardRuntime,
+      moment: { ...moment, suggestedThought: thought },
+      hasVisibleListenCard: Boolean(runtime.listenCardRuntime.activeCardId),
+      activeMoment,
+    });
+
+    if (cardDecision === "save_silently" || cardDecision === "queue_silent") {
+      runtime.savedSilently.push({ ...moment, status: "saved_silently", disposition: "saved_silently" });
+      runtime.suppressedMoments.push({
+        reason: `One-card rule: ${cardDecision}`,
+        thought,
+        segmentKind: moment.segmentKind,
+      });
+      runtime.generatedThoughts.push({
+        momentId: moment.id,
+        thought,
+        disposition: "saved_silently",
+        reasonSelected: `One-card rule (${cardDecision})`,
+        at: new Date(nowMs).toISOString(),
+      });
+      runtime.listenCardRuntime = {
+        ...runtime.listenCardRuntime,
+        queuedMomentIds: [...runtime.listenCardRuntime.queuedMomentIds, moment.id].slice(-20),
+      };
+      return;
+    }
+
     runtime.lastSurfaceMs = nowMs;
     runtime.surfaceTimestamps.push(nowMs);
+    if (runtime.firstProactiveCardMs == null) {
+      runtime.firstProactiveCardMs = nowMs - (runtime.listenStartedMs ?? nowMs);
+    }
     runtime.recentSurfacedTexts.push(thought);
     if (runtime.recentSurfacedTexts.length > 12) runtime.recentSurfacedTexts.shift();
+    const feed = buildListenThoughtFeedContent({ ...moment, suggestedThought: thought });
+    const cardVague = listenCardTextIsVague(`${feed.title} ${feed.body}`);
+    const actionFirst = isActionFirstListenCard(`${feed.title} ${feed.body}`);
+    const cardId = runtime.listenCardRuntime.activeCardId ?? `card-${moment.id}`;
+    runtime.listenCardRuntime = {
+      activeCardId: cardId,
+      activeMomentId: moment.id,
+      queuedMomentIds: runtime.listenCardRuntime.queuedMomentIds.filter((id) => id !== moment.id),
+    };
+    runtime.maxSimultaneousCards = Math.max(runtime.maxSimultaneousCards, 1);
+    runtime.cardsSurfaced += cardDecision === "surface_new" ? 1 : 0;
+    if (cardVague) runtime.vagueCardCount += 1;
+    if (actionFirst) runtime.actionFirstCardCount += 1;
     runtime.surfacedMoments.push({ ...moment, status: "surfaced", disposition: "surfaced" });
     runtime.generatedThoughts.push({
       momentId: moment.id,
@@ -278,9 +400,19 @@ export function applyHarnessMomentDecision(
       disposition: "surfaced",
       reasonSelected: analysis.reason,
       at: new Date(nowMs).toISOString(),
+      cardPreview: feed.body,
+      cardVague,
+      hasFullText: Boolean(feed.fullBody && feed.fullBody.length > feed.body.length),
+      actionFirst,
+      anchorCount: moment.transcriptAnchors.length,
     });
   } else if (analysis.decision === "save_silently") {
     runtime.savedSilently.push({ ...moment, status: "saved_silently", disposition: "saved_silently" });
+    runtime.suppressedMoments.push({
+      reason: analysis.reason,
+      thought,
+      segmentKind: moment.segmentKind,
+    });
     runtime.generatedThoughts.push({
       momentId: moment.id,
       thought,
@@ -421,15 +553,18 @@ export function pickContextAwareQuestion(opts: {
 export function evaluateListenMomentsFromTranscript(
   chunks: Array<{ text?: string; title?: string }>,
   existingMoments: ListenMoment[] = [],
+  mediaTitle?: string,
 ): ListenMoment[] {
   const text = chunks.map((c) => (c.text ?? c.title ?? "").trim()).join(" ");
   const last = chunks.at(-1);
   const newText = (last?.text ?? last?.title ?? "").trim();
+  const segment = classifyListenSegment({ transcript: newText, mediaTitle });
   return evaluateListenMoments({
     newText,
     recentTranscript: text,
     existingMoments,
     nowMs: Date.now(),
+    segmentKind: segment.kind,
   });
 }
 
@@ -554,3 +689,119 @@ export function sessionHasRawAudioOrBase64(session: unknown): boolean {
   const raw = JSON.stringify(session ?? {});
   return /base64|audio\/wav|data:image/i.test(raw);
 }
+
+export interface ListenHarnessQualityResult {
+  failures: string[];
+  warnings: string[];
+  warmupDurationMs: number;
+  firstProactiveCardMs?: number;
+  cardTooEarly: boolean;
+  anyVagueCard: boolean;
+  cardFullTextAccessible: boolean;
+  maxSimultaneousCards: number;
+  duplicateTranscriptLines: number;
+  listeningLimitFiredEarly: boolean;
+  actionFirstCardCount: number;
+  micChunksInListen: number;
+}
+
+const DUPLICATE_TRANSCRIPT_THRESHOLD = 3;
+
+/** Grade live Listen QA for warm-up, segment, card, dedupe, and limit gates. */
+export function gradeListenHarnessQuality(opts: {
+  runtime: ListenHarnessRuntime;
+  listenWarmupMs?: number;
+  userAskTimestamps?: number[];
+  duplicateTranscriptLines?: number;
+  listeningLimitFired?: boolean;
+  listeningElapsedMs?: number;
+  maxListeningMin?: number;
+  micChunks?: number;
+}): ListenHarnessQualityResult {
+  const warmupDurationMs = opts.listenWarmupMs ?? DEFAULT_LISTEN_WARMUP_MS;
+  const failures: string[] = [];
+  const warnings: string[] = [];
+  const duplicateTranscriptLines = opts.duplicateTranscriptLines ?? 0;
+  const maxListeningMin = opts.maxListeningMin ?? 120;
+  const listeningElapsedMs = opts.listeningElapsedMs ?? 0;
+
+  const firstProactive = opts.runtime.firstProactiveCardMs;
+  const cardTooEarly =
+    firstProactive != null && firstProactive < warmupDurationMs && !opts.userAskTimestamps?.length;
+  if (cardTooEarly) {
+    failures.push(
+      `Proactive card appeared at ${Math.round(firstProactive / 1000)}s before warm-up (${warmupDurationMs / 1000}s).`,
+    );
+  }
+
+  if (opts.runtime.maxSimultaneousCards > 1) {
+    failures.push(`Max simultaneous cards ${opts.runtime.maxSimultaneousCards} — expected 1.`);
+  }
+
+  if (duplicateTranscriptLines > DUPLICATE_TRANSCRIPT_THRESHOLD) {
+    failures.push(
+      `Duplicate transcript repetition ${duplicateTranscriptLines} exceeds threshold ${DUPLICATE_TRANSCRIPT_THRESHOLD}.`,
+    );
+  }
+
+  const limitEnabled = maxListeningMin > 0;
+  const limitMs = maxListeningMin * 60_000;
+  const listeningLimitFiredEarly =
+    Boolean(opts.listeningLimitFired) && limitEnabled && listeningElapsedMs < limitMs * 0.9;
+  if (listeningLimitFiredEarly) {
+    failures.push(
+      `Listening limit fired at ${Math.round(listeningElapsedMs / 1000)}s with ${maxListeningMin} min configured.`,
+    );
+  }
+
+  const surfaced = opts.runtime.generatedThoughts.filter((t) => t.disposition === "surfaced");
+  const anyVagueCard = surfaced.some((t) => t.cardVague === true);
+  if (anyVagueCard) failures.push("Surfaced card used vague copy without enough context.");
+
+  const actionFirstCardCount = opts.runtime.actionFirstCardCount;
+  if (actionFirstCardCount > 0) {
+    failures.push(`${actionFirstCardCount} action-first card(s) surfaced before maturity.`);
+  }
+
+  for (const t of surfaced) {
+    if (t.anchorCount != null && t.anchorCount < 1) {
+      failures.push("Surfaced card missing transcript anchor.");
+    }
+  }
+
+  const cardFullTextAccessible =
+    surfaced.length === 0 || surfaced.every((t) => t.hasFullText !== false);
+  if (!cardFullTextAccessible) failures.push("Surfaced card missing expandable full text.");
+
+  for (const s of opts.runtime.suppressedMoments) {
+    if (
+      s.segmentKind &&
+      ["ad", "sponsor", "intro"].includes(s.segmentKind) &&
+      s.reason.includes("surface_now")
+    ) {
+      failures.push(`Ad/intro/sponsor segment triggered surface: ${s.segmentKind}`);
+    }
+  }
+
+  const micChunksInListen = opts.micChunks ?? 0;
+  if (micChunksInListen > 0) {
+    failures.push(`${micChunksInListen} microphone chunk(s) detected during Listen mode.`);
+  }
+
+  return {
+    failures,
+    warnings,
+    warmupDurationMs,
+    firstProactiveCardMs: firstProactive,
+    cardTooEarly,
+    anyVagueCard,
+    cardFullTextAccessible,
+    maxSimultaneousCards: opts.runtime.maxSimultaneousCards,
+    duplicateTranscriptLines,
+    listeningLimitFiredEarly,
+    actionFirstCardCount,
+    micChunksInListen,
+  };
+}
+
+export { classifyListenSegment, listenCardTextIsVague, buildListenThoughtFeedContent, countDuplicateTranscriptLines };
