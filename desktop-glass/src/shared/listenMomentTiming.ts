@@ -6,8 +6,14 @@
 
 import { isDuplicateText } from "./sessionIntelligence.ts";
 import { isMomentMatureForSurface } from "./listenMomentMaturity.ts";
-import { isGroundedListenInsight } from "./listenInsightQuality.ts";
+import { isActionFirstListenCard, isGroundedListenInsight } from "./listenInsightQuality.ts";
 import type { ListenMoment, ListenSurfaceContext, SurfaceDecision } from "./listenMomentTypes.ts";
+
+const ACTION_NOTE_MOMENT_TYPES: ListenMoment["type"][] = [
+  "action_step",
+  "prompt_idea",
+  "implementation_idea",
+];
 
 export const LISTEN_MIN_TRANSCRIPT_CHARS = 80;
 export const LISTEN_MIN_CONFIDENCE = 0.68;
@@ -105,6 +111,28 @@ export function shouldSurfaceListenMoment(
     return { decision: "save_silently", reason: "Quiet mode — no proactive comments." };
   }
 
+  const thought = moment.suggestedThought ?? moment.summary;
+  if (context.recentSurfacedTexts.some((t) => isDuplicateText(t, thought))) {
+    return { decision: "do_nothing", reason: "Similar thought surfaced recently." };
+  }
+
+  if (ACTION_NOTE_MOMENT_TYPES.includes(moment.type) || isActionFirstListenCard(thought)) {
+    return {
+      decision: "save_silently",
+      reason: "Action idea saved to Live Notes — not prompted.",
+    };
+  }
+
+  // Balanced Listen: note-first — no overlay cards unless user asks.
+  if (attentionLevel === "balanced") {
+    return { decision: "save_silently", reason: "Balanced Listen — saved to Live Notes." };
+  }
+
+  // Active: require live-thought overlay enabled.
+  if (!context.liveThoughtsEnabled) {
+    return { decision: "save_silently", reason: "Live thoughts disabled — saving silently." };
+  }
+
   if (lastChunkTooRecent(context) && moment.status !== "ready") {
     return { decision: "wait_for_more_context", reason: "Recent chunk — letting speaker finish." };
   }
@@ -117,11 +145,6 @@ export function shouldSurfaceListenMoment(
   const maxSurfaces = LISTEN_MAX_SURFACES_PER_10_MIN[attentionLevel];
   if (context.surfacesInLast10Min >= maxSurfaces) {
     return { decision: "save_silently", reason: "Surface cap for attention level reached." };
-  }
-
-  const thought = moment.suggestedThought ?? moment.summary;
-  if (context.recentSurfacedTexts.some((t) => isDuplicateText(t, thought))) {
-    return { decision: "do_nothing", reason: "Similar thought surfaced recently." };
   }
 
   if (moment.status === "ready" && moment.importance !== "low") {

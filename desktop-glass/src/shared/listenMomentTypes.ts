@@ -100,6 +100,8 @@ export interface ListenSurfaceContext {
   /** Current segment classification suppresses proactive cards when true. */
   segmentSuppressProactive?: boolean;
   segmentKind?: import("./listenSegmentClassifier.ts").ListenSegmentKind;
+  /** User enabled overlay live thoughts (showOverlaySuggestions). */
+  liveThoughtsEnabled?: boolean;
 }
 
 export interface ListenMomentEngineState {

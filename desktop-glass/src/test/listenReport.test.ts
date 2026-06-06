@@ -38,14 +38,14 @@ function moment(overrides: Partial<ListenMoment> = {}): ListenMoment {
   };
 }
 
-test("report includes What this means section from reasonSelected", () => {
+test("report includes Key ideas from Live Notes", () => {
   const sections = buildListenReportSections({
     session: session(),
     moments: [moment()],
   });
-  const heading = sections.find((s) => s.heading === "What this means");
+  const heading = sections.find((s) => s.heading === "Key ideas");
   assert.ok(heading);
-  assert.match(heading!.items[0], /go-to-market|founder/i);
+  assert.match(heading!.items[0]!, /distribution|founder/i);
 });
 
 test("thin report explains missing content moments", () => {
@@ -53,15 +53,15 @@ test("thin report explains missing content moments", () => {
     session: session(),
     moments: [moment({ segmentKind: "ad", status: "saved_silently" })],
   });
-  const heading = sections.find((s) => s.heading === "What this means");
-  assert.ok(heading);
-  assert.match(heading!.items[0], /Not enough main-content moments/i);
+  const about = sections.find((s) => s.heading === "What this was about");
+  assert.ok(about);
+  assert.match(about!.items[0]!, /Not enough main-content moments/i);
 });
 
-test("markdown includes persona intro note", () => {
+test("markdown includes persona intro and Final takeaway", () => {
   const sections = buildListenReportSections({ session: session(), moments: [moment()] });
   const md = buildListenReportMarkdown(sections);
   assert.match(md, /Listen Report/);
   assert.match(md, /Thought Partner/i);
-  assert.match(md, /## What this means/);
+  assert.match(md, /## Final takeaway/);
 });

@@ -40,6 +40,10 @@ import {
   mergeSemanticIntoDetection,
 } from "./copilotSessionSemantic.ts";
 import type { GlassCopilotDiagnosticResult } from "./copilotDiagnosticAnalysis.ts";
+import {
+  LISTEN_SILENCE_DISMISS_COOLDOWN_MS,
+  shouldShowListenSilencePrompt,
+} from "./listenSilencePrompt.ts";
 
 const MAX_RECENT_SHOWN = 12;
 /** After this many dismissals in a row, the governor backs off (slows down). */
@@ -111,6 +115,7 @@ export class SessionCopilotController {
   private lastRunAt: string | undefined;
   private recentShownTexts: string[] = [];
   private systemAudioSilenceWarning = false;
+  private silenceWarningSuppressedUntilMs: number | undefined;
   private boundSessionId: string | null = null;
   private consecutiveDismissals = 0;
   private currentSessionType: GlassCopilotSessionType = "general_workflow";
@@ -195,6 +200,7 @@ export class SessionCopilotController {
     this.lastRunAt = undefined;
     this.recentShownTexts = [];
     this.systemAudioSilenceWarning = false;
+    this.silenceWarningSuppressedUntilMs = undefined;
     this.consecutiveDismissals = 0;
     this.currentSessionType = "general_workflow";
     this.currentSessionTypeDetection = {
@@ -312,10 +318,25 @@ export class SessionCopilotController {
   }
 
   private silenceWarningActive(input: CopilotTickInput): boolean {
-    if (!input.systemAudioActive) return false;
-    if (input.systemAudioLastSignalMs == null) return false;
-    const elapsed = this.deps.now() - input.systemAudioLastSignalMs;
-    return elapsed >= this.config.silenceTimeoutMin * 60_000;
+    const isListen = this.config.sessionType === "video_learning";
+    return shouldShowListenSilencePrompt({
+      systemAudioActive: input.systemAudioActive,
+      systemAudioLastSignalMs: input.systemAudioLastSignalMs,
+      nowMs: this.deps.now(),
+      isListenMode: isListen,
+      defaultSilenceTimeoutMin: this.config.silenceTimeoutMin,
+      suppressedUntilMs: this.silenceWarningSuppressedUntilMs,
+    });
+  }
+
+  /** User chose "Keep listening" — suppress repeated no-audio prompts. */
+  dismissSilenceWarning(suppressMs = LISTEN_SILENCE_DISMISS_COOLDOWN_MS): void {
+    this.systemAudioSilenceWarning = false;
+    this.silenceWarningSuppressedUntilMs = this.deps.now() + suppressMs;
+  }
+
+  clearPendingInterventions(): void {
+    this.interventions = [];
   }
 
   /**
@@ -387,26 +408,31 @@ export class SessionCopilotController {
 
     let intervention: GlassCopilotIntervention | null = null;
 
+    // Listen mode: note-first — never build coaching action cards.
+    const listenNoteFirst = this.config.sessionType === "video_learning";
+
     // Coaching/diagnostic: maybe surface one high-value insight card.
-    const ctx = {
-      config: this.config,
-      nowMs: this.deps.now(),
-      lastInterventionMs: this.lastInterventionMs,
-      recentShownTexts: this.recentShownTexts,
-      minGapMs: this.effectiveGapMs(),
-    };
-    const picked = pickInterventionInsight(fresh, ctx);
-    if (picked) {
-      intervention = buildInterventionForInsight(picked, this.deps, {
-        sessionType: this.currentSessionType,
-        appName: input.sourceApp,
-      });
-      this.lastInterventionMs = this.deps.now();
-      this.remember(picked.text);
+    if (!listenNoteFirst) {
+      const ctx = {
+        config: this.config,
+        nowMs: this.deps.now(),
+        lastInterventionMs: this.lastInterventionMs,
+        recentShownTexts: this.recentShownTexts,
+        minGapMs: this.effectiveGapMs(),
+      };
+      const picked = pickInterventionInsight(fresh, ctx);
+      if (picked) {
+        intervention = buildInterventionForInsight(picked, this.deps, {
+          sessionType: this.currentSessionType,
+          appName: input.sourceApp,
+        });
+        this.lastInterventionMs = this.deps.now();
+        this.remember(picked.text);
+      }
     }
 
     // Diagnostic mode: offer a diagnosis on a stuck/error signal (if no card yet).
-    if (!intervention && this.config.mode === "diagnostic" && !this.config.muteSuggestions && this.config.showOverlaySuggestions) {
+    if (!listenNoteFirst && !intervention && this.config.mode === "diagnostic" && !this.config.muteSuggestions && this.config.showOverlaySuggestions) {
       const gapOk = this.lastInterventionMs == null || this.deps.now() - this.lastInterventionMs >= this.effectiveGapMs();
       if (gapOk) {
         const signal = detectStuckSignal({

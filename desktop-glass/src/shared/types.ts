@@ -14,8 +14,11 @@ export type GlassMomentKind = "screenshot" | "transcript" | "note";
 
 export type PanelTab =
   | "summary"
+  | "copilot"
   | "setup"
   | "session"
+  | "audio"
+  | "live-notes"
   | "insights"
   | "context"
   | "hypotheses"

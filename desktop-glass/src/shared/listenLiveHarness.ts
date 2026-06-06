@@ -26,6 +26,7 @@ import {
   buildListenThoughtFeedContent,
   listenCardTextIsVague,
 } from "./listenThoughtCards.ts";
+import { buildListenLiveNotes } from "./listenLiveNotes.ts";
 import {
   buildListenReportMarkdown,
   buildListenReportSections,
@@ -127,6 +128,8 @@ export interface ListenHarnessRuntime {
   cardsSurfaced: number;
   actionFirstCardCount: number;
   vagueCardCount: number;
+  liveNotesUpdates: number;
+  noAudioPromptsCount: number;
   listeningLimitFired: boolean;
   listeningLimitFiredAtMs?: number;
   warmupRespected: boolean;
@@ -151,16 +154,18 @@ export function createListenHarnessRuntime(
     cardsSurfaced: 0,
     actionFirstCardCount: 0,
     vagueCardCount: 0,
+    liveNotesUpdates: 0,
+    noAudioPromptsCount: 0,
     listeningLimitFired: false,
     warmupRespected: true,
   };
 }
 
 export function parseListenLiveMinutes(argv: string[]): number {
-  let minutes = 10;
+  let minutes = 60;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--minutes" && argv[i + 1]) {
-      minutes = Math.max(1, Number(argv[++i]) || 10);
+      minutes = Math.max(1, Number(argv[++i]) || 60);
     }
   }
   return minutes;
@@ -168,6 +173,16 @@ export function parseListenLiveMinutes(argv: string[]): number {
 
 export interface ListenLiveCliOptions extends ListenEnduranceConfig {
   warmupSeconds?: number;
+  /** YouTube/video URL to open for the live run (not hardcoded proof). */
+  videoUrl?: string;
+  /** Attempt harness recovery when transcript stalls or listening drops. */
+  autoFix: boolean;
+}
+
+function parseStringFlag(argv: string[], flag: string): string | undefined {
+  const i = argv.indexOf(flag);
+  if (i >= 0 && argv[i + 1]) return argv[i + 1].trim() || undefined;
+  return undefined;
 }
 
 export function parseListenLiveCli(argv: string[] = process.argv.slice(2)): ListenLiveCliOptions {
@@ -177,7 +192,12 @@ export function parseListenLiveCli(argv: string[] = process.argv.slice(2)): List
   if (i >= 0 && argv[i + 1]) {
     warmupSeconds = Math.max(0, Number(argv[i + 1]) || 0);
   }
-  return { ...base, warmupSeconds };
+  return {
+    ...base,
+    warmupSeconds,
+    videoUrl: parseStringFlag(argv, "--url"),
+    autoFix: argv.includes("--auto-fix"),
+  };
 }
 
 export async function runServerPreflight(apiUrl: string): Promise<ServerPreflightResult> {
@@ -302,6 +322,7 @@ export function analyzeListenMomentWithHarness(opts: {
     listenWarmupMs: opts.listenWarmupMs ?? DEFAULT_LISTEN_WARMUP_MS,
     segmentKind: opts.segmentKind,
     segmentSuppressProactive: opts.segmentSuppressProactive,
+    liveThoughtsEnabled: opts.runtime.attentionLevel === "active",
   });
 
   let effectiveDecision = decision;
@@ -405,6 +426,7 @@ export function applyHarnessMomentDecision(
       anchorCount: moment.transcriptAnchors.length,
     });
   } else if (analysis.decision === "save_silently") {
+    runtime.liveNotesUpdates += 1;
     runtime.savedSilently.push({ ...moment, status: "saved_silently", disposition: "saved_silently" });
     runtime.suppressedMoments.push({
       reason: analysis.reason,
@@ -715,6 +737,8 @@ export function gradeListenHarnessQuality(opts: {
   listeningElapsedMs?: number;
   maxListeningMin?: number;
   micChunks?: number;
+  transcriptChunkCount?: number;
+  liveNotesEntryCount?: number;
 }): ListenHarnessQualityResult {
   const warmupDurationMs = opts.listenWarmupMs ?? DEFAULT_LISTEN_WARMUP_MS;
   const failures: string[] = [];
@@ -761,6 +785,21 @@ export function gradeListenHarnessQuality(opts: {
     failures.push(`${actionFirstCardCount} action-first card(s) surfaced before maturity.`);
   }
 
+  if (opts.runtime.attentionLevel === "balanced" && opts.runtime.cardsSurfaced > 0) {
+    failures.push(
+      `Balanced Listen surfaced ${opts.runtime.cardsSurfaced} proactive card(s) — expected note-first silence.`,
+    );
+  }
+
+  if (
+    opts.transcriptChunkCount != null &&
+    opts.transcriptChunkCount > 0 &&
+    (opts.liveNotesEntryCount ?? 0) === 0 &&
+    opts.runtime.savedSilently.length === 0
+  ) {
+    failures.push("Transcript chunks received but Live Notes are missing.");
+  }
+
   for (const t of surfaced) {
     if (t.anchorCount != null && t.anchorCount < 1) {
       failures.push("Surfaced card missing transcript anchor.");
@@ -799,6 +838,46 @@ export function gradeListenHarnessQuality(opts: {
     listeningLimitFiredEarly,
     actionFirstCardCount,
     micChunksInListen,
+  };
+}
+
+/** Metrics for live Listen QA report. */
+export function buildListenHarnessNoteMetrics(opts: {
+  moments: ListenMoment[];
+  transcriptChunks: string[];
+  runtime: ListenHarnessRuntime;
+}): {
+  transcriptChunksReceived: number;
+  duplicateTranscriptCount: number;
+  liveNotesCreated: number;
+  noteUpdates: number;
+  actionCardsShown: number;
+  stackedCardsCount: number;
+  noAudioPromptsCount: number;
+  noteExamples: string[];
+  userInterruptedTooMuch: boolean;
+} {
+  const notes = buildListenLiveNotes({
+    moments: opts.moments,
+    transcriptChunks: opts.transcriptChunks,
+  });
+  const examples = notes.entries
+    .filter((e) => e.status === "mature")
+    .slice(0, 3)
+    .map((e) => `[${e.section}] ${e.text.slice(0, 120)}`);
+  return {
+    transcriptChunksReceived: opts.transcriptChunks.length,
+    duplicateTranscriptCount: notes.duplicateTranscriptCount,
+    liveNotesCreated: notes.entries.length,
+    noteUpdates: opts.runtime.liveNotesUpdates,
+    actionCardsShown: opts.runtime.actionFirstCardCount,
+    stackedCardsCount: Math.max(0, opts.runtime.maxSimultaneousCards - 1),
+    noAudioPromptsCount: opts.runtime.noAudioPromptsCount,
+    noteExamples: examples,
+    userInterruptedTooMuch:
+      opts.runtime.cardsSurfaced > 1 ||
+      opts.runtime.actionFirstCardCount > 0 ||
+      opts.runtime.maxSimultaneousCards > 1,
   };
 }
 

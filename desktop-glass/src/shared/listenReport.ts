@@ -13,6 +13,7 @@ import type { ListenSegmentKind } from "./listenSegmentClassifier.ts";
 import type { ListenCheckpointSummary } from "./listenCheckpoint.ts";
 import { checkpointSummaryToMarkdown } from "./listenCheckpoint.ts";
 import { buildListenReportPersonaGuidance } from "./listenModePersona.ts";
+import { buildListenLiveNotes } from "./listenLiveNotes.ts";
 
 export interface ListenReportInput {
   session: GlassSession;
@@ -82,6 +83,7 @@ export function buildListenReportSections(input: ListenReportInput): GlassCopilo
   const media = input.mediaContext ?? mediaFromSession(input.session) ?? null;
   const moments = input.moments;
   const contentMoments = moments.filter(isMainContentListenMoment);
+  const liveNotes = buildListenLiveNotes({ moments: contentMoments });
 
   const sourceLines: string[] = [];
   if (media?.title) sourceLines.push(`Title: ${media.title}`);
@@ -91,56 +93,94 @@ export function buildListenReportSections(input: ListenReportInput): GlassCopilo
   if (media?.durationLabel) sourceLines.push(`Duration: ${media.durationLabel}`);
   if (!sourceLines.length) sourceLines.push("Screen context unavailable — report based on audio transcript.");
 
-  const bestIdeas = momentLines(contentMoments, ["ready", "surfaced", "saved_silently"]);
-  const iivoThoughts = momentLines(contentMoments, ["surfaced", "saved_silently"]);
-  const actions = contentMoments
-    .filter((m) => m.suggestedAction || m.type === "action_step")
-    .map((m) => m.suggestedAction ?? m.summary)
-    .slice(0, 6);
-  const prompts = contentMoments
-    .filter((m) => m.type === "prompt_idea" || m.type === "implementation_idea")
-    .map((m) => m.suggestedThought ?? m.summary)
-    .slice(0, 6);
-  const sales = contentMoments
-    .filter((m) => m.type === "sales_tactic" || m.type === "business_opportunity")
-    .map((m) => m.suggestedThought ?? m.summary)
-    .slice(0, 6);
-  const entities = contentMoments
-    .filter((m) => m.type === "entity_mention")
-    .map((m) => m.summary)
-    .slice(0, 8);
-  const missed = momentLines(contentMoments, ["stale"], 6);
+  const whatThisMeans = whatThisMeansLines(contentMoments);
   const openQuestions = contentMoments
     .filter((m) => m.suggestedQuestion)
     .map((m) => m.suggestedQuestion!)
     .slice(0, 6);
+  const actions = contentMoments
+    .filter((m) => m.suggestedAction || m.type === "action_step")
+    .map((m) => m.suggestedAction ?? m.summary)
+    .slice(0, 6);
   const ignored = ignoredSegmentLines(moments);
 
-  const whatThisMeans = whatThisMeansLines(contentMoments);
-  const thinReport = contentMoments.length === 0;
+  const bestInsights = momentLines(
+    contentMoments.filter((m) => m.importance === "high" || m.status === "surfaced"),
+    ["ready", "surfaced", "saved_silently"],
+    8,
+  );
+  const keyIdeas =
+    liveNotes.sections.keyIdeas.length > 0
+      ? liveNotes.sections.keyIdeas
+      : momentLines(contentMoments, ["ready", "surfaced", "saved_silently"], 8);
+  const quotes =
+    liveNotes.sections.quotes.length > 0
+      ? liveNotes.sections.quotes
+      : contentMoments
+          .filter((m) => m.type === "quote")
+          .map((m) => m.suggestedThought ?? m.summary)
+          .slice(0, 6);
+  const questions =
+    liveNotes.sections.questions.length > 0
+      ? liveNotes.sections.questions
+      : openQuestions;
+  const actionIdeas =
+    liveNotes.sections.actionIdeas.length > 0
+      ? liveNotes.sections.actionIdeas
+      : actions.length
+        ? actions
+        : ["No explicit action ideas captured — review key ideas if needed."];
+  const missed = momentLines(contentMoments, ["stale"], 6);
+  const finalTakeaway =
+    whatThisMeans.length > 0
+      ? whatThisMeans[0]!
+      : keyIdeas[0] ?? "Review Live Notes and transcript for the main takeaway from this session.";
 
-  const about = media?.visibleTextSummary?.slice(0, 200) ?? "Summary from captured transcript and IIVO moments.";
+  const about =
+    liveNotes.currentTopic ??
+    media?.visibleTextSummary?.slice(0, 200) ??
+    "Summary from captured transcript and IIVO Live Notes.";
 
   const sections: GlassCopilotDebriefSection[] = [
     { heading: "Source", items: sourceLines },
     { heading: "What this was about", items: [about] },
     {
-      heading: "What this means",
-      items: thinReport
-        ? ["Not enough main-content moments were captured — audio may have been thin, muted, or mostly ads/intros."]
-        : whatThisMeans.length
-          ? whatThisMeans
-          : ["Review surfaced thoughts below for the main takeaways from this session."],
+      heading: "Key ideas",
+      items: keyIdeas.length ? keyIdeas : ["No strong key ideas captured — audio may have been thin."],
     },
-    { heading: "Best ideas", items: bestIdeas.length ? bestIdeas : ["No strong ideas captured — transcript may have been thin."] },
-    { heading: "IIVO thoughts", items: iivoThoughts.length ? iivoThoughts : ["No proactive thoughts surfaced — check Quiet mode or thin audio."] },
-    { heading: "Action steps", items: actions.length ? actions : ["No explicit action steps detected."] },
-    { heading: "Prompts / scripts / assets", items: prompts.length ? prompts : ["None generated during this session."] },
-    { heading: "Sales/business applications", items: sales.length ? sales : ["Not applicable or not detected."] },
-    { heading: "Tools / people / companies mentioned", items: entities.length ? entities : ["None noted."] },
-    { heading: "What you may have missed", items: missed.length ? missed : ["No stale moments worth revisiting."] },
-    { heading: "Open questions", items: openQuestions.length ? openQuestions : ["Review the recording or transcript for follow-ups."] },
+    {
+      heading: "Best insights",
+      items: bestInsights.length
+        ? bestInsights
+        : keyIdeas.length
+          ? keyIdeas.slice(0, 4)
+          : ["No high-signal insights captured."],
+    },
+    {
+      heading: "Important quotes/paraphrases",
+      items: quotes.length ? quotes : ["No notable quotes captured."],
+    },
+    {
+      heading: "Questions worth revisiting",
+      items: questions.length ? questions : ["Review the recording or transcript for follow-ups."],
+    },
+    {
+      heading: "Action ideas",
+      items: actionIdeas,
+    },
+    {
+      heading: "What you may have missed",
+      items: missed.length ? missed : ["No stale moments worth revisiting."],
+    },
+    { heading: "Final takeaway", items: [finalTakeaway] },
   ];
+
+  const thinReport = contentMoments.length === 0;
+  if (thinReport) {
+    sections[1]!.items = [
+      "Not enough main-content moments were captured — audio may have been thin, muted, or mostly ads/intros.",
+    ];
+  }
 
   if (ignored.length) {
     sections.push({

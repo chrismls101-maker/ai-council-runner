@@ -84,7 +84,7 @@ test("harness enforces min interval between surfaced thoughts", () => {
     listenWarmupMs: 120_000,
   });
   assert.equal(analysis.decision, "save_silently");
-  assert.ok(/90s|Cooldown|Harness|warm-up/i.test(analysis.reason));
+  assert.ok(/Live Notes|90s|Cooldown|Harness|warm-up/i.test(analysis.reason));
 });
 
 test("applyHarnessMomentDecision records surfaced and silent thoughts", () => {
@@ -128,7 +128,15 @@ test("gradeMediaExtraction reports extraction without hardcoding channel", () =>
   assert.ok(grade.notes.some((n) => /Title extracted/i.test(n)));
 });
 
-test("parseListenLiveCli defaults to auto mode", () => {
+test("parseListenLiveCli defaults to 60 minutes and auto mode", () => {
+  const cli = parseListenLiveCli([]);
+  assert.equal(cli.minutes, 60);
+  assert.equal(cli.manual, false);
+  assert.equal(cli.attach, false);
+  assert.equal(cli.keepGlass, false);
+});
+
+test("parseListenLiveCli accepts minutes override", () => {
   const cli = parseListenLiveCli(["--minutes", "15"]);
   assert.equal(cli.minutes, 15);
   assert.equal(cli.manual, false);
@@ -144,9 +152,14 @@ test("parseListenLiveCli supports manual attach keep-glass", () => {
   assert.equal(cli.keepGlass, true);
 });
 
-test("parseListenLiveCli supports warmup override", () => {
-  const cli = parseListenLiveCli(["--minutes", "5", "--warmup-seconds", "30"]);
-  assert.equal(cli.warmupSeconds, 30);
+test("parseListenLiveCli supports video URL and auto-fix", () => {
+  const cli = parseListenLiveCli([
+    "--url",
+    "https://www.youtube.com/watch?v=AuW-7YGkb0g&t=894s",
+    "--auto-fix",
+  ]);
+  assert.equal(cli.videoUrl, "https://www.youtube.com/watch?v=AuW-7YGkb0g&t=894s");
+  assert.equal(cli.autoFix, true);
 });
 
 test("gradeListenHarnessQuality fails early proactive card", () => {

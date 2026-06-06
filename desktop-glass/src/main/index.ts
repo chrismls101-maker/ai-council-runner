@@ -149,6 +149,14 @@ import { extractMediaContext } from "../shared/mediaContextExtract.ts";
 import { MEDIA_CONTEXT_VISION_PROMPT, type MediaContext } from "../shared/mediaContextTypes.ts";
 import { getActiveBrowserUrl } from "./browserUrl.ts";
 import {
+  applyGlassAppUpdate,
+  checkForGlassAppUpdate,
+} from "./glassAppUpdate.ts";
+import {
+  emptyGlassAppUpdateState,
+  type GlassAppUpdateState,
+} from "../shared/glassAppUpdate.ts";
+import {
   buildActiveListeningProactiveIntervention,
   clearActiveListeningRuntime,
   initialActiveListeningRuntime,
@@ -175,10 +183,18 @@ import {
   type ListenModeRuntime,
 } from "../shared/listenModeRuntime.ts";
 import {
+  LISTEN_START_COUNTDOWN_SECONDS,
+  shouldSkipListenCountdown,
+} from "../shared/listenCountdown.ts";
+import {
   initialListenMomentEngineState,
   type ListenMoment,
 } from "../shared/listenMomentTypes.ts";
 import { listenThoughtFeedBodies } from "../shared/listenThoughtCards.ts";
+import {
+  buildListenLiveNotes,
+  listenTranscriptChunksFromEvents,
+} from "../shared/listenLiveNotes.ts";
 import {
   decideListenCardSurface,
   type ListenCardSurfaceDecision,
@@ -380,6 +396,8 @@ interface AppState {
   nativeLoopbackTested: boolean;
   voiceModeStartNonce: number;
   mediaContext: MediaContext | null;
+  appUpdate: GlassAppUpdateState;
+  listenCountdownSeconds?: number;
 }
 
 let askAbortController: AbortController | null = null;
@@ -422,10 +440,55 @@ const state: AppState = {
   nativeLoopbackTested: false,
   voiceModeStartNonce: 0,
   mediaContext: null,
+  appUpdate: emptyGlassAppUpdateState(app.getVersion()),
 };
 
 let moments = new SavedMomentsStore();
 let sessions = new GlassSessionStore();
+
+let listenCountdownTimer: ReturnType<typeof setInterval> | null = null;
+
+function cancelListenCountdown(): void {
+  if (listenCountdownTimer) {
+    clearInterval(listenCountdownTimer);
+    listenCountdownTimer = null;
+  }
+  if (state.listenCountdownSeconds != null) {
+    state.listenCountdownSeconds = undefined;
+  }
+}
+
+function completeListenCountdown(): void {
+  if (listenCountdownTimer) {
+    clearInterval(listenCountdownTimer);
+    listenCountdownTimer = null;
+  }
+  state.listenCountdownSeconds = undefined;
+  broadcastTranscriptionControl({ type: "start" });
+  push();
+}
+
+function beginListenCountdown(): void {
+  if (listenCountdownTimer) return;
+
+  if (shouldSkipListenCountdown(process.env)) {
+    broadcastTranscriptionControl({ type: "start" });
+    return;
+  }
+
+  state.listenCountdownSeconds = LISTEN_START_COUNTDOWN_SECONDS;
+  push();
+
+  listenCountdownTimer = setInterval(() => {
+    const next = (state.listenCountdownSeconds ?? 1) - 1;
+    if (next <= 0) {
+      completeListenCountdown();
+      return;
+    }
+    state.listenCountdownSeconds = next;
+    push();
+  }, 1000);
+}
 
 function sessionIsLive(): boolean {
   const s = sessions.current();
@@ -455,6 +518,17 @@ const copilotRecentResponses: string[] = [];
 let activeListeningRuntime: ActiveListeningRuntimeState = initialActiveListeningRuntime();
 let listenMomentRuntime: ListenModeRuntime = initialListenMomentEngineState();
 let listenLastChunkMs: number | undefined;
+
+function buildCurrentListenLiveNotes() {
+  const session = sessions.current();
+  const chunks = session ? listenTranscriptChunksFromEvents(session.events) : [];
+  return buildListenLiveNotes({
+    moments: listenMomentRuntime.moments,
+    transcriptChunks: chunks,
+    listenStartedMs: listenMomentRuntime.listenStartedMs,
+    nowMs: Date.now(),
+  });
+}
 
 function buildActiveListeningAskContext(userPrompt?: string) {
   const session = sessions.current();
@@ -735,6 +809,7 @@ async function processListenModeChunk(newText: string, tags?: string[]): Promise
     listenWarmupMs: config.listenWarmupMs,
     segmentSuppressProactive: segment.suppressProactive,
     segmentKind: segment.kind,
+    liveThoughtsEnabled: config.showOverlaySuggestions && !config.muteSuggestions,
   };
 
   if (isListenWarmupActive(surfaceContext)) {
@@ -947,8 +1022,11 @@ function copilotRuntime(): GlassCopilotRuntimeState {
     activeMode === "listen" &&
     state.privacy.listening &&
     isListenWarmupActive(warmupCtx);
+  const runtime = copilot.runtimeState(sessionIsLive());
+  const listenActive = activeMode === "listen" && state.privacy.listening;
   return {
-    ...copilot.runtimeState(sessionIsLive()),
+    ...runtime,
+    pendingInterventions: listenActive ? [] : runtime.pendingInterventions,
     listeningLimitReached: listeningLimitState.limitReached,
     listenBuildingContext: building,
     listenWarmupRemainingMs: building ? listenWarmupRemainingMs(warmupCtx) : 0,
@@ -1157,6 +1235,9 @@ function snapshot(): GlassState {
     copilot: copilotRuntime(),
     voiceModeStartNonce: state.voiceModeStartNonce,
     mediaContext: state.mediaContext,
+    appUpdate: state.appUpdate,
+    listenCountdownSeconds: state.listenCountdownSeconds,
+    listenLiveNotes: isListenModeActive() ? buildCurrentListenLiveNotes() : undefined,
   };
 }
 
@@ -1178,6 +1259,28 @@ function eventContextFields(opts?: { sourceTitle?: string; captureSource?: strin
 function push(): void {
   refreshSetupCapabilities();
   broadcast(IPC.state, snapshot());
+}
+
+let glassUpdateCheckTimer: ReturnType<typeof setInterval> | null = null;
+
+async function runGlassUpdateCheck(): Promise<void> {
+  if (process.env.IIVO_GLASS_E2E === "1") return;
+  if (state.appUpdate.phase === "installing") return;
+
+  const next = await checkForGlassAppUpdate(config, {
+    ...state.appUpdate,
+    currentVersion: app.getVersion(),
+  });
+
+  state.appUpdate = next;
+  push();
+}
+
+function scheduleGlassUpdateChecks(): void {
+  if (process.env.IIVO_GLASS_E2E === "1") return;
+  void runGlassUpdateCheck();
+  setTimeout(() => void runGlassUpdateCheck(), 5_000);
+  glassUpdateCheckTimer = setInterval(() => void runGlassUpdateCheck(), 30 * 60 * 1000);
 }
 
 function dispatchPrivacy(action: Parameters<typeof privacyReducer>[1]): void {
@@ -2271,13 +2374,20 @@ async function handleCommand(
         push();
       }
       return;
-    case "request-start-listening":
-      state.panelTab = "context";
+    case "request-start-listening": {
+      const listenConfig = copilot.getConfig();
+      const willListen =
+        deriveActiveListeningMode(
+          listenConfig,
+          sessionIsLive() && copilotModeIsActive(listenConfig.mode),
+        ) === "listen";
+      state.panelTab = willListen ? "live-notes" : "context";
       if (!isPanelVisible()) togglePanel();
       state.operationDiagnostics = recordOperation(state.operationDiagnostics, "request-start-listening", "pending");
       push();
-      broadcastTranscriptionControl({ type: "start" });
+      beginListenCountdown();
       return;
+    }
     case "start-listening":
       dispatchPrivacy({ type: "START_LISTENING", at: new Date().toISOString() });
       state.stt = { ...state.stt, listeningElapsedMs: 0, lastError: undefined };
@@ -2288,6 +2398,8 @@ async function handleCommand(
         ) === "listen"
       ) {
         listenMomentRuntime = prepareListenModeSession(listenMomentRuntime, Date.now());
+        copilot.clearPendingInterventions();
+        clearListenCardState();
       }
       resetListeningLimitTracking();
       state.operationDiagnostics = diagnosticsForListening(
@@ -2299,6 +2411,7 @@ async function handleCommand(
       push();
       return;
     case "pause":
+      cancelListenCountdown();
       broadcastTranscriptionControl({ type: "stop" });
       dispatchPrivacy({ type: "PAUSE", at: new Date().toISOString() });
       state.stt = { ...state.stt, listeningElapsedMs: 0 };
@@ -2311,6 +2424,7 @@ async function handleCommand(
       return;
     case "stop":
     case "stop-everything": {
+      cancelListenCountdown();
       cancelGlassAsk();
       state.visualAskPhase = "idle";
       const stopped = stopAllActiveCaptureAndListening({
@@ -2711,6 +2825,12 @@ async function handleCommand(
           ? `System audio probe: ${result.systemAudioStatus}${result.systemAudioDiagnostics ? ` (${result.systemAudioDiagnostics})` : ""}`
           : state.setupCheckSummary;
       push();
+      if (
+        !state.privacy.listening &&
+        (process.env.IIVO_GLASS_E2E !== "1" || process.env.IIVO_GLASS_LIVE_E2E === "1")
+      ) {
+        broadcastTranscriptionControl({ type: "connect-system-audio" });
+      }
       return;
     }
     case "run-capture-diagnostics": {
@@ -2805,6 +2925,35 @@ async function handleCommand(
       push();
       return;
     }
+    case "connect-system-audio":
+    case "verify-system-audio":
+      broadcastTranscriptionControl({ type: "connect-system-audio" });
+      state.lastNotice = "Connecting system audio…";
+      push();
+      return;
+    case "glass-update-check":
+      void runGlassUpdateCheck();
+      return;
+    case "glass-update-apply": {
+      state.appUpdate = { ...state.appUpdate, phase: "installing", error: undefined };
+      push();
+      const result = await applyGlassAppUpdate();
+      if (!result.ok) {
+        state.appUpdate = { ...state.appUpdate, phase: "available", error: result.error };
+        push();
+      }
+      return;
+    }
+    case "glass-update-dismiss":
+      state.appUpdate = { ...state.appUpdate, phase: "dismissed" };
+      push();
+      return;
+    case "e2e-set-app-update":
+      if (process.env.IIVO_GLASS_E2E === "1") {
+        state.appUpdate = { ...state.appUpdate, ...command.update };
+        push();
+      }
+      return;
     case "test-microphone":
       state.panelTab = "setup";
       if (!isPanelVisible()) togglePanel();
@@ -3174,6 +3323,7 @@ async function handleCopilotCommand(command: GlassCommand): Promise<boolean> {
       return true;
     }
     case "copilot-dismiss-silence-warning":
+      copilot.dismissSilenceWarning();
       push();
       return true;
     case "copilot-pause-system-audio":
@@ -3797,6 +3947,7 @@ app.whenReady().then(async () => {
   applyGlassUserSettings(glassUserSettings);
   registerGlobalHotkeys();
   push();
+  scheduleGlassUpdateChecks();
 
   if (showSplash) {
     const readyWindows = getWindows();
@@ -3816,6 +3967,7 @@ app.whenReady().then(async () => {
 
 app.on("will-quit", () => {
   unregisterCommandBarHotkeys();
+  if (glassUpdateCheckTimer) clearInterval(glassUpdateCheckTimer);
 });
 
 app.on("window-all-closed", () => {

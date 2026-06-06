@@ -6,6 +6,19 @@ import type {
   GlassCopilotIntervention,
 } from "../../shared/copilotTypes.ts";
 import type { GlassCopilotDiagnosticResult } from "../../shared/copilotDiagnosticAnalysis.ts";
+import { deriveActiveListeningMode } from "../../shared/activeListeningContext.ts";
+import { copilotModeIsActive } from "../../shared/copilotTypes.ts";
+
+function isListenModeActive(state: GlassState): boolean {
+  const sessionLive =
+    state.session?.status === "active" || state.session?.status === "paused";
+  return (
+    deriveActiveListeningMode(
+      state.copilot.config,
+      sessionLive && copilotModeIsActive(state.copilot.config.mode),
+    ) === "listen" && state.privacy.listening
+  );
+}
 
 /**
  * Session Copilot overlay — small, non-blocking interaction cards.
@@ -30,7 +43,8 @@ export function CopilotOverlay({
   const debrief = copilot.debrief ?? null;
   const diagnosticResult = copilot.diagnosticResult ?? null;
   const diagnosticAnalyzing = copilot.diagnosticAnalyzing ?? false;
-  const interventions = copilot.pendingInterventions;
+  const listenMode = isListenModeActive(state);
+  const interventions = listenMode ? [] : copilot.pendingInterventions;
 
   if (
     !showOffer &&
@@ -110,7 +124,18 @@ export function CopilotOverlay({
         </article>
       ) : null}
 
-      {showSilence ? (
+      {showSilence && listenMode ? (
+        <div className="overlay-copilot-status" data-testid="glass-listen-silence-status">
+          <span>No audio detected — still listening</span>
+          <button
+            type="button"
+            className="gbtn gbtn--ghost gbtn--compact"
+            onClick={() => send({ type: "copilot-dismiss-silence-warning" })}
+          >
+            Keep listening
+          </button>
+        </div>
+      ) : showSilence ? (
         <article className="overlay-copilot-card" data-testid="glass-copilot-silence">
           <div className="overlay-copilot-card__eyebrow">Session Copilot</div>
           <div className="overlay-copilot-card__title">No audio detected.</div>

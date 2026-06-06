@@ -4,7 +4,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { readFileSync, existsSync, mkdirSync, appendFileSync, writeFileSync, openSync, fsyncSync, closeSync } from "node:fs";
+import { readFileSync, existsSync, mkdirSync, appendFileSync, writeFileSync, openSync, fsyncSync, closeSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { extractMediaContext } from "../../src/shared/mediaContextExtract.ts";
@@ -27,6 +27,7 @@ import {
   sessionHasRawAudioOrBase64,
   summarizeMomentStats,
   gradeListenHarnessQuality,
+  buildListenHarnessNoteMetrics,
   LISTEN_INTERRUPT_QA_QUESTIONS,
   countDuplicateTranscriptLines,
   formatEnduranceConfig,
@@ -70,14 +71,22 @@ export function parseListenLiveArgs(argv = process.argv.slice(2)) {
 export function resolveSessionsPath() {
   if (process.env.GLASS_SESSIONS_PATH) return process.env.GLASS_SESSIONS_PATH;
   const candidates = [
-    join(homedir(), "Library/Application Support/iivo-glass/glass-sessions.json"),
+    join(homedir(), "Library/Application Support/IIVO Glass (Dev)/glass-sessions.json"),
     join(homedir(), "Library/Application Support/IIVO Glass/glass-sessions.json"),
+    join(homedir(), "Library/Application Support/iivo-glass/glass-sessions.json"),
     join(homedir(), "Library/Application Support/Electron/glass-sessions.json"),
   ];
+  let best = candidates[candidates.length - 1];
+  let bestMtime = 0;
   for (const p of candidates) {
-    if (existsSync(p)) return p;
+    if (!existsSync(p)) continue;
+    const mtime = statSync(p).mtimeMs;
+    if (mtime > bestMtime) {
+      bestMtime = mtime;
+      best = p;
+    }
   }
-  return candidates[0];
+  return best;
 }
 
 export function readSessionsStore(path) {
@@ -143,7 +152,7 @@ tell application "Google Chrome"
   repeat with w in windows
     set ti to 1
     repeat with t in tabs of w
-      if (URL of t) contains "youtube.com/watch" then
+      if (URL of t) contains "youtube.com/watch" and (URL of t) contains "${url.split("v=")[1]?.split("&")[0] ?? ""}" then
         set active tab index of w to ti
         set index of w to 1
         set found to true

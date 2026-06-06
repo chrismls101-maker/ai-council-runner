@@ -480,6 +480,68 @@ test("no silence warning when audio recently flowed", () => {
   assert.equal(result.systemAudioSilenceWarning, false);
 });
 
+test("Listen mode (video_learning) does not build coaching action interventions", () => {
+  const deps = deterministicDeps(10_000_000);
+  const controller = new SessionCopilotController(
+    deps,
+    config({ mode: "coaching", sessionType: "video_learning" }),
+  );
+  const transcript =
+    "We need to follow up with the client tomorrow and send the proposal before the standup meeting.";
+  const result = controller.tick({
+    sessionLive: true,
+    session: makeSession([transcriptEvent("e1", transcript)]),
+    transcript,
+    recentCommands: [],
+    recentResponses: [],
+    systemAudioActive: true,
+    systemAudioLastSignalMs: 10_000_000,
+  });
+  assert.equal(result.intervention, null);
+  assert.equal(controller.pendingInterventions().length, 0);
+});
+
+test("Listen mode silence warning uses longer timeout", () => {
+  const deps = deterministicDeps(10_000_000);
+  const controller = new SessionCopilotController(
+    deps,
+    config({ mode: "coaching", sessionType: "video_learning", silenceTimeoutMin: 5 }),
+  );
+  const atSixMin = controller.tick({
+    sessionLive: true,
+    session: makeSession([transcriptEvent("e1", "hello")]),
+    transcript: "hello",
+    recentCommands: [],
+    recentResponses: [],
+    systemAudioActive: true,
+    systemAudioLastSignalMs: 10_000_000 - 6 * 60_000,
+  });
+  assert.equal(atSixMin.systemAudioSilenceWarning, false);
+
+  const atElevenMin = controller.tick({
+    sessionLive: true,
+    session: makeSession([transcriptEvent("e1", "hello")]),
+    transcript: "hello",
+    recentCommands: [],
+    recentResponses: [],
+    systemAudioActive: true,
+    systemAudioLastSignalMs: 10_000_000 - 11 * 60_000,
+  });
+  assert.equal(atElevenMin.systemAudioSilenceWarning, true);
+
+  controller.dismissSilenceWarning();
+  const suppressed = controller.tick({
+    sessionLive: true,
+    session: makeSession([transcriptEvent("e1", "hello")]),
+    transcript: "hello",
+    recentCommands: [],
+    recentResponses: [],
+    systemAudioActive: true,
+    systemAudioLastSignalMs: 10_000_000 - 11 * 60_000,
+  });
+  assert.equal(suppressed.systemAudioSilenceWarning, false);
+});
+
 // --- config parsing -------------------------------------------------------
 
 test("config parsing clamps interval and validates fields", () => {

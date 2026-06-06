@@ -87,7 +87,7 @@ test("developing idea → wait", () => {
   assert.equal(result.decision, "wait_for_more_context");
 });
 
-test("high-value ready moment → surface in Balanced", () => {
+test("high-value ready moment → save silently in Balanced (note-first)", () => {
   const moment = matureReadyMoment();
   const now = Date.now();
   const result = shouldSurfaceListenMoment(
@@ -97,9 +97,11 @@ test("high-value ready moment → surface in Balanced", () => {
       nowMs: now,
       listenStartedMs: now - DEFAULT_LISTEN_WARMUP_MS - 5_000,
       listenWarmupMs: DEFAULT_LISTEN_WARMUP_MS,
+      liveThoughtsEnabled: true,
     }),
   );
-  assert.equal(result.decision, "surface_now");
+  assert.equal(result.decision, "save_silently");
+  assert.match(result.reason, /Live Notes/i);
 });
 
 test("warm-up phase → save silently", () => {
@@ -272,8 +274,8 @@ test("report includes silently saved moments", () => {
   };
   const moments = listenMomentsFromSessionEvents(session.events);
   const sections = buildListenReportSections({ session, moments });
-  const thoughts = sections.find((s) => s.heading === "IIVO thoughts");
-  assert.ok(thoughts?.items.some((i) => i.includes("sales")));
+  const keyIdeas = sections.find((s) => s.heading === "Key ideas");
+  assert.ok(keyIdeas?.items.some((i) => i.includes("sales") || i.toLowerCase().includes("tactic")));
 });
 
 test("pickBestListenMoment prefers ready high-importance moments", () => {

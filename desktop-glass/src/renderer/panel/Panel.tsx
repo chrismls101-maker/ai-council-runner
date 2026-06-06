@@ -33,10 +33,16 @@ import { IivoAnalysisPanel } from "../components/IivoAnalysisPanel.tsx";
 import { ListeningControls, OperationDiagnosticsFooter } from "../components/ListeningControls.tsx";
 import { SetupSection } from "./SetupSection.tsx";
 import { CopilotPanel } from "./CopilotPanel.tsx";
+import { AudioTab } from "./AudioTab.tsx";
+import { LiveNotesTab } from "./LiveNotesTab.tsx";
+import { deriveActiveListeningMode } from "../../shared/activeListeningContext.ts";
+import { copilotModeIsActive } from "../../shared/copilotTypes.ts";
 
 const TABS: { id: PanelTab; label: string }[] = [
   { id: "summary", label: "Summary" },
+  { id: "copilot", label: "Copilot" },
   { id: "setup", label: "Setup" },
+  { id: "audio", label: "Audio" },
   { id: "session", label: "Session" },
   { id: "insights", label: "Insights" },
   { id: "context", label: "Context" },
@@ -778,21 +784,6 @@ function GlassLayoutSettings({ state }: { state: GlassState }): JSX.Element {
         Visual asks always send the image to IIVO for that answer only. Context Bridge upload
         happens when you Open in IIVO, Save screen, or enable auto-upload above.
       </p>
-      <p className="section-title panel__settings-privacy">Command bar microphone</p>
-      <label className="panel__settings-row panel__settings-row--check">
-        <input
-          type="checkbox"
-          checked={settings.micAutoSendAfterSilence === true}
-          onChange={(e) =>
-            send({ type: "set-mic-auto-send-after-silence", enabled: e.target.checked })
-          }
-        />
-        <span>Auto-send after silence (mic)</span>
-      </label>
-      <p className="hint">
-        Default is off: use the mic on the command bar, review transcribed text, then press Ask.
-        System audio stays separate (right-click the mic button).
-      </p>
     </div>
   );
 }
@@ -830,6 +821,16 @@ export function Panel(): JSX.Element {
   const sessionLive =
     state.session?.status === "active" || state.session?.status === "paused";
 
+  const listenActive =
+    deriveActiveListeningMode(
+      state.copilot.config,
+      sessionLive && copilotModeIsActive(state.copilot.config.mode),
+    ) === "listen" && state.privacy.listening;
+
+  const visibleTabs = listenActive
+    ? [{ id: "live-notes" as PanelTab, label: "IIVO Notes" }, ...TABS.filter((t) => t.id !== "live-notes")]
+    : TABS;
+
   return (
     <div className="panel" data-testid="glass-panel">
       <div className="panel__header">
@@ -860,7 +861,7 @@ export function Panel(): JSX.Element {
 
       <div className="panel__shell">
         <nav className="panel__nav" aria-label="Panel sections">
-          {TABS.map((t) => (
+          {visibleTabs.map((t) => (
             <button
               key={t.id}
               type="button"
@@ -879,21 +880,36 @@ export function Panel(): JSX.Element {
 
         <div className="panel__stage">
           {tab === "summary" ? (
-            <>
+            <div className="panel__body">
+              <p className="empty panel__hint">
+                Ask IIVO from the command bar. Session summaries and analysis live here — use
+                Copilot for Listen, Meetings, Work, and Fix.
+              </p>
+              <SummaryView state={state} />
+            </div>
+          ) : null}
+
+          {tab === "live-notes" ? (
+            <div className="panel__body" data-testid="glass-panel-live-notes-tab">
+              <LiveNotesTab state={state} />
+            </div>
+          ) : null}
+
+          {tab === "copilot" ? (
+            <div className="panel__body panel__body--copilot" data-testid="glass-panel-copilot-tab">
               <CopilotPanel sessionLive={sessionLive} />
-              <div className="panel__body">
-                <p className="empty panel__hint">
-                  Ask IIVO from the command bar. Use the mode cards above for Listen, Meetings,
-                  Work, and Fix.
-                </p>
-                <SummaryView state={state} />
-              </div>
-            </>
+            </div>
           ) : null}
 
           {tab === "setup" ? (
             <div className="panel__body">
               <StatusGrid state={state} />
+            </div>
+          ) : null}
+
+          {tab === "audio" ? (
+            <div className="panel__body">
+              <AudioTab state={state} />
             </div>
           ) : null}
 

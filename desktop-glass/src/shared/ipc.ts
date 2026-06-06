@@ -72,6 +72,7 @@ export type TranscriptionControlCommand =
   | { type: "probe-microphone" }
   | { type: "probe-virtual-audio-devices" }
   | { type: "startup-audio-restore" }
+  | { type: "connect-system-audio" }
   | { type: "test-system-audio" }
   | { type: "test-blackhole" };
 
@@ -142,6 +143,7 @@ export type GlassCommand =
   | { type: "show-blackhole-setup" }
   | { type: "detect-audio-devices" }
   | { type: "verify-system-audio" }
+  | { type: "connect-system-audio" }
   | { type: "focus-audio-setup" }
   | { type: "test-blackhole" }
   | { type: "retry-capture-permission" }
@@ -203,7 +205,14 @@ export type GlassCommand =
   | { type: "copilot-refine-session-type" }
   | { type: "copilot-dismiss-diagnostic-result" }
   | { type: "copilot-open-diagnostic-in-iivo" }
-  | { type: "copilot-save-diagnostic-result" };
+  | { type: "copilot-save-diagnostic-result" }
+  | { type: "glass-update-check" }
+  | { type: "glass-update-apply" }
+  | { type: "glass-update-dismiss" }
+  | {
+      type: "e2e-set-app-update";
+      update: Partial<import("./glassAppUpdate.ts").GlassAppUpdateState>;
+    };
 
 export interface GlassState {
   privacy: PrivacyState;
@@ -252,6 +261,11 @@ export interface GlassState {
   voiceModeStartNonce?: number;
   /** Latest media/page context for Listen mode (text metadata only). */
   mediaContext?: import("./mediaContextTypes.ts").MediaContext | null;
+  appUpdate: import("./glassAppUpdate.ts").GlassAppUpdateState;
+  /** Seconds remaining before listening starts; undefined when idle. */
+  listenCountdownSeconds?: number;
+  /** Structured live notes for Listen mode (note-first UI). */
+  listenLiveNotes?: import("./listenLiveNotes.ts").ListenLiveNotesState;
 }
 
 export interface SttProcessChunkRequest {
