@@ -2295,11 +2295,6 @@ html.glass-dock-window #root {
   font-size: 12px;
 }
 
-.mode-panel__choice-buttons {
-  display: flex;
-  gap: 8px;
-}
-
 .mode-panel__status-row {
   display: flex;
   align-items: center;
@@ -2308,6 +2303,28 @@ html.glass-dock-window #root {
   margin-top: 12px;
   font-size: 11.5px;
   opacity: 0.9;
+}
+
+.mode-panel__listen-privacy {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 11.5px;
+}
+
+.mode-panel__listen-privacy p {
+  margin: 0 0 4px;
+}
+
+.mode-panel__listen-note {
+  opacity: 0.85;
+}
+
+.mode-panel__listen-warn {
+  color: var(--glass-warn, #f5a623);
+  margin-top: 6px !important;
 }
 
 .mode-panel__privacy {

@@ -23,6 +23,7 @@ import {
   intentNeedsRecentTranscript,
 } from "./activeListeningIntent.ts";
 import { extractSalesActiveSignals, looksLikeSalesCallContext } from "./salesActiveCoaching.ts";
+import type { MediaContext } from "./mediaContextTypes.ts";
 
 export interface BuildActiveListeningInput {
   session: GlassSession | null;
@@ -34,6 +35,7 @@ export interface BuildActiveListeningInput {
   recentQuestions?: string[];
   lastAnswer?: string;
   screenshotMeta?: ActiveListeningScreenshotMeta;
+  mediaContext?: MediaContext | null;
   /** Current user question (for intent classification). */
   userPrompt?: string;
   nowMs?: number;
@@ -107,7 +109,10 @@ export function buildActiveListeningContext(input: BuildActiveListeningInput): A
   for (const event of events) {
     if (!withinWindow(event.timestamp, cutoffMs, nowMs)) continue;
     const chunk = eventToChunk(event);
-    if (chunk) chunks.push(chunk);
+    if (!chunk) continue;
+    // Listen mode = computer audio only; exclude microphone unless Voice explicitly on.
+    if (activeMode === "listen" && chunk.source === "microphone") continue;
+    chunks.push(chunk);
   }
 
   // Fallback: if no timed chunks, use tail of running transcript (text only).
@@ -159,6 +164,7 @@ export function buildActiveListeningContext(input: BuildActiveListeningInput): A
     detectedIntent,
     contextThin,
     salesSignals,
+    mediaContext: input.mediaContext ?? undefined,
   };
 }
 

@@ -10,6 +10,7 @@
 
 import type { GlassCopilotMode } from "./copilotTypes.ts";
 import type { GlassModeId } from "./glassModePresets.ts";
+import type { MediaContext } from "./mediaContextTypes.ts";
 
 export type ActiveListeningChunkSource = "system_audio" | "microphone" | "screen" | "session";
 
@@ -69,6 +70,8 @@ export interface ActiveListeningContextPayload {
   contextThin?: boolean;
   /** Sales-call coaching signals (Meetings mode). */
   salesSignals?: SalesActiveSignals;
+  /** Visible screen/media page context (title, channel, URL — no faces). */
+  mediaContext?: MediaContext;
 }
 
 /** Sales / customer-call signals extracted from recent transcript (never invented). */

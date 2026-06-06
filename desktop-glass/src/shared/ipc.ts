@@ -126,6 +126,7 @@ export type GlassCommand =
   | { type: "toggle-overlay" }
   | { type: "set-overlay-mode"; mode: OverlayMode }
   | { type: "window-context-refresh" }
+  | { type: "capture-media-context" }
   | { type: "run-setup-check"; silent?: boolean }
   | { type: "run-capture-diagnostics" }
   | { type: "clear-last-notice" }
@@ -249,6 +250,8 @@ export interface GlassState {
   copilot: import("./copilotTypes.ts").GlassCopilotRuntimeState;
   /** Incremented when the panel requests Voice Mode; the command bar starts it. */
   voiceModeStartNonce?: number;
+  /** Latest media/page context for Listen mode (text metadata only). */
+  mediaContext?: import("./mediaContextTypes.ts").MediaContext | null;
 }
 
 export interface SttProcessChunkRequest {

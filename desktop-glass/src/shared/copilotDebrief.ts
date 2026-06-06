@@ -25,11 +25,20 @@ import {
   MEETING_MISSING_LABELS,
   type MeetingIntelligence,
 } from "./meetingIntelligence.ts";
+import {
+  buildListenReportMarkdown,
+  buildListenReportSections,
+  listenMomentsFromSessionEvents,
+} from "./listenReport.ts";
+import type { ListenMoment } from "./listenMomentTypes.ts";
+import type { MediaContext } from "./mediaContextTypes.ts";
 
 export interface DebriefOptions {
   sessionType?: GlassCopilotSessionType;
   sessionTypeDetection?: SessionTypeDetectionResult;
   reportStyle?: GlassCopilotReportStyle;
+  listenMoments?: ListenMoment[];
+  mediaContext?: MediaContext | null;
 }
 
 const DEBRIEF_TRIGGER_PHRASES = [
@@ -338,22 +347,35 @@ export function buildSessionDebrief(
   const reportStyle = options.reportStyle ?? "concise";
   const cap = reportStyle === "detailed" ? 10 : 4;
 
+  const listenMoments =
+    options.listenMoments ??
+    (sessionType === "video_learning" ? listenMomentsFromSessionEvents(session.events) : []);
+
   let sections =
     detection?.mixed && detection.secondaryType
       ? sectionsForMixed(detection, session, insights, cap)
-      : sectionsForType(sessionType, session, insights, cap);
+      : sessionType === "video_learning" && listenMoments.length > 0
+        ? buildListenReportSections({
+            session,
+            moments: listenMoments,
+            mediaContext: options.mediaContext,
+          })
+        : sectionsForType(sessionType, session, insights, cap);
   // Concise reports drop empty sections (except the lead "what happened").
   if (reportStyle === "concise") {
     sections = sections.filter((section, index) => index === 0 || section.items.length > 0);
   }
 
   const isMeeting = sessionType === "meeting_call" && !(detection?.mixed && detection.secondaryType);
+  const isListenReport = sessionType === "video_learning" && listenMoments.length > 0;
   const markdown = isMeeting
     ? buildBusinessMeetingDebrief(meetingIntelligenceForSession(session), {
         title: session.title,
         summary: whatHappened(session)[0],
       })
-    : debriefToMarkdown(session.title, sections);
+    : isListenReport
+      ? buildListenReportMarkdown(sections)
+      : debriefToMarkdown(session.title, sections);
   return {
     id: deps.idFactory(),
     sessionId: session.id,

@@ -76,6 +76,15 @@ export function detectVirtualAudioDevices(
   return matches.sort((a, b) => a.displayName.localeCompare(b.displayName));
 }
 
+export function selectedDeviceMayIncludeMicrophone(
+  devices: VirtualAudioDeviceMatch[],
+  selectedDeviceId?: string,
+): boolean {
+  if (!selectedDeviceId) return false;
+  const match = devices.find((d) => d.deviceId === selectedDeviceId);
+  return match?.kind === "aggregate" || match?.kind === "multi_output";
+}
+
 export function buildSystemAudioVirtualDeviceDetail(input: {
   virtualDevices: VirtualAudioDeviceMatch[];
   selectedDeviceId?: string;

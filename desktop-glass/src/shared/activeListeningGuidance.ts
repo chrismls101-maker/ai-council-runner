@@ -81,6 +81,20 @@ export function buildActiveListeningGuidance(
     );
   }
 
+  if (ctx.mediaContext) {
+    const m = ctx.mediaContext;
+    lines.push("", "Media / page context (from visible text and browser metadata — not facial recognition):");
+    lines.push(`- Source type: ${m.sourceType} (confidence: ${m.confidence})`);
+    if (m.title) lines.push(`- Title: ${m.title}`);
+    if (m.channelOrSource) lines.push(`- Channel/source: ${m.channelOrSource}`);
+    if (m.url) lines.push(`- URL: ${m.url}`);
+    if (m.durationLabel) lines.push(`- Duration: ${m.durationLabel}`);
+    if (m.visibleTextSummary) lines.push(`- Visible text: ${m.visibleTextSummary.slice(0, 600)}`);
+    if (m.extractionNotes?.length) {
+      lines.push(`- Extraction notes: ${m.extractionNotes.join("; ")}`);
+    }
+  }
+
   const intent = ctx.detectedIntent ?? "general_contextual";
   const modeGuidance =
     ctx.activeMode === "listen"

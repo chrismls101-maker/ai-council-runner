@@ -16,6 +16,7 @@ import type {
 import type { DiagnosticPacket } from "./copilotDiagnostic.ts";
 import type { GlassCopilotDiagnosticResult } from "./copilotDiagnosticAnalysis.ts";
 import type { SemanticSessionClassification } from "./copilotSessionSemantic.ts";
+import type { ListenAttentionLevel } from "./listenMomentTypes.ts";
 
 export type GlassCopilotMode = "off" | "passive" | "coaching" | "diagnostic";
 
@@ -124,6 +125,8 @@ export interface GlassCopilotConfig {
   sessionType: GlassCopilotSessionTypeSetting;
   /** Debrief verbosity. */
   reportStyle: GlassCopilotReportStyle;
+  /** Listen mode proactive feedback frequency (Quiet / Balanced / Active). */
+  listenAttentionLevel: ListenAttentionLevel;
 }
 
 export interface GlassCopilotDebriefSection {
@@ -229,6 +232,7 @@ export const DEFAULT_COPILOT_CONFIG: GlassCopilotConfig = {
   muteSuggestions: false,
   sessionType: "auto",
   reportStyle: "concise",
+  listenAttentionLevel: "balanced",
 };
 
 export function copilotModeIsActive(mode: GlassCopilotMode): boolean {

@@ -28,6 +28,11 @@ import {
   type GlassModeId,
   type GlassModePreset,
 } from "../../shared/glassModePresets.ts";
+import {
+  LISTEN_ATTENTION_LABELS,
+  type ListenAttentionLevel,
+} from "../../shared/listenMomentTypes.ts";
+import { selectedDeviceMayIncludeMicrophone } from "../../shared/virtualAudioDevices.ts";
 
 const COPILOT_MODES: GlassCopilotMode[] = ["off", "passive", "coaching", "diagnostic"];
 
@@ -67,11 +72,21 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
     return "work";
   }, [copilot.active, copilot.mode, config.sessionType]);
 
-  const activeSourceLabel = listening
-    ? tx.selectedMode === "system_audio"
-      ? "System Audio"
-      : "Microphone"
-    : "None";
+  const activeSourceLabel = activeMode === "listen"
+    ? "Computer Audio"
+    : listening
+      ? tx.selectedMode === "system_audio"
+        ? "System Audio"
+        : "Microphone"
+      : "None";
+
+  const listenMicOff = activeMode === "listen" && tx.selectedMode === "system_audio";
+  const aggregateMicWarning =
+    activeMode === "listen" &&
+    selectedDeviceMayIncludeMicrophone(
+      state.virtualAudioDevices ?? [],
+      state.selectedVirtualAudioDeviceId,
+    );
 
   const onModeClick = (preset: GlassModePreset) => {
     const plan = planModeActivation(preset, { systemAudioReady });
@@ -80,12 +95,12 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
     setListenNeedsAudio(false);
 
     if (preset.id === "listen") {
+      send({ type: "capture-media-context" });
+      tx.setMode("system_audio");
       if (plan.needsSystemAudioSetup) {
-        tx.setMode("system_audio");
         setListenNeedsAudio(true);
         return;
       }
-      tx.setMode("system_audio");
       if (plan.startListening) tx.startListening();
       return;
     }
@@ -216,6 +231,25 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
         </button>
       </div>
 
+      {activeMode === "listen" ? (
+        <div className="mode-panel__listen-privacy" data-testid="glass-listen-privacy">
+          <p>
+            <strong>Source:</strong> Computer Audio · <strong>Mic:</strong> Off
+          </p>
+          <p className="mode-panel__listen-note">Your voice is not being listened to in Listen mode.</p>
+          {aggregateMicWarning ? (
+            <p className="mode-panel__listen-warn" data-testid="glass-listen-aggregate-warn">
+              This audio source may include microphone input.
+            </p>
+          ) : null}
+          {!listenMicOff && listening ? (
+            <p className="mode-panel__listen-warn" data-testid="glass-listen-mic-warn">
+              Listen mode requires computer audio only — switch back to System Audio.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
       <ul className="mode-panel__privacy" data-testid="glass-mode-privacy">
         {MODE_PRIVACY_NOTES.map((note) => (
           <li key={note}>{note}</li>
@@ -277,9 +311,30 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
             </label>
 
             <label className="copilot-config__field">
+              <span>Feedback level (Listen)</span>
+              <select
+                value={config.listenAttentionLevel}
+                data-testid="glass-listen-attention-select"
+                onChange={(e) =>
+                  send({
+                    type: "copilot-set-config",
+                    patch: { listenAttentionLevel: e.target.value as ListenAttentionLevel },
+                  })
+                }
+              >
+                {(Object.keys(LISTEN_ATTENTION_LABELS) as ListenAttentionLevel[]).map((level) => (
+                  <option key={level} value={level}>
+                    {LISTEN_ATTENTION_LABELS[level]}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="copilot-config__field">
               <span>Audio source</span>
               <select
-                value={tx.selectedMode}
+                value={activeMode === "listen" ? "system_audio" : tx.selectedMode}
+                disabled={activeMode === "listen"}
                 data-testid="glass-copilot-audio-source-select"
                 onChange={(e) => tx.setMode(e.target.value as typeof tx.selectedMode)}
               >

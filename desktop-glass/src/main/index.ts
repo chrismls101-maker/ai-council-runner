@@ -137,16 +137,14 @@ import {
 } from "../shared/copilotTypes.ts";
 import { shouldOfferCopilot, withCopilotConfig } from "../shared/copilotConfig.ts";
 import {
-  buildSessionDebrief,
-  buildDebriefAiPrompt,
-  detectDebriefTrigger,
-} from "../shared/copilotDebrief.ts";
-import {
   buildActiveListeningContext,
   deriveActiveListeningMode,
   activeListeningMissingContextMessage,
 } from "../shared/activeListeningContext.ts";
 import { shouldShortCircuitThinContext } from "../shared/activeListeningGuidance.ts";
+import { extractMediaContext } from "../shared/mediaContextExtract.ts";
+import { MEDIA_CONTEXT_VISION_PROMPT, type MediaContext } from "../shared/mediaContextTypes.ts";
+import { getActiveBrowserUrl } from "./browserUrl.ts";
 import {
   buildActiveListeningProactiveIntervention,
   clearActiveListeningRuntime,
@@ -155,6 +153,27 @@ import {
   proactiveShouldShowCard,
   type ActiveListeningRuntimeState,
 } from "../shared/activeListeningProactive.ts";
+import {
+  evaluateListenMoments,
+  markListenMomentStatus,
+  pickBestListenMomentForSurface,
+} from "../shared/listenMomentIntelligence.ts";
+import {
+  countSurfacesInLast10Min,
+  shouldSurfaceListenMoment,
+} from "../shared/listenMomentTiming.ts";
+import {
+  clearListenMomentEngineState,
+  initialListenMomentEngineState,
+  type ListenMomentEngineState,
+  type ListenMoment,
+} from "../shared/listenMomentTypes.ts";
+import { buildListenThoughtIntervention } from "../shared/listenThoughtCards.ts";
+import {
+  buildSessionDebrief,
+  buildDebriefAiPrompt,
+  detectDebriefTrigger,
+} from "../shared/copilotDebrief.ts";
 import {
   createListeningLimitState,
   extendListeningLimit,
@@ -330,6 +349,7 @@ interface AppState {
   selectedVirtualAudioDeviceId?: string;
   nativeLoopbackTested: boolean;
   voiceModeStartNonce: number;
+  mediaContext: MediaContext | null;
 }
 
 let askAbortController: AbortController | null = null;
@@ -371,6 +391,7 @@ const state: AppState = {
   virtualAudioDevices: [],
   nativeLoopbackTested: false,
   voiceModeStartNonce: 0,
+  mediaContext: null,
 };
 
 let moments = new SavedMomentsStore();
@@ -402,6 +423,8 @@ let copilotVisualAskFailures = 0;
 const copilotRecentCommands: string[] = [];
 const copilotRecentResponses: string[] = [];
 let activeListeningRuntime: ActiveListeningRuntimeState = initialActiveListeningRuntime();
+let listenMomentRuntime: ListenMomentEngineState = initialListenMomentEngineState();
+let listenLastChunkMs: number | undefined;
 
 function buildActiveListeningAskContext(userPrompt?: string) {
   const session = sessions.current();
@@ -425,13 +448,85 @@ function buildActiveListeningAskContext(userPrompt?: string) {
     lastAnswer: state.lastAskResponse?.fullAnswer ?? state.lastAskResponse?.answer,
     screenshotMeta,
     userPrompt,
+    mediaContext: state.mediaContext,
   });
 }
 
-function maybeShowActiveListeningProactive(newText: string): void {
+/** Capture media/page context from window title, browser URL, and optional screen text. */
+async function captureMediaContext(): Promise<void> {
+  await refreshWindowContext();
+  const ctx = getCachedWindowContext();
+  const browserUrl = await getActiveBrowserUrl(ctx.appName);
+  let visibleTextSummary: string | undefined;
+
+  if (state.screenCaptureProbe === "ready") {
+    try {
+      const captureTarget = resolveCaptureDisplay(state.glassSettings.displayTarget);
+      const shot = await captureDisplayById(captureTarget.id, captureTarget.label);
+      const optimized = optimizeVisualAskImage(
+        shot.imageDataUrl,
+        { width: shot.width, height: shot.height },
+        { prompt: MEDIA_CONTEXT_VISION_PROMPT, preset: "general" },
+      );
+      const response = await askIivoGlass(config, {
+        prompt: MEDIA_CONTEXT_VISION_PROMPT,
+        visualIntent: true,
+        latestScreenshot: {
+          imageDataUrl: optimized.imageDataUrl,
+          label: captureTarget.label,
+          capturedAt: new Date().toISOString(),
+        },
+      });
+      visibleTextSummary = response.answer?.trim().slice(0, 2000);
+    } catch {
+      /* vision read optional — title/URL still used */
+    }
+  }
+
+  const media =
+    extractMediaContext({
+      appName: ctx.appName,
+      windowTitle: ctx.windowTitle,
+      browserUrl,
+      visibleTextSummary,
+    }) ?? null;
+
+  state.mediaContext = media;
+
+  if (sessionIsLive() && sessions.current()?.status === "active" && media) {
+    sessions.addEvent({
+      kind: "app_context",
+      title: media.title ?? "Media context captured",
+      text: [
+        media.sourceType,
+        media.channelOrSource,
+        media.url,
+        media.durationLabel,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      ...eventContextFields(),
+      metadata: { mediaContext: media },
+    });
+    await persistSessions(sessions);
+  }
+
+  if (media?.title) {
+    state.lastNotice = `Media context: ${media.title.slice(0, 80)}${media.title.length > 80 ? "…" : ""}`;
+  } else if (!media) {
+    state.lastNotice = "Media context not detected — ensure the video tab is frontmost.";
+  }
+  push();
+}
+
+function maybeShowActiveListeningProactive(newText: string, tags?: string[]): void {
   const config = copilot.getConfig();
   const activeMode = deriveActiveListeningMode(config, sessionIsLive() && copilotModeIsActive(config.mode));
-  if (activeMode !== "listen" && activeMode !== "meetings") return;
+  if (activeMode === "listen") {
+    void processListenModeChunk(newText, tags);
+    return;
+  }
+  if (activeMode !== "meetings") return;
   const moment = pickActiveListeningProactiveMoment({
     newTranscript: newText,
     recentCommands: copilotRecentCommands,
@@ -456,6 +551,106 @@ function maybeShowActiveListeningProactive(newText: string): void {
   }
   pushFeed(createCommandFeedItem("response", intervention.body, { title: `Active Listening · ${intervention.title}` }));
   push();
+}
+
+async function persistListenMomentEvent(moment: ListenMoment): Promise<void> {
+  if (!sessionIsLive()) return;
+  sessions.addEvent({
+    kind: "saved_moment",
+    title: moment.summary.slice(0, 80),
+    text: moment.suggestedThought ?? moment.summary,
+    tags: ["listen_moment", moment.type, moment.status],
+    importance: moment.importance,
+    ...eventContextFields(),
+    metadata: { listenMoment: moment },
+  });
+  await persistSessions(sessions);
+}
+
+async function processListenModeChunk(newText: string, tags?: string[]): Promise<void> {
+  if (!tags?.includes("system_audio")) return;
+  const config = copilot.getConfig();
+  if (config.mode === "off") return;
+
+  const nowMs = Date.now();
+  listenLastChunkMs = nowMs;
+  const ctx = buildActiveListeningAskContext();
+  const recentTranscript = ctx?.recentTranscriptWindow ?? "";
+
+  listenMomentRuntime.moments = evaluateListenMoments({
+    newText,
+    recentTranscript,
+    existingMoments: listenMomentRuntime.moments,
+    nowMs,
+    idFactory: () => `lm-${nowMs}-${Math.random().toString(36).slice(2, 8)}`,
+  });
+
+  const candidate = pickBestListenMomentForSurface(listenMomentRuntime.moments);
+  if (!candidate) {
+    listenMomentRuntime.silenceReasons.push("No ready moment detected.");
+    if (listenMomentRuntime.silenceReasons.length > 30) listenMomentRuntime.silenceReasons.shift();
+    return;
+  }
+
+  const surfacesInLast10Min = countSurfacesInLast10Min(listenMomentRuntime.surfaceTimestamps, nowMs);
+  const decision = shouldSurfaceListenMoment(candidate, {
+    attentionLevel: config.listenAttentionLevel,
+    nowMs,
+    lastSurfaceMs: listenMomentRuntime.lastSurfaceMs,
+    lastChunkMs: listenLastChunkMs,
+    recentTranscriptChars: recentTranscript.length,
+    recentSurfacedTexts: listenMomentRuntime.recentSurfacedTexts,
+    userReceivingAnswer: state.askStatus === "pending",
+    muteSuggestions: config.muteSuggestions,
+    surfacesInLast10Min,
+  });
+
+  listenMomentRuntime.silenceReasons.push(`${decision.decision}: ${decision.reason}`);
+  if (listenMomentRuntime.silenceReasons.length > 40) listenMomentRuntime.silenceReasons.shift();
+
+  if (decision.decision === "mark_stale") {
+    listenMomentRuntime.moments = markListenMomentStatus(listenMomentRuntime.moments, candidate.id, "stale");
+    return;
+  }
+
+  if (decision.decision === "save_silently") {
+    const updated = {
+      ...candidate,
+      status: "saved_silently" as const,
+      disposition: "saved_silently" as const,
+    };
+    listenMomentRuntime.moments = markListenMomentStatus(listenMomentRuntime.moments, candidate.id, "saved_silently", updated);
+    await persistListenMomentEvent(updated);
+    return;
+  }
+
+  if (decision.decision === "surface_now") {
+    const thought = candidate.suggestedThought ?? candidate.summary;
+    const updated = {
+      ...candidate,
+      status: "surfaced" as const,
+      disposition: "surfaced" as const,
+      surfacedAt: new Date(nowMs).toISOString(),
+    };
+    listenMomentRuntime.moments = markListenMomentStatus(listenMomentRuntime.moments, candidate.id, "surfaced", updated);
+    listenMomentRuntime.lastSurfaceMs = nowMs;
+    listenMomentRuntime.surfaceTimestamps.push(nowMs);
+    listenMomentRuntime.recentSurfacedTexts.push(thought);
+    if (listenMomentRuntime.recentSurfacedTexts.length > 12) listenMomentRuntime.recentSurfacedTexts.shift();
+
+    await persistListenMomentEvent(updated);
+
+    if (config.showOverlaySuggestions && !config.muteSuggestions) {
+      const intervention = buildListenThoughtIntervention(updated, {
+        idFactory: () => `lt-${nowMs}`,
+        clock: () => new Date(nowMs).toISOString(),
+      });
+      pushFeed(createCommandFeedItem("response", intervention.body, { title: intervention.title }));
+    } else {
+      state.lastNotice = `IIVO thought saved: ${thought.slice(0, 80)}…`;
+    }
+    push();
+  }
 }
 
 // --- Max listening duration --------------------------------------------------
@@ -571,6 +766,8 @@ function bindCopilotToSession(): void {
   copilotRecentCommands.length = 0;
   copilotRecentResponses.length = 0;
   activeListeningRuntime = clearActiveListeningRuntime();
+  listenMomentRuntime = clearListenMomentEngineState();
+  listenLastChunkMs = undefined;
   copilot.bindSession(id);
   if (session?.copilot) {
     copilot.hydrate(session.id, session.copilot);
@@ -753,6 +950,7 @@ function snapshot(): GlassState {
     micPermission: state.micPermission,
     copilot: copilotRuntime(),
     voiceModeStartNonce: state.voiceModeStartNonce,
+    mediaContext: state.mediaContext,
   };
 }
 
@@ -1906,6 +2104,9 @@ async function handleCommand(
       resetListeningLimitTracking();
       systemAudioLastSignalMs = undefined;
       activeListeningRuntime = clearActiveListeningRuntime();
+  listenMomentRuntime = clearListenMomentEngineState();
+  listenLastChunkMs = undefined;
+      state.mediaContext = null;
       push();
       return;
     }
@@ -1933,7 +2134,7 @@ async function handleCommand(
       } else if (!sessionIsLive()) {
         state.lastNotice = "Transcript saved. Start a session to keep chunks in the timeline.";
       }
-      maybeShowActiveListeningProactive(chunk);
+      maybeShowActiveListeningProactive(chunk, command.tags);
       push();
       return;
     }
@@ -2231,6 +2432,9 @@ async function handleCommand(
     case "window-context-refresh":
       state.windowContext = await refreshWindowContext();
       push();
+      return;
+    case "capture-media-context":
+      await captureMediaContext();
       return;
     case "report-mic-permission":
       state.micPermission = command.status;
@@ -2601,6 +2805,8 @@ async function generateCopilotDebrief(): Promise<void> {
     sessionType: copilot.getSessionType(),
     sessionTypeDetection: copilot.getSessionTypeDetection(),
     reportStyle: copilot.getConfig().reportStyle,
+    listenMoments: listenMomentRuntime.moments,
+    mediaContext: state.mediaContext,
   };
   const debrief = buildSessionDebrief(
     session,

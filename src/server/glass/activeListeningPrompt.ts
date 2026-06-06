@@ -38,6 +38,17 @@ export interface ActiveListeningContextPayload {
     dealRisks?: string[];
     suggestedMoves?: Array<{ kind: string; text: string }>;
   };
+  mediaContext?: {
+    sourceType: string;
+    title?: string;
+    channelOrSource?: string;
+    url?: string;
+    durationLabel?: string;
+    visibleTextSummary?: string;
+    confidence: string;
+    capturedAt: string;
+    extractionNotes?: string[];
+  };
 }
 
 const SHARED =
@@ -85,6 +96,16 @@ export function buildActiveListeningPromptBlock(
       lines.push("Suggested moves:");
       for (const m of s.suggestedMoves) lines.push(`- ${m.text}`);
     }
+  }
+  if (ctx.mediaContext) {
+    const m = ctx.mediaContext;
+    lines.push("", "Media context (visible text/URL — not facial recognition):");
+    lines.push(`- Type: ${m.sourceType} (${m.confidence})`);
+    if (m.title) lines.push(`- Title: ${m.title}`);
+    if (m.channelOrSource) lines.push(`- Channel: ${m.channelOrSource}`);
+    if (m.url) lines.push(`- URL: ${m.url}`);
+    if (m.durationLabel) lines.push(`- Duration: ${m.durationLabel}`);
+    if (m.visibleTextSummary) lines.push(`- Visible: ${m.visibleTextSummary.slice(0, 500)}`);
   }
   if (/\bhow does that work\b/i.test(prompt) && ctx.activeMode === "listen") {
     lines.push("", "Explain how the thing just described works — from transcript only.");

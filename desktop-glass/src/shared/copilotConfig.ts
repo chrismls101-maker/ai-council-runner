@@ -12,6 +12,10 @@ import {
   type GlassCopilotReportStyle,
 } from "./copilotTypes.ts";
 import type { GlassCopilotSessionTypeSetting } from "./copilotSessionType.ts";
+import {
+  DEFAULT_LISTEN_ATTENTION_LEVEL,
+  type ListenAttentionLevel,
+} from "./listenMomentTypes.ts";
 
 const VALID_MODES = new Set<GlassCopilotMode>(["off", "passive", "coaching", "diagnostic"]);
 
@@ -75,6 +79,14 @@ function parseBool(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
 }
 
+const VALID_LISTEN_ATTENTION = new Set<ListenAttentionLevel>(["quiet", "balanced", "active"]);
+
+function parseListenAttentionLevel(value: unknown): ListenAttentionLevel {
+  return typeof value === "string" && VALID_LISTEN_ATTENTION.has(value as ListenAttentionLevel)
+    ? (value as ListenAttentionLevel)
+    : DEFAULT_LISTEN_ATTENTION_LEVEL;
+}
+
 /** Build a validated config from an untrusted (persisted/IPC) partial. */
 export function parseCopilotConfig(raw: unknown): GlassCopilotConfig {
   const record = (raw && typeof raw === "object" ? raw : {}) as Partial<GlassCopilotConfig>;
@@ -88,6 +100,7 @@ export function parseCopilotConfig(raw: unknown): GlassCopilotConfig {
     muteSuggestions: parseBool(record.muteSuggestions, DEFAULT_COPILOT_CONFIG.muteSuggestions),
     sessionType: parseSessionTypeSetting(record.sessionType),
     reportStyle: parseReportStyle(record.reportStyle),
+    listenAttentionLevel: parseListenAttentionLevel(record.listenAttentionLevel),
   };
 }
 
