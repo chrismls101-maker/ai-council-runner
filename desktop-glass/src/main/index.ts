@@ -200,6 +200,17 @@ import {
   shouldRefreshStreamingLiveNotes,
 } from "../shared/listenLiveNotes.ts";
 import {
+  initialLiveTranslateRuntime,
+  shouldPersistTranslateChunk,
+  startLiveTranslate,
+  stopLiveTranslate,
+  updateLiveTranslateConfig,
+  translateAllowsMicrophone,
+} from "../shared/liveTranslateState.ts";
+import type { LiveTranslateRuntimeState } from "../shared/liveTranslateTypes.ts";
+import { processTranslateTranscriptChunk } from "./liveTranslateMain.ts";
+import { applyCaptionChunk } from "../shared/liveTranslateCaptions.ts";
+import {
   applyListenTranscriptFragment,
   initialListenRollingTranscript,
   rollingTranscriptWindow,
@@ -528,6 +539,7 @@ const copilotRecentCommands: string[] = [];
 const copilotRecentResponses: string[] = [];
 let activeListeningRuntime: ActiveListeningRuntimeState = initialActiveListeningRuntime();
 let listenMomentRuntime: ListenModeRuntime = initialListenMomentEngineState();
+let liveTranslateRuntime: LiveTranslateRuntimeState = initialLiveTranslateRuntime();
 let listenLastChunkMs: number | undefined;
 let listenRollingTranscript: ListenRollingTranscriptState = initialListenRollingTranscript();
 
@@ -753,6 +765,43 @@ function isListenModeActive(): boolean {
     deriveActiveListeningMode(config, sessionIsLive() && copilotModeIsActive(config.mode)) ===
     "listen"
   );
+}
+
+function isTranslateActive(): boolean {
+  return liveTranslateRuntime.active && liveTranslateRuntime.config.enabled;
+}
+
+function shouldSaveTranscriptToSession(): boolean {
+  if (isTranslateActive() && !shouldPersistTranslateChunk(liveTranslateRuntime.config)) {
+    return isListenModeActive();
+  }
+  return true;
+}
+
+async function ingestTranslateChunk(
+  text: string,
+  opts?: { interim?: boolean; tags?: string[] },
+): Promise<void> {
+  if (!isTranslateActive()) return;
+  if (process.env.IIVO_GLASS_E2E === "1") {
+    liveTranslateRuntime = {
+      ...liveTranslateRuntime,
+      status: "active",
+      captions: applyCaptionChunk(liveTranslateRuntime.captions, {
+        original: text,
+        translated: `[${liveTranslateRuntime.config.targetLanguage}] ${text}`,
+        interim: opts?.interim === true,
+        id: `e2e-${Date.now()}`,
+      }),
+    };
+    push();
+    return;
+  }
+  liveTranslateRuntime = await processTranslateTranscriptChunk(
+    { text, interim: opts?.interim, chunkId: `tr-${Date.now()}`, tags: opts?.tags },
+    { config, runtime: liveTranslateRuntime },
+  );
+  push();
 }
 
 function hasVisibleListenCard(): boolean {
@@ -1386,6 +1435,7 @@ function snapshot(): GlassState {
     appUpdate: state.appUpdate,
     listenCountdownSeconds: state.listenCountdownSeconds,
     listenLiveNotes: isListenModeActive() ? buildCurrentListenLiveNotes() : undefined,
+    liveTranslate: isTranslateActive() ? liveTranslateRuntime : undefined,
   };
 }
 
@@ -2592,6 +2642,7 @@ async function handleCommand(
       listenLastChunkMs = undefined;
       listenRollingTranscript = initialListenRollingTranscript();
       state.mediaContext = null;
+      liveTranslateRuntime = stopLiveTranslate(liveTranslateRuntime);
       setListenNotesPadVisible(false);
       push();
       return;
@@ -2600,6 +2651,48 @@ async function handleCommand(
       setListenNotesPadVisible(false);
       push();
       return;
+    case "translate-set-config": {
+      liveTranslateRuntime = updateLiveTranslateConfig(liveTranslateRuntime, command.patch);
+      push();
+      return;
+    }
+    case "translate-start": {
+      liveTranslateRuntime = startLiveTranslate(liveTranslateRuntime, {
+        targetLanguage: command.targetLanguage ?? liveTranslateRuntime.config.targetLanguage,
+      });
+      state.lastNotice = `Live Translate — ${liveTranslateRuntime.captions.languagePairLabel}`;
+      push();
+      return;
+    }
+    case "translate-stop": {
+      liveTranslateRuntime = stopLiveTranslate(liveTranslateRuntime);
+      state.lastNotice = "Translation stopped.";
+      push();
+      return;
+    }
+    case "translate-set-captions-visible": {
+      liveTranslateRuntime = {
+        ...liveTranslateRuntime,
+        captionsVisible: command.visible,
+      };
+      push();
+      return;
+    }
+    case "translate-enable-microphone": {
+      liveTranslateRuntime = {
+        ...liveTranslateRuntime,
+        micExplicitlyEnabled: command.enabled,
+        config: {
+          ...liveTranslateRuntime.config,
+          source: command.enabled ? "microphone" : liveTranslateRuntime.config.source,
+        },
+      };
+      if (command.enabled) {
+        state.lastNotice = "Microphone translation active.";
+      }
+      push();
+      return;
+    }
     case "append-transcript": {
       const chunk = command.text.trim();
       if (!chunk) return;
@@ -2634,7 +2727,7 @@ async function handleCommand(
         push();
         return;
       }
-      if (sessionIsLive() && sessions.current()?.status === "active") {
+      if (sessionIsLive() && sessions.current()?.status === "active" && shouldSaveTranscriptToSession()) {
         const ctxFields = eventContextFields();
         sessions.addEvent({
           kind: "transcript_note",
@@ -2649,6 +2742,7 @@ async function handleCommand(
         state.lastNotice = "Transcript saved. Start a session to keep chunks in the timeline.";
       }
       maybeShowActiveListeningProactive(chunk, command.tags);
+      void ingestTranslateChunk(chunk, { interim: isInterim, tags: command.tags });
       push();
       return;
     }
@@ -3998,6 +4092,7 @@ function registerIpc(): void {
     if (result.ok && result.text?.trim()) {
       const tags = payload.source === "system_audio" ? ["system_audio"] : ["microphone"];
       maybeShowActiveListeningProactive(result.text.trim(), tags);
+      void ingestTranslateChunk(result.text.trim(), { tags });
     }
     return result;
   });

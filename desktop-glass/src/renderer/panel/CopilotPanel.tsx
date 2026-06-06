@@ -33,6 +33,10 @@ import {
   type ListenAttentionLevel,
 } from "../../shared/listenMomentTypes.ts";
 import { selectedDeviceMayIncludeMicrophone } from "../../shared/virtualAudioDevices.ts";
+import {
+  TranslateActiveStatus,
+  TranslateModeSetup,
+} from "./TranslateModeSetup.tsx";
 
 const COPILOT_MODES: GlassCopilotMode[] = ["off", "passive", "coaching", "diagnostic"];
 
@@ -55,6 +59,7 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
   const tx = useTranscriptionContext();
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [pendingMeetingChoice, setPendingMeetingChoice] = useState(false);
+  const [pendingTranslateSetup, setPendingTranslateSetup] = useState(false);
   const [listenNeedsAudio, setListenNeedsAudio] = useState(false);
 
   const copilot = state.copilot;
@@ -65,6 +70,7 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
 
   // Derive which simple mode is active from copilot mode + focus.
   const activeMode = useMemo<GlassModeId | null>(() => {
+    if (state.liveTranslate?.active) return "translate";
     if (!copilot.active || copilot.mode === "off") return null;
     if (copilot.mode === "diagnostic") return "fix";
     if (config.sessionType === "meeting_call") return "meetings";
@@ -92,7 +98,13 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
     const plan = planModeActivation(preset, { systemAudioReady });
     applyModePreset(preset);
     setPendingMeetingChoice(false);
+    setPendingTranslateSetup(false);
     setListenNeedsAudio(false);
+
+    if (preset.id === "translate") {
+      setPendingTranslateSetup(true);
+      return;
+    }
 
     if (preset.id === "listen") {
       send({ type: "capture-media-context" });
@@ -101,7 +113,9 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
         setListenNeedsAudio(true);
         return;
       }
-      if (plan.startListening) tx.startListening();
+      if (plan.startListening) {
+        queueMicrotask(() => tx.startListening());
+      }
       return;
     }
 
@@ -119,7 +133,7 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
       setListenNeedsAudio(true);
       return;
     }
-    if (tx.canListen) tx.startListening();
+    if (tx.canListen) queueMicrotask(() => tx.startListening());
   };
 
   return (
@@ -170,6 +184,22 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
         })}
       </div>
 
+      {pendingTranslateSetup ? (
+        <TranslateModeSetup
+          state={state}
+          systemAudioReady={systemAudioReady}
+          onStartListening={(source) => {
+            setPendingTranslateSetup(false);
+            if (source === "microphone") {
+              tx.setMode("microphone_web_speech");
+            } else {
+              tx.setMode("system_audio");
+            }
+            if (tx.canListen || source === "microphone") queueMicrotask(() => tx.startListening());
+          }}
+        />
+      ) : null}
+
       {pendingMeetingChoice ? (
         <div className="mode-panel__choice" data-testid="glass-meeting-source-choice">
           <span>How should I listen?</span>
@@ -202,7 +232,8 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
             className="gbtn"
             data-testid="glass-configure-audio"
             onClick={() => {
-              setAdvancedOpen(true);
+              if (!state.panelVisible) send({ type: "toggle-panel" });
+              send({ type: "set-tab", tab: "audio" });
               setListenNeedsAudio(false);
             }}
           >
@@ -224,6 +255,7 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
             send({ type: "stop-everything" });
             send({ type: "copilot-set-mode", mode: "off" });
             setPendingMeetingChoice(false);
+            setPendingTranslateSetup(false);
             setListenNeedsAudio(false);
           }}
         >
@@ -249,6 +281,8 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
           ) : null}
         </div>
       ) : null}
+
+      <TranslateActiveStatus state={state} />
 
       <ul className="mode-panel__privacy" data-testid="glass-mode-privacy">
         {MODE_PRIVACY_NOTES.map((note) => (

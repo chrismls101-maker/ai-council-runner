@@ -10,6 +10,8 @@ import {
 } from "../../shared/overlayCards.ts";
 import { send, useGlassState } from "../useGlassState.ts";
 import { CopilotOverlay } from "./CopilotOverlay.tsx";
+import { GlassUpdateOverlay } from "./GlassUpdateOverlay.tsx";
+import { LiveTranslateCaptionsOverlay } from "./LiveTranslateCaptionsOverlay.tsx";
 
 const CARD_TTL_MS = 8_000;
 const FEED_CARD_TTL_MS = 12_000;
@@ -88,6 +90,19 @@ function OverlayPassiveLayer({ overlayMode }: { overlayMode: OverlayMode }): JSX
         ) : null}
       </div>
     </>
+  );
+}
+
+function ListenCountdownOverlay({ seconds }: { seconds: number }): JSX.Element {
+  return (
+    <div className="listen-countdown" data-testid="glass-listen-countdown" aria-live="assertive">
+      <div className="listen-countdown__backdrop" aria-hidden="true" />
+      <div className="listen-countdown__card">
+        <span className="listen-countdown__number">{seconds}</span>
+        <span className="listen-countdown__label">Listening starts…</span>
+        <span className="listen-countdown__hint">Get ready — capture begins when the timer hits zero.</span>
+      </div>
+    </div>
   );
 }
 
@@ -455,14 +470,36 @@ export function Overlay(): JSX.Element {
   const overlayMode = state.windows?.overlayMode ?? state.config.overlayMode ?? "passive";
   const overlayVisible = state.windows?.overlayVisible ?? state.config.overlayEnabled;
   const showInsights = overlayVisible && overlayMode === "insights";
+  const updateVisible =
+    state.appUpdate.phase === "available" || state.appUpdate.phase === "installing";
+  const countdownVisible =
+    state.listenCountdownSeconds != null && state.listenCountdownSeconds > 0;
   const { cards, dismissCard } = useOverlayCards(state, showInsights);
   const feedCards = useCommandFeedCards(state, overlayVisible);
   const toasts = useOverlayToasts(state, showInsights);
   const interactiveCountRef = useRef(0);
 
   useEffect(() => {
+    const updateOnly = updateVisible && !overlayVisible && !countdownVisible;
+    const copilotPrompt =
+      overlayVisible &&
+      (state.copilot.systemAudioSilenceWarning || state.copilot.listeningLimitReached);
+    if (updateOnly || copilotPrompt) {
+      window.glass.setIgnoreMouse(false);
+      return () => {
+        if (interactiveCountRef.current === 0) {
+          window.glass.setIgnoreMouse(true);
+        }
+      };
+    }
     window.glass.setIgnoreMouse(true);
-  }, []);
+  }, [
+    updateVisible,
+    overlayVisible,
+    countdownVisible,
+    state.copilot.systemAudioSilenceWarning,
+    state.copilot.listeningLimitReached,
+  ]);
 
   const enterInteractive = (): void => {
     interactiveCountRef.current += 1;
@@ -476,8 +513,50 @@ export function Overlay(): JSX.Element {
     }
   };
 
-  if (!overlayVisible) {
+  const translateCaptionsVisible = Boolean(
+    state.liveTranslate?.active &&
+      state.liveTranslate.config.enabled &&
+      state.liveTranslate.captionsVisible &&
+      state.liveTranslate.captions.current &&
+      state.liveTranslate.config.captionPosition !== "panel",
+  );
+
+  if (!overlayVisible && !updateVisible && !countdownVisible && !translateCaptionsVisible) {
     return <div className="overlay-root overlay-root--hidden" />;
+  }
+
+  if (!overlayVisible && !countdownVisible && !updateVisible && translateCaptionsVisible) {
+    return (
+      <div className="overlay-root overlay-root--captions-only" data-testid="glass-overlay-root">
+        {state.liveTranslate ? (
+          <LiveTranslateCaptionsOverlay
+            runtime={state.liveTranslate}
+            enterInteractive={enterInteractive}
+            leaveInteractive={leaveInteractive}
+          />
+        ) : null}
+      </div>
+    );
+  }
+
+  if (!overlayVisible && !countdownVisible && updateVisible) {
+    return (
+      <div className="overlay-root overlay-root--update-only" data-testid="glass-overlay-root">
+        <GlassUpdateOverlay
+          appUpdate={state.appUpdate}
+          enterInteractive={enterInteractive}
+          leaveInteractive={leaveInteractive}
+        />
+      </div>
+    );
+  }
+
+  if (!overlayVisible && countdownVisible && !updateVisible) {
+    return (
+      <div className="overlay-root overlay-root--countdown-only" data-testid="glass-overlay-root">
+        <ListenCountdownOverlay seconds={state.listenCountdownSeconds!} />
+      </div>
+    );
   }
 
   return (
@@ -493,11 +572,23 @@ export function Overlay(): JSX.Element {
       <OverlayPassiveLayer overlayMode={overlayMode} />
       <OverlayStatus state={state} />
 
+      {countdownVisible ? (
+        <ListenCountdownOverlay seconds={state.listenCountdownSeconds!} />
+      ) : null}
+
       <CopilotOverlay
         state={state}
         enterInteractive={enterInteractive}
         leaveInteractive={leaveInteractive}
       />
+
+      {updateVisible ? (
+        <GlassUpdateOverlay
+          appUpdate={state.appUpdate}
+          enterInteractive={enterInteractive}
+          leaveInteractive={leaveInteractive}
+        />
+      ) : null}
 
       {feedCards.length > 0 ? (
         <div className="overlay-feed">
@@ -558,6 +649,14 @@ export function Overlay(): JSX.Element {
             </article>
           ))}
         </div>
+      ) : null}
+
+      {state.liveTranslate?.active && state.liveTranslate.captionsVisible ? (
+        <LiveTranslateCaptionsOverlay
+          runtime={state.liveTranslate}
+          enterInteractive={enterInteractive}
+          leaveInteractive={leaveInteractive}
+        />
       ) : null}
     </div>
   );

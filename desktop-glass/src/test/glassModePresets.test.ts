@@ -16,8 +16,8 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
 
-test("presets exist for listen, meetings, work, fix", () => {
-  assert.deepEqual(GLASS_MODE_ORDER, ["listen", "meetings", "work", "fix"]);
+test("presets exist for listen, meetings, translate, work, fix", () => {
+  assert.deepEqual(GLASS_MODE_ORDER, ["listen", "meetings", "translate", "work", "fix"]);
   for (const id of GLASS_MODE_ORDER) {
     assert.ok(GLASS_MODE_PRESETS[id], `preset ${id} exists`);
   }

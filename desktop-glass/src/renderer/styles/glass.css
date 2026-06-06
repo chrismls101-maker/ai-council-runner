@@ -3263,14 +3263,124 @@ html.glass-dock-window #root {
 .mode-panel__choice,
 .mode-panel__setup {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: stretch;
   gap: 10px;
   margin-top: 12px;
   padding: 10px 12px;
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.05);
   font-size: 12px;
+}
+
+.mode-panel__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.mode-panel__field select {
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.35);
+  color: inherit;
+}
+
+.mode-panel__choice-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mode-panel__hint,
+.mode-panel__warn {
+  margin: 0;
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+.mode-panel__translate-status {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(65, 224, 163, 0.08);
+  font-size: 12px;
+}
+
+.live-translate-captions {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--overlay-frame-bottom, 10px) + 72px);
+  transform: translateX(-50%);
+  z-index: 40;
+  max-width: min(880px, 92vw);
+  pointer-events: auto;
+}
+
+.live-translate-captions__inner {
+  padding: 12px 18px 14px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  text-align: center;
+}
+
+.live-translate-captions__meta {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.75;
+  margin-bottom: 6px;
+}
+
+.live-translate-captions__text {
+  margin: 0;
+  font-size: clamp(18px, 2.4vw, 26px);
+  font-weight: 600;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.live-translate-captions__original {
+  margin: 0 0 6px;
+  font-size: clamp(14px, 1.8vw, 18px);
+  line-height: 1.35;
+  opacity: 0.82;
+}
+
+.live-translate-captions__note {
+  margin: 6px 0 0;
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.live-translate-captions__hide {
+  display: block;
+  margin: 6px auto 0;
+  border: none;
+  background: transparent;
+  color: rgba(200, 210, 225, 0.85);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.overlay-root--captions-only {
+  pointer-events: none;
+}
+
+.overlay-root--captions-only .live-translate-captions {
+  pointer-events: auto;
+}
+
+.live-notes__translate-toggle {
+  padding: 0 0 8px;
+}
+
+.mode-card--translate.mode-card--active {
+  border-color: rgba(100, 180, 255, 0.45);
 }
 
 .mode-panel__status-row {

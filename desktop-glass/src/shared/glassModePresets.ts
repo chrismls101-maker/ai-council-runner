@@ -15,7 +15,7 @@ import type { GlassCopilotSessionTypeSetting } from "./copilotSessionType.ts";
 import type { CopilotInputSource } from "./copilotPanelModel.ts";
 
 /** User-facing simple mode ids (Voice is handled separately). */
-export type GlassModeId = "listen" | "meetings" | "work" | "fix";
+export type GlassModeId = "listen" | "meetings" | "work" | "fix" | "translate";
 
 export interface GlassModePreset {
   id: GlassModeId;
@@ -112,9 +112,25 @@ export const GLASS_MODE_PRESETS: Record<GlassModeId, GlassModePreset> = {
     debriefEnabled: true,
     activeListeningEnabled: true,
   },
+  translate: {
+    id: "translate",
+    label: "Translate",
+    description: "Live captions in another language from computer audio or microphone.",
+    examples: "YouTube videos, podcasts, Zoom/WhatsApp calls, courses, webinars, bilingual conversations.",
+    copilotMode: "coaching",
+    sessionFocus: "auto",
+    preferredInputSource: "ask",
+    requiresSystemAudio: false,
+    requiresAudio: true,
+    startsSession: true,
+    startsListeningIfReady: false,
+    meetingIntelligence: false,
+    debriefEnabled: false,
+    activeListeningEnabled: false,
+  },
 };
 
-export const GLASS_MODE_ORDER: GlassModeId[] = ["listen", "meetings", "work", "fix"];
+export const GLASS_MODE_ORDER: GlassModeId[] = ["listen", "meetings", "translate", "work", "fix"];
 
 /** Voice is a separate primary action, not a Copilot card. */
 export const VOICE_MODE_COPY = "Talk to IIVO hands-free.";
@@ -176,6 +192,7 @@ export function modePrimaryActionLabel(
   if (status === "needs_setup") return "Configure Audio";
   if (preset.id === "listen") return "Start Listening";
   if (preset.id === "meetings") return "Start Meeting";
+  if (preset.id === "translate") return "Start Translate";
   return `Start ${preset.label}`;
 }
 

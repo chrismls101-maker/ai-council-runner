@@ -41,6 +41,9 @@ export interface ActiveListeningChunk {
   timestamp: string;
   confidence?: number;
   tags?: string[];
+  /** When Live Translate saved a translation alongside original audio text. */
+  translatedText?: string;
+  labeledAsTranslation?: boolean;
 }
 
 export interface ActiveListeningScreenshotMeta {

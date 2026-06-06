@@ -45,6 +45,8 @@ test.beforeEach(async () => {
   await command.evaluate(() => window.glass.send({ type: "session-end" }));
   await dock.locator('[data-testid="glass-dock-open-panel"]').click();
   await expect(panelPage.locator('[data-testid="glass-panel"]')).toBeVisible();
+  await panelPage.locator('[data-testid="glass-panel-tab-copilot"]').click();
+  await expect(panelPage.locator('[data-testid="glass-panel-copilot-tab"]')).toBeVisible();
 });
 
 test("no audio/capture starts on initial launch", async () => {
@@ -53,9 +55,9 @@ test("no audio/capture starts on initial launch", async () => {
   expect(state.privacy.capturing).toBe(false);
 });
 
-test("panel shows four mode cards and a separate Voice button", async () => {
+test("panel shows five mode cards and a separate Voice button", async () => {
   await expect(panelPage.locator('[data-testid="glass-mode-panel"]')).toBeVisible();
-  for (const id of ["listen", "meetings", "work", "fix"]) {
+  for (const id of ["listen", "meetings", "translate", "work", "fix"]) {
     await expect(panelPage.locator(`[data-testid="glass-mode-card-${id}"]`)).toBeVisible();
   }
   await expect(panelPage.locator('[data-testid="glass-mode-voice"]')).toBeVisible();

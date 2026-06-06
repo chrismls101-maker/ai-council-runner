@@ -53,11 +53,16 @@ function chunkSourceFromEvent(event: GlassSessionEvent): ActiveListeningChunkSou
 function eventToChunk(event: GlassSessionEvent): ActiveListeningChunk | null {
   const text = (event.text ?? event.title ?? "").trim();
   if (!text || event.kind === "iivo_response" || event.kind === "iivo_command") return null;
+  const translateMeta = event.metadata?.liveTranslate as
+    | { translated?: string; isTranslation?: boolean }
+    | undefined;
   return {
     text,
     source: chunkSourceFromEvent(event),
     timestamp: event.timestamp,
     tags: event.tags,
+    translatedText: translateMeta?.translated,
+    labeledAsTranslation: translateMeta?.isTranslation === true,
   };
 }
 

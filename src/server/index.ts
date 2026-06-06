@@ -88,6 +88,8 @@ import {
   GlassAskPayloadTooLargeError,
   validateGlassAskPayloadSize,
 } from "./glass/glassAskPayload.js";
+import { loadGlassUpdateManifest } from "./glass/glassUpdateManifest.js";
+import { translateLiveCaption } from "./glass/glassTranslate.js";
 import {
   createBenchmarkRun,
   estimateBenchmarkRun,
@@ -140,6 +142,16 @@ app.post("/api/glass/ask", express.json({ limit: "6mb" }), async (req, res) => {
   }
 });
 
+app.post("/api/glass/translate", express.json({ limit: "64kb" }), async (req, res) => {
+  try {
+    const result = await translateLiveCaption(req.body ?? {});
+    res.json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Translation failed";
+    res.status(500).json({ error: message });
+  }
+});
+
 app.use(express.json({ limit: "2mb" }));
 
 app.get("/api/health", (_req, res) => {
@@ -172,6 +184,10 @@ app.get("/api/health", (_req, res) => {
       semantic: glassModels.semantic,
     },
   });
+});
+
+app.get("/api/glass/update", (_req, res) => {
+  res.json(loadGlassUpdateManifest());
 });
 
 app.post("/api/transcribe-audio", express.json({ limit: "8mb" }), async (req, res) => {

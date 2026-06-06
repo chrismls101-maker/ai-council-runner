@@ -213,7 +213,12 @@ export type GlassCommand =
   | {
       type: "e2e-set-app-update";
       update: Partial<import("./glassAppUpdate.ts").GlassAppUpdateState>;
-    };
+    }
+  | { type: "translate-set-config"; patch: Partial<import("./liveTranslateTypes.ts").LiveTranslateConfig> }
+  | { type: "translate-start"; targetLanguage?: import("./liveTranslateTypes.ts").LiveTranslateTargetLanguage }
+  | { type: "translate-stop" }
+  | { type: "translate-set-captions-visible"; visible: boolean }
+  | { type: "translate-enable-microphone"; enabled: boolean };
 
 export interface GlassState {
   privacy: PrivacyState;
@@ -267,6 +272,8 @@ export interface GlassState {
   listenCountdownSeconds?: number;
   /** Structured live notes for Listen mode (note-first UI). */
   listenLiveNotes?: import("./listenLiveNotes.ts").ListenLiveNotesState;
+  /** Live Translate captions runtime (separate from Listen notes). */
+  liveTranslate?: import("./liveTranslateTypes.ts").LiveTranslateRuntimeState;
 }
 
 export interface SttProcessChunkRequest {

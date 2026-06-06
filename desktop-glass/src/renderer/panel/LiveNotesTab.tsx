@@ -4,6 +4,7 @@ import type { LiveNoteSection } from "../../shared/listenLiveNotes.ts";
 import { liveNoteSectionLabel } from "../../shared/listenLiveNotes.ts";
 import { collapseDuplicateTranscriptLines } from "../../shared/transcriptDedupe.ts";
 import { formatListeningDuration } from "../../shared/audioChunks.ts";
+import { ListenTranslateToggle } from "./TranslateModeSetup.tsx";
 
 const NOTES_SECTION_ORDER: LiveNoteSection[] = [
   "keyIdeas",
@@ -184,6 +185,7 @@ export function LiveNotesTab({ state }: { state: GlassState }): JSX.Element {
   return (
     <div className="live-notes live-notes--tabbed" data-testid="glass-live-notes">
       <ListenStatusBar state={state} />
+      <ListenTranslateToggle state={state} />
 
       <div className="live-notes__tabs" role="tablist" data-testid="glass-live-notes-tabs">
         <button
