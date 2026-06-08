@@ -22,6 +22,14 @@ export function parseLensHandoffParams(
   return { lensContextId, lensAsk };
 }
 
+/** True when the URL is a Glass/Lens context handoff — onboarding must not block. */
+export function hasLensHandoffQueryParam(
+  search = typeof window !== "undefined" ? window.location.search : "",
+): boolean {
+  const { lensContextId, lensAsk } = parseLensHandoffParams(search);
+  return Boolean(lensAsk ?? lensContextId);
+}
+
 /** Read lens handoff from the current URL once (survives param cleanup after attach). */
 export function readPendingLensHandoff(
   search = typeof window !== "undefined" ? window.location.search : "",

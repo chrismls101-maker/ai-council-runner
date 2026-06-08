@@ -136,7 +136,7 @@ test.describe("Context Bridge v1", () => {
 
   test("A — Paste Context UI", async ({ page }) => {
     test.setTimeout(60_000);
-    await page.goto("/");
+    await page.goto("/dashboard");
     await page.getByTestId("composer-input").click();
     await attachPastedContext(page, SAMPLE_CONTEXT.title, SAMPLE_CONTEXT.text);
     await expect(page.getByTestId("context-attachment-bar")).toBeVisible();
@@ -148,7 +148,7 @@ test.describe("Context Bridge v1", () => {
 
   test("B — Save Evidence", async ({ page }) => {
     test.setTimeout(90_000);
-    await page.goto("/");
+    await page.goto("/dashboard");
     await page.locator(".composer-plus-btn").click();
     await page.getByTestId("context-bridge-save-evidence").click();
     await page.getByTestId("paste-context-title-input").fill(`QA evidence ${Date.now()}`);
@@ -168,7 +168,7 @@ test.describe("Context Bridge v1", () => {
   test("C — Ask IIVO About This (live, optional)", async ({ page }) => {
     test.skip(!process.env.CONTEXT_QA_LIVE, "Set CONTEXT_QA_LIVE=1 to run live provider test");
     test.setTimeout(4 * 60_000);
-    await page.goto("/");
+    await page.goto("/dashboard");
     await attachPastedContext(page, "Founder context", SAMPLE_CONTEXT.text);
     await page.getByTestId("composer-input").fill("What is the key takeaway from this context?");
     await page.getByTestId("composer-send").click();
@@ -180,7 +180,7 @@ test.describe("Context Bridge v1", () => {
 
   test("D — Trust Copy", async ({ page }) => {
     test.setTimeout(60_000);
-    await page.goto("/");
+    await page.goto("/dashboard");
     await page.getByTestId("sidebar-nav-trust").click();
     const copy = page.getByTestId("context-bridge-trust-copy");
     await expect(copy).toBeVisible();
@@ -194,7 +194,7 @@ test.describe("Context Bridge v1", () => {
 
   test("E — Context relevance / trace", async ({ page }) => {
     test.setTimeout(process.env.CONTEXT_QA_LIVE ? 5 * 60_000 : 60_000);
-    await page.goto("/");
+    await page.goto("/dashboard");
 
     if (!process.env.CONTEXT_QA_LIVE) {
       await attachPastedContext(
@@ -213,7 +213,7 @@ test.describe("Context Bridge v1", () => {
 
   test("F — Large context truncation", async ({ page }) => {
     test.setTimeout(60_000);
-    await page.goto("/");
+    await page.goto("/dashboard");
     const largeText = "A".repeat(12_500);
     await attachPastedContext(page, "Large paste QA", largeText);
     await expect(page.getByTestId("context-truncation-warning")).toBeVisible();
@@ -228,7 +228,7 @@ test.describe("Context Bridge v1", () => {
     const ephemeralTitle = `Ephemeral QA ${Date.now()}`;
     const evidenceTitle = `Evidence QA ${Date.now()}`;
 
-    await page.goto("/");
+    await page.goto("/dashboard");
     await attachPastedContext(page, ephemeralTitle, SAMPLE_CONTEXT.text);
     await expect(page.getByTestId("context-ephemeral-reminder")).toBeVisible();
     await page.reload();
@@ -236,7 +236,7 @@ test.describe("Context Bridge v1", () => {
     await expect(page.getByTestId("context-library-panel")).toBeVisible();
     await expectContextLibraryItemAbsent(page, ephemeralTitle);
 
-    await page.goto("/");
+    await page.goto("/dashboard");
     await page.locator(".composer-plus-btn").click();
     await page.getByTestId("context-bridge-save-evidence").click();
     await page.getByTestId("paste-context-title-input").fill(evidenceTitle);
@@ -260,7 +260,7 @@ test.describe("Context Bridge v1", () => {
 
   test("H — URL safety", async ({ page }) => {
     test.setTimeout(60_000);
-    await page.goto("/");
+    await page.goto("/dashboard");
     await page.locator(".composer-plus-btn").click();
     await page.getByTestId("context-bridge-import-url").click();
     await expect(page.getByTestId("import-url-modal")).toBeVisible();

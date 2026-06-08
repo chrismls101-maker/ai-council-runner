@@ -23,7 +23,7 @@ export const PUBLIC_READINESS_CHECKLIST: ReadinessChecklistSection[] = [
     id: "product-clarity",
     title: "Product clarity",
     items: [
-      { id: "first-run-onboarding", label: "First-run onboarding explains IIVO", status: "ready" },
+      { id: "first-run-onboarding", label: "First-run onboarding calibrates to the user", status: "ready" },
       { id: "landing-empty-state", label: "Landing page shows what to ask", status: "ready" },
       { id: "router-helper", label: "Auto Router path helper is visible", status: "ready" },
     ],

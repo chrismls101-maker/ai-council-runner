@@ -60,6 +60,12 @@ import {
 } from "./constants/publicMessages";
 import { isOnboardingComplete } from "./utils/onboarding";
 import {
+  fetchGlassUserProfileFromServer,
+  loadLocalGlassUserProfile,
+} from "./utils/userProfile";
+import type { GlassUserProfile } from "./types/userProfile";
+import { hasLensHandoffQueryParam } from "./utils/lensHandoff";
+import {
   MAX_ATTACHED_CONTEXT_ITEMS,
   buildAskIivoPrompt,
   buildAskIivoScreenshotPrompt,
@@ -303,7 +309,10 @@ export default function App() {
   const [creditConfirmEstimate, setCreditConfirmEstimate] =
     useState<CreditEstimateResponse | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(
-    () => !isOnboardingComplete(),
+    () => !isOnboardingComplete() && !hasLensHandoffQueryParam(),
+  );
+  const [glassUserProfile, setGlassUserProfile] = useState<GlassUserProfile | null>(() =>
+    loadLocalGlassUserProfile(),
   );
   const [attachedContext, setAttachedContext] = useState<AttachedContextItem[]>([]);
   const [pasteContextOpen, setPasteContextOpen] = useState(false);
@@ -438,11 +447,22 @@ export default function App() {
     const bootstrap = async () => {
       try {
         const healthRes = await fetch("/api/health");
-        const data = (await healthRes.json()) as { ok: boolean; missingKeys: string[] };
+        if (!healthRes.ok) {
+          if (!cancelled) {
+            setBackendReachable(false);
+            setApiWarning(
+              healthRes.status === 401
+                ? "Backend auth failed. Check GLASS_API_SECRET in .env and restart npm run dev."
+                : `Cannot reach backend (HTTP ${healthRes.status}). Is the server running?`,
+            );
+          }
+          return;
+        }
+        const data = (await healthRes.json()) as { ok: boolean; missingKeys?: string[] };
         if (cancelled) return;
 
         setBackendReachable(true);
-        if (!data.ok) {
+        if (!data.ok && data.missingKeys?.length) {
           setApiWarning(
             `Missing API keys: ${data.missingKeys.join(", ")}. Add them to .env`,
           );
@@ -450,7 +470,7 @@ export default function App() {
       } catch {
         if (!cancelled) {
           setBackendReachable(false);
-        setApiWarning("Cannot reach backend. Is the server running?");
+          setApiWarning("Cannot reach backend. Is the server running?");
         }
       }
 
@@ -491,6 +511,14 @@ export default function App() {
       }
     }
   }, []);
+
+  useEffect(() => {
+    const local = loadLocalGlassUserProfile();
+    if (local) setGlassUserProfile(local);
+    void fetchGlassUserProfileFromServer().then((remote) => {
+      if (remote) setGlassUserProfile(remote);
+    });
+  }, [showOnboarding]);
 
   useEffect(() => {
     userPinnedToBottomRef.current = true;
@@ -933,6 +961,7 @@ export default function App() {
           businessContext: hasBusinessProfileContent(businessContext)
             ? businessContext
             : undefined,
+          userProfile: glassUserProfile ?? undefined,
           memoryMode,
           selectedMemoryIds:
             memoryMode === "manual" ? selectedMemoryIds : undefined,
@@ -1081,6 +1110,7 @@ export default function App() {
     benchmark,
     decisionObjective,
     businessContext,
+    glassUserProfile,
     memoryMode,
     selectedMemoryIds,
     conversationTurns,
@@ -1918,8 +1948,10 @@ export default function App() {
 
       {showOnboarding && (
         <OnboardingModal
-          onComplete={() => setShowOnboarding(false)}
-          onOpenSettings={() => handleSectionChange("settings")}
+          onComplete={() => {
+            setShowOnboarding(false);
+            setGlassUserProfile(loadLocalGlassUserProfile());
+          }}
         />
       )}
 

@@ -1,5 +1,7 @@
 import { formatBusinessContextBlock } from "../decisionQuality/formatContext.js";
 import type { BusinessContext } from "../decisionQuality/types.js";
+import { formatGlassUserProfileBlock } from "../userProfile/formatUserProfile.js";
+import type { GlassUserProfile } from "../userProfile/types.js";
 
 export const PRESETS: Record<string, string> = {
   none: "",
@@ -53,6 +55,7 @@ export function buildFullPrompt(
   options?: {
     decisionObjective?: string;
     businessContext?: BusinessContext;
+    userProfile?: GlassUserProfile;
     memoryBlock?: string;
     conversationBlock?: string;
     externalContextBlock?: string;
@@ -75,6 +78,10 @@ export function buildFullPrompt(
 
   if (options?.businessContext) {
     sections.push(formatBusinessContextBlock(options.businessContext));
+  }
+
+  if (options?.userProfile) {
+    sections.push(formatGlassUserProfileBlock(options.userProfile));
   }
 
   if (options?.memoryBlock?.trim()) {

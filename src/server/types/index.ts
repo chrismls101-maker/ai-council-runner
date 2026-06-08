@@ -161,6 +161,7 @@ export interface RunCouncilRequest {
   benchmark?: boolean;
   decisionObjective?: string;
   businessContext?: Partial<BusinessContext>;
+  userProfile?: Partial<import("../userProfile/types.js").GlassUserProfile>;
   memoryMode?: MemoryMode;
   selectedMemoryIds?: string[];
   conversationContext?: {

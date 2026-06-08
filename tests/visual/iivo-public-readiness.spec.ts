@@ -35,25 +35,30 @@ test.beforeAll(async () => {
 });
 
 test.describe("Public Readiness v1", () => {
-  test("A — Onboarding flow", async ({ page }) => {
+  test("A — Onboarding calibration flow", async ({ page }) => {
     test.setTimeout(90_000);
 
-    await page.addInitScript(() => {
+    await page.goto("/dashboard");
+    await page.evaluate(() => {
       localStorage.removeItem("iivo_onboarding_v1_completed");
+      localStorage.removeItem("iivo_glass_user_profile_v1");
     });
-
-    await page.goto("/");
+    await page.reload();
     await expect(page.getByTestId("onboarding-modal")).toBeVisible();
-    await expect(page.getByRole("heading", { name: "What is IIVO?" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "What's your name?" })).toBeVisible();
 
+    await page.getByTestId("onboarding-input-name").fill("Jordan");
     await page.getByTestId("onboarding-next").click();
-    await expect(page.getByRole("heading", { name: "How IIVO works" })).toBeVisible();
-
+    await page.getByTestId("onboarding-input-usualWork").fill("Research and writing");
     await page.getByTestId("onboarding-next").click();
-    await expect(page.getByRole("heading", { name: "Your workspace" })).toBeVisible();
+    await page.getByTestId("onboarding-input-currentFocus").fill("Drafting a grant proposal");
+    await page.getByTestId("onboarding-finish").click();
 
-    await page.getByTestId("onboarding-get-started").click();
-    await expect(page.getByTestId("onboarding-modal")).not.toBeVisible();
+    await expect(page.getByTestId("onboarding-calibrated")).toBeVisible();
+    await expect.poll(async () =>
+      page.evaluate(() => localStorage.getItem("iivo_onboarding_v1_completed")),
+    ).toBe("true");
+    await expect(page.getByTestId("onboarding-modal")).not.toBeVisible({ timeout: 8000 });
 
     await page.reload();
     await expect(page.getByTestId("onboarding-modal")).not.toBeVisible();
@@ -73,7 +78,7 @@ test.describe("Public Readiness v1", () => {
       localStorage.setItem("iivo_onboarding_v1_completed", "true");
     });
 
-    await page.goto("/");
+    await page.goto("/dashboard");
     await expect(page.getByRole("heading", { name: "IIVO", level: 1 })).toBeVisible();
     await expect(page.getByText("INTELLIGENCE IN. VERIFIED ACTION OUT.")).toBeVisible();
     await expect(page.getByTestId("composer-input")).toBeVisible();
@@ -88,7 +93,7 @@ test.describe("Public Readiness v1", () => {
       localStorage.setItem("iivo_onboarding_v1_completed", "true");
     });
 
-    await page.goto("/");
+    await page.goto("/dashboard");
     await page.getByTestId("sidebar-nav-trust").click();
 
     await expect(page.getByRole("heading", { name: "Trust & Privacy" })).toBeVisible();
@@ -122,7 +127,7 @@ test.describe("Public Readiness v1", () => {
       localStorage.setItem("iivo_onboarding_v1_completed", "true");
     });
 
-    await page.goto("/");
+    await page.goto("/dashboard");
     await page.getByTestId("sidebar-nav-trust").click();
     await expect(page.getByTestId("public-readiness-checklist")).toBeVisible();
 

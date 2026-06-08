@@ -1,0 +1,10 @@
+node_modules
+desktop-glass
+dist
+.git
+.env
+.env.*
+!.env.example
+playwright-report
+test-results
+*.log

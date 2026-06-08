@@ -68,7 +68,7 @@ export async function sectionBasicAssistant(page: Page, report: MasterQaReport):
   const id = "basic-assistant";
   const label = "Basic Assistant";
   try {
-    await page.goto("/");
+    await page.goto("/dashboard");
     await expect(page.getByTestId("composer-input")).toBeVisible({ timeout: 15_000 });
     await assertNeutralPresetActive(page);
 
@@ -120,7 +120,7 @@ export async function sectionContextBridge(page: Page, report: MasterQaReport): 
   const id = "context-bridge";
   const label = "Context Bridge";
   try {
-    await page.goto("/");
+    await page.goto("/dashboard");
     await attachPastedContext(page, SAMPLE_CONTEXT.title, SAMPLE_CONTEXT.text);
     const chip = page.getByTestId("context-attachment-chip");
     await expect(chip).toContainText(SAMPLE_CONTEXT.title);
@@ -136,7 +136,7 @@ export async function sectionContextBridge(page: Page, report: MasterQaReport): 
     await page.getByTestId("sidebar-nav-context-library").click();
     await expectContextLibraryItemAbsent(page, ephemeralTitle);
 
-    await page.goto("/");
+    await page.goto("/dashboard");
     await page.locator(".composer-plus-btn").click();
     await page.getByTestId("context-bridge-save-evidence").click();
     await page.getByTestId("paste-context-title-input").fill(evidenceTitle);
@@ -223,7 +223,7 @@ export async function sectionScreenshotEvidence(page: Page, report: MasterQaRepo
       .poll(async () => page.getByTestId("composer-input").inputValue())
       .toMatch(/analyze this screenshot/i);
 
-    await page.goto("/");
+    await page.goto("/dashboard");
     await page.getByTestId("sidebar-nav-context-library").click();
     await selectContextLibraryItemByTitle(page, title);
     await expect(page.getByTestId("context-screenshot-preview")).toBeVisible();
@@ -392,7 +392,7 @@ export async function sectionBenchmarkSanity(page: Page, report: MasterQaReport)
   const id = "benchmark";
   const label = "Benchmark";
   try {
-    await page.goto("/");
+    await page.goto("/dashboard");
     await page.getByTestId("sidebar-nav-benchmark-lab").click();
     await expect(page.getByTestId("benchmark-lab-panel")).toBeVisible();
     await expect(page.getByTestId("benchmark-prompt-library")).toBeVisible();

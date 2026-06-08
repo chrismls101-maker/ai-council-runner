@@ -73,24 +73,37 @@ function heuristicToDecision(h: ReturnType<typeof classifyPromptRoute>): RouterD
   };
 }
 
+export type RouterDecidingLayer = "fast_direct" | "heuristic" | "llm_router";
+
+export interface RouterAgentResult {
+  decision: RouterDecision;
+  decidingLayer: RouterDecidingLayer;
+}
+
 export async function runRouterAgent(
   userPrompt: string,
   signal?: AbortSignal,
   options?: { effectivePrompt?: string },
-): Promise<RouterDecision> {
+): Promise<RouterAgentResult> {
   const routeText = options?.effectivePrompt?.trim() || userPrompt.trim();
   const responsePlan = resolveResponsePlan(routeText);
   if (responsePlan.lane.lane === "fast_direct") {
     return {
-      selectedWorkflow: DIRECT_ANSWER_ID,
-      reason: responsePlan.lane.reason,
-      confidence: 95,
+      decidingLayer: "fast_direct",
+      decision: {
+        selectedWorkflow: DIRECT_ANSWER_ID,
+        reason: responsePlan.lane.reason,
+        confidence: 95,
+      },
     };
   }
 
   const heuristic = classifyPromptRoute(routeText);
   if (heuristic) {
-    return heuristicToDecision(heuristic);
+    return {
+      decidingLayer: "heuristic",
+      decision: heuristicToDecision(heuristic),
+    };
   }
 
   try {
@@ -112,27 +125,41 @@ export async function runRouterAgent(
       ) {
         const fallback = classifyPromptRoute(routeText);
         if (fallback?.selectedWorkflow === DIRECT_ANSWER_ID) {
-          return heuristicToDecision(fallback);
+          return {
+            decidingLayer: "heuristic",
+            decision: heuristicToDecision(fallback),
+          };
         }
         return {
-          selectedWorkflow: DIRECT_ANSWER_ID,
-          reason: "Rewrite, support, or fast-lane utility — direct answer, not council.",
-          confidence: 88,
+          decidingLayer: "heuristic",
+          decision: {
+            selectedWorkflow: DIRECT_ANSWER_ID,
+            reason: "Rewrite, support, or fast-lane utility — direct answer, not council.",
+            confidence: 88,
+          },
         };
       }
-      return parsed;
+      return { decidingLayer: "llm_router", decision: parsed };
     }
   } catch {
     /* fall through */
   }
 
   const fallback = classifyPromptRoute(routeText);
-  if (fallback) return heuristicToDecision(fallback);
+  if (fallback) {
+    return {
+      decidingLayer: "heuristic",
+      decision: heuristicToDecision(fallback),
+    };
+  }
 
   return {
-    selectedWorkflow: DIRECT_ANSWER_ID,
-    reason: "No strong council signals — answered directly.",
-    confidence: 55,
+    decidingLayer: "heuristic",
+    decision: {
+      selectedWorkflow: DIRECT_ANSWER_ID,
+      reason: "No strong council signals — answered directly.",
+      confidence: 55,
+    },
   };
 }
 

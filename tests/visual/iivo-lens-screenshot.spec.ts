@@ -67,7 +67,7 @@ test.describe("IIVO Lens screenshot", () => {
     const id = await createLensScreenshotItem(title);
 
     try {
-      await page.goto("/");
+      await page.goto("/dashboard");
       await page.getByTestId("sidebar-nav-context-library").click();
       await expect(page.getByTestId("context-library-panel")).toBeVisible();
 

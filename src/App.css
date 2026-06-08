@@ -158,15 +158,19 @@ body {
 .app-nav-shell {
   display: flex;
   flex-shrink: 0;
-  height: 100vh;
+  align-items: flex-start;
+  height: auto;
+  align-self: flex-start;
   position: sticky;
-  top: 0;
+  top: 12px;
   z-index: 20;
 }
 
 .nav-rail {
   width: var(--rail-width);
   flex-shrink: 0;
+  align-self: flex-start;
+  height: fit-content;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -254,14 +258,13 @@ body {
 }
 
 .rail-nav {
-  flex: 1;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
   width: 100%;
   padding: 4px 0;
-  min-height: 0;
 }
 
 .rail-footer {
@@ -269,8 +272,8 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  margin-top: auto;
-  padding-top: 8px;
+  margin-top: 10px;
+  padding-top: 0;
 }
 
 .rail-account-avatar {

@@ -27,7 +27,7 @@ test.describe("Preset neutral default", () => {
   });
 
   test("fresh load uses No preset with Auto Router", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/dashboard");
     await expect(page.getByTestId("composer-input")).toBeVisible({ timeout: 15_000 });
     await assertNeutralPresetActive(page);
     await expect(page.getByTestId("workflow-select")).toContainText(/Auto/i);
@@ -36,7 +36,7 @@ test.describe("Preset neutral default", () => {
 
   test("Direct Answer — Design.com screenshot has no AI Front Desk bleed", async ({ page }) => {
     test.setTimeout(5 * 60_000);
-    await page.goto("/");
+    await page.goto("/dashboard");
     await assertNeutralPresetActive(page);
     await submitComposerPrompt(page, "Analyze this screenshot of Design.com");
     if (process.env.PRESET_QA_SKIP_LIVE === "1") {
@@ -53,7 +53,7 @@ test.describe("Preset neutral default", () => {
 
   test("explicit AI Front Desk preset injects sales context", async ({ page }) => {
     test.setTimeout(5 * 60_000);
-    await page.goto("/");
+    await page.goto("/dashboard");
     await selectWorkspacePreset(page, "AI Front Desk Sales Test");
     await expect(page.getByTestId("preset-select")).toContainText(/AI Front Desk/i);
     await selectPillOption(page, "workflow-select", "Auto");

@@ -68,7 +68,7 @@ export async function preparePublicReadinessState(page: Page): Promise<void> {
   });
   await installNeutralPresetInit(page);
 
-  await page.goto("/");
+  await page.goto("/dashboard");
   await pauseQuick(page, 500);
 
   const onboarding = page.getByTestId("onboarding-modal");

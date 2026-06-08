@@ -62,6 +62,9 @@ import {
   type ConversationContext,
 } from "../conversation/followUpContext.js";
 import { normalizeBusinessContext } from "../decisionQuality/formatContext.js";
+import { normalizeGlassUserProfile } from "../userProfile/formatUserProfile.js";
+import { getGlassUserProfile } from "../userProfile/userProfileStore.js";
+import type { GlassUserProfile } from "../userProfile/types.js";
 import { inferDecisionObjective } from "../decisionQuality/inferObjective.js";
 import {
   hasDecisionQualityContent,
@@ -99,6 +102,10 @@ import {
 import { applyExecutionModeToRoute } from "../executionMode/applyExecutionMode.js";
 import { LEGAL_PRIVACY_PROMPT } from "../executionMode/executionMode.js";
 import type { ExecutionModeTrace } from "../executionMode/executionModeTrace.js";
+import {
+  appendRoutingTelemetry,
+  type RoutingDecidingLayer,
+} from "../routing/routingTelemetry.js";
 
 type ProgressCallback = (event: ProgressEvent) => void;
 
@@ -270,6 +277,7 @@ export interface RunCouncilOptions {
   benchmark?: boolean;
   decisionObjective?: string;
   businessContext?: Partial<BusinessContext>;
+  userProfile?: Partial<GlassUserProfile>;
   memoryMode?: MemoryMode;
   selectedMemoryIds?: string[];
   conversationContext?: ConversationContext;
@@ -309,6 +317,7 @@ export async function runCouncilFull(
     benchmark = false,
     decisionObjective: decisionObjectiveInput,
     businessContext: businessContextInput,
+    userProfile: userProfileInput,
     memoryMode = "auto",
     selectedMemoryIds,
     conversationContext,
@@ -317,6 +326,9 @@ export async function runCouncilFull(
   } = options;
 
   const businessContext = normalizeBusinessContext(businessContextInput);
+  const storedUserProfile = await getGlassUserProfile();
+  const userProfile =
+    normalizeGlassUserProfile(userProfileInput) ?? storedUserProfile ?? undefined;
   const routingPrompt = resolveRoutingPrompt(prompt, conversationContext);
   const responsePlan = resolveResponsePlan(routingPrompt);
 
@@ -412,6 +424,7 @@ export async function runCouncilFull(
   const basePromptOptions = {
     decisionObjective,
     businessContext,
+    userProfile,
   };
 
   const conversationBlock = buildConversationContextBlock(prompt, conversationContext);
@@ -439,15 +452,21 @@ export async function runCouncilFull(
   let routeId: string = workflowId;
 
   let routerDecision: CouncilRunResult["routerDecision"];
+  let decidingLayer: RoutingDecidingLayer = "heuristic";
+  const routeOverride =
+    (workflowInput !== undefined && workflowInput !== "auto") ||
+    executionModeInput !== "auto";
 
   const forceDirectAnswer = shouldForceDirectAnswerRoute(prompt, conversationContext);
 
   if (workflowInput === "auto") {
-    routerDecision = await runRouterAgent(
+    const routerResult = await runRouterAgent(
       buildRouterPrompt(prompt, conversationContext, externalRouterHint),
       controller.signal,
       { effectivePrompt: routingPrompt },
     );
+    routerDecision = routerResult.decision;
+    decidingLayer = routerResult.decidingLayer;
     routeId = routerDecision.selectedWorkflow;
     const heuristicOverride = classifyPromptRoute(routingPrompt);
     if (
@@ -460,6 +479,7 @@ export async function runCouncilFull(
         reason: heuristicOverride.reason,
         confidence: heuristicOverride.confidence,
       };
+      decidingLayer = "heuristic";
     }
     if (
       responsePlan.lane.lane === "fast_direct" &&
@@ -472,6 +492,7 @@ export async function runCouncilFull(
         reason: responsePlan.lane.reason,
         confidence: 95,
       };
+      decidingLayer = "fast_direct";
     } else if (
       executionModeDecision.effectiveMode === "council" &&
       responsePlan.lane.preferredRoute === "product-decision" &&
@@ -504,7 +525,10 @@ export async function runCouncilFull(
       reason: "IIVO identity follow-up — direct answer.",
       confidence: 95,
     };
+    decidingLayer = "heuristic";
     emit({ type: "router-complete", runId, routerDecision });
+  } else {
+    decidingLayer = "user_override";
   }
 
   const appliedRoute = applyExecutionModeToRoute({
@@ -520,6 +544,9 @@ export async function runCouncilFull(
   });
   routeId = appliedRoute.routeId;
   routerDecision = appliedRoute.routerDecision ?? routerDecision;
+  if (routeOverride) {
+    decidingLayer = "user_override";
+  }
   if (routeId !== DIRECT_ANSWER_ID) {
     workflowId = routeId as WorkflowId;
   }
@@ -534,6 +561,9 @@ export async function runCouncilFull(
       reason: `Execution Mode: Quick — ${executionModeDecision.reason}`,
       confidence: 95,
     };
+    if (routeOverride) {
+      decidingLayer = "user_override";
+    }
   }
 
   if (LEGAL_PRIVACY_PROMPT.test(routingPrompt)) {
@@ -543,7 +573,20 @@ export async function runCouncilFull(
       reason: "Legal/privacy advisory — Quick direct answer (never Sales Attack).",
       confidence: 96,
     };
+    if (!routeOverride) {
+      decidingLayer = "heuristic";
+    }
   }
+
+  void appendRoutingTelemetry({
+    timestamp: new Date().toISOString(),
+    runId,
+    promptSnippet: routingPrompt.slice(0, 100),
+    decidedRoute: routeId,
+    decidingLayer,
+    executionMode: executionModeInput,
+    routeOverride,
+  });
 
   const isDirectAnswer = routeId === DIRECT_ANSWER_ID;
   omitPreset = shouldOmitPresetContext({

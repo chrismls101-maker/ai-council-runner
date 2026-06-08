@@ -153,7 +153,7 @@ test("Decision Learning visual QA flow", async ({ page }) => {
 
   let stepARunId: string | undefined;
 
-  await page.goto("/");
+  await page.goto("/dashboard");
   await initQaMonitor(page);
   await updateQaMonitor(page, {
     step: "Step A: Product Decision Run",

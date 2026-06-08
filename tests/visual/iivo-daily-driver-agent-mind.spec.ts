@@ -25,7 +25,7 @@ test("Agent Mind panel visible after navigation and reattach", async ({ page }) 
   });
   await installNeutralPresetInit(page);
   await registerDailyDriverMonitorPersistence(page, { totalScenarios: 1 });
-  await page.goto("/");
+  await page.goto("/dashboard");
   await ensureDailyDriverQaMonitor(page, { totalScenarios: 1, report });
 
   await expect(page.getByTestId("daily-agent-mind-panel")).toBeVisible({ timeout: 15_000 });
@@ -45,7 +45,7 @@ test("Agent Mind panel updates plan, timeline, and evaluation fields", async ({ 
     localStorage.setItem("iivo_onboarding_v1_completed", "true");
   });
   await installNeutralPresetInit(page);
-  await page.goto("/");
+  await page.goto("/dashboard");
   await ensureDailyDriverQaMonitor(page, { totalScenarios: 1, report });
 
   const panel = page.getByTestId("daily-agent-mind-panel");

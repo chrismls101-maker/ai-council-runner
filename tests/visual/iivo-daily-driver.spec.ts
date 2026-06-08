@@ -61,7 +61,7 @@ test.describe("IIVO Daily Driver Simulation", () => {
   });
 
   test("Agent Mind panel is visible", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/dashboard");
     await ensureDailyDriverQaMonitor(page, { totalScenarios: scenarios.length, report });
     await expect(page.getByTestId("visual-qa-monitor")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId("daily-agent-mind-panel")).toBeVisible();

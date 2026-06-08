@@ -94,7 +94,7 @@ test.describe("Usage & Credits Visual QA", () => {
         const summary = await assertUsageResetToDefault();
         qaLog(`Credits reset — currentCredits=${summary.currentCredits}`);
 
-        await page.goto("/");
+        await page.goto("/dashboard");
         await initQaMonitor(page, {
           title: "IIVO Usage QA",
           initialStep: "Live charge flow",
@@ -271,7 +271,7 @@ test.describe("Usage & Credits Visual QA", () => {
         const summary = await assertUsageResetToDefault();
         qaLog(`Credits reset — currentCredits=${summary.currentCredits}`);
 
-        await page.goto("/");
+        await page.goto("/dashboard");
         await initQaMonitor(page, {
           title: "IIVO Usage QA",
           initialStep: "Estimate & guard flow",

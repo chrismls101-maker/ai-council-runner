@@ -32,7 +32,7 @@ test("Benchmark Lab prompt library UI (no live run)", async ({ page }) => {
     page,
     "Prompt library UI",
     async () => {
-      await page.goto("/");
+      await page.goto("/dashboard");
       await initQaMonitor(page, {
         title: "IIVO Benchmark Library QA",
         initialStep: "Prompt Library",
@@ -78,7 +78,7 @@ test("Benchmark Lab live flow (simple control prompt)", async ({ page }) => {
     "Setup",
     async () => {
       await assertUsageResetToDefault();
-      await page.goto("/");
+      await page.goto("/dashboard");
       await initQaMonitor(page, {
         title: "IIVO Benchmark QA",
         initialStep: "Benchmark Lab",

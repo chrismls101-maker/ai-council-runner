@@ -503,6 +503,18 @@ await test("buildGlassDirectUserPrompt with no session never nags for context", 
   assert.doesNotMatch(prompt, /I need more specific context/i);
 });
 
+await test("buildGlassDirectUserPrompt includes Glass user profile block", () => {
+  const prompt = buildGlassDirectUserPrompt("Help me prioritize today", undefined, {
+    name: "Jordan",
+    usualWork: "Enterprise sales",
+    currentFocus: "Closing a pilot",
+  });
+  assert.match(prompt, /User Profile \(from Glass calibration\)/);
+  assert.match(prompt, /Name: Jordan/);
+  assert.match(prompt, /Kind of work: Enterprise sales/);
+  assert.match(prompt, /Current focus: Closing a pilot/);
+});
+
 // --- meeting intelligence (server prompt routing) ---
 
 await test("looksLikeMeeting detects meeting prompts/context", () => {

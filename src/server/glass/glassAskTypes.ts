@@ -56,6 +56,7 @@ export interface GlassAskRequestBody {
   responseStyle?: "overlay";
   /** Selects env model slot: default text, semantic refine, or diagnostic. */
   modelPurpose?: "default" | "semantic" | "diagnostic";
+  userProfile?: import("../userProfile/types.js").GlassUserProfile;
 }
 
 export interface GlassAskResponseBody {

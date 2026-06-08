@@ -91,6 +91,11 @@ import {
 import { loadGlassUpdateManifest } from "./glass/glassUpdateManifest.js";
 import { translateLiveCaption } from "./glass/glassTranslate.js";
 import {
+  clearGlassUserProfile,
+  getGlassUserProfile,
+  saveGlassUserProfile,
+} from "./userProfile/userProfileStore.js";
+import {
   createBenchmarkRun,
   estimateBenchmarkRun,
 } from "./benchmarks/createBenchmark.js";
@@ -106,15 +111,22 @@ import {
   MAX_AUDIO_BYTES,
   transcribeAudioBuffer,
 } from "./transcription/transcribeAudio.js";
+import { glassApiAuthMiddleware } from "./middleware/glassApiAuth.js";
+import {
+  isLandingGateEnabled,
+  verifyLandingPassword,
+} from "./landingGate.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3001;
 
+const allowedOrigin = process.env.ALLOWED_ORIGIN?.trim();
+
 const app = express();
-app.use(cors());
+app.use(allowedOrigin ? cors({ origin: allowedOrigin }) : cors());
 
 /** Visual ask may include optimized JPEG data URLs — parse before the global 2mb limit. */
-app.post("/api/glass/ask", express.json({ limit: "6mb" }), async (req, res) => {
+app.post("/api/glass/ask", glassApiAuthMiddleware, express.json({ limit: "6mb" }), async (req, res) => {
   const body = req.body as GlassAskRequestBody;
   try {
     validateGlassAskPayloadSize(body);
@@ -142,7 +154,7 @@ app.post("/api/glass/ask", express.json({ limit: "6mb" }), async (req, res) => {
   }
 });
 
-app.post("/api/glass/translate", express.json({ limit: "64kb" }), async (req, res) => {
+app.post("/api/glass/translate", glassApiAuthMiddleware, express.json({ limit: "64kb" }), async (req, res) => {
   try {
     const result = await translateLiveCaption(req.body ?? {});
     res.json(result);
@@ -153,6 +165,23 @@ app.post("/api/glass/translate", express.json({ limit: "64kb" }), async (req, re
 });
 
 app.use(express.json({ limit: "2mb" }));
+
+app.get("/api/landing-gate/status", (_req, res) => {
+  res.json({ enabled: isLandingGateEnabled() });
+});
+
+app.post("/api/landing-gate/unlock", (req, res) => {
+  if (!isLandingGateEnabled()) {
+    res.json({ ok: true });
+    return;
+  }
+  const password = typeof req.body?.password === "string" ? req.body.password : "";
+  if (!verifyLandingPassword(password)) {
+    res.status(401).json({ error: "Incorrect password" });
+    return;
+  }
+  res.json({ ok: true });
+});
 
 app.get("/api/health", (_req, res) => {
   const missing = validateApiKeys();
@@ -186,11 +215,26 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
+app.get("/api/user-profile", async (_req, res) => {
+  const profile = await getGlassUserProfile();
+  res.json({ profile });
+});
+
+app.put("/api/user-profile", async (req, res) => {
+  const profile = await saveGlassUserProfile(req.body ?? {});
+  res.json({ profile });
+});
+
+app.delete("/api/user-profile", async (_req, res) => {
+  await clearGlassUserProfile();
+  res.json({ ok: true });
+});
+
 app.get("/api/glass/update", (_req, res) => {
   res.json(loadGlassUpdateManifest());
 });
 
-app.post("/api/transcribe-audio", express.json({ limit: "8mb" }), async (req, res) => {
+app.post("/api/transcribe-audio", glassApiAuthMiddleware, express.json({ limit: "8mb" }), async (req, res) => {
   const { audioBase64, mimeType, model, source } = req.body as {
     audioBase64?: string;
     mimeType?: string;
@@ -952,6 +996,7 @@ app.post("/api/run-council", async (req, res) => {
     benchmark,
     decisionObjective,
     businessContext,
+    userProfile: userProfileInput,
     memoryMode,
     selectedMemoryIds,
     conversationContext,
@@ -1006,6 +1051,7 @@ app.post("/api/run-council", async (req, res) => {
         benchmark: Boolean(benchmark),
         decisionObjective,
         businessContext,
+        userProfile: userProfileInput,
         memoryMode,
         selectedMemoryIds,
         conversationContext,
@@ -1055,6 +1101,7 @@ app.post("/api/run-council", async (req, res) => {
       benchmark: Boolean(benchmark),
       decisionObjective,
       businessContext,
+      userProfile: userProfileInput,
       memoryMode,
       selectedMemoryIds,
       conversationContext,
@@ -1195,16 +1242,27 @@ function emptyOutputs() {
 const clientDist = path.resolve(__dirname, "../client");
 
 if (process.env.NODE_ENV === "production") {
-  app.use(express.static(clientDist));
+  app.use(
+    express.static(clientDist, {
+      setHeaders(res, filePath) {
+        if (filePath.endsWith("index.html")) {
+          res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+          res.setHeader("Pragma", "no-cache");
+        }
+      },
+    }),
+  );
   app.get("/{*path}", (_req, res) => {
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
     res.sendFile(path.join(clientDist, "index.html"), (err) => {
       if (err) res.status(404).json({ error: "Not found" });
     });
   });
 }
 
-app.listen(PORT, () => {
-  console.log(`IIVO server listening on http://localhost:${PORT}`);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`IIVO server listening on http://0.0.0.0:${PORT}`);
   logApiKeyStatus();
   logImageVisionStatus();
   logConfiguredModels();

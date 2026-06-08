@@ -11,6 +11,9 @@ import {
 import { callOpenAIWithModelChain, ProviderError } from "../providers/openai.js";
 import type { GlassAskRequestBody, GlassAskResponseBody, GlassAskSessionPayload } from "./glassAskTypes.js";
 import { buildActiveListeningPromptBlock } from "./activeListeningPrompt.js";
+import { formatGlassUserProfileBlock, normalizeGlassUserProfile } from "../userProfile/formatUserProfile.js";
+import { getGlassUserProfile } from "../userProfile/userProfileStore.js";
+import type { GlassUserProfile } from "../userProfile/types.js";
 
 export const GLASS_DIRECT_SYSTEM_PROMPT = `You are IIVO Glass, a fast conversational AI companion over the user's workspace. Answer naturally and directly, like ChatGPT. Use the provided session context only when relevant. Be concise unless the user asks for depth. Do not invent screen/audio details you were not given. Do not use council/report formatting.
 
@@ -376,8 +379,13 @@ function buildSessionAnchorBlock(anchors: SessionAnchors): string[] {
 export function buildGlassDirectUserPrompt(
   prompt: string,
   session?: GlassAskSessionPayload,
+  userProfile?: GlassUserProfile,
 ): string {
   const lines: string[] = [prompt.trim()];
+
+  if (userProfile) {
+    lines.push("", formatGlassUserProfileBlock(userProfile));
+  }
 
   if (session?.summary?.trim()) {
     lines.push("", "Session summary:", session.summary.trim());
@@ -515,7 +523,10 @@ export async function runGlassDirectAsk(
   }
 
   const purpose = body.modelPurpose ?? "default";
-  const userPrompt = buildGlassDirectUserPrompt(prompt, body.session);
+  const storedProfile = await getGlassUserProfile();
+  const userProfile =
+    normalizeGlassUserProfile(body.userProfile) ?? storedProfile ?? undefined;
+  const userPrompt = buildGlassDirectUserPrompt(prompt, body.session, userProfile);
   let result = await caller(GLASS_DIRECT_SYSTEM_PROMPT, userPrompt, signal, purpose);
   let formatted = formatGlassDirectAnswer(result.content);
 

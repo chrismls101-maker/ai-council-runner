@@ -48,12 +48,8 @@ export const HISTORY_FILTERS: { value: HistoryFilter; label: string }[] = [
 
 export const SIDEBAR_NAV: { id: SidebarSection; label: string; icon: string }[] = [
   { id: "history", label: "Decision History", icon: "history" },
-  { id: "decision-learning", label: "Decision Learning", icon: "learning" },
-  { id: "benchmark-lab", label: "Benchmark Lab", icon: "benchmark" },
   { id: "memory", label: "Memory Vault", icon: "memory" },
   { id: "context-library", label: "Context Library", icon: "context" },
-  { id: "research", label: "Research Library", icon: "research" },
-  { id: "final-plans", label: "Saved Plans", icon: "plans" },
   { id: "settings", label: "Settings", icon: "settings" },
   { id: "trust", label: "Trust & Privacy", icon: "trust" },
 ];

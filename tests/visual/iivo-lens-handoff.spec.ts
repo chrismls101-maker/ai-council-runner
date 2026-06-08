@@ -109,7 +109,7 @@ test.describe("IIVO Lens handoff", () => {
     const id = await createLensContextItem(title);
 
     try {
-      await page.goto("/");
+      await page.goto("/dashboard");
       await page.getByTestId("sidebar-nav-context-library").click();
       await expect(page.getByTestId("context-library-panel")).toBeVisible();
       await expect(
