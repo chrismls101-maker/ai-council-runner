@@ -22,7 +22,7 @@ test.describe("Glass public landing", () => {
     await page.goto("/");
     await expect(page.getByTestId("glass-public-landing")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole("heading", { name: "IIVO Glass" })).toBeVisible();
-    await expect(page.getByTestId("glass-landing-download")).toBeVisible();
+    await expect(page.getByTestId("glass-landing-download").first()).toBeVisible();
   });
 
   test("shows password gate with reveal toggle when enabled", async ({ page }) => {
