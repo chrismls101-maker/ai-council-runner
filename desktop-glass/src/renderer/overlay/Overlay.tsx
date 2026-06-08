@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import type { GlassState } from "../../shared/ipc.ts";
 import type { OverlayMode } from "../../shared/glassWindowTypes.ts";
 import type { GlassSessionInsight } from "../../shared/sessionTypes.ts";
@@ -213,7 +213,7 @@ export function Overlay(): JSX.Element {
   const state = useGlassState();
   const onboardingOpen = state.onboardingOpen;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (onboardingOpen) {
       window.glass.setIgnoreMouse(false);
     }
@@ -229,7 +229,9 @@ export function Overlay(): JSX.Element {
   );
   const notificationVisible = Boolean(notification);
   const updateVisible =
-    state.appUpdate.phase === "available" || state.appUpdate.phase === "installing";
+    state.appUpdate.phase === "available" ||
+    state.appUpdate.phase === "downloading" ||
+    state.appUpdate.phase === "installing";
   const countdownVisible =
     state.listenCountdownSeconds != null && state.listenCountdownSeconds > 0;
   const { cards, dismissCard } = useOverlayCards(state, overlayContentVisible);

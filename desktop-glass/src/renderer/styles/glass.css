@@ -791,6 +791,12 @@ html.glass-dock-window #root {
 .dock--unlocked .dock__toast {
   position: relative;
   z-index: 4;
+  pointer-events: none;
+}
+
+.dock--unlocked .dock__actions .gbtn,
+.dock--unlocked .dock-menu__panel,
+.dock--unlocked .dock-menu__trigger {
   pointer-events: auto;
 }
 
@@ -806,6 +812,18 @@ html.glass-dock-window #root {
   border-radius: inherit;
   background: rgba(4, 8, 18, 0.58);
   pointer-events: none;
+}
+
+.dock--unlocked .chrome-reposition-scrim,
+.command-bar-stack--unlocked .chrome-reposition-scrim {
+  pointer-events: auto;
+  cursor: grab;
+  z-index: 3;
+}
+
+.dock--unlocked .chrome-reposition-scrim:active,
+.command-bar-stack--unlocked .chrome-reposition-scrim:active {
+  cursor: grabbing;
 }
 
 .chrome-reposition-hint {
@@ -2770,6 +2788,7 @@ html.glass-dock-window #root {
   z-index: 3;
   opacity: 0.55;
   filter: saturate(0.45);
+  pointer-events: none;
 }
 
 .command-bar-stack--unlocked .command-bar.composer-shell .command-bar__row,

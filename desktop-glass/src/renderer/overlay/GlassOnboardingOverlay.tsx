@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { GLASS_ONBOARDING_QUESTIONS } from "../../shared/glassOnboarding.ts";
 import type { GlassUserProfile } from "../../shared/glassUserProfile.ts";
 import { send } from "../useGlassState.ts";
@@ -22,6 +22,26 @@ export function GlassOnboardingOverlay(): JSX.Element {
   const questionIndex = typeof step === "number" ? step : 2;
   const question = GLASS_ONBOARDING_QUESTIONS[questionIndex];
 
+  const handleSkip = useCallback((): void => {
+    send({ type: "skip-glass-onboarding" });
+  }, []);
+
+  useEffect(() => {
+    window.glass.setIgnoreMouse(false);
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        handleSkip();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [handleSkip]);
+
   useEffect(() => {
     if (step === "calibrated") return;
     const saved = answers[question.key];
@@ -29,10 +49,6 @@ export function GlassOnboardingOverlay(): JSX.Element {
     const t = window.setTimeout(() => inputRef.current?.focus(), reduceMotion ? 0 : 120);
     return () => window.clearTimeout(t);
   }, [step, question.key, answers, reduceMotion]);
-
-  const handleSkip = (): void => {
-    send({ type: "skip-glass-onboarding" });
-  };
 
   const handleContinue = (): void => {
     const trimmed = draft.trim();
@@ -56,6 +72,11 @@ export function GlassOnboardingOverlay(): JSX.Element {
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>): void => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      handleSkip();
+      return;
+    }
     if (event.key === "Enter" && draft.trim()) {
       event.preventDefault();
       handleContinue();
@@ -128,6 +149,9 @@ export function GlassOnboardingOverlay(): JSX.Element {
           </div>
         )}
       </div>
+      <p className="glass-onboarding-rescue" data-testid="onboarding-rescue-hint">
+        Stuck? Press <kbd>Esc</kbd> to skip · <kbd>⌘⌥⎋</kbd> to Force Quit
+      </p>
     </div>
   );
 }

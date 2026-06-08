@@ -72,3 +72,10 @@ dmg:
   artifactName: ${productName}-${version}-${arch}.${ext}
   title: ${productName} ${version}
   sign: true
+
+publish:
+  provider: github
+  owner: chrismls101-maker
+  repo: ai-council-runner
+  vPrefixedTagName: true
+  releaseType: release

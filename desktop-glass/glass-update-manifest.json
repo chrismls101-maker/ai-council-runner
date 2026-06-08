@@ -1,10 +1,10 @@
 {
-  "version": "0.1.8",
-  "buildId": "20260608020634",
-  "releasedAt": "2026-06-08T02:06:34.769Z",
+  "version": "0.1.10",
+  "buildId": "20260608215523",
+  "releasedAt": "2026-06-08T21:55:23.637Z",
   "title": "NEW SYSTEM UPDATE",
-  "notes": "IIVO Glass v0.1.8 is ready to install.\n\n• Command bar Live Translate shortcut (Languages icon) — one-click media translate from system audio.\n• Live Translate upgrades: caption overlay, panel setup, Listen/Meetings toggles, private-no-save defaults.\n• Dock layout fixes: priority ordering, sizing for Pause/End session, clickable action buttons.\n• Command bar and dock unlock overlay (dark scrim + drag hint), lock/rotate tooltips.\n• Glass hover tooltips on command bar translate and layout controls.",
-  "downloadUrl": "file:///Users/newuser/Desktop/ai-council-runner/desktop-glass/release/IIVO Glass-0.1.8-arm64.dmg",
-  "darwinArm64Dmg": "/Users/newuser/Desktop/ai-council-runner/desktop-glass/release/IIVO Glass-0.1.8-arm64.dmg",
+  "notes": "IIVO Glass v0.1.10 is ready to install.\n\n• Unlock layout: dock and command bar stay put when you unlock — only move when you drag.\n• Fix crash on unlock (missing click-through sync import).\n• Squirrel auto-update from GitHub Releases — Update now installs without a manual DMG.\n• Setup panel clarifies dev vs installed update paths.",
+  "downloadUrl": "file:///Users/newuser/Desktop/ai-council-runner/desktop-glass/release/IIVO Glass-0.1.10-arm64.dmg",
+  "darwinArm64Dmg": "/Users/newuser/Desktop/ai-council-runner/desktop-glass/release/IIVO Glass-0.1.10-arm64.dmg",
   "darwinUniversalDmg": ""
 }

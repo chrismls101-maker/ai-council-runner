@@ -1,3 +1,8 @@
+/**
+ * Infra note (not @legacy): imports main-process modules that transitively require `electron`.
+ * The suite fails to load under plain `node:test` (SyntaxError on desktopCapturer).
+ * Omitted from `npm test` in package.json — run via Electron context or refactor imports before CI.
+ */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";

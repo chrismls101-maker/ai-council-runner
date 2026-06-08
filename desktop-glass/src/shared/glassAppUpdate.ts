@@ -17,6 +17,7 @@ export type GlassAppUpdatePhase =
   | "idle"
   | "checking"
   | "available"
+  | "downloading"
   | "installing"
   | "dismissed";
 
@@ -28,6 +29,7 @@ export interface GlassAppUpdateState {
   title?: string;
   releaseNotes?: string;
   downloadUrl?: string;
+  downloadPercent?: number;
   checkedAt?: string;
   error?: string;
 }

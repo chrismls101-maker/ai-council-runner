@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { playChromeLockToggleSound } from "./chromeLockSound.ts";
+import { syncGlassClickThrough } from "./glassTextInteraction.ts";
 import { send } from "./useGlassState.ts";
 
 /** Toggle dock / command-bar layout lock with audible feedback. */

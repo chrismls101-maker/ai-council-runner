@@ -8,6 +8,11 @@ import {
   resolveGlassUpdateDownloadTarget,
   type GlassUpdateManifest,
 } from "../shared/glassAppUpdate.ts";
+import {
+  GLASS_GITHUB_UPDATE_OWNER,
+  GLASS_GITHUB_UPDATE_REPO,
+  glassGitHubUpdateFeedUrl,
+} from "../shared/glassAppUpdateFeed.ts";
 
 describe("glassAppUpdate", () => {
   it("parses semver tuples", () => {
@@ -32,6 +37,8 @@ describe("glassAppUpdate", () => {
     assert.equal(defaultGlassUpdateTitle("0.2.0"), "NEW SYSTEM UPDATE · v0.2.0");
   });
 
+  // @legacy dev/DMG fallback only: v0.1.9 packaged Mac auto-updates via Squirrel zip
+  // (glassAutoUpdater.ts + GitHub Releases). DMG resolution still applies to dev + applyGlassAppUpdate fallback.
   it("resolves darwin download targets", () => {
     const manifest: GlassUpdateManifest = {
       version: "0.2.0",
@@ -49,6 +56,15 @@ describe("glassAppUpdate", () => {
     assert.equal(
       resolveGlassUpdateDownloadTarget({ version: "0.2.0", downloadUrl: "https://x/y.dmg" }, "darwin", "arm64"),
       "https://x/y.dmg",
+    );
+  });
+
+  it("points packaged auto-update at GitHub releases", () => {
+    assert.equal(GLASS_GITHUB_UPDATE_OWNER, "chrismls101-maker");
+    assert.equal(GLASS_GITHUB_UPDATE_REPO, "ai-council-runner");
+    assert.equal(
+      glassGitHubUpdateFeedUrl(),
+      "https://api.github.com/repos/chrismls101-maker/ai-council-runner/releases/latest",
     );
   });
 });

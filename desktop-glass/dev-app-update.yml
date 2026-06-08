@@ -1,0 +1,4 @@
+provider: github
+owner: chrismls101-maker
+repo: ai-council-runner
+updaterCacheDirName: iivo-glass-updater

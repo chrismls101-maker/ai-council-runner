@@ -103,6 +103,10 @@ import {
   togglePanel,
   unregisterCommandBarHotkeys,
   setOnboardingPending,
+  setGlassBootSequenceCompleteHandler,
+  setOnboardingEmergencyHandler,
+  registerOnboardingEmergencyShortcut,
+  unregisterOnboardingEmergencyShortcut,
   setCommandBarLayoutChangedHandler,
 } from "./windows.ts";
 import { computeCommandBarOverlayClearancePx } from "../shared/glassLayoutMath.ts";
@@ -180,6 +184,12 @@ import {
   applyGlassAppUpdate,
   checkForGlassAppUpdate,
 } from "./glassAppUpdate.ts";
+import {
+  applyGlassAutoUpdate,
+  checkGlassAutoUpdate,
+  initGlassAutoUpdater,
+  isGlassAutoUpdateEnabled,
+} from "./glassAutoUpdater.ts";
 import {
   emptyGlassAppUpdateState,
   type GlassAppUpdateState,
@@ -1620,11 +1630,28 @@ function snapshot(): GlassState {
 }
 
 async function finishGlassOnboarding(profile: GlassUserProfile | null): Promise<void> {
+  unregisterOnboardingEmergencyShortcut();
   const stored = await completeGlassOnboardingStore(profile);
   state.onboardingOpen = false;
   state.glassUserProfile = stored.profile;
+  glassUserSettings = {
+    ...glassUserSettings,
+    displayTarget: "primary",
+    chromeLayoutLocked: true,
+    dockCustomOrigin: null,
+    commandBarCustomOrigin: null,
+  };
+  state.glassSettings = glassUserSettings;
+  await persistGlassUserSettings(glassUserSettings);
+  syncChromeLayoutFromSettings(glassUserSettings, { clearCustomOrigins: true });
+  const manager = getLayoutManager();
+  manager?.setDisplayTarget("primary");
   setOnboardingPending(false);
   push();
+}
+
+function skipGlassOnboardingEmergency(): void {
+  void finishGlassOnboarding(null);
 }
 
 function pushFeed(item: GlassCommandFeedItem): void {
@@ -1660,7 +1687,17 @@ let overlayRendererNotificationActive = false;
 
 async function runGlassUpdateCheck(): Promise<void> {
   if (process.env.IIVO_GLASS_E2E === "1") return;
-  if (state.appUpdate.phase === "installing") return;
+  if (
+    state.appUpdate.phase === "installing" ||
+    state.appUpdate.phase === "downloading"
+  ) {
+    return;
+  }
+
+  if (isGlassAutoUpdateEnabled()) {
+    await checkGlassAutoUpdate();
+    return;
+  }
 
   const next = await checkForGlassAppUpdate(config, {
     ...state.appUpdate,
@@ -3451,9 +3488,16 @@ async function handleCommand(
       void runGlassUpdateCheck();
       return;
     case "glass-update-apply": {
-      state.appUpdate = { ...state.appUpdate, phase: "installing", error: undefined };
+      state.appUpdate = {
+        ...state.appUpdate,
+        phase: isGlassAutoUpdateEnabled() ? "downloading" : "installing",
+        error: undefined,
+        downloadPercent: isGlassAutoUpdateEnabled() ? 0 : undefined,
+      };
       push();
-      const result = await applyGlassAppUpdate();
+      const result = isGlassAutoUpdateEnabled()
+        ? await applyGlassAutoUpdate()
+        : await applyGlassAppUpdate();
       if (!result.ok) {
         state.appUpdate = { ...state.appUpdate, phase: "available", error: result.error };
         push();
@@ -4481,10 +4525,20 @@ app.whenReady().then(async () => {
   if (process.env.IIVO_GLASS_E2E === "1") {
     glassOnboardingState = { ...glassOnboardingState, completed: true };
   }
-  state.onboardingOpen = !glassOnboardingState.completed;
+  const needsGlassOnboarding = !glassOnboardingState.completed;
   state.glassUserProfile = glassOnboardingState.profile;
-  if (state.onboardingOpen) {
+  if (needsGlassOnboarding) {
     setOnboardingPending(true);
+  }
+  // Keep onboarding UI out of the overlay until boot splash fully finishes.
+  state.onboardingOpen = needsGlassOnboarding && !showSplash;
+  if (showSplash && needsGlassOnboarding) {
+    setGlassBootSequenceCompleteHandler(() => {
+      state.onboardingOpen = true;
+      push();
+    });
+  } else {
+    setGlassBootSequenceCompleteHandler(null);
   }
   glassContextProfile = await loadGlassContextProfile();
   const sanitizedTarget = sanitizeDisplayTarget(glassUserSettings.displayTarget);
@@ -4519,9 +4573,23 @@ app.whenReady().then(async () => {
   createWindows(config, glassUserSettings.displayTarget);
   applyGlassUserSettings(glassUserSettings);
   registerGlobalHotkeys();
+  if (needsGlassOnboarding) {
+    setOnboardingEmergencyHandler(skipGlassOnboardingEmergency);
+    registerOnboardingEmergencyShortcut();
+  } else {
+    setOnboardingEmergencyHandler(null);
+  }
   refreshSetupCapabilities();
   push();
   scheduleInitialSetupCheck();
+  initGlassAutoUpdater((patch) => {
+    state.appUpdate = {
+      ...state.appUpdate,
+      ...patch,
+      currentVersion: app.getVersion(),
+    };
+    push();
+  });
   scheduleGlassUpdateChecks();
 
   if (showSplash) {

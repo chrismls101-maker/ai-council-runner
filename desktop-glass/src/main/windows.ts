@@ -79,6 +79,9 @@ let chromeMovePersistTimer: ReturnType<typeof setTimeout> | null = null;
 let glassBootPending = false;
 /** When true, onboarding blocks dock and command bar until calibration completes. */
 let onboardingPending = false;
+let onGlassBootSequenceComplete: (() => void) | null = null;
+const ONBOARDING_ESCAPE_ACCEL = "Escape";
+let onboardingEmergencyHandler: (() => void) | null = null;
 
 let onCommandBarLayoutChanged: (() => void) | null = null;
 
@@ -136,8 +139,14 @@ function presentOnboardingOverlay(overlay: BrowserWindow): void {
   const layout = overlayLayoutFromDisplay(getPrimaryDisplayContext());
   overlay.setBounds(layout);
   overlay.setFocusable(true);
-  overlay.showInactive();
   applyOverlayClickThrough(overlay, false);
+  overlay.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, OVERLAY_ALWAYS_ON_TOP_RELATIVE);
+  overlay.show();
+  overlay.focus();
+  overlay.moveTop();
+  if (!overlay.webContents.isDestroyed()) {
+    overlay.webContents.focus();
+  }
 }
 
 function shouldShowOverlayWindow(): boolean {
@@ -149,7 +158,16 @@ function shouldShowOverlayWindow(): boolean {
 export function syncOverlayPresentationRaised(raised: boolean): void {
   overlayNoticePinned = raised;
   overlayRaisedForNotifications = raised;
+  if (glassBootPending) return;
   if (!windows?.overlay || windows.overlay.isDestroyed()) return;
+  if (onboardingPending) {
+    if (shouldShowOverlayWindow()) {
+      presentOnboardingOverlay(windows.overlay);
+    } else {
+      windows.overlay.hide();
+    }
+    return;
+  }
   if (shouldShowOverlayWindow()) {
     if (layoutManager) {
       windows.overlay.setBounds(layoutManager.getOverlayLayout());
@@ -221,19 +239,33 @@ export function beginGlassBootSequence(): void {
   glassBootPending = true;
 }
 
+/** Called when boot splash finishes or aborts — e.g. reveal first-run onboarding in renderer. */
+export function setGlassBootSequenceCompleteHandler(handler: (() => void) | null): void {
+  onGlassBootSequenceComplete = handler;
+}
+
+function dismissSplashWindow(): void {
+  const splash = splashWindow;
+  splashWindow = null;
+  if (splash && !splash.isDestroyed()) {
+    splash.destroy();
+  }
+}
+
+function completeGlassBootSequence(): void {
+  glassBootPending = false;
+  dismissSplashWindow();
+  showPrimaryGlassWindows();
+  onGlassBootSequenceComplete?.();
+}
+
 /** Abort boot splash when the page fails to load — show Glass windows immediately. */
 export function abortGlassBootSequence(reason?: string): void {
   if (!glassBootPending) return;
   if (reason) {
     console.warn(`[IIVO Glass] boot splash aborted: ${reason}`);
   }
-  glassBootPending = false;
-  const splash = splashWindow;
-  splashWindow = null;
-  if (splash && !splash.isDestroyed()) {
-    splash.close();
-  }
-  showPrimaryGlassWindows();
+  completeGlassBootSequence();
 }
 
 /** Show dock, overlay, and command bar after the boot splash has finished. */
@@ -263,9 +295,63 @@ function showPrimaryGlassWindows(): void {
   logDiagnostics();
 }
 
+/** macOS-global Escape — skips onboarding even when the overlay cannot take focus. */
+export function setOnboardingEmergencyHandler(handler: (() => void) | null): void {
+  onboardingEmergencyHandler = handler;
+}
+
+export function registerOnboardingEmergencyShortcut(): void {
+  if (process.env.IIVO_GLASS_E2E === "1") return;
+  try {
+    if (globalShortcut.isRegistered(ONBOARDING_ESCAPE_ACCEL)) {
+      globalShortcut.unregister(ONBOARDING_ESCAPE_ACCEL);
+    }
+    const ok = globalShortcut.register(ONBOARDING_ESCAPE_ACCEL, () => {
+      onboardingEmergencyHandler?.();
+    });
+    if (!ok) {
+      console.warn("[IIVO Glass] onboarding Escape shortcut failed to register");
+    }
+  } catch (err) {
+    console.warn("[IIVO Glass] onboarding Escape shortcut error:", err);
+  }
+}
+
+export function unregisterOnboardingEmergencyShortcut(): void {
+  try {
+    if (globalShortcut.isRegistered(ONBOARDING_ESCAPE_ACCEL)) {
+      globalShortcut.unregister(ONBOARDING_ESCAPE_ACCEL);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function pinLayoutToPrimaryDisplay(): void {
+  layoutManager?.setDisplayTarget("primary");
+}
+
+/** Reset dock + command bar on the primary display after onboarding completes. */
+function revealChromeAfterOnboarding(): void {
+  if (!windows || !layoutManager) return;
+  pinLayoutToPrimaryDisplay();
+  dockCustomOrigin = null;
+  commandBarCustomOrigin = null;
+  chromeLayoutLocked = true;
+  relayoutAllWindows({ resetDock: true });
+  showPrimaryGlassWindows();
+}
+
 /** Block dock/command bar until first-run onboarding completes. */
 export function setOnboardingPending(pending: boolean): void {
   onboardingPending = pending;
+  if (pending) {
+    pinLayoutToPrimaryDisplay();
+  } else {
+    unregisterOnboardingEmergencyShortcut();
+    revealChromeAfterOnboarding();
+    return;
+  }
   if (!windows || !layoutManager) return;
   showPrimaryGlassWindows();
 }
@@ -345,6 +431,7 @@ function logDiagnostics(): void {
 
 function applyDockLayout(resetPosition = false): void {
   if (!windows?.dock || windows.dock.isDestroyed() || !layoutManager) return;
+  if (!chromeLayoutLocked && !resetPosition) return;
   const current = windows.dock.getBounds();
   const auto = layoutManager.getDockLayout(current.width, current.height);
   const workArea = layoutManager.getDisplay().workArea;
@@ -370,6 +457,7 @@ function applyDockLayout(resetPosition = false): void {
 
 function applyCommandBarLayout(resetPosition = false): void {
   if (!windows?.commandBar || windows.commandBar.isDestroyed() || !layoutManager) return;
+  if (!chromeLayoutLocked && !resetPosition) return;
   const current = windows.commandBar.getBounds();
   const auto = layoutManager.getCommandBarLayout();
   const workArea = layoutManager.getDisplay().workArea;
@@ -517,6 +605,7 @@ function createOverlayWindow(): BrowserWindow {
     fullscreenable: false,
     show: false,
     backgroundColor: "#00000000",
+    acceptFirstMouse: true,
     ...(process.platform === "darwin" ? { type: "panel" as const } : {}),
     webPreferences: {
       preload: preloadPath,
@@ -819,7 +908,10 @@ function fadeOutWindow(win: BrowserWindow, durationMs: number): Promise<void> {
 export async function finishSplash(): Promise<void> {
   const splash = splashWindow;
   splashWindow = null;
-  if (!splash || splash.isDestroyed()) return;
+  if (!splash || splash.isDestroyed()) {
+    completeGlassBootSequence();
+    return;
+  }
   try {
     await splash.webContents.executeJavaScript(
       `document.body?.classList.add('is-finishing');
@@ -832,9 +924,8 @@ export async function finishSplash(): Promise<void> {
   }
   await new Promise((resolve) => setTimeout(resolve, 420));
   await fadeOutWindow(splash, 380);
-  if (!splash.isDestroyed()) splash.close();
-  glassBootPending = false;
-  showPrimaryGlassWindows();
+  if (!splash.isDestroyed()) splash.destroy();
+  completeGlassBootSequence();
 }
 
 export function getWindows(): GlassWindows | null {
@@ -992,7 +1083,7 @@ export function resizeDockWindow(
     width: clamped.width,
     height: clamped.height,
   };
-  if (dockCustomOrigin) {
+  if (chromeLayoutLocked && dockCustomOrigin) {
     const anchor = layoutManager.getDockLayout(clamped.width, clamped.height, options);
     next = resolveChromeWindowBounds(
       { ...anchor, width: clamped.width, height: clamped.height },
@@ -1204,6 +1295,9 @@ export function lockChromeLayout(): {
 
 export function unlockChromeLayout(): void {
   chromeLayoutLocked = false;
+  if (windows) {
+    stackGlassWindows(windows);
+  }
   applyChromeMovability();
   if (windows?.commandBar && !windows.commandBar.isDestroyed()) {
     commandBarClickThrough = false;

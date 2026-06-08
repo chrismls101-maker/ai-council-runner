@@ -45,4 +45,13 @@ const pack = spawnSync(
   ["electron-builder", "--mac", "--config", "electron-builder.signed.yml"],
   { cwd: glassRoot, stdio: "inherit", env },
 );
-process.exit(pack.status ?? 1);
+if (pack.status !== 0) {
+  process.exit(pack.status ?? 1);
+}
+
+const manifest = spawnSync("node", ["scripts/write-glass-update-manifest.mjs"], {
+  cwd: glassRoot,
+  stdio: "inherit",
+  env,
+});
+process.exit(manifest.status ?? 0);

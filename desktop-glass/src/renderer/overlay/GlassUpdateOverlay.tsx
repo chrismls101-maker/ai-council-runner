@@ -13,7 +13,10 @@ export function GlassUpdateOverlay({
   enterInteractive,
   leaveInteractive,
 }: Props): JSX.Element | null {
-  const visible = appUpdate.phase === "available" || appUpdate.phase === "installing";
+  const visible =
+    appUpdate.phase === "available" ||
+    appUpdate.phase === "downloading" ||
+    appUpdate.phase === "installing";
 
   useEffect(() => {
     if (!visible) return;
@@ -24,7 +27,16 @@ export function GlassUpdateOverlay({
   if (!visible) return null;
 
   const title = appUpdate.title ?? "NEW SYSTEM UPDATE";
+  const downloading = appUpdate.phase === "downloading";
   const installing = appUpdate.phase === "installing";
+  const busy = downloading || installing;
+  const updateButtonLabel = downloading
+    ? appUpdate.downloadPercent != null && appUpdate.downloadPercent > 0
+      ? `Downloading… ${Math.round(appUpdate.downloadPercent)}%`
+      : "Downloading…"
+    : installing
+      ? "Installing…"
+      : "Update";
 
   return (
     <div
@@ -49,7 +61,7 @@ export function GlassUpdateOverlay({
           <p className="glass-update-card__notes">{appUpdate.releaseNotes.trim()}</p>
         ) : (
           <p className="glass-update-card__notes">
-            A newer build is ready. Update now to get the latest fixes and features.
+            A newer build is ready. Update now to download and install automatically — no DMG required.
           </p>
         )}
         {appUpdate.error ? (
@@ -62,12 +74,12 @@ export function GlassUpdateOverlay({
             type="button"
             className="gbtn gbtn--primary gbtn--glass-update"
             data-testid="glass-update-apply"
-            disabled={installing}
+            disabled={busy}
             onClick={() => send({ type: "glass-update-apply" })}
           >
-            {installing ? "Opening installer…" : "Update"}
+            {updateButtonLabel}
           </button>
-          {!installing ? (
+          {!busy ? (
             <button
               type="button"
               className="gbtn gbtn--ghost gbtn--glass-update-later"

@@ -174,12 +174,22 @@ function AppIdentityPanel(): JSX.Element | null {
 function SystemUpdatePanel(): JSX.Element {
   const { appUpdate, appIdentityReport } = useGlassState();
   const isDev = appIdentityReport?.runningMode === "dev";
-  const updateReady = appUpdate.phase === "available" || appUpdate.phase === "installing";
+  const updateReady =
+    appUpdate.phase === "available" ||
+    appUpdate.phase === "downloading" ||
+    appUpdate.phase === "installing";
   const updateDismissed = appUpdate.phase === "dismissed";
 
   let status = `v${appUpdate.currentVersion} — up to date`;
   if (appUpdate.phase === "checking") status = "Checking for updates…";
-  else if (updateReady && appUpdate.latestVersion) {
+  else if (appUpdate.phase === "downloading") {
+    status =
+      appUpdate.downloadPercent != null && appUpdate.downloadPercent > 0
+        ? `Downloading v${appUpdate.latestVersion ?? "update"}… ${Math.round(appUpdate.downloadPercent)}%`
+        : `Downloading v${appUpdate.latestVersion ?? "update"}…`;
+  } else if (appUpdate.phase === "installing") {
+    status = `Installing v${appUpdate.latestVersion ?? "update"}…`;
+  } else if (updateReady && appUpdate.latestVersion) {
     status = `Update available: v${appUpdate.latestVersion}`;
   } else if (updateDismissed && appUpdate.latestVersion) {
     status = `v${appUpdate.latestVersion} ready (dismissed)`;
@@ -192,9 +202,18 @@ function SystemUpdatePanel(): JSX.Element {
       <p className="setup-section__identity-title">System update</p>
       {isDev ? (
         <p className="hint setup-section__dev-hint" data-testid="glass-dev-mode-hint">
-          Dev mode — UI reloads automatically. Run{" "}
-          <code>npm run glass:dev</code> from the repo root while iterating; only build a DMG when
-          shipping a release.
+          Dev build — run <code>npm run glass:dev</code> while coding. Renderer hot-reloads; restart
+          dev only when main-process code changes. No DMG rebuild needed on your machine.
+        </p>
+      ) : (
+        <p className="hint setup-section__update-hint" data-testid="glass-packaged-update-hint">
+          Installed app — new versions download from GitHub and install when you tap{" "}
+          <strong>Update now</strong>. You never need to download or rebuild a DMG yourself.
+        </p>
+      )}
+      {appUpdate.error ? (
+        <p className="hint setup-section__update-error" data-testid="glass-update-error-inline">
+          {appUpdate.error}
         </p>
       ) : null}
       <p className="hint setup-section__update-status">{status}</p>

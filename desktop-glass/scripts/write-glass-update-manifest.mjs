@@ -33,6 +33,18 @@ const arm64Dmg = dmgPath(`IIVO Glass-${version}-arm64.dmg`);
 const universalDmg = dmgPath(`IIVO Glass-${version}-universal.dmg`);
 
 const RELEASE_NOTES = {
+  "0.1.10": [
+    "Unlock layout: dock and command bar stay put when you unlock — only move when you drag.",
+    "Fix crash on unlock (missing click-through sync import).",
+    "Squirrel auto-update from GitHub Releases — Update now installs without a manual DMG.",
+    "Setup panel clarifies dev vs installed update paths.",
+  ],
+  "0.1.9": [
+    "Onboarding waits until boot splash finishes; Esc skips globally if stuck.",
+    "Onboarding always opens on your primary display with a larger rescue hint.",
+    "Dock and command bar reset to correct positions after onboarding; unlock layout fix.",
+    "Landing install guide, privacy, and terms pages on iivo.ai.",
+  ],
   "0.1.8": [
     "Command bar Live Translate shortcut (Languages icon) — one-click media translate from system audio.",
     "Live Translate upgrades: caption overlay, panel setup, Listen/Meetings toggles, private-no-save defaults.",
@@ -73,3 +85,12 @@ for (const target of targets) {
 }
 
 console.log(JSON.stringify(manifest, null, 2));
+
+const arm64Zip = dmgPath(`IIVO Glass-${version}-arm64-mac.zip`);
+const latestMacYml = path.join(releaseDir, "latest-mac.yml");
+if (arm64Zip || fs.existsSync(latestMacYml)) {
+  console.log("\n[glass:release] Squirrel auto-update assets (upload to GitHub release v" + version + "):");
+  if (arm64Zip) console.log(`  - ${arm64Zip}`);
+  if (fs.existsSync(latestMacYml)) console.log(`  - ${latestMacYml}`);
+  console.log("  Packaged Glass checks GitHub Releases via electron-updater (no DMG reinstall).");
+}
