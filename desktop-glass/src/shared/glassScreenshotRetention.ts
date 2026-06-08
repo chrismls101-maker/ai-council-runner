@@ -11,6 +11,9 @@
 
 import type { GlassUserSettings } from "./glassSettings.ts";
 
+/** Auto-hide "Screen used for this answer" after the response is shown. */
+export const VISUAL_ASK_RETENTION_DISMISS_MS = 10_000;
+
 export type GlassScreenshotRetentionKind =
   | "none"
   | "used_ephemeral"
