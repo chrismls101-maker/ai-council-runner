@@ -11,7 +11,7 @@ export function useChromeLockToggle(chromeLocked: boolean): () => void {
   }, [chromeLocked]);
 }
 
-/** Command bar sits on a click-through window; ensure the lock button receives clicks. */
+/** Command bar sits on a click-through window; ensure controls receive clicks. */
 export function ensureCommandBarClickable(): void {
-  window.glass.setIgnoreMouse(false);
+  syncGlassClickThrough(false);
 }

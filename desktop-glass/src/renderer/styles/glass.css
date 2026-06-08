@@ -38,6 +38,172 @@
   pointer-events: none;
 }
 
+/* Command-bar-style answer shell (responses, debriefs, diagnostics) */
+.glass-answer-shell {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 22px;
+  padding: 0;
+  background: linear-gradient(165deg, rgba(10, 12, 18, 0.94), rgba(6, 8, 14, 0.9));
+  backdrop-filter: blur(32px) saturate(175%);
+  -webkit-backdrop-filter: blur(32px) saturate(175%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 14px 36px rgba(0, 0, 0, 0.45);
+}
+
+.glass-answer-shell__sheen {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 0;
+  background: var(--glass-apple-sheen);
+}
+
+.glass-answer-shell__content {
+  position: relative;
+  z-index: 1;
+  padding: 16px 18px 14px;
+}
+
+.glass-answer-shell__led {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
+}
+
+.glass-answer-shell--auto {
+  width: 100%;
+}
+
+.glass-answer-shell--auto .overlay-feed-card__body-wrap--auto,
+.glass-answer-shell--auto .overlay-copilot-card__debrief-body--auto {
+  max-height: min(55vh, 640px);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.glass-answer-shell .overlay-feed-card__eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  margin-bottom: 8px;
+  color: rgba(220, 232, 248, 0.88);
+}
+
+.glass-answer-shell .overlay-feed-card__body,
+.glass-answer-shell .overlay-copilot-card__debrief-body--auto {
+  font-size: 15px;
+  line-height: 1.58;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.94);
+  letter-spacing: 0.01em;
+}
+
+.glass-answer-shell .overlay-copilot-card__title {
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.35;
+  margin-bottom: 10px;
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.glass-answer-shell .overlay-feed-card__actions,
+.glass-answer-shell .overlay-copilot-card__actions {
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-answer-shell.overlay-feed-card--thinking,
+.glass-answer-shell.overlay-feed-card--looking {
+  max-width: min(520px, calc(100vw - 48px));
+}
+
+.glass-answer-shell.overlay-feed-card--response,
+.glass-answer-shell.overlay-feed-card--error {
+  max-width: none;
+  min-width: 0;
+}
+
+/* Merged user prompt + IIVO answer (command bar ask) */
+.glass-chat-reply {
+  width: 450px;
+  max-width: 450px;
+  min-width: 450px;
+}
+
+.glass-chat-reply__content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px 12px;
+  min-height: 0;
+}
+
+.glass-chat-reply__prompt {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 500;
+  color: rgba(176, 190, 214, 0.72);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.glass-chat-reply__scroll {
+  max-height: 55vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+}
+
+.glass-chat-reply__answer {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.58;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.94);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.glass-chat-reply__answer--pending {
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(220, 232, 248, 0.88);
+}
+
+.glass-chat-reply__answer--error {
+  color: #ffd6de;
+}
+
+.glass-chat-reply__actions {
+  flex-shrink: 0;
+}
+
+.glass-chat-reply--pending .glass-chat-reply__scroll {
+  max-height: none;
+  overflow: visible;
+}
+
+.glass-answer-shell.overlay-feed-card--response .overlay-feed-card__body-wrap,
+.glass-answer-shell.overlay-feed-card--error .overlay-feed-card__body-wrap {
+  margin-bottom: 10px;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -102,25 +268,48 @@ html.glass-dock-window #root {
 
 /* ---------- Floating Listen notepad (dedicated window) ---------- */
 .notes-pad {
+  position: relative;
   display: flex;
   flex-direction: column;
   width: 100%;
   height: 100%;
   min-height: 0;
-  border-radius: 14px;
+  border-radius: 22px;
   overflow: hidden;
-  border: 1px solid rgba(65, 224, 163, 0.22);
-  background: linear-gradient(
-    165deg,
-    rgba(6, 8, 12, 0.97) 0%,
-    rgba(10, 12, 18, 0.94) 45%,
-    rgba(4, 6, 10, 0.98) 100%
-  );
+  isolation: isolate;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+  background: linear-gradient(165deg, rgba(10, 12, 18, 0.94), rgba(6, 8, 14, 0.9));
   box-shadow:
-    0 24px 64px rgba(0, 0, 0, 0.55),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 0 0 1px rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(18px);
+    0 0 0 1px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 24px 64px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(32px) saturate(175%);
+  -webkit-backdrop-filter: blur(32px) saturate(175%);
+}
+
+.notes-pad__sheen {
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 0;
+  background: var(--glass-apple-sheen);
+}
+
+.notes-pad__led {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
+}
+
+.notes-pad--composer > .notes-pad__header,
+.notes-pad--composer > .notes-pad__body,
+.notes-pad--composer > .listen-insight-strip {
+  position: relative;
+  z-index: 1;
 }
 
 .notes-pad__header {
@@ -426,6 +615,11 @@ html.glass-dock-window #root {
   background: rgba(255, 255, 255, 0.1);
   color: rgba(255, 255, 255, 0.94);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
 }
 
 .dock .gbtn:hover {
@@ -441,61 +635,77 @@ html.glass-dock-window #root {
 
 .dock--minimal:not(.dock--vertical) {
   flex-direction: row;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
+  position: relative;
   width: max-content;
   min-width: 280px;
-  max-width: calc(100vw - 48px);
+  max-width: none;
   height: auto;
-  padding: 7px 12px;
+  padding: 7px 18px 7px 12px;
   border-radius: 999px;
+  overflow: hidden;
 }
 
 .dock--minimal {
   flex-direction: row;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 8px;
   padding: 7px 10px;
+  overflow: hidden;
 }
 
-/* Horizontal: single-row strip — drag | lock | actions */
-.dock--minimal:not(.dock--vertical) .dock__strip {
+.dock.dock--minimal {
+  overflow: hidden;
+}
+
+/* Horizontal: Glass + session on the left, chrome controls at the end */
+.dock--minimal:not(.dock--vertical) .dock__head {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   flex-shrink: 0;
-}
-
-.dock--minimal .dock__drag {
-  padding-right: 4px;
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  flex-wrap: nowrap;
+  padding-right: 6px;
   margin-right: 2px;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .dock--minimal:not(.dock--vertical) .dock__actions {
   display: flex;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   flex-direction: row;
   flex-wrap: nowrap;
   align-items: center;
   gap: 6px;
-  min-width: 0;
+  width: max-content;
+  min-width: max-content;
 }
 
-.dock--minimal .dock__actions {
-  flex: 1;
+.dock--minimal.dock--vertical .dock__actions {
   flex-wrap: wrap;
   row-gap: 4px;
 }
 
 .dock--minimal:not(.dock--vertical) .dock__row--menu {
-  flex-basis: 100%;
-  width: 100%;
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 5;
+  flex-basis: auto;
+  width: max-content;
+  min-width: 100%;
+  max-width: min(420px, calc(100vw - 24px));
+  padding: 8px;
+  border-radius: 12px;
+  background: linear-gradient(165deg, rgba(10, 12, 18, 0.96), rgba(6, 8, 14, 0.94));
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.42);
 }
 
-.dock--minimal .dock__row--menu {
+.dock--minimal.dock--vertical .dock__row--menu {
   flex-basis: 100%;
   width: 100%;
 }
@@ -523,71 +733,60 @@ html.glass-dock-window #root {
   row-gap: 6px;
 }
 
-.dock__drag {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-right: 8px;
-  -webkit-app-region: no-drag;
-  cursor: default;
-}
-
 .dock--unlocked.dock--minimal {
   position: relative;
 }
 
-.dock--unlocked .dock__chrome,
-.dock--unlocked .dock__actions,
-.dock--unlocked .dock__row--menu,
-.dock--unlocked .dock__toast,
+.dock--unlocked {
+  outline: 1px dashed rgba(56, 225, 255, 0.55);
+  outline-offset: 2px;
+  cursor: grab;
+}
+
+.dock--unlocked .gbtn,
+.dock--unlocked .dock__drag {
+  cursor: pointer;
+}
+
 .dock--unlocked .dock__drag {
   -webkit-app-region: no-drag;
-  pointer-events: none;
-  opacity: 0.34;
-  filter: saturate(0.35);
-  cursor: default;
+}
+
+.dock--unlocked .dock__actions,
+.dock--unlocked .dock__row--menu,
+.dock--unlocked .dock__toast {
+  position: relative;
+  z-index: 4;
+  pointer-events: auto;
 }
 
 .dock--unlocked .dock__chrome {
   position: relative;
-  z-index: 10;
+  z-index: 5;
+}
+
+.chrome-reposition-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  background: rgba(4, 8, 18, 0.58);
   pointer-events: none;
 }
 
-.dock--unlocked .chrome-lock,
-.dock--unlocked .chrome-rotate {
-  pointer-events: auto;
-  opacity: 1;
-  filter: none;
-  position: relative;
-  z-index: 11;
-  cursor: pointer;
-}
-
-.dock--unlocked {
-  outline: 1px dashed rgba(56, 225, 255, 0.42);
-  outline-offset: 2px;
-}
-
-.chrome-reposition {
+.chrome-reposition-hint {
   position: absolute;
   inset: 0;
-  z-index: 5;
+  z-index: 6;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: inherit;
-  pointer-events: auto;
-  cursor: grab;
-  background: transparent;
-  touch-action: none;
+  pointer-events: none;
+  user-select: none;
 }
 
-.chrome-reposition:active {
-  cursor: grabbing;
-}
-
-.chrome-reposition__hint {
+.chrome-reposition-hint__pill {
   font-size: 12px;
   font-weight: 650;
   letter-spacing: 0.03em;
@@ -595,11 +794,27 @@ html.glass-dock-window #root {
   padding: 7px 16px;
   border-radius: 999px;
   border: 1px dashed rgba(56, 225, 255, 0.48);
-  background: rgba(8, 14, 26, 0.82);
+  background: rgba(8, 14, 26, 0.88);
   box-shadow: 0 0 24px rgba(56, 225, 255, 0.18);
   text-align: center;
+}
+
+.dock__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+
+.dock__drag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  -webkit-app-region: drag;
+  cursor: grab;
   user-select: none;
-  pointer-events: none;
 }
 
 .dock__chrome {
@@ -608,6 +823,17 @@ html.glass-dock-window #root {
   gap: 4px;
   flex-shrink: 0;
   -webkit-app-region: no-drag;
+  margin-left: 2px;
+  padding-left: 6px;
+  padding-right: 2px;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  position: relative;
+  z-index: 4;
+}
+
+.dock__chrome .gbtn {
+  position: relative;
+  z-index: 1;
 }
 
 /* Vertical: glass pill ends at last button (content height) */
@@ -628,32 +854,38 @@ html.glass-dock-window #root {
   box-sizing: border-box;
 }
 
-.dock--vertical.dock--minimal .dock__strip {
+.dock--vertical.dock--minimal .dock__head {
   display: flex;
   flex-direction: row;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 8px;
   width: 100%;
   min-width: var(--dock-vertical-track);
   align-self: stretch;
   flex-shrink: 0;
-  padding-bottom: 8px;
-  margin-bottom: 2px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.dock--vertical.dock--minimal .dock__strip .dock__drag {
+  padding-bottom: 0;
+  margin-bottom: 0;
+  border-bottom: none;
   border-right: none;
   padding-right: 0;
   margin-right: 0;
 }
 
-.dock--vertical.dock--minimal .dock__strip .dock__chrome {
-  flex-shrink: 0;
-  padding-bottom: 0;
-  margin-bottom: 0;
-  border-bottom: none;
+.dock--vertical.dock--minimal .dock__head .dock__drag {
+  border-right: none;
+  padding-right: 0;
+  margin-right: 0;
+}
+
+.dock--vertical .dock__head {
+  width: 100%;
+}
+
+.dock--vertical .dock__head .gbtn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 38px;
 }
 
 .dock--vertical .dock__actions {
@@ -678,6 +910,24 @@ html.glass-dock-window #root {
   text-align: center;
   white-space: nowrap;
   padding: 9px 12px;
+}
+
+.dock--vertical .dock__chrome {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-left: 0;
+  padding-left: 0;
+  border-left: none;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.dock--vertical .dock__chrome .gbtn {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .dock--vertical .dock__row--menu {
@@ -710,7 +960,8 @@ html.glass-dock-window #root {
   text-align: center;
 }
 
-.dock--vertical .chrome-reposition {
+.dock--vertical .chrome-reposition-scrim,
+.dock--vertical .chrome-reposition-hint {
   overflow: hidden;
 }
 
@@ -750,6 +1001,18 @@ html.glass-dock-window #root {
   color: rgba(236, 244, 255, 0.92);
 }
 
+.dock__dev-badge {
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: rgba(12, 18, 28, 0.95);
+  background: linear-gradient(135deg, #7cf0ff 0%, #5eead4 100%);
+  box-shadow: 0 0 10px rgba(94, 234, 212, 0.45);
+}
+
 .dock__pills {
   display: flex;
   align-items: center;
@@ -765,6 +1028,9 @@ html.glass-dock-window #root {
   gap: 6px;
   flex-shrink: 0;
   -webkit-app-region: no-drag;
+  position: relative;
+  z-index: 3;
+  pointer-events: auto;
 }
 
 .dock__buttons {
@@ -829,6 +1095,7 @@ html.glass-dock-window #root {
 /* ---------- Dock menu ---------- */
 .dock-menu__trigger {
   min-width: 34px;
+  flex-shrink: 0;
 }
 
 .dock-menu__trigger--open {
@@ -1446,6 +1713,10 @@ html.glass-dock-window #root {
   pointer-events: auto;
 }
 
+.overlay-root--notice-only {
+  pointer-events: none;
+}
+
 /* ---------- System update modal (overlay window) ---------- */
 .glass-update-overlay {
   position: fixed;
@@ -1741,6 +2012,156 @@ html.glass-dock-window #root {
   z-index: 2;
 }
 
+/* Single bottom-center notification (errors, feed, toasts, notices) */
+.glass-notification-host {
+  position: fixed;
+  left: 50%;
+  bottom: var(--overlay-notification-bottom, calc(var(--overlay-frame-bottom, 10px) + 96px));
+  transform: translateX(-50%);
+  display: flex;
+  justify-content: center;
+  width: min(480px, calc(100vw - 48px));
+  pointer-events: none;
+  z-index: 50;
+}
+
+.glass-notification-host:has(.glass-answer-shell) {
+  width: 450px;
+  max-width: 450px;
+  bottom: var(--overlay-notification-bottom, calc(var(--overlay-frame-bottom, 10px) + 96px));
+}
+
+.glass-notification-host--chat {
+  width: 450px;
+  max-width: 450px;
+  min-width: 450px;
+}
+
+.glass-notification-host--fading {
+  opacity: 0;
+  transition: opacity 0.38s ease;
+  pointer-events: none;
+}
+
+.glass-notification-host .overlay-feed-card.glass-answer-shell {
+  pointer-events: auto;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+}
+
+.glass-notification-host:has(.glass-answer-shell) .glass-answer-shell {
+  pointer-events: auto;
+  animation: overlay-card-in 0.22s ease-out;
+}
+
+.glass-notification-host__card {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  width: 100%;
+  padding: 16px 18px;
+  border-radius: 16px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(236, 244, 255, 0.96);
+  border: 1px solid rgba(74, 222, 128, 0.35);
+  background: rgba(8, 12, 20, 0.82);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  animation: overlay-card-in 0.22s ease-out;
+}
+
+.glass-notification-host__card--error {
+  border-color: rgba(255, 107, 129, 0.45);
+  color: #ffd6de;
+}
+
+.glass-notification-host__title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(176, 190, 214, 0.92);
+}
+
+.glass-notification-host__message {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: min(40vh, 280px);
+  overflow-y: auto;
+}
+
+.glass-notification-host__dismiss {
+  align-self: flex-end;
+}
+
+.overlay-center-notice {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 72px 24px 24px;
+  pointer-events: none;
+  z-index: 40;
+}
+
+.overlay-center-notice__card {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  max-width: min(440px, calc(100vw - 48px));
+  padding: 16px 18px;
+  border-radius: 16px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(236, 244, 255, 0.96);
+  border: 1px solid rgba(74, 222, 128, 0.35);
+  background: rgba(8, 12, 20, 0.82);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  animation: overlay-card-in 0.22s ease-out;
+}
+
+.overlay-center-notice__card--error {
+  border-color: rgba(255, 107, 129, 0.45);
+  color: #ffd6de;
+}
+
+.overlay-center-notice__title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(176, 190, 214, 0.92);
+}
+
+.overlay-center-notice__message {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: min(40vh, 280px);
+  overflow-y: auto;
+}
+
+.overlay-center-notice__dismiss {
+  align-self: flex-end;
+}
+
 .overlay-toast {
   pointer-events: auto;
   padding: 10px 14px;
@@ -1860,6 +2281,30 @@ html.glass-dock-window #root {
   max-width: 480px;
 }
 
+.overlay-feed-card.glass-answer-shell {
+  pointer-events: auto;
+  max-width: none;
+  animation: overlay-card-in 0.22s ease-out;
+}
+
+.overlay-feed-card.glass-answer-shell.overlay-feed-card--response,
+.overlay-feed-card.glass-answer-shell.overlay-feed-card--error,
+.overlay-feed-card.glass-answer-shell.overlay-feed-card--thinking,
+.overlay-feed-card.glass-answer-shell.overlay-feed-card--looking {
+  padding: 0;
+  border: none;
+  /* Keep command-bar shell fill — do not strip to transparent */
+  background: linear-gradient(165deg, rgba(10, 12, 18, 0.94), rgba(6, 8, 14, 0.9));
+  backdrop-filter: blur(32px) saturate(175%);
+  -webkit-backdrop-filter: blur(32px) saturate(175%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 14px 36px rgba(0, 0, 0, 0.45);
+}
+
 .overlay-feed-card--pinned {
   border-color: rgba(120, 235, 255, 0.45);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.42), 0 0 24px rgba(56, 225, 255, 0.18);
@@ -1955,6 +2400,71 @@ html.glass-dock-window #root {
   font-size: 11px;
   color: var(--glass-text-dim);
   line-height: 1.35;
+  animation: overlay-retention-fade 10s ease forwards;
+}
+
+@keyframes overlay-retention-fade {
+  0%,
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    max-height: 0;
+    margin: 0;
+    overflow: hidden;
+  }
+}
+
+/* Selectable text in command bar + overlay responses (native right-click edit menu) */
+.glass-selectable-text,
+.glass-body--command .command-input.composer-textarea,
+.glass-body--overlay .glass-chat-reply__prompt,
+.glass-body--overlay .glass-chat-reply__answer,
+.glass-body--overlay .overlay-feed-card__body {
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+
+.overlay-feed-card__remember {
+  align-self: flex-start;
+  margin: 2px 0 0;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: rgba(176, 190, 214, 0.55);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.overlay-feed-card__remember:hover:not(:disabled) {
+  color: rgba(200, 214, 236, 0.78);
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.overlay-feed-card__remember:disabled {
+  cursor: default;
+}
+
+.overlay-feed-card__remember--saved {
+  color: rgba(140, 200, 160, 0.62);
+  border-color: rgba(140, 200, 160, 0.16);
+  background: rgba(140, 200, 160, 0.06);
+}
+
+.overlay-feed-card__remember--failed {
+  color: rgba(255, 180, 190, 0.78);
+  border-color: rgba(255, 120, 140, 0.22);
+  background: rgba(255, 120, 140, 0.06);
 }
 
 .overlay-feed-card__body {
@@ -2201,23 +2711,31 @@ html.glass-dock-window #root {
 }
 
 .command-bar-stack--unlocked {
-  outline: 1px dashed rgba(255, 255, 255, 0.48);
+  position: relative;
+  outline: 1px dashed rgba(56, 225, 255, 0.55);
   outline-offset: 3px;
   border-radius: 18px;
 }
 
+.command-bar-stack--unlocked .chrome-reposition-scrim {
+  border-radius: 18px;
+}
+
+.command-bar-stack--unlocked .chrome-reposition-hint {
+  border-radius: 18px;
+}
+
 .command-bar-stack--unlocked .command-bar-accessories,
-.command-bar-stack--unlocked .command-bar.composer-shell .command-bar__row,
-.command-bar-stack--unlocked .command-bar.composer-shell .composer-main {
-  pointer-events: none;
-  opacity: 0.34;
-  filter: saturate(0.35);
+.command-bar-stack--unlocked .command-bar.composer-shell {
+  position: relative;
+  z-index: 3;
+  opacity: 0.55;
+  filter: saturate(0.45);
 }
 
 .command-bar-stack--unlocked .command-bar.composer-shell .command-bar__row,
 .command-bar-stack--unlocked .command-bar.composer-shell .composer-main {
-  position: relative;
-  z-index: 10;
+  pointer-events: none;
 }
 
 .command-bar-stack--unlocked .command-chrome-lock {
@@ -2225,7 +2743,7 @@ html.glass-dock-window #root {
   opacity: 1;
   filter: none;
   position: relative;
-  z-index: 11;
+  z-index: 6;
   -webkit-app-region: no-drag;
   cursor: pointer;
 }
@@ -2384,6 +2902,143 @@ html.glass-dock-window #root {
 
 .command-bar.composer-shell .composer-send-btn.stop:hover:not(:disabled) {
   box-shadow: 0 10px 24px rgba(255, 107, 129, 0.35);
+}
+
+.command-bar-accessory.command-bar__translate-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px 7px 12px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: rgba(210, 228, 255, 0.94);
+  border-color: rgba(100, 170, 255, 0.28);
+  background: linear-gradient(165deg, rgba(12, 18, 32, 0.92), rgba(8, 12, 22, 0.88));
+}
+
+.command-bar__translate-status-dot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(120, 195, 255, 0.95);
+  box-shadow: 0 0 8px rgba(80, 160, 255, 0.55);
+  animation: command-pulse 1.2s ease-in-out infinite;
+}
+
+.command-bar__translate-status-label {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.command-bar__translate-status-stop {
+  flex-shrink: 0;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 120, 130, 0.35);
+  background: rgba(255, 90, 105, 0.12);
+  color: rgba(255, 190, 195, 0.96);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.command-bar__translate-status-stop:hover {
+  border-color: rgba(255, 130, 140, 0.55);
+  background: rgba(255, 90, 105, 0.22);
+}
+
+.glass-hover-tooltip-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.glass-hover-tooltip {
+  position: fixed;
+  z-index: 100000;
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(8, 12, 20, 0.94);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  color: rgba(240, 246, 255, 0.96);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.glass-hover-tooltip::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: rgba(8, 12, 20, 0.94);
+}
+
+.command-bar.composer-shell .command-translate-btn {
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  margin: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04)),
+    rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  color: rgba(220, 235, 255, 0.88);
+  cursor: pointer;
+  transition:
+    transform 0.12s ease,
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease,
+    color 0.15s ease;
+}
+
+.command-bar.composer-shell .command-translate-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.98);
+}
+
+.command-bar.composer-shell .command-translate-btn--active {
+  border-color: rgba(100, 185, 255, 0.55);
+  background:
+    linear-gradient(145deg, rgba(80, 160, 255, 0.28), rgba(40, 90, 180, 0.16)),
+    rgba(30, 70, 140, 0.18);
+  box-shadow:
+    inset 0 1px 0 rgba(180, 220, 255, 0.22),
+    0 0 14px rgba(70, 150, 255, 0.22);
+  color: rgba(190, 225, 255, 1);
+}
+
+.command-translate-btn__icon {
+  display: block;
+  pointer-events: none;
+}
+
+.command-bar.composer-shell .composer-trailing .command-translate-btn {
+  margin-right: 4px;
 }
 
 .command-bar.composer-shell .command-chrome-lock.composer-icon-btn {
@@ -2981,6 +3636,21 @@ html.glass-dock-window #root {
   z-index: 5;
 }
 
+.overlay-copilot:has(.glass-answer-shell) {
+  max-width: min(700px, calc(100vw - 40px));
+}
+
+.overlay-copilot-card.glass-answer-shell {
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  max-width: min(700px, calc(100vw - 40px));
+  width: 100%;
+}
+
 .overlay-copilot-card {
   pointer-events: auto;
   padding: 12px 14px;
@@ -3012,6 +3682,18 @@ html.glass-dock-window #root {
   font-size: 12px;
   line-height: 1.45;
   color: var(--glass-text-dim);
+}
+
+.overlay-copilot-card__debrief-body--auto {
+  max-height: min(72vh, 640px);
+  overflow-y: auto;
+  margin: 0 0 10px;
+  font-size: 15px;
+  line-height: 1.58;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.94);
+  white-space: pre-wrap;
+  font-family: inherit;
 }
 
 .overlay-copilot-card__debrief-body {
@@ -3368,7 +4050,7 @@ html.glass-dock-window #root {
 .live-translate-captions {
   position: fixed;
   left: 50%;
-  bottom: calc(var(--overlay-frame-bottom, 10px) + 72px);
+  bottom: var(--overlay-notification-bottom, calc(var(--overlay-frame-bottom, 10px) + 72px));
   transform: translateX(-50%);
   z-index: 40;
   max-width: min(880px, 92vw);

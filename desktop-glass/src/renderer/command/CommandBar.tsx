@@ -7,13 +7,23 @@ import { useTranscriptionContext } from "../TranscriptionProvider.tsx";
 import { VoiceModePanel } from "./VoiceModePanel.tsx";
 import { CommandMicIcon } from "./CommandMicIcon.tsx";
 import { CommandSendIcon, CommandStopIcon } from "./CommandSendIcon.tsx";
+import { CommandTranslateIcon } from "./CommandTranslateIcon.tsx";
+import { GlassHoverTooltip } from "../components/GlassHoverTooltip.tsx";
 import type { TranscriptionMode } from "../../shared/audioCaptureTypes.ts";
 import { useVoiceMode } from "../useVoiceMode.ts";
+import {
+  prepareGlassTextContextMenu,
+  prepareGlassTextPointerDown,
+  syncGlassClickThrough,
+} from "../glassTextInteraction.ts";
 import {
   micPermissionDeniedMessage,
   shouldShowMicPermissionDenied,
 } from "../../shared/commandBarMic.ts";
 import { formatListeningDuration } from "../../shared/audioChunks.ts";
+import { buildTranslateStartPatch } from "../../shared/liveTranslateConfig.ts";
+import { liveTranslateLanguagePairLabel } from "../../shared/liveTranslateTypes.ts";
+import type { LiveTranslateTargetLanguage } from "../../shared/liveTranslateTypes.ts";
 
 /**
  * Bottom-centered Glass command bar. Direct ask renders inline on the overlay;
@@ -28,7 +38,7 @@ export function CommandBar(): JSX.Element {
   const tx = useTranscriptionContext();
   const voice = useVoiceMode();
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const dragSurfaceRef = useRef<HTMLDivElement | null>(null);
+  const stackRef = useRef<HTMLDivElement | null>(null);
   const [text, setText] = useState("");
   const [showSources, setShowSources] = useState(false);
   const focusedRef = useRef(false);
@@ -56,13 +66,42 @@ export function CommandBar(): JSX.Element {
   const listenCopilotActive =
     state.copilot?.active === true && state.copilot.config.sessionType === "video_learning";
 
+  const translateRuntime = state.liveTranslate;
+  const translateActive = translateRuntime?.active && translateRuntime.config.enabled;
+  const translateTarget: LiveTranslateTargetLanguage =
+    translateRuntime?.config.targetLanguage ?? "es";
+  const translatePairLabel = translateActive
+    ? liveTranslateLanguagePairLabel(
+        translateRuntime.config.sourceLanguage,
+        translateRuntime.config.targetLanguage,
+        translateRuntime.detectedSourceLanguage,
+      )
+    : undefined;
+  const translateStatusLabel = translateActive ? `Live Translate · ${translatePairLabel}` : undefined;
+
+  const toggleTranslate = useCallback(() => {
+    if (translateActive) {
+      send({ type: "translate-stop" });
+      return;
+    }
+    send({
+      type: "translate-set-config",
+      patch: buildTranslateStartPatch("media", translateTarget),
+    });
+    send({ type: "translate-start", targetLanguage: translateTarget });
+    if (!systemListening) {
+      tx.setMode("system_audio");
+      void tx.startSystemAudioListening();
+    }
+  }, [translateActive, translateTarget, systemListening, tx]);
+
   useEffect(() => {
-    window.glass.setIgnoreMouse(true);
+    syncGlassClickThrough(true);
   }, []);
 
   const updateIgnore = useCallback(() => {
     const interactive = focusedRef.current || hoverCountRef.current > 0;
-    window.glass.setIgnoreMouse(!interactive);
+    syncGlassClickThrough(!interactive);
   }, []);
 
   const enterInteractive = useCallback(() => {
@@ -77,7 +116,7 @@ export function CommandBar(): JSX.Element {
 
   useEffect(() => {
     const unsubscribe = window.glass.onCommandBarFocus(() => {
-      window.glass.setIgnoreMouse(false);
+      syncGlassClickThrough(false);
       inputRef.current?.focus();
       inputRef.current?.select();
     });
@@ -121,7 +160,7 @@ export function CommandBar(): JSX.Element {
       focusedRef.current = false;
       setShowSources(false);
       send({ type: "command-bar-blur" });
-      window.glass.setIgnoreMouse(true);
+      updateIgnore();
     }
   };
 
@@ -155,16 +194,31 @@ export function CommandBar(): JSX.Element {
 
   const chromeLocked = state.glassSettings.chromeLayoutLocked !== false;
   const toggleChromeLock = useChromeLockToggle(chromeLocked);
-  useChromeWindowDrag(!chromeLocked, dragSurfaceRef);
+  useChromeWindowDrag(!chromeLocked, stackRef);
 
   useEffect(() => {
     if (!chromeLocked) {
       ensureCommandBarClickable();
       return () => {
-        window.glass.setIgnoreMouse(true);
+        syncGlassClickThrough(true);
       };
     }
   }, [chromeLocked]);
+
+  useEffect(() => {
+    const node = stackRef.current;
+    if (!node) return;
+
+    const report = (): void => {
+      const heightPx = Math.ceil(node.getBoundingClientRect().height);
+      send({ type: "report-command-bar-stack-height", heightPx });
+    };
+
+    report();
+    const observer = new ResizeObserver(report);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   const inputValue = micListening && !micInputTouchedRef.current ? tx.commandBarListenText : text;
   const voiceActive = voice.state.active || voice.state.status === "error";
@@ -186,17 +240,18 @@ export function CommandBar(): JSX.Element {
       state.screenContextStatus.label
     ) : null;
 
-  const hasAccessories = Boolean(screenContextLine || voiceActive || showSecondary);
+  const hasAccessories = Boolean(screenContextLine || voiceActive || showSecondary || translateActive);
 
   return (
     <div className="command-root">
       <div
+        ref={stackRef}
         className={`command-bar-stack${!chromeLocked ? " command-bar-stack--unlocked" : ""}`}
         data-testid="glass-command-bar-stack"
         onMouseEnter={chromeLocked ? enterInteractive : undefined}
         onMouseLeave={chromeLocked ? leaveInteractive : undefined}
       >
-        {!chromeLocked ? <ChromeRepositionOverlay surfaceRef={dragSurfaceRef} /> : null}
+        {!chromeLocked ? <ChromeRepositionOverlay /> : null}
 
         {hasAccessories ? (
           <div className="command-bar-accessories" data-testid="glass-command-bar-accessories">
@@ -214,6 +269,24 @@ export function CommandBar(): JSX.Element {
             ) : null}
 
             <VoiceModePanel />
+
+            {translateActive && translateStatusLabel ? (
+              <div
+                className="command-bar-accessory command-bar__translate-status"
+                data-testid="glass-command-translate-status"
+              >
+                <span className="command-bar__translate-status-dot" aria-hidden="true" />
+                <span className="command-bar__translate-status-label">{translateStatusLabel}</span>
+                <button
+                  type="button"
+                  className="command-bar__translate-status-stop"
+                  data-testid="glass-command-translate-stop"
+                  onClick={() => send({ type: "translate-stop" })}
+                >
+                  Stop
+                </button>
+              </div>
+            ) : null}
 
             {showSecondary ? (
               <div
@@ -339,7 +412,10 @@ export function CommandBar(): JSX.Element {
               <CommandMicIcon />
             </button>
 
-            <div className="command-input-stack">
+            <div
+              className="command-input-stack"
+              onPointerDownCapture={prepareGlassTextPointerDown}
+            >
               <input
                 ref={inputRef}
                 data-testid="glass-command-input"
@@ -369,9 +445,10 @@ export function CommandBar(): JSX.Element {
                   }
                 }}
                 onKeyDown={handleKeyDown}
+                onContextMenu={prepareGlassTextContextMenu}
                 onFocus={() => {
                   focusedRef.current = true;
-                  window.glass.setIgnoreMouse(false);
+                  syncGlassClickThrough(false);
                 }}
                 onBlur={() => {
                   focusedRef.current = false;
@@ -381,6 +458,21 @@ export function CommandBar(): JSX.Element {
             </div>
 
             <div className="command-bar__trailing composer-trailing">
+              <GlassHoverTooltip label={translateActive ? "Stop Translate" : "Translate"}>
+                <button
+                  type="button"
+                  data-testid="glass-command-translate"
+                  className={`command-translate-btn${translateActive ? " command-translate-btn--active" : ""}`}
+                  aria-label={translateActive ? "Stop Live Translate" : "Start Live Translate"}
+                  aria-pressed={translateActive}
+                  onClick={toggleTranslate}
+                  onPointerDown={ensureCommandBarClickable}
+                  onMouseEnter={ensureCommandBarClickable}
+                >
+                  <CommandTranslateIcon />
+                </button>
+              </GlassHoverTooltip>
+
               {askPending ? (
                 <button
                   type="button"
@@ -404,18 +496,19 @@ export function CommandBar(): JSX.Element {
                 </button>
               )}
 
-              <button
-                type="button"
-                data-testid="glass-command-chrome-lock"
-                className={`command-chrome-lock composer-icon-btn${chromeLocked ? " command-chrome-lock--locked" : " command-chrome-lock--unlocked"}`}
-                title={chromeLocked ? "Unlock layout to move dock and bar" : "Lock layout in place"}
-                aria-label={chromeLocked ? "Unlock layout" : "Lock layout"}
-                onPointerDown={ensureCommandBarClickable}
-                onMouseEnter={ensureCommandBarClickable}
-                onClick={toggleChromeLock}
-              >
-                {chromeLocked ? "🔒" : "🔓"}
-              </button>
+              <GlassHoverTooltip label={chromeLocked ? "Unlock layout" : "Lock layout"}>
+                <button
+                  type="button"
+                  data-testid="glass-command-chrome-lock"
+                  className={`command-chrome-lock composer-icon-btn${chromeLocked ? " command-chrome-lock--locked" : " command-chrome-lock--unlocked"}`}
+                  aria-label={chromeLocked ? "Unlock layout" : "Lock layout"}
+                  onPointerDown={ensureCommandBarClickable}
+                  onMouseEnter={ensureCommandBarClickable}
+                  onClick={toggleChromeLock}
+                >
+                  {chromeLocked ? "🔒" : "🔓"}
+                </button>
+              </GlassHoverTooltip>
             </div>
           </div>
 

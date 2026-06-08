@@ -28,7 +28,10 @@ test("command bar window height fits accessory strips above the composer pill", 
   assert.ok(commandBar.includes("command-bar-accessories"), "accessories sit above pill");
   assert.ok(commandBar.includes('data-testid="glass-command-bar-stack"'), "stack test id for e2e");
   assert.ok(commandBar.includes("<VoiceModePanel />"), "voice panel in accessory stack");
-  assert.match(commandBar, /composer-shell[\s\S]*composer-main/, "main pill keeps single composer row");
+  assert.ok(commandBar.includes('data-testid="glass-command-translate"'), "Translate on command bar");
+  assert.ok(commandBar.includes("command-bar__translate-status"), "Translate status strip when active");
+  assert.ok(commandBar.includes("prepareGlassTextContextMenu"), "native context menu helper on input");
+  assert.ok(commandBar.includes("prepareGlassTextPointerDown"), "right-click disables click-through");
 });
 
 test("composeCommandBarMicText merges prefix, finalized, and interim", () => {
