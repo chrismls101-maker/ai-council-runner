@@ -1,7 +1,7 @@
 {
   "name": "iivo-glass",
   "private": true,
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "IIVO Glass — transparent desktop AI overlay companion for IIVO.",
   "author": "Christopher Miles / IIVO",
   "type": "module",

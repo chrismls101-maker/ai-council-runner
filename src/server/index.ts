@@ -89,6 +89,11 @@ import {
   validateGlassAskPayloadSize,
 } from "./glass/glassAskPayload.js";
 import { loadGlassUpdateManifest } from "./glass/glassUpdateManifest.js";
+import {
+  handleGlassElectronUpdateFeed,
+  handleGlassUpdateDownload,
+  withGlassUpdateProxyUrls,
+} from "./glass/glassUpdateFeed.js";
 import { translateLiveCaption } from "./glass/glassTranslate.js";
 import {
   clearGlassUserProfile,
@@ -116,6 +121,31 @@ import {
   isLandingGateEnabled,
   verifyLandingPassword,
 } from "./landingGate.js";
+import rateLimit from "express-rate-limit";
+
+const councilLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests. Please wait before running another council." },
+});
+
+const glassLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests from this device." },
+});
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests." },
+});
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3001;
@@ -123,10 +153,11 @@ const PORT = Number(process.env.PORT) || 3001;
 const allowedOrigin = process.env.ALLOWED_ORIGIN?.trim();
 
 const app = express();
+app.set("trust proxy", 1);
 app.use(allowedOrigin ? cors({ origin: allowedOrigin }) : cors());
 
 /** Visual ask may include optimized JPEG data URLs — parse before the global 2mb limit. */
-app.post("/api/glass/ask", glassApiAuthMiddleware, express.json({ limit: "6mb" }), async (req, res) => {
+app.post("/api/glass/ask", glassApiAuthMiddleware, glassLimiter, express.json({ limit: "6mb" }), async (req, res) => {
   const body = req.body as GlassAskRequestBody;
   try {
     validateGlassAskPayloadSize(body);
@@ -154,7 +185,7 @@ app.post("/api/glass/ask", glassApiAuthMiddleware, express.json({ limit: "6mb" }
   }
 });
 
-app.post("/api/glass/translate", glassApiAuthMiddleware, express.json({ limit: "64kb" }), async (req, res) => {
+app.post("/api/glass/translate", glassApiAuthMiddleware, glassLimiter, express.json({ limit: "64kb" }), async (req, res) => {
   try {
     const result = await translateLiveCaption(req.body ?? {});
     res.json(result);
@@ -163,6 +194,8 @@ app.post("/api/glass/translate", glassApiAuthMiddleware, express.json({ limit: "
     res.status(500).json({ error: message });
   }
 });
+
+app.use("/api", apiLimiter);
 
 app.use(express.json({ limit: "2mb" }));
 
@@ -230,8 +263,22 @@ app.delete("/api/user-profile", async (_req, res) => {
   res.json({ ok: true });
 });
 
-app.get("/api/glass/update", (_req, res) => {
-  res.json(loadGlassUpdateManifest());
+app.get("/api/glass/update", (req, res) => {
+  const manifest = loadGlassUpdateManifest();
+  if (manifest.ok === false) {
+    res.json(manifest);
+    return;
+  }
+  const { ok: _ok, ...payload } = manifest;
+  res.json({ ...withGlassUpdateProxyUrls(req, payload), ok: true });
+});
+
+app.get("/api/glass/update/electron/latest-mac.yml", (req, res) => {
+  void handleGlassElectronUpdateFeed(req, res);
+});
+
+app.get("/api/glass/update/download/:filename", (req, res) => {
+  void handleGlassUpdateDownload(req, res);
 });
 
 app.post("/api/transcribe-audio", glassApiAuthMiddleware, express.json({ limit: "8mb" }), async (req, res) => {
@@ -984,7 +1031,7 @@ app.post("/api/run-council/stop", (req, res) => {
   res.json({ stopped: stopRun(runId) });
 });
 
-app.post("/api/run-council", async (req, res) => {
+app.post("/api/run-council", councilLimiter, async (req, res) => {
   const {
     prompt,
     preset,

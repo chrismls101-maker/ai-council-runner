@@ -1694,6 +1694,14 @@ async function runGlassUpdateCheck(): Promise<void> {
     return;
   }
 
+  state.appUpdate = {
+    ...state.appUpdate,
+    phase: "checking",
+    error: undefined,
+    checkedAt: new Date().toISOString(),
+  };
+  push();
+
   if (isGlassAutoUpdateEnabled()) {
     await checkGlassAutoUpdate();
     return;
@@ -4589,7 +4597,7 @@ app.whenReady().then(async () => {
       currentVersion: app.getVersion(),
     };
     push();
-  });
+  }, config.iivoApiUrl);
   scheduleGlassUpdateChecks();
 
   if (showSplash) {

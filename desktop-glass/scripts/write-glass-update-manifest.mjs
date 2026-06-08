@@ -29,10 +29,21 @@ function fileUrlFor(absPath) {
   return `file://${absPath.split(path.sep).join("/")}`;
 }
 
+function publicDownloadUrl(version, filename) {
+  const base = (process.env.IIVO_PUBLIC_URL ?? "https://iivo.ai").replace(/\/+$/, "");
+  return `${base}/api/glass/update/download/${encodeURIComponent(filename)}`;
+}
+
 const arm64Dmg = dmgPath(`IIVO Glass-${version}-arm64.dmg`);
 const universalDmg = dmgPath(`IIVO Glass-${version}-universal.dmg`);
+const arm64DmgName = `IIVO-Glass-${version}-arm64.dmg`;
+const publicArm64Dmg = publicDownloadUrl(version, arm64DmgName);
 
 const RELEASE_NOTES = {
+  "0.1.11": [
+    "Fix Check for updates — pulls releases through iivo.ai (private GitHub repo).",
+    "Update check now shows Checking… and surfaces errors in Setup.",
+  ],
   "0.1.10": [
     "Unlock layout: dock and command bar stay put when you unlock — only move when you drag.",
     "Fix crash on unlock (missing click-through sync import).",
@@ -68,8 +79,8 @@ const manifest = {
   releasedAt: new Date().toISOString(),
   title: "NEW SYSTEM UPDATE",
   notes: releaseNotesFor(version),
-  downloadUrl: fileUrlFor(arm64Dmg) || fileUrlFor(universalDmg),
-  darwinArm64Dmg: arm64Dmg,
+  downloadUrl: publicArm64Dmg || fileUrlFor(arm64Dmg) || fileUrlFor(universalDmg),
+  darwinArm64Dmg: publicArm64Dmg || arm64Dmg,
   darwinUniversalDmg: universalDmg,
 };
 

@@ -37,7 +37,7 @@ async function fetchRemoteManifest(apiUrl: string, signal?: AbortSignal): Promis
         headers: iivoApiAuthHeaders(),
       });
       if (!res.ok) continue;
-      const body = (await res.json()) as GlassUpdateManifest & { ok?: boolean };
+      const body = (await res.json()) as GlassUpdateManifest & { ok?: boolean; reason?: string };
       if (body.ok === false) continue;
       if (!body.version?.trim()) continue;
       return body;
@@ -177,6 +177,7 @@ export async function checkForGlassAppUpdate(
       ...checking,
       phase: "idle",
       latestVersion: manifest?.version,
+      error: manifest ? undefined : "No update manifest found on the IIVO server.",
     };
   }
 

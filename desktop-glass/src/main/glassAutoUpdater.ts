@@ -10,10 +10,6 @@ import {
   defaultGlassUpdateTitle,
   type GlassAppUpdateState,
 } from "../shared/glassAppUpdate.ts";
-import {
-  GLASS_GITHUB_UPDATE_OWNER,
-  GLASS_GITHUB_UPDATE_REPO,
-} from "../shared/glassAppUpdateFeed.ts";
 
 type StatePatch = Partial<GlassAppUpdateState>;
 
@@ -48,7 +44,10 @@ function formatReleaseNotes(notes: unknown): string | undefined {
   return undefined;
 }
 
-export function initGlassAutoUpdater(onPatch: (patch: StatePatch) => void): void {
+export function initGlassAutoUpdater(
+  onPatch: (patch: StatePatch) => void,
+  apiBaseUrl = "https://iivo.ai",
+): void {
   if (!isGlassAutoUpdateEnabled()) return;
 
   pushState = onPatch;
@@ -58,11 +57,10 @@ export function initGlassAutoUpdater(onPatch: (patch: StatePatch) => void): void
   autoUpdater.autoRunAppAfterInstall = true;
   autoUpdater.allowPrerelease = false;
 
+  const feedBase = `${apiBaseUrl.replace(/\/+$/, "")}/api/glass/update/electron`;
   autoUpdater.setFeedURL({
-    provider: "github",
-    owner: GLASS_GITHUB_UPDATE_OWNER,
-    repo: GLASS_GITHUB_UPDATE_REPO,
-    releaseType: "release",
+    provider: "generic",
+    url: feedBase,
   });
 
   autoUpdater.on("checking-for-update", () => {
@@ -128,6 +126,12 @@ export function initGlassAutoUpdater(onPatch: (patch: StatePatch) => void): void
 
 export async function checkGlassAutoUpdate(): Promise<void> {
   if (!isGlassAutoUpdateEnabled()) return;
+  pushState?.({
+    phase: "checking",
+    error: undefined,
+    downloadPercent: undefined,
+    checkedAt: new Date().toISOString(),
+  });
   try {
     await autoUpdater.checkForUpdates();
   } catch (err) {

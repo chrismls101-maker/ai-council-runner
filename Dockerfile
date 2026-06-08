@@ -6,6 +6,7 @@ COPY tsconfig.json tsconfig.server.json vite.config.ts index.html ./
 COPY public ./public
 COPY prototypes ./prototypes
 COPY src ./src
+COPY desktop-glass/glass-update-manifest.json ./desktop-glass/glass-update-manifest.json
 RUN npm run build
 
 FROM node:22-alpine

@@ -195,6 +195,12 @@ function SystemUpdatePanel(): JSX.Element {
     status = `v${appUpdate.latestVersion} ready (dismissed)`;
   } else if (appUpdate.latestVersion && appUpdate.latestVersion !== appUpdate.currentVersion) {
     status = `Latest published: v${appUpdate.latestVersion}`;
+  } else if (appUpdate.checkedAt && appUpdate.phase === "idle" && !appUpdate.error) {
+    const when = new Date(appUpdate.checkedAt);
+    const time = Number.isNaN(when.getTime()) ? null : when.toLocaleTimeString();
+    status = time
+      ? `v${appUpdate.currentVersion} — up to date (checked ${time})`
+      : `v${appUpdate.currentVersion} — up to date`;
   }
 
   return (
