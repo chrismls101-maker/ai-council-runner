@@ -10,6 +10,7 @@ import {
   readGlassState,
   resetE2eExternalUrls,
   openPanelTab,
+  connectIivoGlassForE2e,
   type LaunchedGlass,
 } from "./helpers/electronApp.ts";
 import { resetE2eSetupState } from "./helpers/e2eSetupReset.ts";
@@ -80,12 +81,13 @@ test.describe("IIVO Glass LIVE UI (real server)", () => {
 
   test("direct ask returns a live AI answer (not stub)", async () => {
     const { command, overlay } = await getGlassWindows(app.browser);
+    await connectIivoGlassForE2e(app.browser);
 
+    const prompt =
+      "What is IIVO Glass for on my desktop? Answer in 2–3 practical sentences — no council format.";
     const input = command.locator('[data-testid="glass-command-input"]');
     await input.click();
-    await input.fill(
-      "What is IIVO Glass for on my desktop? Answer in 2–3 practical sentences — no council format.",
-    );
+    await input.fill(prompt);
     await input.press("Enter");
 
     await expect(overlay.locator('[data-testid="glass-overlay-thinking-card"]')).toBeVisible();
@@ -94,6 +96,7 @@ test.describe("IIVO Glass LIVE UI (real server)", () => {
     });
 
     const responseText = await overlay.locator('[data-testid="glass-overlay-response-card"]').innerText();
+    expect(responseText).toContain("IIVO Glass");
     expect(responseText).not.toContain(STUB_CANARY);
     expect(responseText.trim().length).toBeGreaterThan(60);
     for (const marker of COUNCIL_MARKERS) {
@@ -106,12 +109,13 @@ test.describe("IIVO Glass LIVE UI (real server)", () => {
 
   test("second live ask is substantive (not stub)", async () => {
     const { command, overlay } = await getGlassWindows(app.browser);
+    await connectIivoGlassForE2e(app.browser);
 
+    const prompt =
+      "List three example command-bar questions I could ask Glass about what is on my screen — short bullets only.";
     const input = command.locator('[data-testid="glass-command-input"]');
     await input.click();
-    await input.fill(
-      "List three example command-bar questions I could ask Glass about what is on my screen — short bullets only.",
-    );
+    await input.fill(prompt);
     await input.press("Enter");
 
     await expect(overlay.locator('[data-testid="glass-overlay-response-card"]')).toBeVisible({
@@ -119,6 +123,7 @@ test.describe("IIVO Glass LIVE UI (real server)", () => {
     });
 
     const responseText = await overlay.locator('[data-testid="glass-overlay-response-card"]').innerText();
+    expect(responseText).toContain("screen");
     expect(responseText.trim().length).toBeGreaterThan(40);
     expect(responseText).not.toContain(STUB_CANARY);
     for (const marker of COUNCIL_MARKERS) {

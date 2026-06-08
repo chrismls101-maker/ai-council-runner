@@ -8,7 +8,7 @@ import {
   type LiveTranslateTargetLanguage,
   type LiveTranslateWorkflowMode,
 } from "../../shared/liveTranslateTypes.ts";
-import { configDefaultsForMode, saveModeStatusLabel } from "../../shared/liveTranslateConfig.ts";
+import { configDefaultsForMode, saveModeStatusLabel, buildTranslateStartPatch } from "../../shared/liveTranslateConfig.ts";
 import { translateSourceStatusLabel } from "../../shared/liveTranslateState.ts";
 import type { GlassState } from "../../shared/ipc.ts";
 
@@ -21,18 +21,9 @@ function startTranslateConfig(
   displayMode: LiveTranslateDisplayMode,
   saveMode: LiveTranslateSaveMode,
 ): void {
-  const defaults = configDefaultsForMode(mode);
   send({
     type: "translate-set-config",
-    patch: {
-      enabled: true,
-      ...defaults,
-      source,
-      targetLanguage: target,
-      displayMode,
-      saveMode,
-      sourceLanguage: "auto",
-    },
+    patch: { ...buildTranslateStartPatch(mode, target, saveMode), source, displayMode },
   });
 }
 

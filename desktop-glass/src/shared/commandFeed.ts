@@ -80,3 +80,42 @@ export function appendCommandFeedItem(
 ): GlassCommandFeedItem[] {
   return [...feed, item].slice(-max);
 }
+
+export const OVERLAY_CHAT_FEED_KINDS: GlassCommandFeedKind[] = [
+  "thinking",
+  "looking",
+  "response",
+  "error",
+];
+
+export function isOverlayChatFeedKind(kind: GlassCommandFeedKind): boolean {
+  return OVERLAY_CHAT_FEED_KINDS.includes(kind);
+}
+
+/** Latest overlay chat card (skips standalone "command" rows). */
+export function pickOverlayChatFeedItem(
+  feed: GlassCommandFeedItem[],
+): GlassCommandFeedItem | null {
+  for (let i = feed.length - 1; i >= 0; i -= 1) {
+    const item = feed[i];
+    if (isOverlayChatFeedKind(item.kind)) return item;
+  }
+  return null;
+}
+
+export function resolveOverlayChatPrompt(
+  item: GlassCommandFeedItem,
+  feed: GlassCommandFeedItem[],
+): string | undefined {
+  const direct = item.prompt?.trim();
+  if (direct) return direct;
+  const idx = feed.findIndex((f) => f.id === item.id);
+  if (idx < 0) return undefined;
+  for (let i = idx - 1; i >= 0; i -= 1) {
+    if (feed[i].kind === "command") {
+      const body = feed[i].body.trim();
+      if (body) return body;
+    }
+  }
+  return undefined;
+}

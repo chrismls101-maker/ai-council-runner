@@ -57,6 +57,8 @@ export interface GlassAskRequestBody {
   /** Selects env model slot: default text, semantic refine, or diagnostic. */
   modelPurpose?: "default" | "semantic" | "diagnostic";
   userProfile?: import("../userProfile/types.js").GlassUserProfile;
+  /** Passive context summary from Glass context engine (preferred over raw userProfile). */
+  userContext?: string;
 }
 
 export interface GlassAskResponseBody {

@@ -3,6 +3,7 @@
  */
 
 import type { GlassConfig } from "../shared/config.ts";
+import { iivoApiAuthHeaders } from "../shared/iivoApiAuth.ts";
 import {
   preflightFailure,
   type VisualAskPreflightResult,
@@ -26,16 +27,43 @@ export interface GlassServerHealthSnapshot {
   missingKeys?: string[];
 }
 
+export interface GlassServerHealthFetchResult {
+  snapshot: GlassServerHealthSnapshot | null;
+  httpStatus?: number;
+  error?: string;
+}
+
 export async function fetchGlassServerHealth(
   config: GlassConfig,
   signal?: AbortSignal,
-): Promise<GlassServerHealthSnapshot | null> {
+): Promise<GlassServerHealthFetchResult> {
   try {
-    const res = await fetch(`${config.iivoApiUrl}/api/health`, { signal });
-    if (!res.ok) return null;
-    return (await res.json()) as GlassServerHealthSnapshot;
-  } catch {
-    return null;
+    const res = await fetch(`${config.iivoApiUrl}/api/health`, {
+      signal,
+      headers: iivoApiAuthHeaders(),
+    });
+    if (!res.ok) {
+      if (res.status === 401) {
+        return {
+          snapshot: null,
+          httpStatus: 401,
+          error:
+            "Server rejected API credentials (401). Rebuild Glass with a matching IIVO_GLASS_API_SECRET.",
+        };
+      }
+      return {
+        snapshot: null,
+        httpStatus: res.status,
+        error: `Health check failed (HTTP ${res.status}).`,
+      };
+    }
+    return { snapshot: (await res.json()) as GlassServerHealthSnapshot };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Network error";
+    return {
+      snapshot: null,
+      error: `Could not reach ${config.iivoApiUrl}: ${message}`,
+    };
   }
 }
 
@@ -44,12 +72,44 @@ export async function fetchVisionConfig(
   signal?: AbortSignal,
 ): Promise<{ enabled: boolean; configured: boolean; reason?: string } | null> {
   try {
-    const res = await fetch(`${config.iivoApiUrl}/api/config/vision`, { signal });
+    const res = await fetch(`${config.iivoApiUrl}/api/config/vision`, {
+      signal,
+      headers: iivoApiAuthHeaders(),
+    });
     if (!res.ok) return null;
     return (await res.json()) as { enabled: boolean; configured: boolean; reason?: string };
   } catch {
     return null;
   }
+}
+
+/** Older /api/health payloads omit vision/stt — hydrate from dedicated endpoints. */
+export async function enrichGlassServerHealthSnapshot(
+  config: GlassConfig,
+  snapshot: GlassServerHealthSnapshot,
+  signal?: AbortSignal,
+): Promise<GlassServerHealthSnapshot> {
+  const enriched: GlassServerHealthSnapshot = { ...snapshot };
+
+  if (!enriched.vision) {
+    const vision = await fetchVisionConfig(config, signal);
+    if (vision) enriched.vision = vision;
+  }
+
+  if (!enriched.stt) {
+    const openAiMissing = enriched.missingKeys?.includes("OPENAI_API_KEY") ?? false;
+    const configured = !openAiMissing && enriched.ok !== false;
+    enriched.stt = {
+      configured,
+      enabled: configured,
+      endpoint: "/api/transcribe-audio",
+      reason: openAiMissing
+        ? "OpenAI API key not configured on server (OPENAI_API_KEY)."
+        : undefined,
+    };
+  }
+
+  return enriched;
 }
 
 export interface RunVisualAskPreflightInput {
@@ -70,10 +130,15 @@ export async function runVisualAskPreflight(
     return preflightFailure("no_display");
   }
 
-  const health = await fetchGlassServerHealth(input.config, input.signal);
-  if (!health) {
-    return preflightFailure("server_offline");
+  const healthResult = await fetchGlassServerHealth(input.config, input.signal);
+  if (!healthResult.snapshot) {
+    return preflightFailure("server_offline", healthResult.error);
   }
+  const health = await enrichGlassServerHealthSnapshot(
+    input.config,
+    healthResult.snapshot,
+    input.signal,
+  );
 
   const vision =
     health.vision ?? (await fetchVisionConfig(input.config, input.signal));

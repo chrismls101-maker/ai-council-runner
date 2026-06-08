@@ -1,19 +1,22 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { isBootSplashBundlePresent } from "../shared/bootSplash.ts";
 
-test("boot splash disabled when splash.html is absent (stable core)", () => {
+test("boot splash disabled when splash.html is absent", () => {
   const mainDir = mkdtempSync(join(tmpdir(), "glass-main-"));
   assert.equal(isBootSplashBundlePresent(mainDir), false);
 });
 
-test("boot splash enabled when splash.html exists (WIP bundle)", () => {
+test("boot splash enabled when renderer splash.html exists", () => {
   const root = mkdtempSync(join(tmpdir(), "glass-root-"));
   const mainDir = join(root, "out", "main");
-  writeFileSync(join(root, "splash.html"), "<html></html>");
+  const rendererDir = join(root, "out", "renderer");
+  mkdirSync(mainDir, { recursive: true });
+  mkdirSync(rendererDir, { recursive: true });
+  writeFileSync(join(rendererDir, "splash.html"), "<html></html>");
   assert.equal(isBootSplashBundlePresent(mainDir), true);
 });
 

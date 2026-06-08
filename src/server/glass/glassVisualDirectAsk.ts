@@ -31,8 +31,16 @@ export const GLASS_CAPTURE_FIRST_MESSAGE =
 export const GLASS_VISION_NOT_CONFIGURED_MESSAGE =
   "I found your latest capture, but visual analysis is not configured yet.";
 
-function buildVisualUserPrompt(prompt: string, meta?: GlassAskLatestScreenshot): string {
+function buildVisualUserPrompt(
+  prompt: string,
+  meta?: GlassAskLatestScreenshot,
+  userContext?: string,
+): string {
   const lines = [prompt.trim()];
+  const contextBlock = userContext?.trim();
+  if (contextBlock) {
+    lines.push("", contextBlock);
+  }
   if (meta?.label || meta?.sourceTitle) {
     lines.push("", "Capture metadata:");
     if (meta.label) lines.push(`- Display: ${meta.label}`);
@@ -48,9 +56,10 @@ async function runVisionFromContextItem(
   item: ContextItem,
   signal?: AbortSignal,
   purpose: GlassModelPurpose = "default",
+  userContext?: string,
 ): Promise<VisionAnswerResult> {
   return runVisionAnswer({
-    prompt: buildVisualUserPrompt(prompt, undefined),
+    prompt: buildVisualUserPrompt(prompt, undefined, userContext),
     contextItem: item,
     signal,
     modelPurpose: purpose,
@@ -63,6 +72,7 @@ async function runVisionFromDataUrl(
   meta: GlassAskLatestScreenshot | undefined,
   signal?: AbortSignal,
   purpose: GlassModelPurpose = "default",
+  userContext?: string,
 ): Promise<VisionAnswerResult> {
   const config = getImageVisionConfig();
   const startedAt = new Date().toISOString();
@@ -91,7 +101,7 @@ async function runVisionFromDataUrl(
     const chain = buildGlassModelTryChain(selected);
     const result = await callOpenAIVisionWithModelChain(
       GLASS_VISUAL_SYSTEM,
-      buildVisualUserPrompt(prompt, meta),
+      buildVisualUserPrompt(prompt, meta, userContext),
       imageDataUrl,
       chain,
       signal,
@@ -211,6 +221,7 @@ export async function runGlassVisualDirectAsk(
   signal?: AbortSignal,
 ): Promise<GlassAskResponseBody> {
   const prompt = body.prompt?.trim() ?? "";
+  const userContext = body.userContext?.trim() || undefined;
   const shot = body.latestScreenshot;
   const purpose = body.modelPurpose ?? "default";
 
@@ -230,7 +241,7 @@ export async function runGlassVisualDirectAsk(
     const item = await getContextItem(contextId);
     if (!item || item.type !== "screenshot") {
       if (inlineImage) {
-        vision = await runVisionFromDataUrl(prompt, inlineImage, shot, signal, purpose);
+        vision = await runVisionFromDataUrl(prompt, inlineImage, shot, signal, purpose, userContext);
       } else {
         return {
           answer: GLASS_CAPTURE_FIRST_MESSAGE,
@@ -239,10 +250,10 @@ export async function runGlassVisualDirectAsk(
         };
       }
     } else {
-      vision = await runVisionFromContextItem(prompt, item, signal, purpose);
+      vision = await runVisionFromContextItem(prompt, item, signal, purpose, userContext);
     }
   } else if (inlineImage) {
-    vision = await runVisionFromDataUrl(prompt, inlineImage, shot, signal, purpose);
+    vision = await runVisionFromDataUrl(prompt, inlineImage, shot, signal, purpose, userContext);
   } else {
     return {
       answer: GLASS_CAPTURE_FIRST_MESSAGE,

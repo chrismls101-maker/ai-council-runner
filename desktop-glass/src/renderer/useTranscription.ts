@@ -41,6 +41,7 @@ import {
   pickPreferredVirtualAudioDevice,
   shouldUseVirtualSystemAudioCapture,
 } from "../shared/virtualAudioCapture.ts";
+import { detectVirtualAudioDevices } from "../shared/virtualAudioDevices.ts";
 import {
   initialTranscriptionState,
   transcriptionReducer,
@@ -121,6 +122,7 @@ export interface TranscriptionController {
   startMicrophoneListening: (inputPrefix?: string) => Promise<void>;
   startSystemAudioListening: () => void;
   startListening: () => void;
+  beginListeningCapture: () => void;
   stopListening: () => void;
   stopListeningLocal: () => void;
   setMicInputOverride: (text: string) => void;
@@ -129,6 +131,7 @@ export interface TranscriptionController {
   probeMicrophone: () => Promise<void>;
   probeVirtualAudioDevices: () => Promise<void>;
   testSystemAudio: () => Promise<void>;
+  connectSystemAudio: () => Promise<void>;
   testBlackHole: () => Promise<void>;
 }
 
@@ -154,6 +157,7 @@ export function useTranscription(): TranscriptionController {
   const chunkSegmentTimerRef = useRef<number | null>(null);
   const chunkSourceRef = useRef<"microphone" | "system_audio">("microphone");
   const isListeningRef = useRef(false);
+  const systemAudioProbeInFlightRef = useRef(false);
 
   useEffect(() => {
     setSystemAudioStatus(glassState.systemAudioStatus);
@@ -309,6 +313,7 @@ export function useTranscription(): TranscriptionController {
 
   const processBlob = useCallback(
     async (blob: Blob, mimeType: string, source: "microphone" | "system_audio") => {
+      if (!isListeningRef.current) return;
       lastBlobRef.current = blob;
       lastMimeRef.current = mimeType;
       setHasLastChunk(true);
@@ -358,6 +363,7 @@ export function useTranscription(): TranscriptionController {
     stopAllStreams();
     stopTimer();
     dispatch({ type: "STOP_LISTENING" });
+    dispatch({ type: "SET_ERROR", message: undefined });
   }, [stopAllStreams, stopTimer]);
 
   const stopListening = useCallback(() => {
@@ -607,14 +613,20 @@ export function useTranscription(): TranscriptionController {
   }, []);
 
   const testSystemAudio = useCallback(async () => {
+    if (systemAudioProbeInFlightRef.current) return;
+    systemAudioProbeInFlightRef.current = true;
     try {
+      const inputs = await reportVirtualAudioDevices();
+      const virtualMatches = detectVirtualAudioDevices(inputs);
       const selectedId = glassState.selectedVirtualAudioDeviceId?.trim();
-      if (selectedId) {
-        await reportVirtualAudioDevices();
-        const device = (glassState.virtualAudioDevices ?? []).find(
-          (d) => d.deviceId === selectedId,
-        );
-        const virtual = await probeVirtualAudioInput(selectedId, device?.label);
+      const preferred =
+        (selectedId ? virtualMatches.find((d) => d.deviceId === selectedId) : undefined) ??
+        pickPreferredVirtualAudioDevice(virtualMatches) ??
+        pickPreferredVirtualAudioDevice(glassState.virtualAudioDevices ?? []);
+      const deviceId = preferred?.deviceId;
+
+      if (deviceId) {
+        const virtual = await probeVirtualAudioInput(deviceId, preferred?.label);
         applySystemAudioProbeResult(virtual.status, virtual.detail);
         dispatch({
           type: "SET_ERROR",
@@ -629,30 +641,25 @@ export function useTranscription(): TranscriptionController {
         dispatch({ type: "SET_ERROR", message: undefined });
         return;
       }
-      await reportVirtualAudioDevices();
-      const deviceId = resolveVirtualDeviceId();
-      if (!deviceId) {
-        applySystemAudioProbeResult(native.status, native.detail);
-        return;
-      }
-      const device = (glassState.virtualAudioDevices ?? []).find((d) => d.deviceId === deviceId);
-      const virtual = await probeVirtualAudioInput(deviceId, device?.label);
-      applySystemAudioProbeResult(virtual.status, virtual.detail);
+      applySystemAudioProbeResult(native.status, native.detail);
       dispatch({
         type: "SET_ERROR",
-        message: virtual.hasActivity ? undefined : virtual.detail,
+        message: native.detail,
       });
     } catch (err) {
       const mapped = mapSystemAudioCaptureError(err);
       applySystemAudioProbeResult(mapped.status, mapped.detail);
       dispatch({ type: "SET_ERROR", message: mapped.detail });
+    } finally {
+      systemAudioProbeInFlightRef.current = false;
     }
   }, [
     applySystemAudioProbeResult,
-    resolveVirtualDeviceId,
     glassState.selectedVirtualAudioDeviceId,
     glassState.virtualAudioDevices,
   ]);
+
+  const connectSystemAudio = testSystemAudio;
 
   const testBlackHole = useCallback(async () => {
     await reportVirtualAudioDevices();
@@ -731,7 +738,7 @@ export function useTranscription(): TranscriptionController {
     ],
   );
 
-  const startListening = useCallback(() => {
+  const beginListeningCapture = useCallback(() => {
     if (selectedMode === "manual") {
       dispatch({ type: "SET_ERROR", message: "Choose Microphone or System Audio before starting." });
       return;
@@ -773,6 +780,38 @@ export function useTranscription(): TranscriptionController {
     startWebSpeech,
     startMediaRecorder,
     startSystemAudio,
+    startMicrophoneListening,
+  ]);
+
+  const startListening = useCallback(() => {
+    if (selectedMode === "manual") {
+      dispatch({ type: "SET_ERROR", message: "Choose Microphone or System Audio before starting." });
+      return;
+    }
+    if (
+      selectedMode === "microphone_web_speech" ||
+      selectedMode === "microphone_media_recorder"
+    ) {
+      void startMicrophoneListening();
+      return;
+    }
+    if (!canStartListening(effectiveMode, snapshot)) {
+      dispatch({
+        type: "SET_ERROR",
+        message:
+          !glassState.stt.enabled && usesSttChunkCapture(effectiveMode)
+            ? STT_MIC_NOT_CONFIGURED_MESSAGE
+            : modeStatusMessage(effectiveMode, snapshot),
+      });
+      return;
+    }
+    dispatch({ type: "SET_ERROR", message: undefined });
+    send({ type: "request-start-listening" });
+  }, [
+    selectedMode,
+    effectiveMode,
+    snapshot,
+    glassState.stt.enabled,
     startMicrophoneListening,
   ]);
 
@@ -900,6 +939,7 @@ export function useTranscription(): TranscriptionController {
     startMicrophoneListening,
     startSystemAudioListening,
     startListening,
+    beginListeningCapture,
     stopListening,
     stopListeningLocal,
     setMicInputOverride,
@@ -908,6 +948,7 @@ export function useTranscription(): TranscriptionController {
     probeMicrophone,
     probeVirtualAudioDevices,
     testSystemAudio,
+    connectSystemAudio,
     testBlackHole,
   };
 }

@@ -1561,3 +1561,26 @@ body.shot-lightbox-open {
   line-height: 1;
   cursor: pointer;
 }
+
+.shot-lightbox-download {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  padding: 8px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(114, 168, 255, 0.45);
+  background: rgba(18, 28, 44, 0.92);
+  color: rgba(220, 232, 248, 0.95);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.shot-lightbox-download:hover {
+  border-color: rgba(114, 168, 255, 0.75);
+  background: rgba(24, 36, 56, 0.96);
+}

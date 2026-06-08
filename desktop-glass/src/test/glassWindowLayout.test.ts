@@ -7,10 +7,15 @@ import {
 import { parseOverlayMode } from "../shared/glassWindowTypes.ts";
 import {
   commandBarLayoutFromDisplay,
+  COMMAND_BAR_BOTTOM_MARGIN,
   COMMAND_BAR_HEIGHT,
+  COMMAND_BAR_ROOT_BOTTOM_PADDING_PX,
+  computeCommandBarOverlayClearancePx,
+  commandBarOverlayClearanceFallbackPx,
   dockLayoutFromDisplay,
   listenNotesPadLayoutFromDisplay,
   overlayLayoutFromDisplay,
+  overlayNotificationBottomPx,
   panelLayoutFromDisplay,
   type DisplayLayoutContext,
 } from "../shared/glassLayoutMath.ts";
@@ -61,6 +66,50 @@ test("command bar is bottom-centered inside the work area", () => {
   // sits near the bottom of the work area, above the edge
   assert.ok(bar.y + bar.height < primaryDisplay.workArea.y + primaryDisplay.workArea.height);
   assert.ok(bar.y > primaryDisplay.workArea.y);
+});
+
+test("overlay clearance uses full command bar window position, not stack height alone", () => {
+  const externalDisplay: DisplayLayoutContext = {
+    id: 2,
+    scaleFactor: 2,
+    bounds: { x: 1440, y: 0, width: 1920, height: 1080 },
+    workArea: { x: 1440, y: 30, width: 1920, height: 1050 },
+  };
+  const bar = { x: 2020, y: 709, width: 760, height: COMMAND_BAR_HEIGHT };
+  const stackHeightPx = 61;
+  const workBottom = externalDisplay.workArea.y + externalDisplay.workArea.height;
+
+  const clearance = computeCommandBarOverlayClearancePx({
+    workAreaBottomY: workBottom,
+    commandBarY: bar.y,
+    commandBarHeight: bar.height,
+    stackHeightPx,
+  });
+
+  // Stack-only math (61 + 14 gap) would overlap; full window math clears the tall bar window.
+  assert.equal(clearance, 156);
+  assert.ok(clearance > stackHeightPx + 14);
+  assert.equal(
+    overlayNotificationBottomPx({ commandBarOverlayClearancePx: clearance }),
+    clearance + 14,
+  );
+});
+
+test("default bottom-anchored bar clearance equals margin + padding + stack", () => {
+  const bar = commandBarLayoutFromDisplay(primaryDisplay);
+  const stackHeightPx = 61;
+  const workBottom = primaryDisplay.workArea.y + primaryDisplay.workArea.height;
+  const clearance = computeCommandBarOverlayClearancePx({
+    workAreaBottomY: workBottom,
+    commandBarY: bar.y,
+    commandBarHeight: bar.height,
+    stackHeightPx,
+  });
+  assert.equal(
+    clearance,
+    COMMAND_BAR_BOTTOM_MARGIN + COMMAND_BAR_ROOT_BOTTOM_PADDING_PX + stackHeightPx,
+  );
+  assert.equal(commandBarOverlayClearanceFallbackPx(stackHeightPx), clearance);
 });
 
 test("command bar shrinks to fit a small display", () => {

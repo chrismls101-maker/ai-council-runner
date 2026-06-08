@@ -9,10 +9,21 @@ export function syncGlassClickThrough(enabled: boolean): void {
   window.glass.setIgnoreMouse(enabled);
 }
 
-/** Right-click before context menu — needed when command bar uses click-through forwarding. */
+/** Overlay response cards — disable full-screen click-through before clicks land. */
+export function ensureOverlayInteractive(): void {
+  clickThroughEnabled = false;
+  window.glass.setIgnoreMouse(false);
+}
+
+/** Disable click-through on pointer down (command bar + overlay text surfaces). */
 export function prepareGlassTextPointerDown(event: ReactPointerEvent): void {
-  if (event.button !== 2) return;
-  syncGlassClickThrough(false);
+  if (event.currentTarget.ownerDocument?.body?.classList.contains("glass-body--command")) {
+    syncGlassClickThrough(false);
+    return;
+  }
+  if (event.currentTarget.ownerDocument?.body?.classList.contains("glass-body--overlay")) {
+    ensureOverlayInteractive();
+  }
 }
 
 /** @deprecated use prepareGlassTextPointerDown */
@@ -20,8 +31,13 @@ export const prepareGlassTextMouseDown = prepareGlassTextPointerDown;
 
 /** Allow native cut/copy/paste/select-all menus in click-through Glass windows. */
 export function prepareGlassTextContextMenu(event: ReactMouseEvent<HTMLElement>): void {
+  const onOverlay = event.currentTarget.ownerDocument?.body?.classList.contains("glass-body--overlay");
   const wasClickThrough = clickThroughEnabled;
-  syncGlassClickThrough(false);
+  if (onOverlay) {
+    ensureOverlayInteractive();
+  } else {
+    syncGlassClickThrough(false);
+  }
 
   if (reroutingContextMenu || !wasClickThrough) {
     return;

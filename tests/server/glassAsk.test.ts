@@ -61,6 +61,18 @@ await test("buildGlassDirectUserPrompt includes session summary", () => {
   assert.match(prompt, /Recent transcript/);
 });
 
+await test("buildGlassDirectUserPrompt prepends passive userContext when present", () => {
+  const prompt = buildGlassDirectUserPrompt(
+    "Debug this handler",
+    undefined,
+    { name: "Alex", usualWork: "Design", currentFocus: "Launch" },
+    "User context (inferred from recent Glass interactions — local only):\nRole tendency: technical builder",
+  );
+  assert.match(prompt, /Debug this handler/);
+  assert.match(prompt, /inferred from recent Glass interactions/);
+  assert.doesNotMatch(prompt, /Glass calibration/);
+});
+
 await test("formatGlassDirectAnswer strips headers and shortens long text", () => {
   const long = "a".repeat(1000);
   const formatted = formatGlassDirectAnswer(`## Title\n${long}`);

@@ -3,6 +3,7 @@
  */
 
 import type { GlassConfig } from "../shared/config.ts";
+import { withIivoApiAuthHeaders } from "../shared/iivoApiAuth.ts";
 import type {
   LiveTranslateGlossaryTerm,
   LiveTranslateLanguage,
@@ -42,7 +43,7 @@ export async function translateViaServer(
   try {
     res = await fetchImpl(buildGlassTranslateUrl(config), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: withIivoApiAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         text: request.text,
         sourceLanguage: request.sourceLanguage === "auto" ? undefined : request.sourceLanguage,

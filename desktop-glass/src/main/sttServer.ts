@@ -4,6 +4,7 @@
 
 import { readFile } from "node:fs/promises";
 import type { GlassConfig } from "../shared/config.ts";
+import { withIivoApiAuthHeaders } from "../shared/iivoApiAuth.ts";
 import type { SttTranscribeRequest, SttTranscribeResult } from "../shared/sttTypes.ts";
 import { STT_SERVER_UNAVAILABLE_MESSAGE } from "../shared/sttTypes.ts";
 import type { FetchLike } from "./sttOpenAI.ts";
@@ -24,7 +25,7 @@ export async function transcribeViaServer(
   try {
     res = await fetchImpl(buildTranscribeAudioUrl(config), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: withIivoApiAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         audioBase64: buffer.toString("base64"),
         mimeType: request.mimeType,

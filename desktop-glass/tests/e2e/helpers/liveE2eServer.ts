@@ -14,6 +14,8 @@ export function createLiveE2eHandle(baseUrl: string): StubServerHandle {
     getScreenshotUploadCount: () => 0,
     getHandoffVisits: () => [],
     resetHandoffState: () => undefined,
+    getMemoryPostCount: () => 0,
+    getLastMemoryBody: () => null,
   };
 }
 

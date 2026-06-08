@@ -13,6 +13,9 @@ export const MAX_RUNNING_TRANSCRIPT_CHARS = 50_000;
 /** Max listen_moment events kept when pruning (checkpoints preserved). */
 export const MAX_LISTEN_MOMENT_EVENTS = 400;
 
+/** Max checkpoint summaries kept in session store (older dropped). */
+export const MAX_LISTEN_CHECKPOINT_EVENTS = 80;
+
 export function pruneRunningTranscript(
   text: string,
   maxChars = MAX_RUNNING_TRANSCRIPT_CHARS,
@@ -39,6 +42,7 @@ export function pruneTranscriptSessionEvents(
   opts: {
     maxTranscriptEvents?: number;
     maxListenMomentEvents?: number;
+    maxCheckpointEvents?: number;
   } = {},
 ): GlassSessionEvent[] {
   const maxTranscript = opts.maxTranscriptEvents ?? MAX_TRANSCRIPT_EVENTS_IN_SESSION;
@@ -52,8 +56,11 @@ export function pruneTranscriptSessionEvents(
   const keptTranscripts =
     transcripts.length > maxTranscript ? transcripts.slice(transcripts.length - maxTranscript) : transcripts;
   const keptMoments = moments.length > maxMoments ? moments.slice(moments.length - maxMoments) : moments;
+  const maxCheckpoints = opts.maxCheckpointEvents ?? MAX_LISTEN_CHECKPOINT_EVENTS;
+  const keptCheckpoints =
+    checkpoints.length > maxCheckpoints ? checkpoints.slice(checkpoints.length - maxCheckpoints) : checkpoints;
 
-  const merged = [...nonTranscript, ...keptTranscripts, ...keptMoments, ...checkpoints];
+  const merged = [...nonTranscript, ...keptTranscripts, ...keptMoments, ...keptCheckpoints];
   merged.sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
   return merged;
 }

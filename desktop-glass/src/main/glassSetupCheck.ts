@@ -11,7 +11,10 @@ import {
 } from "../shared/captureSourceEnumeration.ts";
 import { probeDesktopCaptureSources } from "./captureSourceProbe.ts";
 import { runScreenCaptureProbe } from "./screenCaptureProbe.ts";
-import { fetchGlassServerHealth } from "./glassVisualAskPreflight.ts";
+import {
+  enrichGlassServerHealthSnapshot,
+  fetchGlassServerHealth,
+} from "./glassVisualAskPreflight.ts";
 import { resolveCaptureDisplay } from "./displayRegistry.ts";
 import type { GlassDisplayTarget } from "../shared/glassSettings.ts";
 import { probeSystemAudioEnumeration } from "./systemAudioProbe.ts";
@@ -33,7 +36,10 @@ export async function runGlassSetupCheck(input: {
   displayTarget: GlassDisplayTarget;
   skipCaptureProbe?: boolean;
 }): Promise<GlassSetupCheckResult> {
-  const rawHealth = await fetchGlassServerHealth(input.config);
+  const healthFetch = await fetchGlassServerHealth(input.config);
+  const rawHealth = healthFetch.snapshot
+    ? await enrichGlassServerHealthSnapshot(input.config, healthFetch.snapshot)
+    : null;
   const serverHealth: GlassServerHealthForSetup | null = rawHealth
     ? {
         reachable: true,
@@ -46,7 +52,10 @@ export async function runGlassSetupCheck(input: {
             }
           : undefined,
       }
-    : { reachable: false };
+    : {
+        reachable: false,
+        checkError: healthFetch.error,
+      };
 
   const initial: GlassSetupCheckResult = {
     serverHealth,
@@ -57,16 +66,15 @@ export async function runGlassSetupCheck(input: {
   };
 
   if (input.skipCaptureProbe || process.env.IIVO_GLASS_E2E === "1") {
+    const e2eStub = process.env.IIVO_GLASS_E2E === "1";
     return {
       ...initial,
-      screenCaptureDetail:
-        process.env.IIVO_GLASS_E2E === "1"
-          ? "Screen capture probe skipped in E2E."
-          : undefined,
-      windowCaptureDetail:
-        process.env.IIVO_GLASS_E2E === "1" ? "Window capture probe skipped in E2E." : undefined,
-      systemAudioStatus: "not_tested",
-      systemAudioDetail: "System audio probe skipped.",
+      screenCaptureDetail: e2eStub ? "Screen capture probe skipped in E2E." : undefined,
+      windowCaptureDetail: e2eStub ? "Window capture probe skipped in E2E." : undefined,
+      systemAudioStatus: e2eStub ? "available" : "not_tested",
+      systemAudioDetail: e2eStub
+        ? "System audio simulated for E2E."
+        : "System audio probe skipped.",
     };
   }
 

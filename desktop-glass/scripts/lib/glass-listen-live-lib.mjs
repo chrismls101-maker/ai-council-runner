@@ -52,6 +52,7 @@ export {
   sessionHasRawAudioOrBase64,
   summarizeMomentStats,
   gradeListenHarnessQuality,
+  buildListenHarnessNoteMetrics,
   countDuplicateTranscriptLines,
   LISTEN_INTERRUPT_QA_QUESTIONS,
   formatEnduranceConfig,

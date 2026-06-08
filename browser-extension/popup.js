@@ -2,8 +2,14 @@
  * IIVO Lens — popup UI (hardened v1)
  */
 
-const API_BASE = "http://localhost:3001";
-const IIVO_APP = "http://localhost:5173";
+const VITE_PORTS = [5173, 5174, 5175];
+const DIRECT_API = "http://localhost:3001";
+
+/** Resolved at runtime — Vite dev proxy (adds auth) or direct API. */
+let apiBase = DIRECT_API;
+let webBase = "http://localhost:5173";
+/** @type {Record<string, string>} */
+let apiAuthHeaders = {};
 const LENS_CAPTURED_VIA = "browser_lens";
 const MAX_SUMMARY = 280;
 const PREVIEW_CHARS = 420;
@@ -116,6 +122,71 @@ function urlDomain(sourceUrl) {
   }
 }
 
+function apiUrl(path) {
+  return `${apiBase}${path}`;
+}
+
+async function apiFetch(path, options = {}) {
+  const headers = { ...apiAuthHeaders, ...(options.headers || {}) };
+  return fetch(apiUrl(path), { ...options, headers });
+}
+
+async function loadStoredApiSecret() {
+  const { iivoApiSecret } = await chrome.storage.local.get("iivoApiSecret");
+  return typeof iivoApiSecret === "string" && iivoApiSecret.trim() ? iivoApiSecret.trim() : null;
+}
+
+async function probeHealth(base, headers = {}) {
+  try {
+    const res = await fetch(`${base}/api/health`, {
+      signal: AbortSignal.timeout(4000),
+      headers,
+    });
+    if (!res.ok) return false;
+    const data = await res.json().catch(() => ({}));
+    return data.ok === true;
+  } catch {
+    return false;
+  }
+}
+
+async function discoverWebBase() {
+  for (const port of VITE_PORTS) {
+    try {
+      const base = `http://localhost:${port}`;
+      const res = await fetch(`${base}/`, { signal: AbortSignal.timeout(2000) });
+      if (res.ok) return base;
+    } catch {
+      /* try next port */
+    }
+  }
+  return `http://localhost:${VITE_PORTS[0]}`;
+}
+
+/** Prefer Vite dev server (proxy injects GLASS_API_SECRET); fall back to :3001 with stored secret. */
+async function discoverEndpoints() {
+  for (const port of VITE_PORTS) {
+    const base = `http://localhost:${port}`;
+    if (await probeHealth(base)) {
+      apiBase = base;
+      webBase = base;
+      apiAuthHeaders = {};
+      return true;
+    }
+  }
+
+  const secret = await loadStoredApiSecret();
+  const headers = secret ? { Authorization: `Bearer ${secret}` } : {};
+  if (await probeHealth(DIRECT_API, headers)) {
+    apiBase = DIRECT_API;
+    webBase = await discoverWebBase();
+    apiAuthHeaders = headers;
+    return true;
+  }
+
+  return false;
+}
+
 function previewSnippet(text, max = PREVIEW_CHARS) {
   const trimmed = text?.trim() ?? "";
   if (!trimmed) return "(No readable text detected)";
@@ -125,8 +196,8 @@ function previewSnippet(text, max = PREVIEW_CHARS) {
 
 async function checkIivoHealth() {
   try {
-    const res = await fetch(`${API_BASE}/api/health`, { signal: AbortSignal.timeout(4000) });
-    if (!res.ok) throw new Error("unhealthy");
+    const ok = await discoverEndpoints();
+    if (!ok) throw new Error("offline");
     iivoOnline = true;
     setConnectionPill("online", "Live");
     return true;
@@ -162,7 +233,7 @@ async function captureActiveTab() {
 }
 
 async function fetchContextItems() {
-  const res = await fetch(`${API_BASE}/api/context`, { signal: AbortSignal.timeout(8000) });
+  const res = await apiFetch("/api/context", { signal: AbortSignal.timeout(8000) });
   if (!res.ok) throw new Error("Could not load context library.");
   const body = await res.json();
   return body.items ?? [];
@@ -244,7 +315,7 @@ function buildContextPayload(data, mode) {
 }
 
 async function postContextItem(payload) {
-  const res = await fetch(`${API_BASE}/api/context`, {
+  const res = await apiFetch("/api/context", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -261,7 +332,7 @@ async function postContextItem(payload) {
 }
 
 async function uploadContextScreenshot(id, imageDataUrl) {
-  const res = await fetch(`${API_BASE}/api/context/${encodeURIComponent(id)}/screenshot`, {
+  const res = await apiFetch(`/api/context/${encodeURIComponent(id)}/screenshot`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ imageDataUrl }),
@@ -364,9 +435,84 @@ function renderScreenshotPreview(data) {
   setStatus(null);
 }
 
-async function startScreenshotCapture() {
-  if (!(await ensureReady())) return;
+function buildScreenshotFilename(data) {
+  const domain = urlDomain(data.sourceUrl || "page")
+    .replace(/[^a-z0-9.-]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48) || "page";
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  return `iivo-lens-${domain}-${stamp}.png`;
+}
 
+async function downloadScreenshotDataUrl(imageDataUrl, meta = pendingScreenshot) {
+  if (!imageDataUrl?.startsWith("data:image/")) {
+    throw new Error("No screenshot available to download.");
+  }
+
+  const filename = buildScreenshotFilename(meta ?? { sourceUrl: "page" });
+
+  const viaBackground = await new Promise((resolve) => {
+    chrome.runtime.sendMessage(
+      {
+        type: "IIVO_LENS_DOWNLOAD_SCREENSHOT",
+        imageDataUrl,
+        filename,
+      },
+      (response) => {
+        const err = chrome.runtime.lastError;
+        if (err) {
+          resolve({ ok: false, error: err.message });
+          return;
+        }
+        resolve(response ?? { ok: false, error: "Download failed." });
+      },
+    );
+  });
+
+  if (viaBackground?.ok) {
+    return filename;
+  }
+
+  const blob = await (await fetch(imageDataUrl)).blob();
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = filename;
+    link.rel = "noopener";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+
+  return filename;
+}
+
+async function downloadPendingScreenshot() {
+  const dataUrl = pendingScreenshot?.imageDataUrl ?? getScreenshotPreviewSrc();
+  if (!dataUrl?.startsWith("data:image/")) {
+    setStatus("Capture a screenshot first.", "error");
+    return;
+  }
+
+  setBusy(true);
+  setErrorDetail(null);
+  setStatus("Opening save dialog…", "muted");
+
+  try {
+    const filename = await downloadScreenshotDataUrl(dataUrl, pendingScreenshot);
+    setStatus(`Download started: ${filename}`, "success");
+  } catch (err) {
+    setStatus(err instanceof Error ? err.message : "Could not download screenshot.", "error");
+    if (err instanceof Error) setErrorDetail(err.message);
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function startScreenshotCapture() {
   setBusy(true);
   setErrorDetail(null);
   showScreenshotConfirm(false);
@@ -482,7 +628,7 @@ function guardScreenshotPreviewNavigation(event) {
 }
 
 function openIivo(path = "/") {
-  const url = path.startsWith("http") ? path : `${IIVO_APP}${path}`;
+  const url = path.startsWith("http") ? path : `${webBase}${path}`;
   chrome.runtime.sendMessage({ type: "IIVO_LENS_OPEN_APP", url });
 }
 
@@ -520,6 +666,7 @@ function renderPreview(data) {
   hints.push("Save Evidence → Context Library");
   hints.push("Attach Context → opens IIVO with chip");
   hints.push("Send Screenshot → visible tab with confirmation");
+  hints.push("Download PNG → save screenshot to your computer");
   $("lens-action-hints").textContent = hints.join(" · ");
 
   $("btn-send-selection").disabled = !hasSelection;
@@ -650,6 +797,7 @@ function wireActions() {
     setStatus("Ready to send again.", "muted");
   });
   $("btn-send-screenshot").addEventListener("click", () => void startScreenshotCapture());
+  $("btn-download-screenshot").addEventListener("click", () => void downloadPendingScreenshot());
   $("btn-ask-screenshot").addEventListener("click", () => void confirmScreenshot("ask"));
   $("btn-save-screenshot").addEventListener("click", () => void confirmScreenshot("save"));
   $("btn-cancel-screenshot").addEventListener("click", () => cancelScreenshot());
@@ -663,6 +811,7 @@ function wireActions() {
   $("btn-screenshot-expand")?.addEventListener("auxclick", guardScreenshotPreviewNavigation);
   $("btn-screenshot-lightbox-close")?.addEventListener("click", () => closeScreenshotLightbox());
   $("btn-screenshot-lightbox-x")?.addEventListener("click", () => closeScreenshotLightbox());
+  $("btn-screenshot-lightbox-download")?.addEventListener("click", () => void downloadPendingScreenshot());
 
   const settingsSheet = $("lens-settings-sheet");
   const openSettings = () => {

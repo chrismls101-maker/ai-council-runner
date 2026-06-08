@@ -32,7 +32,8 @@ When you open the popup, IIVO Lens captures a **preview only** — nothing is se
 2. Review the thumbnail preview, image type, and file size.
 3. Confirm:
    - **Ask IIVO About Screenshot** — saves image + metadata, opens IIVO with `?lensAsk=<id>`
-   - **Save Screenshot as Evidence** — saves to Context Library only
+   - **Download PNG** — saves the screenshot to your computer (works without IIVO running)
+   - **Save to IIVO** — saves to Context Library only (requires IIVO server)
    - **Cancel** — discards the pending screenshot
 
 Screenshot images are stored locally on disk at `data/context/screenshots/<id>.png` (not embedded as huge base64 in JSON).
@@ -152,8 +153,9 @@ Selection must exist on the active tab when the popup opens. Re-select text, clo
 9. Send same URL twice within 24h — verify duplicate warning
 10. Re-send deleted context via `?lensContextId=bad-id` — verify friendly error in IIVO
 11. **Send Screenshot to IIVO** — verify thumbnail preview before send
-12. **Ask IIVO About Screenshot** — verify IIVO opens with screenshot chip + “Analyze this screenshot” prompt
-13. **Save Screenshot as Evidence** — verify PNG appears in Context Library with Lens badge + thumbnail
+12. **Download PNG** — verify Chrome save dialog and file saved locally
+13. **Ask IIVO About Screenshot** — verify IIVO opens with screenshot chip + “Analyze this screenshot” prompt
+14. **Save to IIVO** — verify PNG appears in Context Library with Lens badge + thumbnail
 
 Automated QA (no extension install): `npm run qa:lens` and `npm run test:lens`
 
@@ -208,7 +210,7 @@ OPENAI_API_KEY=sk-...
 
 1. Reload the extension after code changes (`chrome://extensions` → reload)
 2. Capture a visible-tab screenshot via **Send Screenshot to IIVO**
-3. **Save Screenshot as Evidence** — verify thumbnail in Context Library
+3. **Save to IIVO** — verify thumbnail in Context Library
 4. **Ask IIVO About Screenshot** — verify composer shows screenshot chip + “Analyze this screenshot…” prompt
 5. **Vision disabled** (`IMAGE_VISION_ENABLED=false` or unset):
    - Composer note: “Visual analysis not configured” / “Image analysis is not configured”

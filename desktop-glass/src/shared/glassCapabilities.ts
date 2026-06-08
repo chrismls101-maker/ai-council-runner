@@ -78,6 +78,8 @@ export type MicPermissionReport = "not_requested" | "granted" | "denied" | "erro
 
 export interface GlassServerHealthForSetup {
   reachable: boolean;
+  /** Set when a health probe ran but could not reach /api/health. */
+  checkError?: string;
   vision?: {
     enabled: boolean;
     configured: boolean;
@@ -116,6 +118,14 @@ export const SCREEN_RECORDING_RESTART_HINT =
 
 export const VIRTUAL_AUDIO_HELP_DETAIL =
   "Some macOS setups cannot provide system audio directly. Install a virtual audio device (e.g. BlackHole or Loopback), route system output through it, then choose that device when starting System Audio.";
+
+/** Stale copy from a failed reachability probe — not a live server/STT fault. */
+export function isServerConnectivityMessage(message: string | undefined): boolean {
+  if (!message?.trim()) return false;
+  return /401|unauthorized|unavailable|offline|econnrefused|enotfound|failed to reach|could not reach|network error|health check failed|transcription server unavailable|npm run dev/i.test(
+    message,
+  );
+}
 
 function severityFromStatus(status: GlassCapabilityStatus): GlassCapabilitySeverity {
   switch (status) {
@@ -481,22 +491,42 @@ export function buildSystemAudioCapability(input: GlassSetupCapabilitiesInput): 
 export function buildVisionCapability(
   health: GlassServerHealthForSetup | null,
 ): GlassCapabilityRow {
-  if (!health?.reachable) {
+  if (health === null) {
+    return {
+      id: "vision",
+      status: "not_requested",
+      label: "Not checked",
+      detail: "Connect IIVO Glass to verify server vision.",
+      severity: "idle",
+    };
+  }
+  if (!health.reachable) {
     return {
       id: "vision",
       status: "error",
       label: "Unknown",
-      detail: "Start the IIVO server to check vision status.",
+      detail:
+        health.checkError ??
+        "Could not reach the IIVO server to check vision status.",
       severity: "error",
     };
   }
   const vision = health.vision;
-  if (!vision?.enabled) {
+  if (!vision) {
+    return {
+      id: "vision",
+      status: "not_requested",
+      label: "Unknown",
+      detail: "Could not load vision status from the server.",
+      severity: "warn",
+    };
+  }
+  if (!vision.enabled) {
     return {
       id: "vision",
       status: "missing_config",
       label: "Disabled",
-      detail: vision?.reason ?? "Vision is not enabled on the IIVO server (IMAGE_VISION_ENABLED).",
+      detail: vision.reason ?? "Vision is not enabled on the IIVO server (IMAGE_VISION_ENABLED).",
       severity: "warn",
     };
   }
@@ -524,12 +554,23 @@ export function buildSttCapability(
   sttEnabled: boolean,
   lastSttError?: string,
 ): GlassCapabilityRow {
-  if (!health?.reachable) {
+  if (health === null) {
+    return {
+      id: "stt",
+      status: "not_requested",
+      label: "Not checked",
+      detail: "Connect IIVO Glass to verify STT status.",
+      severity: "idle",
+    };
+  }
+  if (!health.reachable) {
     return {
       id: "stt",
       status: "error",
       label: "Unknown",
-      detail: "Start the IIVO server to check STT status.",
+      detail:
+        health.checkError ??
+        "Could not reach the IIVO server to check STT status.",
       severity: "error",
     };
   }
@@ -550,6 +591,30 @@ export function buildSttCapability(
       label: "Missing key",
       detail: serverStt.reason ?? "OpenAI API key is not configured on the IIVO server.",
       severity: "warn",
+    };
+  }
+  const serverSttReady =
+    health.reachable && sttEnabled && (serverStt?.configured ?? true);
+  if (serverSttReady && sttStatus !== "missing_key" && sttStatus !== "disabled") {
+    const operationalError =
+      lastSttError?.trim() && !isServerConnectivityMessage(lastSttError)
+        ? lastSttError
+        : undefined;
+    if (operationalError) {
+      return {
+        id: "stt",
+        status: "error",
+        label: "Transcription failed",
+        detail: operationalError,
+        severity: "warn",
+      };
+    }
+    return {
+      id: "stt",
+      status: "configured",
+      label: "Ready",
+      detail: "STT is configured (server-side key present; value never shown in Glass).",
+      severity: "ok",
     };
   }
   if (sttStatus === "server_unavailable") {
@@ -601,15 +666,25 @@ export function buildServerCapability(
   health: GlassServerHealthForSetup | null,
   lastError?: string,
 ): GlassCapabilityRow {
-  const offline = /fetch|network|econnrefused|unavailable|failed to reach|cannot connect/i.test(
-    lastError ?? "",
-  );
-  if (!health?.reachable || offline) {
+  if (health === null) {
+    return {
+      id: "server",
+      status: "not_requested",
+      label: "Not checked",
+      detail: "Connect IIVO Glass to verify the server.",
+      severity: "idle",
+    };
+  }
+  if (!health.reachable) {
+    const detail =
+      health.checkError ??
+      lastError ??
+      "IIVO server unavailable. Check IIVO_API_URL and API credentials.";
     return {
       id: "server",
       status: "error",
       label: "Offline",
-      detail: lastError ?? "IIVO server unavailable. Run npm run dev from the project root.",
+      detail,
       severity: "error",
     };
   }

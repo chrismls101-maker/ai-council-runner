@@ -2,8 +2,25 @@ import { hasLensHandoffQueryParam } from "./lensHandoff";
 
 export const DASHBOARD_PATH = "/dashboard";
 
+export type AppRoute = "landing" | "dashboard" | "install" | "privacy" | "terms";
+
+export const INSTALL_PATH = "/install";
+export const PRIVACY_PATH = "/privacy";
+export const TERMS_PATH = "/terms";
+
 export function isDashboardPath(pathname = typeof window !== "undefined" ? window.location.pathname : ""): boolean {
   return pathname === DASHBOARD_PATH || pathname.startsWith(`${DASHBOARD_PATH}/`);
+}
+
+export function isGlassPublicPath(
+  pathname = typeof window !== "undefined" ? window.location.pathname : "",
+): boolean {
+  return (
+    pathname === "/" ||
+    pathname === INSTALL_PATH ||
+    pathname === PRIVACY_PATH ||
+    pathname === TERMS_PATH
+  );
 }
 
 /** Deep links from Glass/Lens/app should open the dashboard, not the public landing. */
@@ -23,7 +40,12 @@ export function redirectRootHandoffToDashboard(): void {
   window.history.replaceState({}, "", `${DASHBOARD_PATH}${search}${hash}`);
 }
 
-export function resolveAppRoute(): "landing" | "dashboard" {
+export function resolveAppRoute(): AppRoute {
   redirectRootHandoffToDashboard();
-  return isDashboardPath(window.location.pathname) ? "dashboard" : "landing";
+  const pathname = window.location.pathname;
+  if (isDashboardPath(pathname)) return "dashboard";
+  if (pathname === INSTALL_PATH) return "install";
+  if (pathname === PRIVACY_PATH) return "privacy";
+  if (pathname === TERMS_PATH) return "terms";
+  return "landing";
 }

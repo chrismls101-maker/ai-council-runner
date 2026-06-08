@@ -4,6 +4,7 @@ import { isOverlayChatFeedKind } from "../../shared/commandFeed.ts";
 import { send, useGlassState } from "../useGlassState.ts";
 import { RememberThisButton } from "./RememberThisButton.tsx";
 import {
+  ensureOverlayInteractive,
   prepareGlassTextContextMenu,
   prepareGlassTextPointerDown,
 } from "../glassTextInteraction.ts";
@@ -65,6 +66,7 @@ export function FeedCard({
                 : "glass-overlay-card"
         }
       className={`glass-chat-reply glass-answer-shell overlay-feed-card overlay-feed-card--${item.kind}${item.pinned ? " overlay-feed-card--pinned" : ""}${isPending ? " glass-chat-reply--pending" : ""}${isError ? " glass-chat-reply--error" : ""}`}
+      onPointerDownCapture={ensureOverlayInteractive}
     >
         <span className="glass-answer-shell__sheen" aria-hidden="true" />
         <div
@@ -81,7 +83,10 @@ export function FeedCard({
             </p>
           </div>
           {!isPending ? (
-            <div className="overlay-feed-card__actions glass-chat-reply__actions">
+            <div
+              className="overlay-feed-card__actions glass-chat-reply__actions"
+              onPointerDownCapture={ensureOverlayInteractive}
+            >
               {(isResponse || isError) && item.body ? (
                 <button
                   type="button"
@@ -102,6 +107,11 @@ export function FeedCard({
                   </button>
                   {isResponse ? (
                     <>
+                      <RememberThisButton
+                        content={item.fullBody ?? item.body}
+                        prompt={prompt}
+                        runId={item.runId}
+                      />
                       <button
                         type="button"
                         className="gbtn gbtn--ghost"
@@ -169,7 +179,6 @@ export function FeedCard({
         </p>
         {isResponse ? (
           <RememberThisButton
-            apiUrl={state.config.iivoApiUrl}
             content={item.fullBody ?? item.body}
             prompt={prompt}
             runId={item.runId}

@@ -1,0 +1,259 @@
+/* First-run onboarding overlay (ported from web glass-theme.css) */
+.glass-onboarding-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(20px, 4vw, 32px);
+  pointer-events: auto;
+  background:
+    radial-gradient(ellipse 70% 55% at 50% 40%, rgba(140, 185, 230, 0.1), transparent 70%),
+    rgba(4, 6, 10, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.glass-onboarding-ambient {
+  position: absolute;
+  inset: -10%;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 45% 35% at 22% 28%, rgba(180, 210, 255, 0.12), transparent 60%),
+    radial-gradient(ellipse 40% 32% at 78% 72%, rgba(160, 190, 230, 0.1), transparent 58%);
+  animation: glass-onboarding-ambient 22s ease-in-out infinite alternate;
+}
+
+@keyframes glass-onboarding-ambient {
+  0% {
+    transform: translate3d(-2%, -1%, 0) scale(1);
+  }
+  100% {
+    transform: translate3d(2%, 2%, 0) scale(1.04);
+  }
+}
+
+.glass-onboarding-card {
+  position: relative;
+  width: min(520px, 100%);
+  padding: clamp(28px, 5vw, 36px) clamp(24px, 4vw, 32px) clamp(24px, 4vw, 30px);
+  border-radius: 22px;
+  overflow: hidden;
+  isolation: isolate;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.58), rgba(205, 230, 255, 0.36));
+  backdrop-filter: blur(26px) saturate(165%);
+  -webkit-backdrop-filter: blur(26px) saturate(165%);
+  border: 1px solid rgba(255, 255, 255, 0.52);
+  border-bottom-color: rgba(255, 255, 255, 0.22);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.34) inset,
+    inset 0 1px 0 rgba(255, 255, 255, 0.76),
+    0 24px 64px rgba(0, 0, 0, 0.42),
+    0 0 48px rgba(140, 190, 255, 0.12);
+}
+
+.glass-onboarding-card::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.32),
+    rgba(255, 255, 255, 0.08) 38%,
+    transparent 72%
+  );
+}
+
+.glass-onboarding-led {
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  bottom: 10px;
+  z-index: 2;
+}
+
+.glass-onboarding-step,
+.glass-onboarding-calibrated {
+  position: relative;
+  z-index: 1;
+}
+
+.glass-onboarding-kicker {
+  margin: 0 0 14px;
+  font-size: 0.6875rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(55, 68, 92, 0.72);
+}
+
+.glass-onboarding-question {
+  margin: 0 0 22px;
+  font-size: clamp(1.35rem, 3.2vw, 1.65rem);
+  font-weight: 500;
+  line-height: 1.35;
+  color: rgba(28, 36, 52, 0.94);
+}
+
+.glass-onboarding-field {
+  display: block;
+  margin-bottom: 22px;
+}
+
+.glass-onboarding-input {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.42);
+  color: rgba(22, 30, 46, 0.95);
+  font-family: inherit;
+  font-size: 1rem;
+  line-height: 1.4;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
+    0 4px 16px rgba(0, 0, 0, 0.06);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.glass-onboarding-input::placeholder {
+  color: rgba(70, 82, 102, 0.55);
+}
+
+.glass-onboarding-input:focus {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.85);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.5) inset,
+    inset 0 1px 0 rgba(255, 255, 255, 0.82),
+    0 0 24px rgba(180, 215, 255, 0.35);
+}
+
+.glass-onboarding-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.glass-onboarding-skip {
+  padding: 0;
+  border: none;
+  background: none;
+  color: rgba(55, 68, 92, 0.65);
+  font-size: 0.8125rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.glass-onboarding-skip:hover {
+  color: rgba(28, 36, 52, 0.88);
+}
+
+.glass-onboarding-continue {
+  min-height: 42px;
+  padding: 10px 22px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(210, 230, 255, 0.48));
+  color: rgba(22, 30, 46, 0.92);
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    0 8px 20px rgba(0, 0, 0, 0.12);
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    opacity 0.2s ease;
+}
+
+.glass-onboarding-continue:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    0 12px 28px rgba(0, 0, 0, 0.16),
+    0 0 20px rgba(180, 215, 255, 0.28);
+}
+
+.glass-onboarding-continue:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.glass-onboarding-calibrated {
+  text-align: center;
+  padding: clamp(12px, 3vw, 20px) 0 clamp(8px, 2vw, 12px);
+}
+
+.glass-onboarding-calibrated-ring {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 20px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.85), rgba(205, 230, 255, 0.35));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 0 28px rgba(180, 215, 255, 0.45);
+  animation: glass-onboarding-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes glass-onboarding-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.9),
+      0 0 28px rgba(180, 215, 255, 0.45);
+  }
+  50% {
+    transform: scale(1.04);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.95),
+      0 0 40px rgba(200, 230, 255, 0.62);
+  }
+}
+
+.glass-onboarding-calibrated-eyebrow {
+  margin: 0 0 10px;
+  font-size: 0.6875rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(55, 68, 92, 0.72);
+}
+
+.glass-onboarding-calibrated-title {
+  margin: 0 0 10px;
+  font-size: clamp(1.5rem, 3.5vw, 1.85rem);
+  font-weight: 500;
+  line-height: 1.25;
+  color: rgba(22, 30, 46, 0.96);
+}
+
+.glass-onboarding-calibrated-copy {
+  margin: 0;
+  font-size: clamp(1rem, 2vw, 1.125rem);
+  line-height: 1.6;
+  color: rgba(45, 58, 78, 0.82);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glass-onboarding-ambient,
+  .glass-onboarding-calibrated-ring {
+    animation: none !important;
+  }
+}

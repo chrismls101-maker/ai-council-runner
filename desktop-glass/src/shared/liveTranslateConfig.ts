@@ -6,6 +6,7 @@ import type {
   LiveTranslateConfig,
   LiveTranslateGlossaryTerm,
   LiveTranslateSaveMode,
+  LiveTranslateTargetLanguage,
   LiveTranslateWorkflowMode,
 } from "./liveTranslateTypes.ts";
 
@@ -72,6 +73,23 @@ export function normalizeLiveTranslateConfig(
     saveMode: normalizeSaveMode(patch.saveMode ?? merged.saveMode),
     captionPosition: merged.captionPosition === "panel" ? "bottom_center" : merged.captionPosition,
     glossaryTerms: patch.glossaryTerms ?? merged.glossaryTerms ?? DEFAULT_GLOSSARY_TERMS,
+  };
+}
+
+export function buildTranslateStartPatch(
+  mode: LiveTranslateWorkflowMode,
+  target: LiveTranslateTargetLanguage,
+  saveMode: LiveTranslateSaveMode = "private_no_save",
+): Partial<LiveTranslateConfig> & { enabled: boolean } {
+  const defaults = configDefaultsForMode(mode);
+  return {
+    enabled: true,
+    ...defaults,
+    source: defaults.source ?? "system_audio",
+    targetLanguage: target,
+    displayMode: defaults.displayMode ?? "translation_only",
+    saveMode,
+    sourceLanguage: "auto",
   };
 }
 

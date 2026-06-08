@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { send } from "../useGlassState.ts";
 import type { GlassState } from "../../shared/ipc.ts";
 import type {
@@ -125,16 +124,36 @@ export function CopilotOverlay({
       ) : null}
 
       {showSilence && listenMode ? (
-        <div className="overlay-copilot-status" data-testid="glass-listen-silence-status">
-          <span>No audio detected — still listening</span>
-          <button
-            type="button"
-            className="gbtn gbtn--ghost gbtn--compact"
-            onClick={() => send({ type: "copilot-dismiss-silence-warning" })}
-          >
-            Keep listening
-          </button>
-        </div>
+        <article className="overlay-copilot-card" data-testid="glass-listen-silence-status">
+          <div className="overlay-copilot-card__eyebrow">Listen Mode</div>
+          <div className="overlay-copilot-card__title">No audio detected — still listening</div>
+          <p className="overlay-copilot-card__body">
+            Play audio on your Mac or check BlackHole routing. You can keep listening or stop now.
+          </p>
+          <div className="overlay-copilot-card__actions">
+            <button
+              type="button"
+              className="gbtn gbtn--primary"
+              onClick={() => send({ type: "copilot-dismiss-silence-warning" })}
+            >
+              Keep listening
+            </button>
+            <button
+              type="button"
+              className="gbtn gbtn--ghost"
+              onClick={() => send({ type: "pause" })}
+            >
+              Pause
+            </button>
+            <button
+              type="button"
+              className="gbtn gbtn--ghost"
+              onClick={() => send({ type: "stop-everything" })}
+            >
+              Stop Listening
+            </button>
+          </div>
+        </article>
       ) : showSilence ? (
         <article className="overlay-copilot-card" data-testid="glass-copilot-silence">
           <div className="overlay-copilot-card__eyebrow">Session Copilot</div>
@@ -160,25 +179,34 @@ export function CopilotOverlay({
       ) : null}
 
       {debrief ? (
-        <article className="overlay-copilot-card overlay-copilot-card--debrief" data-testid="glass-copilot-debrief">
-          <div className="overlay-copilot-card__eyebrow">Session Debrief</div>
-          <pre className="overlay-copilot-card__debrief-body">{debrief.markdown}</pre>
-          <div className="overlay-copilot-card__actions">
-            <button
-              type="button"
-              className="gbtn gbtn--primary"
-              onClick={() => send({ type: "copilot-open-debrief-in-iivo" })}
-            >
-              Open in IIVO
-            </button>
-            <button
-              type="button"
-              className="gbtn gbtn--ghost"
-              onClick={() => send({ type: "copilot-dismiss-debrief" })}
-            >
-              Dismiss
-            </button>
+        <article
+          className="overlay-copilot-card overlay-copilot-card--debrief glass-answer-shell glass-answer-shell--auto"
+          data-testid="glass-copilot-debrief"
+        >
+          <span className="glass-answer-shell__sheen" aria-hidden="true" />
+          <div className="glass-answer-shell__content">
+            <div className="overlay-copilot-card__eyebrow">Session Debrief</div>
+            <pre className="overlay-copilot-card__debrief-body overlay-copilot-card__debrief-body--auto">
+              {debrief.markdown}
+            </pre>
+            <div className="overlay-copilot-card__actions">
+              <button
+                type="button"
+                className="gbtn gbtn--primary"
+                onClick={() => send({ type: "copilot-open-debrief-in-iivo" })}
+              >
+                Open in IIVO
+              </button>
+              <button
+                type="button"
+                className="gbtn gbtn--ghost"
+                onClick={() => send({ type: "copilot-dismiss-debrief" })}
+              >
+                Dismiss
+              </button>
+            </div>
           </div>
+          <span className="glass-answer-shell__led ui-led-line" aria-hidden="true" />
         </article>
       ) : null}
 
@@ -202,46 +230,43 @@ export function CopilotOverlay({
 }
 
 function DiagnosticResultCard({ result }: { result: GlassCopilotDiagnosticResult }): JSX.Element {
-  const [expanded, setExpanded] = useState(false);
   return (
-    <article className="overlay-copilot-card" data-testid="glass-copilot-diagnostic-result">
-      <div className="overlay-copilot-card__eyebrow">Diagnostic</div>
-      <div className="overlay-copilot-card__title">{result.rootCauseSummary}</div>
-      {expanded ? (
-        <pre className="overlay-copilot-card__debrief-body">{result.fullMarkdown}</pre>
-      ) : (
-        <p className="overlay-copilot-card__body">{result.probableRootCause}</p>
-      )}
-      <div className="overlay-copilot-card__actions">
-        <button
-          type="button"
-          className="gbtn gbtn--ghost"
-          onClick={() => setExpanded((v) => !v)}
-        >
-          {expanded ? "Hide details" : "View details"}
-        </button>
-        <button
-          type="button"
-          className="gbtn"
-          onClick={() => send({ type: "copilot-save-diagnostic-result" })}
-        >
-          Save
-        </button>
-        <button
-          type="button"
-          className="gbtn gbtn--primary"
-          onClick={() => send({ type: "copilot-open-diagnostic-in-iivo" })}
-        >
-          Open in IIVO
-        </button>
-        <button
-          type="button"
-          className="gbtn gbtn--ghost"
-          onClick={() => send({ type: "copilot-dismiss-diagnostic-result" })}
-        >
-          Dismiss
-        </button>
+    <article
+      className="overlay-copilot-card glass-answer-shell glass-answer-shell--auto"
+      data-testid="glass-copilot-diagnostic-result"
+    >
+      <span className="glass-answer-shell__sheen" aria-hidden="true" />
+      <div className="glass-answer-shell__content">
+        <div className="overlay-copilot-card__eyebrow">Diagnostic</div>
+        <div className="overlay-copilot-card__title">{result.rootCauseSummary}</div>
+        <pre className="overlay-copilot-card__debrief-body overlay-copilot-card__debrief-body--auto">
+          {result.fullMarkdown || result.probableRootCause}
+        </pre>
+        <div className="overlay-copilot-card__actions">
+          <button
+            type="button"
+            className="gbtn"
+            onClick={() => send({ type: "copilot-save-diagnostic-result" })}
+          >
+            Save
+          </button>
+          <button
+            type="button"
+            className="gbtn gbtn--primary"
+            onClick={() => send({ type: "copilot-open-diagnostic-in-iivo" })}
+          >
+            Open in IIVO
+          </button>
+          <button
+            type="button"
+            className="gbtn gbtn--ghost"
+            onClick={() => send({ type: "copilot-dismiss-diagnostic-result" })}
+          >
+            Dismiss
+          </button>
+        </div>
       </div>
+      <span className="glass-answer-shell__led ui-led-line" aria-hidden="true" />
     </article>
   );
 }

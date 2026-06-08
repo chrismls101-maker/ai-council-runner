@@ -6,10 +6,12 @@
  */
 
 import { execSync, spawn, spawnSync } from "node:child_process";
+import { get as httpGet } from "node:http";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { pickPreferredVirtualAudioDevice } from "../../src/shared/virtualAudioCapture.ts";
+import { isSystemAudioConnected } from "../../src/shared/systemAudioUi.ts";
 import { chromium } from "@playwright/test";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -76,12 +78,13 @@ async function waitForCdp(url, electronProcess, timeoutMs = CDP_STARTUP_TIMEOUT_
     if (electronProcess?.exitCode != null) {
       throw new Error(`Glass exited before CDP ready (code ${electronProcess.exitCode})`);
     }
-    try {
-      const res = await fetch(`${url}/json/version`);
-      if (res.ok) return;
-    } catch {
-      /* retry */
-    }
+    const ready = await new Promise((resolve) => {
+      httpGet(`${url}/json/version`, (res) => {
+        res.resume();
+        resolve(res.statusCode === 200);
+      }).on("error", () => resolve(false));
+    });
+    if (ready) return;
     await new Promise((r) => setTimeout(r, 250));
   }
   throw new Error(`CDP not ready at ${url} within ${timeoutMs}ms`);
@@ -183,7 +186,7 @@ function findBlackHoleDevice(devices) {
 
 async function ensurePanelOpen(dock, panel) {
   await dock.locator('[data-testid="glass-dock-open-panel"]').click();
-  await panel.waitForSelector('[data-testid="glass-mode-panel"]', { timeout: 12_000 });
+  await panel.waitForSelector('[data-testid="glass-panel"]', { timeout: 12_000 });
 }
 
 async function openSetupTab(panel) {
@@ -191,26 +194,172 @@ async function openSetupTab(panel) {
   await panel.waitForSelector('[data-testid="glass-panel-setup"]', { timeout: 8_000 });
 }
 
-async function openSummaryTab(panel) {
-  await panel.locator('[data-testid="glass-panel-tab-summary"]').click();
+async function openCopilotTab(panel) {
+  await panel.locator('[data-testid="glass-panel-tab-copilot"]').click();
   await panel.waitForSelector('[data-testid="glass-mode-panel"]', { timeout: 8_000 });
 }
 
-/** Run setup check + probe virtual audio (UI click + IPC for speed). */
-async function runFastSetupCheck({ command, panel, log }) {
-  log("  1/3 Run Setup Check…");
+async function openAudioTab(panel) {
+  await panel.locator('[data-testid="glass-panel-tab-audio"]').click();
+  await panel.waitForSelector('[data-testid="glass-panel-audio-tab"]', { timeout: 8_000 });
+}
+
+function setupPermissionsLevel(rows) {
+  const filtered = (rows ?? []).filter((row) => row.id !== "systemAudio");
+  if (filtered.some((row) => row.severity === "error")) return "error";
+  if (filtered.some((row) => row.severity === "warn")) return "warn";
+  return "ok";
+}
+
+function isIivoGlassConnected(state) {
+  if (!state.setupCheckSummary?.trim()) return false;
+  if (!isSystemAudioConnected(state.systemAudioStatus)) return false;
+  const rows = state.setupCapabilities ?? [];
+  if (rows.length === 0) return false;
+  const server = rows.find((row) => row.id === "server");
+  if (server?.severity === "error") return false;
+  return setupPermissionsLevel(rows) !== "error";
+}
+
+/** Click CONNECT IIVO GLASS on Setup — connects server, permissions, and system audio. */
+async function connectIivoGlassViaSetup({ command, panel, log }) {
+  log("  1/3 Connect IIVO Glass…");
   await openSetupTab(panel);
-  await Promise.all([
-    panel.locator('[data-testid="glass-run-setup-check"]').click(),
-    command.evaluate(() => {
-      window.glass.send({ type: "probe-virtual-audio-devices" });
-      window.glass.send({ type: "run-setup-check" });
-    }),
-  ]);
-  await pollUntil(async () => {
-    const state = await readGlassState(command);
-    return (state.setupCapabilities?.length ?? 0) > 0 ? state : null;
-  }, 8_000);
+
+  let state = await readGlassState(command);
+  if (isIivoGlassConnected(state)) {
+    log("  Already connected (server + system audio)");
+    return { ok: true, state };
+  }
+
+  await panel.locator('[data-testid="glass-run-setup-check"]').click();
+  state = await pollUntil(async () => {
+    const s = await readGlassState(command);
+    return isIivoGlassConnected(s) ? s : null;
+  }, 30_000);
+
+  if (!state) {
+    const last = await readGlassState(command);
+    return {
+      ok: false,
+      category: "setup_failed",
+      cause: last.setupCheckSummary ?? "Connect IIVO Glass did not finish.",
+      fix: "Open Setup → CONNECT IIVO GLASS, grant permissions, confirm BlackHole routing.",
+      state: last,
+    };
+  }
+
+  log(`  Connected · system audio: ${state.systemAudioStatus}`);
+  return { ok: true, state };
+}
+
+/**
+ * Audio tab fallback when Connect did not bring system audio online.
+ */
+async function ensureSystemAudioViaAudioTab({ command, panel, log }) {
+  log("  2/3 Verify system audio…");
+
+  let state = await readGlassState(command);
+  if (isSystemAudioConnected(state.systemAudioStatus)) {
+    log("  System audio online");
+    return { ok: true, state };
+  }
+
+  log("  Audio not connected — Audio tab fallback…");
+  await openAudioTab(panel);
+
+  async function detectDevices() {
+    await Promise.all([
+      panel.locator('[data-testid="glass-detect-audio-devices"]').click(),
+      command.evaluate(() => window.glass.send({ type: "probe-virtual-audio-devices" })),
+    ]);
+    await sleep(900);
+  }
+
+  await detectDevices();
+  state = await pollUntil(async () => {
+    const s = await readGlassState(command);
+    return findBlackHoleDevice(s.virtualAudioDevices) ? s : null;
+  }, 12_000);
+  state = state ?? (await readGlassState(command));
+
+  let device = findBlackHoleDevice(state.virtualAudioDevices);
+  const savedId = state.selectedVirtualAudioDeviceId?.trim();
+  if (!device && savedId) {
+    device = state.virtualAudioDevices?.find((d) => d.deviceId === savedId);
+  }
+
+  if (!device?.deviceId) {
+    await detectDevices();
+    state = await readGlassState(command);
+    device = findBlackHoleDevice(state.virtualAudioDevices);
+  }
+
+  if (!device?.deviceId) {
+    const labels = (state.virtualAudioDevices ?? []).map((d) => d.label).join(", ") || "none";
+    return {
+      ok: false,
+      category: "blackhole_no_signal",
+      cause: `No BlackHole device found (detected: ${labels}).`,
+      fix:
+        "Install BlackHole 2ch, route Mac output through Multi-Output Device, then re-run. " +
+        "Press play on your video while the harness runs.",
+      state,
+    };
+  }
+
+  if (state.selectedVirtualAudioDeviceId !== device.deviceId) {
+    log(`  Selecting: ${device.label}`);
+    await panel.locator('[data-testid="glass-system-audio-source-select"]').selectOption(device.deviceId);
+    await sleep(400);
+  }
+
+  if (!isSystemAudioConnected(state.systemAudioStatus)) {
+    log("  Connecting system audio…");
+    await Promise.all([
+      panel.locator('[data-testid="glass-connect-system-audio"]').click(),
+      command.evaluate(() => window.glass.send({ type: "connect-system-audio" })),
+    ]);
+    await sleep(800);
+  }
+
+  state = await readGlassState(command);
+  if (!isSystemAudioConnected(state.systemAudioStatus)) {
+    log("  Testing signal — press play on your video if it is paused…");
+    await Promise.all([
+      panel.locator('[data-testid="glass-test-system-audio-bar"]').click(),
+      command.evaluate(() => window.glass.send({ type: "test-system-audio" })),
+    ]);
+    state = await pollUntil(async () => {
+      const s = await readGlassState(command);
+      return isSystemAudioConnected(s.systemAudioStatus) ? s : null;
+    }, 10_000);
+  }
+
+  state = state ?? (await readGlassState(command));
+  if (isSystemAudioConnected(state.systemAudioStatus)) {
+    log(`  System audio online (${device.label})`);
+    return { ok: true, state, device };
+  }
+
+  if (state.systemAudioStatus === "requires_permission") {
+    return {
+      ok: false,
+      category: "screen_capture_failed",
+      cause: state.systemAudioDetail ?? "Screen/System Audio permission not granted to IIVO Glass.",
+      fix:
+        "Grant Screen Recording to IIVO Glass/Electron in System Settings → Privacy, then re-run.",
+      state,
+    };
+  }
+
+  return {
+    ok: false,
+    category: "blackhole_no_signal",
+    cause: state.systemAudioDetail ?? `System audio not ready (status: ${state.systemAudioStatus}).`,
+    fix: "Press play on your video, confirm Multi-Output Device includes BlackHole, then re-run.",
+    state,
+  };
 }
 
 /**
@@ -338,8 +487,8 @@ export async function configureSystemAudioForListen({ command, panel, log = cons
 }
 
 async function clickListenMode({ command, panel, log }) {
-  log("  3/3 Listen mode…");
-  await openSummaryTab(panel);
+  log("  3/3 Listen mode (10s countdown, then capture)…");
+  await openCopilotTab(panel);
   const listenCard = panel.locator('[data-testid="glass-mode-card-listen"]');
   await listenCard.waitFor({ state: "visible", timeout: 8_000 });
   await listenCard.click({ force: true });
@@ -348,50 +497,60 @@ async function clickListenMode({ command, panel, log }) {
   if (await configureBtn.isVisible({ timeout: 1200 }).catch(() => false)) {
     log("  Listen prompted for audio setup — configuring…");
     await configureBtn.click();
-    const audio = await configureSystemAudioForListen({ command, panel, log });
+    const audio = await ensureSystemAudioViaAudioTab({ command, panel, log });
     if (!audio.ok) return audio;
-    await openSummaryTab(panel);
+    await openCopilotTab(panel);
     await listenCard.click({ force: true });
   }
+
+  await command.evaluate(() => {
+    window.glass.send({ type: "transcription-set-mode", mode: "system_audio" });
+    window.glass.send({ type: "request-start-listening" });
+  });
 
   return { ok: true };
 }
 
 async function waitForListeningActive({ command, log }) {
+  let nudged = false;
+  let lastCountdown = -1;
   const state = await pollUntil(async () => {
     const s = await readGlassState(command);
+    const counting = s.listenCountdownSeconds != null && s.listenCountdownSeconds > 0;
+    if (counting && s.listenCountdownSeconds !== lastCountdown) {
+      lastCountdown = s.listenCountdownSeconds;
+      log(`  … countdown ${s.listenCountdownSeconds}s before listening`);
+    }
+    if (counting) return null;
     const elapsed = s.stt?.listeningElapsedMs ?? 0;
     if (s.privacy?.listening && elapsed >= 800 && s.transcriptionMode === "system_audio") {
       return s;
     }
-    await command.evaluate(() => {
-      window.glass.send({ type: "transcription-set-mode", mode: "system_audio" });
-      window.glass.send({ type: "request-start-listening" });
-    });
+    if (!nudged && !counting && !s.privacy?.listening) {
+      nudged = true;
+      log("  … nudging system_audio listen start");
+      await command.evaluate(() => {
+        window.glass.send({ type: "transcription-set-mode", mode: "system_audio" });
+        window.glass.send({ type: "request-start-listening" });
+      });
+    }
     return null;
-  }, 25_000, 500);
+  }, 60_000, 500);
 
-  if (state) return state;
-
-  let lastErr = "";
-  const fallback = await pollUntil(async () => {
-    const s = await readGlassState(command);
-    lastErr = s.stt?.lastError ?? s.lastError ?? "";
-    const elapsed = s.stt?.listeningElapsedMs ?? 0;
-    if (s.privacy?.listening && elapsed >= 800 && s.transcriptionMode === "system_audio") return s;
-    return null;
-  }, 15_000, 400);
-
-  if (!fallback && lastErr) log(`  STT/status: ${lastErr}`);
-  return fallback;
+  if (!state) {
+    const last = await readGlassState(command);
+    const lastErr = last.stt?.lastError ?? last.lastError ?? "";
+    if (lastErr) log(`  STT/status: ${lastErr}`);
+  }
+  return state;
 }
 
 /**
- * Fast automate: Setup Check → System Audio → Listen card.
+ * Fast automate: Connect IIVO Glass → audio backup → Copilot Listen → countdown → listening.
  * Open YouTube separately (before calling this) so you can press play during audio test.
  */
 export async function automateListenMode({ command, dock, panel, endurance, log = console.log }) {
-  log("Automating Listen mode (fast: setup check → audio → Listen)…");
+  log("Automating Listen mode (Connect → audio → Listen + countdown)…");
 
   const maxListeningMin = endurance?.maxListeningMinutes ?? 0;
   const attention = endurance?.attention ?? "balanced";
@@ -413,9 +572,11 @@ export async function automateListenMode({ command, dock, panel, endurance, log 
   await sleep(150);
 
   await ensurePanelOpen(dock, panel);
-  await runFastSetupCheck({ command, panel, log });
 
-  const audioConfig = await configureSystemAudioForListen({ command, panel, log });
+  const connectResult = await connectIivoGlassViaSetup({ command, panel, log });
+  if (!connectResult.ok) return connectResult;
+
+  const audioConfig = await ensureSystemAudioViaAudioTab({ command, panel, log });
   if (!audioConfig.ok) return audioConfig;
 
   const listenClick = await clickListenMode({ command, panel, log });
@@ -447,6 +608,29 @@ export async function automateListenMode({ command, dock, panel, endurance, log 
   return { ok: true, state };
 }
 
+/** Re-connect audio and re-arm Listen when transcript stalls during a long run. */
+export async function attemptListenRecovery({ command, dock, panel, endurance, log = console.log }) {
+  log("  [auto-fix] Transcript stalled — reconnecting audio and Listen…");
+  await ensurePanelOpen(dock, panel);
+  const audio = await ensureSystemAudioViaAudioTab({ command, panel, log });
+  if (!audio.ok) return audio;
+  const listen = await clickListenMode({ command, panel, log });
+  if (!listen.ok) return listen;
+  const state = await waitForListeningActive({ command, log });
+  if (!state) {
+    const last = await readGlassState(command);
+    return {
+      ok: false,
+      category: "recovery_failed",
+      cause: "Listen did not restart after auto-fix.",
+      fix: "Check BlackHole routing and press play on the video.",
+      state: last,
+    };
+  }
+  log("  [auto-fix] Listen recovered");
+  return { ok: true, state };
+}
+
 export async function closeGlassSession({ browser, electronProcess, log = console.log }) {
   try {
     await browser?.close();
@@ -472,9 +656,9 @@ export function printSetupInstructions(log = console.log) {
   log("");
   log("  2. Harness opens YouTube immediately — press play while Glass configures.");
   log("");
-  log("  3. BlackHole routing Mac audio — harness auto-clicks Setup → audio → Listen.");
+  log("  3. BlackHole routing Mac audio — harness clicks Setup → Connect, Audio fallback, Copilot Listen.");
   log("");
-  log("  AUTO MODE: no manual panel hunting — fast setup check, audio, Listen card.");
+  log("  AUTO MODE: Connect IIVO Glass, verify audio, Listen card, 10s countdown, then capture.");
   log("");
   log("══════════════════════════════════════════════════════════════");
   log("");

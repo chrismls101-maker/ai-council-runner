@@ -1,10 +1,8 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { send, useGlassState } from "../useGlassState.ts";
 import type { GlassCommand } from "../../shared/ipc.ts";
 import type { GlassCapabilityRow, GlassSetupActionType } from "../../shared/glassCapabilities.ts";
-import { mapPermissionsApiToMic } from "../../shared/glassCapabilities.ts";
-import { reportVirtualAudioDevices } from "./virtualAudioScan.ts";
-import { SystemAudioConfigure } from "./SystemAudioConfigure.tsx";
+import { connectIivoGlass, isIivoGlassConnected } from "./connectIivoGlass.ts";
 
 function severityClass(severity: GlassCapabilityRow["severity"]): string {
   return `status-dot status-dot--${severity}`;
@@ -14,44 +12,59 @@ function sendSetupAction(action: GlassSetupActionType): void {
   send({ type: action } as GlassCommand);
 }
 
-async function queryMicPermissionWithoutPrompt(): Promise<void> {
-  if (!navigator.permissions?.query) return;
-  try {
-    const result = await navigator.permissions.query({
-      name: "microphone" as PermissionName,
-    });
-    send({
-      type: "report-mic-permission",
-      status: mapPermissionsApiToMic(result.state),
-    });
-  } catch {
-    /* Permissions API unavailable */
-  }
-}
-
 export function SetupSection(): JSX.Element {
   const state = useGlassState();
   const rows = (state.setupCapabilities ?? []).filter((row) => row.id !== "systemAudio");
+  const [connecting, setConnecting] = useState(false);
+  const connected = isIivoGlassConnected({
+    setupCheckSummary: state.setupCheckSummary,
+    setupCapabilities: state.setupCapabilities,
+    systemAudioStatus: state.systemAudioStatus,
+  });
 
-  const runSetupCheck = useCallback(async () => {
-    await queryMicPermissionWithoutPrompt();
-    await reportVirtualAudioDevices();
-    send({ type: "run-setup-check" });
+  useEffect(() => {
+    if (connecting && connected) setConnecting(false);
+  }, [connecting, connected]);
+
+  useEffect(() => {
+    if (!connecting) return;
+    const timer = window.setTimeout(() => setConnecting(false), 12_000);
+    return () => window.clearTimeout(timer);
+  }, [connecting]);
+
+  const handleConnect = useCallback(async () => {
+    setConnecting(true);
+    await connectIivoGlass();
   }, []);
+
+  const connectLabel = connecting
+    ? "CONNECTING IIVO GLASS…"
+    : connected
+      ? "IIVO GLASS CONNECTED"
+      : "CONNECT IIVO GLASS";
 
   return (
     <div className="setup-section" data-testid="glass-panel-setup">
+      <div className="setup-section__connect-row">
+        <button
+          type="button"
+          className={`gbtn gbtn--connect-glass${connected ? " gbtn--connect-glass--connected" : " gbtn--primary"}${connecting ? " gbtn--connect-glass--busy" : ""}`}
+          data-testid="glass-run-setup-check"
+          data-connected={connected ? "true" : "false"}
+          aria-pressed={connected}
+          disabled={connecting}
+          onClick={() => void handleConnect()}
+        >
+          <span
+            className={`connect-glass__dot ${connected ? "connect-glass__dot--on" : "connect-glass__dot--off"}`}
+            aria-hidden="true"
+          />
+          <span className="connect-glass__label">{connectLabel}</span>
+        </button>
+      </div>
       <div className="setup-section__head">
         <p className="section-title">Setup</p>
         <div className="setup-section__head-actions">
-          <button
-            type="button"
-            className="gbtn gbtn--small"
-            data-testid="glass-run-setup-check"
-            onClick={() => void runSetupCheck()}
-          >
-            Run Setup Check
-          </button>
           <button
             type="button"
             className="gbtn gbtn--small"
@@ -63,6 +76,7 @@ export function SetupSection(): JSX.Element {
         </div>
       </div>
       <AppIdentityPanel />
+      <SystemUpdatePanel />
       {state.duplicateAppWarning ? (
         <p className="setup-section__warning" data-testid="glass-duplicate-app-warning">
           {state.duplicateAppWarning}
@@ -79,7 +93,6 @@ export function SetupSection(): JSX.Element {
           {state.captureDiagnosticsReport.lines.join("\n")}
         </pre>
       ) : null}
-      <SystemAudioConfigure />
       <ul className="setup-section__rows">
         {rows.map((row) => (
           <li key={row.id} className="setup-section__row" data-testid={`glass-setup-row-${row.id}`}>
@@ -154,6 +167,67 @@ function AppIdentityPanel(): JSX.Element | null {
           </ul>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function SystemUpdatePanel(): JSX.Element {
+  const { appUpdate, appIdentityReport } = useGlassState();
+  const isDev = appIdentityReport?.runningMode === "dev";
+  const updateReady = appUpdate.phase === "available" || appUpdate.phase === "installing";
+  const updateDismissed = appUpdate.phase === "dismissed";
+
+  let status = `v${appUpdate.currentVersion} — up to date`;
+  if (appUpdate.phase === "checking") status = "Checking for updates…";
+  else if (updateReady && appUpdate.latestVersion) {
+    status = `Update available: v${appUpdate.latestVersion}`;
+  } else if (updateDismissed && appUpdate.latestVersion) {
+    status = `v${appUpdate.latestVersion} ready (dismissed)`;
+  } else if (appUpdate.latestVersion && appUpdate.latestVersion !== appUpdate.currentVersion) {
+    status = `Latest published: v${appUpdate.latestVersion}`;
+  }
+
+  return (
+    <div className="setup-section__update" data-testid="glass-setup-system-update">
+      <p className="setup-section__identity-title">System update</p>
+      {isDev ? (
+        <p className="hint setup-section__dev-hint" data-testid="glass-dev-mode-hint">
+          Dev mode — UI reloads automatically. Run{" "}
+          <code>npm run glass:dev</code> from the repo root while iterating; only build a DMG when
+          shipping a release.
+        </p>
+      ) : null}
+      <p className="hint setup-section__update-status">{status}</p>
+      <div className="setup-section__update-actions">
+        <button
+          type="button"
+          className="gbtn gbtn--small"
+          data-testid="glass-check-for-update"
+          onClick={() => send({ type: "glass-update-check" })}
+        >
+          Check for updates
+        </button>
+        {updateReady ? (
+          <button
+            type="button"
+            className="gbtn gbtn--small gbtn--primary"
+            data-testid="glass-setup-apply-update"
+            onClick={() => send({ type: "glass-update-apply" })}
+          >
+            Update now
+          </button>
+        ) : null}
+        {updateDismissed ? (
+          <button
+            type="button"
+            className="gbtn gbtn--small"
+            data-testid="glass-setup-show-update"
+            onClick={() => send({ type: "glass-update-check" })}
+          >
+            Show update prompt
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

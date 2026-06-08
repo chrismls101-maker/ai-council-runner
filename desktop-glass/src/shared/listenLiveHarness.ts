@@ -3,6 +3,7 @@
  * and report building. Shared by the live QA script and unit tests.
  */
 
+import { iivoApiAuthHeaders } from "./iivoApiAuth.ts";
 import {
   decideListenCardSurface,
   initialListenCardRuntimeState,
@@ -209,7 +210,10 @@ export async function runServerPreflight(apiUrl: string): Promise<ServerPrefligh
   let health: Record<string, unknown> | undefined;
 
   try {
-    const res = await fetch(`${apiUrl}/api/health`, { signal: AbortSignal.timeout(10_000) });
+    const res = await fetch(`${apiUrl}/api/health`, {
+      signal: AbortSignal.timeout(10_000),
+      headers: iivoApiAuthHeaders(),
+    });
     health = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     if (!res.ok || !health.ok) {
       failures.push({

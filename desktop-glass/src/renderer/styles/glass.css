@@ -168,6 +168,40 @@
   overflow-y: auto;
   overflow-x: hidden;
   min-height: 0;
+  margin: 0 -2px;
+  padding: 0 2px 2px;
+  border-radius: 10px;
+  background: linear-gradient(165deg, rgba(10, 12, 18, 0.94), rgba(6, 8, 14, 0.9));
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.28) rgba(10, 12, 18, 0.94);
+}
+
+.glass-chat-reply__scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.glass-chat-reply__scroll::-webkit-scrollbar-track {
+  background: linear-gradient(165deg, rgba(10, 12, 18, 0.94), rgba(6, 8, 14, 0.9));
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.22);
+}
+
+.glass-chat-reply__scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(28, 32, 42, 0.98), rgba(12, 14, 20, 0.98));
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 0 8px rgba(255, 255, 255, 0.18);
+}
+
+.glass-chat-reply__scroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(38, 44, 56, 0.98), rgba(16, 18, 26, 0.98));
+  border-color: rgba(255, 255, 255, 0.32);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 0 10px rgba(255, 255, 255, 0.28);
 }
 
 .glass-chat-reply__answer {
@@ -1708,6 +1742,10 @@ html.glass-dock-window #root {
   opacity: 0;
 }
 
+.overlay-root--onboarding {
+  pointer-events: auto;
+}
+
 .overlay-root--update-only,
 .overlay-root--countdown-only {
   pointer-events: auto;
@@ -2035,6 +2073,7 @@ html.glass-dock-window #root {
   width: 450px;
   max-width: 450px;
   min-width: 450px;
+  pointer-events: auto;
 }
 
 .glass-notification-host--fading {

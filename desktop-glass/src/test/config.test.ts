@@ -10,10 +10,10 @@ import {
   buildIivoChatUrl,
 } from "../shared/config.ts";
 
-test("defaults to localhost web + api", () => {
+test("defaults to production web + api", () => {
   const config = resolveConfig({});
-  assert.equal(config.iivoWebUrl, "http://localhost:5173");
-  assert.equal(config.iivoApiUrl, "http://localhost:3001");
+  assert.equal(config.iivoWebUrl, "https://iivo.ai");
+  assert.equal(config.iivoApiUrl, "https://iivo.ai");
   assert.equal(config.overlayEnabled, true);
   assert.equal(config.overlayMode, "passive");
 });
@@ -62,15 +62,15 @@ test("blank env falls back to defaults", () => {
 
 test("builds api + handoff urls", () => {
   const config = resolveConfig({});
-  assert.equal(buildContextApiUrl(config), "http://localhost:3001/api/context");
+  assert.equal(buildContextApiUrl(config), "https://iivo.ai/api/context");
   assert.equal(
     buildScreenshotApiUrl(config, "abc 123"),
-    "http://localhost:3001/api/context/abc%20123/screenshot",
+    "https://iivo.ai/api/context/abc%20123/screenshot",
   );
-  assert.equal(buildLensAskUrl(config, "ctx1"), "http://localhost:5173/?lensAsk=ctx1");
+  assert.equal(buildLensAskUrl(config, "ctx1"), "https://iivo.ai/dashboard?lensAsk=ctx1");
   assert.equal(
     buildLensContextUrl(config, "ctx1"),
-    "http://localhost:5173/?lensContextId=ctx1",
+    "https://iivo.ai/dashboard?lensContextId=ctx1",
   );
-  assert.equal(buildIivoChatUrl(config), "http://localhost:5173/");
+  assert.equal(buildIivoChatUrl(config), "https://iivo.ai/dashboard");
 });

@@ -2,23 +2,27 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { GlassState } from "../../shared/ipc.ts";
 import type { OverlayMode } from "../../shared/glassWindowTypes.ts";
 import type { GlassSessionInsight } from "../../shared/sessionTypes.ts";
-import type { GlassCommandFeedItem } from "../../shared/commandFeed.ts";
-import { filterFeedToSingleListenCard } from "../../shared/listenCardState.ts";
 import {
   isOverlayCardEventKind,
   overlayCardFromEvent,
 } from "../../shared/overlayCards.ts";
 import { send, useGlassState } from "../useGlassState.ts";
 import { CopilotOverlay } from "./CopilotOverlay.tsx";
+import { GlassNotificationHost } from "./GlassNotificationHost.tsx";
 import { GlassUpdateOverlay } from "./GlassUpdateOverlay.tsx";
+import { GlassOnboardingOverlay } from "./GlassOnboardingOverlay.tsx";
 import { LiveTranslateCaptionsOverlay } from "./LiveTranslateCaptionsOverlay.tsx";
+import { useGlassNotification } from "./useGlassNotification.ts";
+import { overlayNotificationBottomPx } from "../../shared/glassLayoutMath.ts";
+import {
+  nextOverlayInteractiveCount,
+  overlayFeedNotificationActive,
+  overlayRequiresAlwaysInteractive,
+  overlayShouldEnableClickThrough,
+} from "../../shared/overlayPointerPolicy.ts";
 
 const CARD_TTL_MS = 8_000;
-const FEED_CARD_TTL_MS = 12_000;
-const TOAST_TTL_MS = 5_000;
 const MAX_CARDS = 4;
-const MAX_FEED_CARDS = 5;
-const MAX_TOASTS = 3;
 /** Built-in primary display — locked; sits at dock edge (workArea bottom). */
 const PRIMARY_FRAME_BOTTOM_INSET_PX = 10;
 /** HDMI / external TV — same bottom alignment when Glass is on Display 2+. */
@@ -47,17 +51,22 @@ function overlayFrameBottomInsetPx(state: GlassState): number {
   return PRIMARY_FRAME_BOTTOM_INSET_PX;
 }
 
+function overlayLayoutStyle(state: GlassState): CSSProperties {
+  const frameBottom = overlayFrameBottomInsetPx(state);
+  return {
+    "--overlay-frame-bottom": `${frameBottom}px`,
+    "--overlay-notification-bottom": `${overlayNotificationBottomPx({
+      commandBarOverlayClearancePx: state.commandBarOverlayClearancePx,
+      commandBarStackHeightPx: state.commandBarStackHeightPx,
+    })}px`,
+  } as CSSProperties;
+}
+
 type FloatingCard = {
   id: string;
   title: string;
   body: string;
   kind: "event" | "insight";
-};
-
-type Toast = {
-  id: string;
-  message: string;
-  tone: "info" | "success" | "capture" | "listen";
 };
 
 function overlayCardFromInsight(insight: GlassSessionInsight): FloatingCard {
@@ -200,317 +209,88 @@ function useOverlayCards(state: GlassState, enabled: boolean): {
   return { cards, dismissCard };
 }
 
-/**
- * Surfaces command-bar responses (and other feed items) as floating glass cards.
- * Items auto-fade after a TTL unless pinned. Always active while the overlay is
- * visible — the command bar is the primary surface, not the insights panel.
- */
-function useCommandFeedCards(state: GlassState, enabled: boolean): GlassCommandFeedItem[] {
-  const [aged, setAged] = useState<Set<string>>(new Set());
-  const seenRef = useRef<Set<string>>(new Set());
-  const seededRef = useRef(false);
-
-  useEffect(() => {
-    if (!enabled) return;
-    const feed = state.commandFeed ?? [];
-
-    if (!seededRef.current) {
-      // Don't replay history on overlay load; age pre-existing items immediately.
-      const preexisting = new Set<string>();
-      for (const item of feed) {
-        seenRef.current.add(item.id);
-        if (!item.pinned) preexisting.add(item.id);
-      }
-      if (preexisting.size > 0) setAged((prev) => new Set([...prev, ...preexisting]));
-      seededRef.current = true;
-      return;
-    }
-
-    for (const item of feed) {
-      if (seenRef.current.has(item.id)) continue;
-      seenRef.current.add(item.id);
-      const id = item.id;
-      window.setTimeout(() => {
-        setAged((prev) => new Set(prev).add(id));
-      }, FEED_CARD_TTL_MS);
-    }
-  }, [enabled, state.commandFeed]);
-
-  if (!enabled) return [];
-  const visible = (state.commandFeed ?? [])
-    .filter((item) => item.pinned || !aged.has(item.id))
-    .slice(-MAX_FEED_CARDS);
-  return filterFeedToSingleListenCard(visible);
-}
-
-function useOverlayToasts(state: GlassState, enabled: boolean): Toast[] {
-  const [toasts, setToasts] = useState<Toast[]>([]);
-  const seenNoticeRef = useRef<string | undefined>();
-  const seenMomentsRef = useRef<Set<string>>(new Set());
-  const seededMomentsRef = useRef(false);
-
-  const pushToast = (message: string, tone: Toast["tone"]): void => {
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    setToasts((current) => [{ id, message, tone }, ...current].slice(0, MAX_TOASTS));
-    window.setTimeout(() => {
-      setToasts((current) => current.filter((item) => item.id !== id));
-    }, TOAST_TTL_MS);
-  };
-
-  useEffect(() => {
-    if (!enabled) return;
-    if (state.lastNotice && state.lastNotice !== seenNoticeRef.current) {
-      seenNoticeRef.current = state.lastNotice;
-      pushToast(state.lastNotice, "info");
-    }
-  }, [enabled, state.lastNotice]);
-
-  useEffect(() => {
-    if (!enabled) return;
-    if (!seededMomentsRef.current) {
-      for (const moment of state.moments) seenMomentsRef.current.add(moment.id);
-      seededMomentsRef.current = true;
-      return;
-    }
-    for (const moment of state.moments) {
-      if (seenMomentsRef.current.has(moment.id)) continue;
-      seenMomentsRef.current.add(moment.id);
-      pushToast(`Saved moment: ${moment.note.slice(0, 80)}`, "success");
-    }
-  }, [enabled, state.moments]);
-
-  const wasListeningRef = useRef(false);
-  const wasCapturingRef = useRef(false);
-
-  useEffect(() => {
-    if (!enabled) return;
-    if (state.privacy.listening && !wasListeningRef.current) {
-      pushToast("Listening started", "listen");
-    }
-    wasListeningRef.current = state.privacy.listening;
-  }, [enabled, state.privacy.listening]);
-
-  useEffect(() => {
-    if (!enabled) return;
-    if (state.privacy.capturing && !wasCapturingRef.current) {
-      pushToast("Capturing screen…", "capture");
-    }
-    wasCapturingRef.current = state.privacy.capturing;
-  }, [enabled, state.privacy.capturing]);
-
-  return toasts;
-}
-
-async function copyFeedText(text: string): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch {
-    /* clipboard may be unavailable */
-  }
-}
-
-function VisualAskRetentionHint(): JSX.Element | null {
-  const state = useGlassState();
-  const retention = state.visualAskRetention;
-  if (!retention?.usedForAnswer) return null;
-  return (
-    <p className="overlay-feed-card__retention" data-testid="glass-visual-ask-retention">
-      {retention.label}
-      {retention.detail ? ` · ${retention.detail}` : ""}
-    </p>
-  );
-}
-
-function FeedCard({
-  item,
-  enterInteractive,
-  leaveInteractive,
-}: {
-  item: GlassCommandFeedItem;
-  enterInteractive: () => void;
-  leaveInteractive: () => void;
-}): JSX.Element {
-  const state = useGlassState();
-  const [expanded, setExpanded] = useState(false);
-  const [showActions, setShowActions] = useState(false);
-  const isListenInsight = Boolean(item.listenMomentId);
-  const isLooking = item.kind === "looking";
-  const isThinking = item.kind === "thinking";
-  const isResponse = item.kind === "response";
-  const isError = item.kind === "error";
-  const displayBody =
-    expanded && item.fullBody ? item.fullBody : item.body;
-  const canExpand = isListenInsight
-    ? Boolean(item.fullBody)
-    : Boolean(item.fullBody && item.fullBody !== item.body);
-  const bodyOverflows = canExpand && !expanded;
-
-  return (
-    <article
-      data-testid={
-        isLooking
-          ? "glass-overlay-looking-card"
-          : isThinking
-            ? "glass-overlay-thinking-card"
-            : isResponse
-              ? "glass-overlay-response-card"
-              : "glass-overlay-card"
-      }
-      className={`overlay-feed-card overlay-feed-card--${item.kind}${item.pinned ? " overlay-feed-card--pinned" : ""}${isListenInsight ? " overlay-feed-card--listen" : ""}${expanded ? " overlay-feed-card--expanded" : ""}`}
-      onMouseEnter={enterInteractive}
-      onMouseLeave={leaveInteractive}
-    >
-      <div className="overlay-feed-card__eyebrow">
-        <span className="overlay-feed-card__dot" aria-hidden="true" />
-        {item.title}
-      </div>
-      <div className={`overlay-feed-card__body-wrap${bodyOverflows ? " overlay-feed-card__body-wrap--fade" : ""}`}>
-        <p className="overlay-feed-card__body">{displayBody}</p>
-        {bodyOverflows ? (
-          <span className="overlay-feed-card__more-hint" aria-hidden="true">
-            More…
-          </span>
-        ) : null}
-      </div>
-      {isResponse ? <VisualAskRetentionHint /> : null}
-      {!isThinking && !isLooking ? (
-        <div className="overlay-feed-card__actions">
-          {(isResponse || isError) && item.body ? (
-            <button type="button" className="gbtn gbtn--ghost" onClick={() => void copyFeedText(item.fullBody ?? item.body)}>
-              Copy
-            </button>
-          ) : null}
-          {canExpand ? (
-            <button
-              type="button"
-              className="gbtn gbtn--ghost"
-              data-testid="glass-overlay-feed-expand"
-              onClick={() => setExpanded((v) => !v)}
-            >
-              {expanded ? "Collapse" : "Expand"}
-            </button>
-          ) : null}
-          {isListenInsight && !showActions ? (
-            <button
-              type="button"
-              className="gbtn gbtn--ghost"
-              data-testid="glass-overlay-listen-more-actions"
-              onClick={() => setShowActions(true)}
-            >
-              More actions
-            </button>
-          ) : null}
-          {isListenInsight && showActions ? (
-            <>
-              <button type="button" className="gbtn gbtn--ghost" onClick={() => send({ type: "save-feed-moment", id: item.id })}>
-                Save
-              </button>
-              <button
-                type="button"
-                className="gbtn gbtn--ghost"
-                data-testid="glass-overlay-open-iivo"
-                onClick={() => send({ type: "open-feed-in-iivo", id: item.id })}
-              >
-                Turn into action
-              </button>
-              <button type="button" className="gbtn gbtn--ghost" onClick={() => setShowActions(false)}>
-                Dismiss actions
-              </button>
-            </>
-          ) : null}
-          {!isListenInsight ? (
-            <>
-              <button
-                type="button"
-                className="gbtn gbtn--ghost"
-                onClick={() => send({ type: "pin-command-feed-item", id: item.id, pinned: !item.pinned })}
-              >
-                {item.pinned ? "Unpin" : "Pin"}
-              </button>
-              {isResponse ? (
-                <>
-                  <button type="button" className="gbtn gbtn--ghost" onClick={() => send({ type: "save-feed-moment", id: item.id })}>
-                    Save Moment
-                  </button>
-                  {state.visualAskRetention?.kind === "not_saved" && state.session ? (
-                    <button
-                      type="button"
-                      className="gbtn gbtn--ghost"
-                      data-testid="glass-save-visual-capture"
-                      onClick={() => send({ type: "save-last-visual-capture" })}
-                    >
-                      Save screen
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    data-testid="glass-overlay-open-iivo"
-                    className="gbtn gbtn--primary"
-                    onClick={() => send({ type: "open-feed-in-iivo", id: item.id })}
-                  >
-                    Open in IIVO
-                  </button>
-                </>
-              ) : null}
-              {isError ? (
-                <button type="button" className="gbtn gbtn--primary" onClick={() => send({ type: "open-feed-in-iivo", id: item.id })}>
-                  Open in IIVO
-                </button>
-              ) : null}
-            </>
-          ) : null}
-        </div>
-      ) : null}
-    </article>
-  );
-}
-
 export function Overlay(): JSX.Element {
   const state = useGlassState();
+  const onboardingOpen = state.onboardingOpen;
+
+  useEffect(() => {
+    if (onboardingOpen) {
+      window.glass.setIgnoreMouse(false);
+    }
+  }, [onboardingOpen]);
+
   const overlayMode = state.windows?.overlayMode ?? state.config.overlayMode ?? "passive";
-  const overlayVisible = state.windows?.overlayVisible ?? state.config.overlayEnabled;
-  const showInsights = overlayVisible && overlayMode === "insights";
+  const overlayContentVisible =
+    (state.windows?.overlayVisible ?? state.config.overlayEnabled) && overlayMode !== "hidden";
+  const notificationEnabled = !onboardingOpen;
+  const { notification, fading, onChatHoverStart, onChatHoverEnd } = useGlassNotification(
+    state,
+    notificationEnabled,
+  );
+  const notificationVisible = Boolean(notification);
   const updateVisible =
     state.appUpdate.phase === "available" || state.appUpdate.phase === "installing";
   const countdownVisible =
     state.listenCountdownSeconds != null && state.listenCountdownSeconds > 0;
-  const { cards, dismissCard } = useOverlayCards(state, showInsights);
-  const feedCards = useCommandFeedCards(state, overlayVisible);
-  const toasts = useOverlayToasts(state, showInsights);
+  const { cards, dismissCard } = useOverlayCards(state, overlayContentVisible);
   const interactiveCountRef = useRef(0);
+  const feedNotificationActive = overlayFeedNotificationActive(notification);
+
+  const applyOverlayPointerCapture = (): void => {
+    if (onboardingOpen) return;
+    const updateOnly = updateVisible && !overlayContentVisible && !countdownVisible;
+    const passiveNoticeOnly =
+      notificationVisible &&
+      !overlayContentVisible &&
+      !updateVisible &&
+      !countdownVisible &&
+      !feedNotificationActive;
+    const copilotPrompt =
+      overlayContentVisible &&
+      (state.copilot.systemAudioSilenceWarning || state.copilot.listeningLimitReached);
+    const alwaysInteractive = overlayRequiresAlwaysInteractive({
+      updateOnly,
+      copilotPrompt,
+      passiveNoticeOnly,
+    });
+    window.glass.setIgnoreMouse(
+      overlayShouldEnableClickThrough({
+        overlayContentVisible,
+        feedNotificationActive,
+        interactiveCount: interactiveCountRef.current,
+        alwaysInteractive,
+      }),
+    );
+  };
 
   useEffect(() => {
-    const updateOnly = updateVisible && !overlayVisible && !countdownVisible;
-    const copilotPrompt =
-      overlayVisible &&
-      (state.copilot.systemAudioSilenceWarning || state.copilot.listeningLimitReached);
-    if (updateOnly || copilotPrompt) {
-      window.glass.setIgnoreMouse(false);
-      return () => {
-        if (interactiveCountRef.current === 0) {
-          window.glass.setIgnoreMouse(true);
-        }
-      };
-    }
-    window.glass.setIgnoreMouse(true);
+    if (onboardingOpen) return;
+    interactiveCountRef.current = 0;
+    applyOverlayPointerCapture();
+  }, [notification?.id, notificationVisible, feedNotificationActive, onboardingOpen]);
+
+  useEffect(() => {
+    if (onboardingOpen) return;
+    applyOverlayPointerCapture();
   }, [
+    onboardingOpen,
     updateVisible,
-    overlayVisible,
+    overlayContentVisible,
+    notificationVisible,
+    feedNotificationActive,
     countdownVisible,
     state.copilot.systemAudioSilenceWarning,
     state.copilot.listeningLimitReached,
   ]);
 
   const enterInteractive = (): void => {
-    interactiveCountRef.current += 1;
-    window.glass.setIgnoreMouse(false);
+    interactiveCountRef.current = nextOverlayInteractiveCount(interactiveCountRef.current, 1);
+    applyOverlayPointerCapture();
   };
 
   const leaveInteractive = (): void => {
-    interactiveCountRef.current = Math.max(0, interactiveCountRef.current - 1);
-    if (interactiveCountRef.current === 0) {
-      window.glass.setIgnoreMouse(true);
-    }
+    interactiveCountRef.current = nextOverlayInteractiveCount(interactiveCountRef.current, -1);
+    applyOverlayPointerCapture();
   };
 
   const translateCaptionsVisible = Boolean(
@@ -521,11 +301,25 @@ export function Overlay(): JSX.Element {
       state.liveTranslate.config.captionPosition !== "panel",
   );
 
-  if (!overlayVisible && !updateVisible && !countdownVisible && !translateCaptionsVisible) {
+  if (onboardingOpen) {
+    return (
+      <div className="overlay-root overlay-root--onboarding" data-testid="glass-overlay-root">
+        <GlassOnboardingOverlay />
+      </div>
+    );
+  }
+
+  if (
+    !overlayContentVisible &&
+    !updateVisible &&
+    !countdownVisible &&
+    !translateCaptionsVisible &&
+    !notificationVisible
+  ) {
     return <div className="overlay-root overlay-root--hidden" />;
   }
 
-  if (!overlayVisible && !countdownVisible && !updateVisible && translateCaptionsVisible) {
+  if (!overlayContentVisible && !countdownVisible && !updateVisible && translateCaptionsVisible) {
     return (
       <div className="overlay-root overlay-root--captions-only" data-testid="glass-overlay-root">
         {state.liveTranslate ? (
@@ -539,7 +333,7 @@ export function Overlay(): JSX.Element {
     );
   }
 
-  if (!overlayVisible && !countdownVisible && updateVisible) {
+  if (!overlayContentVisible && !countdownVisible && updateVisible) {
     return (
       <div className="overlay-root overlay-root--update-only" data-testid="glass-overlay-root">
         <GlassUpdateOverlay
@@ -551,7 +345,7 @@ export function Overlay(): JSX.Element {
     );
   }
 
-  if (!overlayVisible && countdownVisible && !updateVisible) {
+  if (!overlayContentVisible && countdownVisible && !updateVisible) {
     return (
       <div className="overlay-root overlay-root--countdown-only" data-testid="glass-overlay-root">
         <ListenCountdownOverlay seconds={state.listenCountdownSeconds!} />
@@ -559,18 +353,50 @@ export function Overlay(): JSX.Element {
     );
   }
 
+  if (
+    !overlayContentVisible &&
+    notificationVisible &&
+    !updateVisible &&
+    !countdownVisible &&
+    !translateCaptionsVisible
+  ) {
+    return (
+      <div
+        className="overlay-root overlay-root--notice-only"
+        data-testid="glass-overlay-root"
+        style={overlayLayoutStyle(state)}
+      >
+        <GlassNotificationHost
+          notification={notification}
+          fading={fading}
+          enterInteractive={enterInteractive}
+          leaveInteractive={leaveInteractive}
+          onChatHoverStart={onChatHoverStart}
+          onChatHoverEnd={onChatHoverEnd}
+        />
+      </div>
+    );
+  }
+
+  const showInsights = overlayContentVisible && overlayMode === "insights";
+
   return (
     <div
       className="overlay-root"
       data-testid="glass-overlay-root"
-      style={
-        {
-          "--overlay-frame-bottom": `${overlayFrameBottomInsetPx(state)}px`,
-        } as CSSProperties
-      }
+      style={overlayLayoutStyle(state)}
     >
       <OverlayPassiveLayer overlayMode={overlayMode} />
       <OverlayStatus state={state} />
+
+      <GlassNotificationHost
+        notification={notification}
+        fading={fading}
+        enterInteractive={enterInteractive}
+        leaveInteractive={leaveInteractive}
+        onChatHoverStart={onChatHoverStart}
+        onChatHoverEnd={onChatHoverEnd}
+      />
 
       {countdownVisible ? (
         <ListenCountdownOverlay seconds={state.listenCountdownSeconds!} />
@@ -588,29 +414,6 @@ export function Overlay(): JSX.Element {
           enterInteractive={enterInteractive}
           leaveInteractive={leaveInteractive}
         />
-      ) : null}
-
-      {feedCards.length > 0 ? (
-        <div className="overlay-feed">
-          {feedCards.map((item) => (
-            <FeedCard key={item.id} item={item} enterInteractive={enterInteractive} leaveInteractive={leaveInteractive} />
-          ))}
-        </div>
-      ) : null}
-
-      {showInsights && toasts.length > 0 ? (
-        <div className="overlay-toasts">
-          {toasts.map((toast) => (
-            <div
-              key={toast.id}
-              className={`overlay-toast overlay-toast--${toast.tone}`}
-              onMouseEnter={enterInteractive}
-              onMouseLeave={leaveInteractive}
-            >
-              {toast.message}
-            </div>
-          ))}
-        </div>
       ) : null}
 
       {showInsights && cards.length > 0 ? (

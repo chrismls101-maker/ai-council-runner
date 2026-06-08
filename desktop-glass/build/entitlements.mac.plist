@@ -2,7 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <!-- Minimal entitlements required for a hardened-runtime Electron app. -->
+  <!-- Required for Electron + hardened runtime (main app, helpers, frameworks). -->
   <key>com.apple.security.cs.allow-jit</key>
   <true/>
   <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
@@ -10,9 +10,8 @@
   <key>com.apple.security.cs.disable-library-validation</key>
   <true/>
   <!--
-    NOTE: macOS Screen Recording is granted by the user at runtime via
-    System Settings -> Privacy & Security -> Screen Recording (TCC), not via an
-    entitlement. Do not add broad sandbox/device entitlements unless needed.
+    Screen Recording / microphone are granted at runtime via System Settings (TCC),
+    not via entitlements. Do not add sandbox entitlements unless distributing via MAS.
   -->
 </dict>
 </plist>

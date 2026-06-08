@@ -28,7 +28,14 @@ import {
   buildTextContextPayload,
 } from "../shared/contextPayload.ts";
 import { createScreenshotContext, createContextItem } from "../shared/iivoClient.ts";
-import { IPC, type GlassCommand, type GlassState, type SessionActionStatus } from "../shared/ipc.ts";
+import {
+  IPC,
+  type GlassCommand,
+  type GlassState,
+  type SaveGlassMemoryRequest,
+  type SessionActionStatus,
+} from "../shared/ipc.ts";
+import { saveResponseToMemoryVault } from "../shared/iivoMemoryClient.ts";
 import { waitForMinLookingDuration, waitForMinThinkingDuration, GLASS_ASK_TIMEOUT_MS, VOICE_ASK_STATUS } from "../shared/glassAskTiming.ts";
 import type { PanelTab } from "../shared/types.ts";
 import { GlassSessionStore } from "../shared/sessionStore.ts";
@@ -64,6 +71,7 @@ import {
   beginGlassBootSequence,
   createSplashWindow,
   createWindows,
+  disposeWindows,
   finishSplash,
   whenGlassWindowsReady,
   getCommandBarHotkeyStatus,
@@ -74,7 +82,9 @@ import {
   refreshGlassDisplayLayout,
   setListenNotesPadVisible,
   getGlassWindowState,
+  syncOverlayPresentationRaised,
   getWindows,
+  getLayoutManager,
   isPanelVisible,
   lockChromeLayout,
   unlockChromeLayout,
@@ -92,7 +102,24 @@ import {
   toggleOverlay,
   togglePanel,
   unregisterCommandBarHotkeys,
+  setOnboardingPending,
+  setCommandBarLayoutChangedHandler,
 } from "./windows.ts";
+import { computeCommandBarOverlayClearancePx } from "../shared/glassLayoutMath.ts";
+import {
+  completeGlassOnboardingStore,
+  loadGlassOnboardingState,
+} from "./glassOnboardingStore.ts";
+import {
+  loadGlassContextProfile,
+  persistGlassContextProfile,
+} from "./glassContextStore.ts";
+import {
+  recordGlassContextInteraction,
+  resolveGlassUserContext,
+  type GlassContextProfile,
+} from "../shared/glassContextEngine.ts";
+import { normalizeGlassUserProfile, type GlassUserProfile } from "../shared/glassUserProfile.ts";
 import { loadMoments, persistMoments } from "./store.ts";
 import { loadSessions, persistSessions } from "./sessionPersistence.ts";
 import {
@@ -299,6 +326,7 @@ import {
   buildVisualAskRetentionStatus,
   shouldAutoUploadCapturesToContext,
   shouldDiscardEphemeralAfterAsk,
+  VISUAL_ASK_RETENTION_DISMISS_MS,
   type EphemeralVisualCapture,
   type GlassVisualAskRetention,
 } from "../shared/glassScreenshotRetention.ts";
@@ -320,6 +348,7 @@ import { loadGlassUserSettings, persistGlassUserSettings } from "./glassSettings
 import {
   buildGlassSetupCapabilities,
   formatSetupCheckSummary,
+  isServerConnectivityMessage,
   mapCaptureErrorToScreenCaptureStatus,
   VIRTUAL_AUDIO_HELP_DETAIL,
   type GlassCapabilityRow,
@@ -328,6 +357,7 @@ import {
   type ScreenCaptureProbeStatus,
   type WindowCaptureProbeStatus,
 } from "../shared/glassCapabilities.ts";
+import { shouldRaiseOverlayForNotifications } from "../shared/glassNotifications.ts";
 import type { CaptureDiagnosticsReport } from "../shared/captureDiagnostics.ts";
 import { runCaptureDiagnosticsReport } from "./captureDiagnostics.ts";
 import {
@@ -421,6 +451,8 @@ interface AppState {
   mediaContext: MediaContext | null;
   appUpdate: GlassAppUpdateState;
   listenCountdownSeconds?: number;
+  onboardingOpen: boolean;
+  glassUserProfile: GlassUserProfile | null;
 }
 
 let askAbortController: AbortController | null = null;
@@ -432,7 +464,7 @@ let glassUserSettings: GlassUserSettings = { ...DEFAULT_GLASS_USER_SETTINGS };
 const state: AppState = {
   privacy: { ...initialPrivacyState },
   transcript: "",
-  panelTab: "summary",
+  panelTab: "setup",
   sessionActionStatus: "idle",
   transcriptionMode: "manual",
   systemAudioStatus: resolveInitialSystemAudioStatus(
@@ -444,6 +476,8 @@ const state: AppState = {
   stt: buildGlassSttState(sttConfig),
   operationDiagnostics: createInitialOperationDiagnostics(),
   commandFeed: [],
+  commandBarStackHeightPx: undefined,
+  commandBarOverlayClearancePx: undefined,
   askStatus: "idle",
   askInFlight: false,
   latestScreenshot: null,
@@ -464,12 +498,34 @@ const state: AppState = {
   voiceModeStartNonce: 0,
   mediaContext: null,
   appUpdate: emptyGlassAppUpdateState(app.getVersion()),
+  onboardingOpen: false,
+  glassUserProfile: null,
 };
 
 let moments = new SavedMomentsStore();
 let sessions = new GlassSessionStore();
+let glassContextProfile: GlassContextProfile;
 
 let listenCountdownTimer: ReturnType<typeof setInterval> | null = null;
+let visualAskRetentionDismissTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearVisualAskRetentionDismissTimer(): void {
+  if (visualAskRetentionDismissTimer) {
+    clearTimeout(visualAskRetentionDismissTimer);
+    visualAskRetentionDismissTimer = null;
+  }
+}
+
+function scheduleVisualAskRetentionDismiss(): void {
+  clearVisualAskRetentionDismissTimer();
+  visualAskRetentionDismissTimer = setTimeout(() => {
+    if (state.visualAskRetention?.usedForAnswer) {
+      state.visualAskRetention = null;
+      push();
+    }
+    visualAskRetentionDismissTimer = null;
+  }, VISUAL_ASK_RETENTION_DISMISS_MS);
+}
 
 function cancelListenCountdown(): void {
   if (listenCountdownTimer) {
@@ -1413,6 +1469,92 @@ function refreshSetupCapabilities(): void {
   });
 }
 
+async function applyGlassSetupCheckResult(
+  result: Awaited<ReturnType<typeof runGlassSetupCheck>>,
+  options: { silent?: boolean; noticePrefix?: string } = {},
+): Promise<void> {
+  state.serverHealthForSetup = result.serverHealth;
+  state.screenCaptureProbe = result.screenCaptureProbe;
+  state.screenCaptureDetail = result.screenCaptureDetail;
+  state.windowCaptureProbe = result.windowCaptureProbe;
+  state.windowCaptureDetail = result.windowCaptureDetail;
+  if (
+    !state.privacy.listening &&
+    (process.env.IIVO_GLASS_E2E !== "1" || process.env.IIVO_GLASS_LIVE_E2E === "1")
+  ) {
+    const skipSystemAudioDowngrade =
+      process.env.IIVO_GLASS_LIVE_E2E === "1" &&
+      result.systemAudioStatus === "not_tested" &&
+      state.systemAudioStatus === "available";
+    if (!skipSystemAudioDowngrade) {
+      state.systemAudioStatus = result.systemAudioStatus;
+      state.systemAudioDetail = result.systemAudioDetail;
+    }
+  } else if (!state.privacy.listening && process.env.IIVO_GLASS_E2E === "1") {
+    state.systemAudioStatus = result.systemAudioStatus;
+    state.systemAudioDetail = result.systemAudioDetail;
+  }
+  if (result.serverHealth?.reachable) {
+    if (isServerConnectivityMessage(state.lastError)) {
+      state.lastError = undefined;
+    }
+    if (isServerConnectivityMessage(state.stt.lastError)) {
+      state.stt = { ...state.stt, lastError: undefined };
+    }
+    if (sttConfig.endpoint === "server" && result.serverHealth.stt?.configured !== false) {
+      state.stt = buildGlassSttState(
+        { ...sttConfig, status: "configured" },
+        { ...state.stt, lastError: undefined },
+      );
+    }
+  }
+  refreshSetupCapabilities();
+  state.setupCheckSummary = formatSetupCheckSummary(state.setupCapabilities);
+  if (!options.silent && options.noticePrefix) {
+    state.lastNotice = options.noticePrefix;
+  }
+  push();
+  if (
+    !state.privacy.listening &&
+    (process.env.IIVO_GLASS_E2E !== "1" || process.env.IIVO_GLASS_LIVE_E2E === "1")
+  ) {
+    broadcastTranscriptionControl({ type: "connect-system-audio" });
+  }
+}
+
+function refreshCommandBarOverlayClearance(): boolean {
+  const bar = getWindows()?.commandBar;
+  const layout = getLayoutManager();
+  const stackHeightPx = state.commandBarStackHeightPx;
+  if (!bar || bar.isDestroyed() || !layout || !stackHeightPx || stackHeightPx <= 0) {
+    return false;
+  }
+  const display = layout.getDisplay();
+  const bounds = bar.getBounds();
+  const clearance = computeCommandBarOverlayClearancePx({
+    workAreaBottomY: display.workArea.y + display.workArea.height,
+    commandBarY: bounds.y,
+    commandBarHeight: bounds.height,
+    stackHeightPx,
+  });
+  if (state.commandBarOverlayClearancePx === clearance) {
+    return false;
+  }
+  state.commandBarOverlayClearancePx = clearance;
+  return true;
+}
+
+function scheduleInitialSetupCheck(): void {
+  if (process.env.IIVO_GLASS_E2E === "1") return;
+  void (async () => {
+    const result = await runGlassSetupCheck({
+      config,
+      displayTarget: state.glassSettings.displayTarget,
+    });
+    await applyGlassSetupCheckResult(result, { silent: true });
+  })();
+}
+
 function snapshot(): GlassState {
   const session = sessions.current();
   return {
@@ -1442,6 +1584,8 @@ function snapshot(): GlassState {
       displayInfo: getDisplayLayoutSummary(),
     },
     commandFeed: state.commandFeed,
+    commandBarStackHeightPx: state.commandBarStackHeightPx,
+    commandBarOverlayClearancePx: state.commandBarOverlayClearancePx,
     askStatus: state.askStatus,
     lastAskResponse: state.lastAskResponse,
     latestScreenshot: state.latestScreenshot ?? null,
@@ -1470,7 +1614,17 @@ function snapshot(): GlassState {
     listenCountdownSeconds: state.listenCountdownSeconds,
     listenLiveNotes: isListenModeActive() ? buildCurrentListenLiveNotes() : undefined,
     liveTranslate: isTranslateActive() ? liveTranslateRuntime : undefined,
+    onboardingOpen: state.onboardingOpen,
+    glassUserProfile: state.glassUserProfile,
   };
+}
+
+async function finishGlassOnboarding(profile: GlassUserProfile | null): Promise<void> {
+  const stored = await completeGlassOnboardingStore(profile);
+  state.onboardingOpen = false;
+  state.glassUserProfile = stored.profile;
+  setOnboardingPending(false);
+  push();
 }
 
 function pushFeed(item: GlassCommandFeedItem): void {
@@ -1490,10 +1644,19 @@ function eventContextFields(opts?: { sourceTitle?: string; captureSource?: strin
 
 function push(): void {
   refreshSetupCapabilities();
+  syncOverlayPresentationRaised(
+    shouldRaiseOverlayForNotifications({
+      lastError: state.lastError,
+      lastNotice: state.lastNotice,
+      commandFeedLength: state.commandFeed.length,
+      rendererNotificationActive: overlayRendererNotificationActive,
+    }),
+  );
   broadcast(IPC.state, snapshot());
 }
 
 let glassUpdateCheckTimer: ReturnType<typeof setInterval> | null = null;
+let overlayRendererNotificationActive = false;
 
 async function runGlassUpdateCheck(): Promise<void> {
   if (process.env.IIVO_GLASS_E2E === "1") return;
@@ -1830,6 +1993,24 @@ function buildVisualAskStatusMessages(
   return messages;
 }
 
+async function openRunHistoryOnWeb(runId: string): Promise<void> {
+  const trimmed = runId?.trim();
+  if (!trimmed) return;
+
+  const runUrl = buildRunHistoryUrl(config, trimmed);
+  state.lastSentUrl = runUrl;
+  const opened = await openGlassHandoffUrl(runUrl);
+  if (opened.ok) {
+    state.lastNotice = "Opened full council on web.";
+  } else {
+    state.lastNotice = opened.copiedToClipboard
+      ? `Could not open browser. URL copied to clipboard: ${runUrl}`
+      : `Could not open browser. Copy this URL: ${runUrl}`;
+    state.lastError = opened.error;
+  }
+  push();
+}
+
 async function openFeedInIivo(feedId: string): Promise<void> {
   const item = state.commandFeed.find((f) => f.id === feedId);
   if (!item) return;
@@ -1992,6 +2173,23 @@ function removePendingAskFeedItems(): void {
   );
 }
 
+function dismissOverlayChatFeed(): void {
+  const chatKinds = new Set<GlassCommandFeedItem["kind"]>([
+    "command",
+    "thinking",
+    "looking",
+    "response",
+    "error",
+  ]);
+  state.commandFeed = state.commandFeed.filter(
+    (item) => item.pinned || !chatKinds.has(item.kind),
+  );
+  if (state.lastNotice?.startsWith("IIVO answered")) {
+    state.lastNotice = undefined;
+  }
+  push();
+}
+
 function cancelGlassAsk(): void {
   if (!state.askInFlight) return;
 
@@ -2044,6 +2242,23 @@ async function saveFeedMoment(feedId: string): Promise<void> {
  * Command-bar direct ask. Calls POST /api/glass/ask and renders the answer inline
  * as overlay response cards. Falls back to Context Bridge handoff on failure.
  */
+function glassContextOnboardingSeed(): GlassUserProfile | null {
+  return state.glassUserProfile;
+}
+
+function resolveGlassAskUserContext(): string | undefined {
+  return resolveGlassUserContext(glassContextProfile, glassContextOnboardingSeed());
+}
+
+async function recordGlassContextAfterResponse(prompt: string): Promise<void> {
+  glassContextProfile = recordGlassContextInteraction(
+    glassContextProfile,
+    { question: prompt },
+    glassContextOnboardingSeed(),
+  );
+  await persistGlassContextProfile(glassContextProfile);
+}
+
 async function submitCommand(rawText: string): Promise<void> {
   const text = rawText.trim();
   if (!text || state.askInFlight) return;
@@ -2064,10 +2279,11 @@ async function submitCommand(rawText: string): Promise<void> {
   const signal = askAbortController.signal;
 
   const visualIntent = shouldCaptureScreenForGlassAsk(text);
+  clearVisualAskRetentionDismissTimer();
+  state.visualAskRetention = null;
   state.askInFlight = true;
   state.askStatus = "pending";
   state.lastError = undefined;
-  pushFeed(createCommandFeedItem("command", text, { prompt: text }));
   state.operationDiagnostics = recordOperation(state.operationDiagnostics, "ask-iivo", "pending");
 
   const live = sessionIsLive();
@@ -2195,6 +2411,7 @@ async function submitCommand(rawText: string): Promise<void> {
     pushFeed(
       createCommandFeedItem("looking", "IIVO is looking at your screen…", {
         title: "IIVO is looking",
+        prompt: text,
       }),
     );
     push();
@@ -2215,6 +2432,7 @@ async function submitCommand(rawText: string): Promise<void> {
         pushFeed(
           createCommandFeedItem("looking", "Optimizing screen image…", {
             title: "IIVO",
+            prompt: text,
           }),
         );
         push();
@@ -2321,10 +2539,12 @@ async function submitCommand(rawText: string): Promise<void> {
       "thinking",
       interruptLabel ??
         (visualIntent ? "Analyzing screen…" : "IIVO is thinking…"),
+      { prompt: text },
     ),
   );
   push();
 
+  const userContext = resolveGlassAskUserContext();
   const runGlassAsk = async (): Promise<import("../shared/glassAskTypes.ts").GlassAskResponse> =>
     askIivoGlass(
       config,
@@ -2334,6 +2554,7 @@ async function submitCommand(rawText: string): Promise<void> {
         latestScreenshot,
         visualIntent: visualIntent || undefined,
         responseStyle: "overlay",
+        ...(userContext ? { userContext } : {}),
       },
       signal,
     );
@@ -2392,6 +2613,7 @@ async function submitCommand(rawText: string): Promise<void> {
         savedToSession: visualSavedToSession,
         uploadedToContext: false,
       });
+      scheduleVisualAskRetentionDismiss();
 
       if (shouldDiscardEphemeralAfterAsk(state.glassSettings, !!live, visualSavedToSession)) {
         state.pendingCaptureDataUrl = undefined;
@@ -2446,6 +2668,7 @@ async function submitCommand(rawText: string): Promise<void> {
       });
     }
     state.visualAskPhase = "idle";
+    await recordGlassContextAfterResponse(text);
   } catch (err) {
     if (requestGeneration !== askRequestGeneration || signal.aborted || err instanceof GlassAskCancelledError) {
       return;
@@ -2543,6 +2766,7 @@ async function submitCommand(rawText: string): Promise<void> {
         state.visualAskPhase = "idle";
         mergeVisualAskDiagnostics({ serverResult: "success", phase: "idle" });
         state.operationDiagnostics = recordOperation(state.operationDiagnostics, "ask-iivo", "ok");
+        await recordGlassContextAfterResponse(text);
         push();
         return;
       } catch (retryErr) {
@@ -2898,6 +3122,16 @@ async function handleCommand(
     case "ask-iivo-direct":
       await submitCommand(command.text);
       return;
+    case "report-command-bar-stack-height": {
+      const heightPx = Math.max(0, Math.round(command.heightPx));
+      const stackChanged = state.commandBarStackHeightPx !== heightPx;
+      state.commandBarStackHeightPx = heightPx;
+      const clearanceChanged = refreshCommandBarOverlayClearance();
+      if (stackChanged || clearanceChanged) {
+        push();
+      }
+      return;
+    }
     case "cancel-glass-ask":
       cancelGlassAsk();
       return;
@@ -3046,6 +3280,9 @@ async function handleCommand(
       setOverlayClickThrough(true);
       push();
       return;
+    case "dismiss-overlay-chat":
+      dismissOverlayChatFeed();
+      return;
     case "pin-command-feed-item":
       state.commandFeed = state.commandFeed.map((item) =>
         item.id === command.id ? { ...item, pinned: command.pinned } : item,
@@ -3059,10 +3296,23 @@ async function handleCommand(
       state.panelTab = command.tab;
       push();
       return;
-    case "toggle-panel":
-      togglePanel();
+    case "clear-last-notice":
+      state.lastNotice = undefined;
       push();
       return;
+    case "clear-last-error":
+      state.lastError = undefined;
+      push();
+      return;
+    case "toggle-panel": {
+      const panelWasOpen = isPanelVisible();
+      togglePanel();
+      if (panelWasOpen && state.lastNotice?.startsWith("Setup check:")) {
+        state.lastNotice = undefined;
+      }
+      push();
+      return;
+    }
     case "toggle-overlay":
       toggleOverlay();
       push();
@@ -3091,37 +3341,12 @@ async function handleCommand(
         skipCaptureProbe:
           process.env.IIVO_GLASS_E2E === "1" && process.env.IIVO_GLASS_E2E_CAPTURE_FAIL !== "1",
       });
-      state.serverHealthForSetup = result.serverHealth;
-      state.screenCaptureProbe = result.screenCaptureProbe;
-      state.screenCaptureDetail = result.screenCaptureDetail;
-      state.windowCaptureProbe = result.windowCaptureProbe;
-      state.windowCaptureDetail = result.windowCaptureDetail;
-      if (
-        !state.privacy.listening &&
-        (process.env.IIVO_GLASS_E2E !== "1" || process.env.IIVO_GLASS_LIVE_E2E === "1")
-      ) {
-        const skipSystemAudioDowngrade =
-          process.env.IIVO_GLASS_LIVE_E2E === "1" &&
-          result.systemAudioStatus === "not_tested" &&
-          state.systemAudioStatus === "available";
-        if (!skipSystemAudioDowngrade) {
-          state.systemAudioStatus = result.systemAudioStatus;
-          state.systemAudioDetail = result.systemAudioDetail;
-        }
-      }
-      refreshSetupCapabilities();
-      state.setupCheckSummary = formatSetupCheckSummary(state.setupCapabilities);
-      state.lastNotice =
+      const silent = command.type === "run-setup-check" && command.silent;
+      const noticePrefix =
         command.type === "retry-system-audio"
           ? `System audio probe: ${result.systemAudioStatus}${result.systemAudioDiagnostics ? ` (${result.systemAudioDiagnostics})` : ""}`
-          : state.setupCheckSummary;
-      push();
-      if (
-        !state.privacy.listening &&
-        (process.env.IIVO_GLASS_E2E !== "1" || process.env.IIVO_GLASS_LIVE_E2E === "1")
-      ) {
-        broadcastTranscriptionControl({ type: "connect-system-audio" });
-      }
+          : undefined;
+      await applyGlassSetupCheckResult(result, { silent, noticePrefix });
       return;
     }
     case "run-capture-diagnostics": {
@@ -3281,6 +3506,14 @@ async function handleCommand(
         state.setupCheckSummary = formatSetupCheckSummary(state.setupCapabilities);
         push();
       }
+      return;
+    case "complete-glass-onboarding": {
+      const profile = normalizeGlassUserProfile(command.profile);
+      await finishGlassOnboarding(profile);
+      return;
+    }
+    case "skip-glass-onboarding":
+      await finishGlassOnboarding(null);
       return;
     case "e2e-reset-setup-state":
       if (process.env.IIVO_GLASS_E2E === "1") {
@@ -3926,6 +4159,9 @@ async function handleSessionCommand(command: GlassCommand): Promise<void> {
     case "session-analyze-now":
       await analyzeSessionNow();
       break;
+    case "view-council-on-web":
+      await openRunHistoryOnWeb(command.runId);
+      break;
     case "session-send-event":
       await sendSessionEvent(command.id);
       break;
@@ -4097,6 +4333,20 @@ function registerScreenshotProtocol(): void {
 
 function registerIpc(): void {
   ipcMain.handle(IPC.getState, () => snapshot());
+  ipcMain.handle(IPC.saveGlassMemory, async (_event, input: SaveGlassMemoryRequest) => {
+    try {
+      await saveResponseToMemoryVault({
+        apiUrl: config.iivoApiUrl,
+        content: input.content,
+        prompt: input.prompt,
+        runId: input.runId,
+      });
+      return { ok: true };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Memory save failed";
+      return { ok: false, error: message };
+    }
+  });
   ipcMain.handle(IPC.windowContextGet, () => getCurrentWindowContext());
   ipcMain.handle(IPC.sttProcessChunk, async (_event, payload: SttProcessChunkPayload) => {
     const result = await processSttChunk(payload, {
@@ -4142,6 +4392,17 @@ function registerIpc(): void {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win) return;
     setIgnoreMouseFromWindow(win, !!ignore);
+  });
+  ipcMain.on(IPC.overlayNotificationActive, (_event, active: boolean) => {
+    overlayRendererNotificationActive = active;
+    syncOverlayPresentationRaised(
+      shouldRaiseOverlayForNotifications({
+        lastError: state.lastError,
+        lastNotice: state.lastNotice,
+        commandFeedLength: state.commandFeed.length,
+        rendererNotificationActive: overlayRendererNotificationActive,
+      }),
+    );
   });
 
   ipcMain.on(IPC.resizeDock, (_event, width: number, height: number) => {
@@ -4216,6 +4477,16 @@ app.whenReady().then(async () => {
   moments = await loadMoments();
   sessions = await loadSessions();
   glassUserSettings = await loadGlassUserSettings();
+  let glassOnboardingState = await loadGlassOnboardingState();
+  if (process.env.IIVO_GLASS_E2E === "1") {
+    glassOnboardingState = { ...glassOnboardingState, completed: true };
+  }
+  state.onboardingOpen = !glassOnboardingState.completed;
+  state.glassUserProfile = glassOnboardingState.profile;
+  if (state.onboardingOpen) {
+    setOnboardingPending(true);
+  }
+  glassContextProfile = await loadGlassContextProfile();
   const sanitizedTarget = sanitizeDisplayTarget(glassUserSettings.displayTarget);
   if (sanitizedTarget !== glassUserSettings.displayTarget) {
     glassUserSettings = { ...glassUserSettings, displayTarget: sanitizedTarget };
@@ -4240,10 +4511,17 @@ app.whenReady().then(async () => {
     void persistGlassUserSettings(glassUserSettings);
   });
   registerIpc();
+  setCommandBarLayoutChangedHandler(() => {
+    if (refreshCommandBarOverlayClearance()) {
+      push();
+    }
+  });
   createWindows(config, glassUserSettings.displayTarget);
   applyGlassUserSettings(glassUserSettings);
   registerGlobalHotkeys();
+  refreshSetupCapabilities();
   push();
+  scheduleInitialSetupCheck();
   scheduleGlassUpdateChecks();
 
   if (showSplash) {
@@ -4265,6 +4543,7 @@ app.whenReady().then(async () => {
 app.on("will-quit", () => {
   unregisterCommandBarHotkeys();
   if (glassUpdateCheckTimer) clearInterval(glassUpdateCheckTimer);
+  disposeWindows();
 });
 
 app.on("window-all-closed", () => {

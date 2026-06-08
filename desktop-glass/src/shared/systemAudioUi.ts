@@ -124,3 +124,7 @@ export function isSystemAudioCapabilityRowCompact(detail?: string): boolean {
   if (!detail?.trim()) return true;
   return !/Install BlackHole|Audio MIDI Setup|Multi-Output Device/i.test(detail);
 }
+
+export function isSystemAudioConnected(status: SystemAudioStatus): boolean {
+  return status === "available";
+}

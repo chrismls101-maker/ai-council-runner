@@ -1,24 +1,24 @@
 # Signed + notarized distribution config for IIVO Glass.
 #
-# Use ONLY for public distribution builds — requires an Apple Developer ID and
-# credentials. Local development uses the default (unsigned) electron-builder.yml.
+# Local dev builds use electron-builder.yml (unsigned). Run signed release with:
+#   npm run package:mac:signed
 #
-# Run:  npm run glass:package:mac:signed
+# Required environment (notarytool via @electron/notarize):
+#   APPLE_ID              Apple ID email (default in script: incawgnito.x@gmail.com)
+#   APPLE_ID_PASSWORD     App-specific password (NOT your Apple ID login password)
+#   APPLE_TEAM_ID         Apple Developer Team ID (default: 3WRBTRX524)
 #
-# Required environment for signing + notarization:
-#   APPLE_ID                      Apple ID email (notarization)
-#   APPLE_APP_SPECIFIC_PASSWORD   app-specific password for that Apple ID
-#   APPLE_TEAM_ID                 Apple Developer Team ID
-# Signing identity comes from EITHER:
-#   - a "Developer ID Application: <Name> (<TeamID>)" cert in your login keychain, OR
-#   - CSC_LINK (path/base64 of a .p12) + CSC_KEY_PASSWORD
+# The release script maps APPLE_ID_PASSWORD → APPLE_APP_SPECIFIC_PASSWORD for
+# electron-builder v26, which reads notarization credentials from env vars only.
 #
-# Do not run this unless those credentials exist; it will otherwise fail at the
-# signing/notarization step.
+# Signing identity must exist in your login keychain, or provide CSC_LINK + CSC_KEY_PASSWORD.
 
 appId: com.iivo.glass
 productName: IIVO Glass
 copyright: Copyright © 2026 Christopher Miles / IIVO
+
+# Fail the build if any binary in the bundle is unsigned.
+forceCodeSigning: true
 
 directories:
   output: release
@@ -30,6 +30,10 @@ files:
 
 npmRebuild: false
 asar: true
+
+extraResources:
+  - from: glass-update-manifest.json
+    to: glass-update-manifest.json
 
 mac:
   category: public.app-category.productivity
@@ -52,16 +56,19 @@ mac:
     - dmg
     - zip
   icon: build/icon.icns
-  # Signed distribution: hardened runtime + entitlements + auto-discovered
-  # Developer ID. Do NOT set identity: null here.
+  type: distribution
+  identity: "christopher miles (3WRBTRX524)"
   hardenedRuntime: true
   gatekeeperAssess: false
+  # Same plist for main app, inherited child processes, Electron Framework, and login helper.
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
-  # Notarize using the APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID env vars.
-  notarize: true
+  entitlementsLoginHelper: build/entitlements.mac.plist
+  # Temporarily off — submit manually: xcrun notarytool submit … after build
+  notarize: false
   artifactName: ${productName}-${version}-${arch}-${os}.${ext}
 
 dmg:
   artifactName: ${productName}-${version}-${arch}.${ext}
   title: ${productName} ${version}
+  sign: true

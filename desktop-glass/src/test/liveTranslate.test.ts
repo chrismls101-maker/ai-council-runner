@@ -15,6 +15,7 @@ import {
   normalizeLiveTranslateConfig,
   normalizeSaveMode,
   saveModeStatusLabel,
+  buildTranslateStartPatch,
 } from "../shared/liveTranslateConfig.ts";
 import {
   applyGlossaryToTranslation,
@@ -250,6 +251,14 @@ test("mode affects prompt guidance", () => {
   const conv = buildTranslateSystemPrompt({ text: "test", targetLanguage: "en", mode: "conversation" });
   assert.match(media, /concise/i);
   assert.match(conv, /casual/i);
+});
+
+test("buildTranslateStartPatch uses media defaults and private save", () => {
+  const patch = buildTranslateStartPatch("media", "es");
+  assert.equal(patch.enabled, true);
+  assert.equal(patch.mode, "media");
+  assert.equal(patch.saveMode, "private_no_save");
+  assert.equal(patch.targetLanguage, "es");
 });
 
 test("panel-only caption position normalized to bottom_center", () => {

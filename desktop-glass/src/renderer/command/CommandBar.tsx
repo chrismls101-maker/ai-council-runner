@@ -387,6 +387,7 @@ export function CommandBar(): JSX.Element {
           aria-label={
             chromeLocked ? undefined : "Layout unlocked — hold and drag to move, then lock when done"
           }
+          onPointerDownCapture={prepareGlassTextPointerDown}
         >
           <div className="command-bar__row composer-main">
             <button

@@ -20,9 +20,9 @@ import {
 export type { GlassLayoutPreset, GlassWindowState, OverlayMode };
 
 export interface GlassConfig {
-  /** IIVO web app base, e.g. http://localhost:5173 */
+  /** IIVO web app base, e.g. https://iivo.ai */
   iivoWebUrl: string;
-  /** IIVO API server base, e.g. http://localhost:3001 */
+  /** IIVO API server base, e.g. https://iivo.ai */
   iivoApiUrl: string;
   /** Full-screen intelligence overlay (click-through); on by default */
   overlayEnabled: boolean;
@@ -33,8 +33,8 @@ export interface GlassConfig {
 }
 
 export const DEFAULT_CONFIG: GlassConfig = {
-  iivoWebUrl: "http://localhost:5173",
-  iivoApiUrl: "http://localhost:3001",
+  iivoWebUrl: "https://iivo.ai",
+  iivoApiUrl: "https://iivo.ai",
   overlayEnabled: true,
   overlayMode: DEFAULT_OVERLAY_MODE,
   layoutPreset: DEFAULT_GLASS_LAYOUT_PRESET,
@@ -78,19 +78,19 @@ export function buildScreenshotApiUrl(config: GlassConfig, contextId: string): s
 
 /** Handoff that attaches context AND pre-fills the composer (mirrors Lens "Ask IIVO"). */
 export function buildLensAskUrl(config: GlassConfig, contextId: string): string {
-  return `${config.iivoWebUrl}/?lensAsk=${encodeURIComponent(contextId)}`;
+  return `${config.iivoWebUrl}/dashboard?lensAsk=${encodeURIComponent(contextId)}`;
 }
 
 /** Handoff that only attaches the context chip (mirrors Lens "Attach"). */
 export function buildLensContextUrl(config: GlassConfig, contextId: string): string {
-  return `${config.iivoWebUrl}/?lensContextId=${encodeURIComponent(contextId)}`;
+  return `${config.iivoWebUrl}/dashboard?lensContextId=${encodeURIComponent(contextId)}`;
 }
 
 export function buildIivoChatUrl(config: GlassConfig): string {
-  return `${config.iivoWebUrl}/`;
+  return `${config.iivoWebUrl}/dashboard`;
 }
 
 /** Best-effort deep link when a council run id exists (Analyze Now path). */
 export function buildRunHistoryUrl(config: GlassConfig, runId: string): string {
-  return `${config.iivoWebUrl}/?runId=${encodeURIComponent(runId)}`;
+  return `${config.iivoWebUrl}/dashboard?runId=${encodeURIComponent(runId)}`;
 }

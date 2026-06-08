@@ -4,6 +4,7 @@
 
 import type { GlassConfig } from "../shared/config.ts";
 import type { GlassAskRequest, GlassAskResponse } from "../shared/glassAskTypes.ts";
+import { withIivoApiAuthHeaders } from "../shared/iivoApiAuth.ts";
 
 export function buildGlassAskUrl(config: GlassConfig): string {
   return `${config.iivoApiUrl}/api/glass/ask`;
@@ -28,7 +29,7 @@ export async function askIivoGlass(
 ): Promise<GlassAskResponse> {
   const res = await fetch(buildGlassAskUrl(config), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: withIivoApiAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ ...request, responseStyle: "overlay" }),
     signal,
   });
@@ -48,6 +49,11 @@ export async function askIivoGlass(
 
   if (!res.ok) {
     const detail = body.error ?? body.message ?? res.statusText;
+    if (res.status === 404) {
+      throw new Error(
+        `Glass ask is not available at ${buildGlassAskUrl(config)} (${detail}). Deploy the latest IIVO server or set IIVO_API_URL to your local server (e.g. http://127.0.0.1:3001).`,
+      );
+    }
     throw new Error(`IIVO ask failed (${res.status}): ${detail}`);
   }
 

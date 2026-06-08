@@ -815,12 +815,19 @@ A ready-to-use config is provided: `desktop-glass/electron-builder.signed.yml`
 `notarize: true`). It is **not** used by the local build. Run it only when you
 have credentials:
 ```bash
-export APPLE_ID="you@example.com"
-export APPLE_APP_SPECIFIC_PASSWORD="abcd-efgh-ijkl-mnop"
-export APPLE_TEAM_ID="XXXXXXXXXX"
-# signing identity: a Developer ID cert in your keychain, or CSC_LINK + CSC_KEY_PASSWORD
+export APPLE_ID="incawgnito.x@gmail.com"
+export APPLE_TEAM_ID="3WRBTRX524"
+export APPLE_ID_PASSWORD="abcd-efgh-ijkl-mnop"   # app-specific password — NOT your Apple ID password
 npm run glass:package:mac:signed
 ```
+`APPLE_ID_PASSWORD` is mapped to electron-builder’s `APPLE_APP_SPECIFIC_PASSWORD`
+internally (`scripts/package-mac-signed.mjs`). Generate it at
+[appleid.apple.com](https://appleid.apple.com) → Sign-In and Security →
+App-Specific Passwords → Generate.
+
+Signing identity: `christopher miles (3WRBTRX524)` (keychain
+or `CSC_LINK` + `CSC_KEY_PASSWORD` in CI).
+
 Without those credentials this command will fail at the signing/notarization
 step — that is intentional.
 

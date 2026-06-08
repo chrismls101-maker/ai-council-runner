@@ -1,0 +1,39 @@
+/**
+ * Overlay pointer policy — feed chat cards use hover-to-interact so the fullscreen
+ * overlay stays click-through and does not block the dock / command bar.
+ */
+
+import type { GlassNotificationView } from "./glassNotifications.ts";
+
+export function overlayFeedNotificationActive(
+  notification: GlassNotificationView | null,
+): boolean {
+  return notification?.source === "feed";
+}
+
+/** Modal-style notifications (update, copilot prompt, non-feed notices) capture the overlay. */
+export function overlayRequiresAlwaysInteractive(input: {
+  updateOnly: boolean;
+  copilotPrompt: boolean;
+  passiveNoticeOnly: boolean;
+}): boolean {
+  return input.updateOnly || input.copilotPrompt || input.passiveNoticeOnly;
+}
+
+export function overlayShouldEnableClickThrough(input: {
+  overlayContentVisible: boolean;
+  feedNotificationActive: boolean;
+  interactiveCount: number;
+  alwaysInteractive: boolean;
+}): boolean {
+  if (input.alwaysInteractive) return false;
+  if (input.feedNotificationActive && input.interactiveCount === 0) return true;
+  if (!input.overlayContentVisible && !input.feedNotificationActive) return true;
+  if (input.overlayContentVisible && input.interactiveCount === 0) return true;
+  return false;
+}
+
+export function nextOverlayInteractiveCount(current: number, delta: 1 | -1): number {
+  if (delta === 1) return current + 1;
+  return Math.max(0, current - 1);
+}

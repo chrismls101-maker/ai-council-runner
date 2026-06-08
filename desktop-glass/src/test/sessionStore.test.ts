@@ -91,13 +91,13 @@ test("hydrate of corrupt json yields an empty store", () => {
   assert.equal(restored.list().length, 0);
 });
 
-test("keeps at most 20 sessions", () => {
+test("persists all sessions without a cap", () => {
   const store = new GlassSessionStore(deps());
   for (let i = 0; i < 25; i += 1) {
     store.createSession(`s${i}`);
     store.endSession();
   }
-  assert.ok(store.list().length <= 20);
+  assert.equal(store.list().length, 25);
 });
 
 test("migrateSession fills missing fields", () => {

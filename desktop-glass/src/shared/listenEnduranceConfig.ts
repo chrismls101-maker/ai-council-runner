@@ -38,7 +38,7 @@ export function defaultListenEnduranceConfig(
   overrides: Partial<ListenEnduranceConfig> = {},
 ): ListenEnduranceConfig {
   return {
-    minutes: 10,
+    minutes: 60,
     maxListeningMinutes: 0,
     checkpointMinutes: DEFAULT_CHECKPOINT_MINUTES,
     maxGptCallsPerHour: DEFAULT_MAX_GPT_CALLS_PER_HOUR,
@@ -83,7 +83,7 @@ function parseAttention(argv: string[]): ListenAttentionLevel {
 /** Parse endurance + live QA CLI flags from argv. */
 export function parseListenEnduranceCli(argv: string[] = process.argv.slice(2)): ListenEnduranceConfig {
   const hoursFlag = parseNumberFlag(argv, "--hours", 0);
-  const minutesFlag = parseNumberFlag(argv, "--minutes", hoursFlag > 0 ? hoursFlag * 60 : 10);
+  const minutesFlag = parseNumberFlag(argv, "--minutes", hoursFlag > 0 ? hoursFlag * 60 : 60);
 
   let speed: "fast" | "realtime" | undefined;
   const speedIdx = argv.indexOf("--speed");

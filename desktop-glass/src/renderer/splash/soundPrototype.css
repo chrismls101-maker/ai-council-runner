@@ -1,0 +1,162 @@
+@import url("https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600&display=swap");
+
+.sound-lab-body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Sora", -apple-system, BlinkMacSystemFont, sans-serif;
+  color: rgba(236, 244, 255, 0.94);
+  background: radial-gradient(ellipse 80% 60% at 50% 0%, #0a1628 0%, #04080f 55%, #020408 100%);
+}
+
+.sound-lab {
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 3rem;
+}
+
+.sound-lab__header {
+  margin-bottom: 1.75rem;
+}
+
+.sound-lab__title {
+  margin: 0 0 0.35rem;
+  font-size: 1.35rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.sound-lab__sub {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: rgba(176, 198, 220, 0.78);
+}
+
+.sound-lab__sub code {
+  font-size: 0.82em;
+  color: rgba(120, 235, 255, 0.9);
+}
+
+.sound-lab__panel {
+  padding: 1.25rem 1.35rem;
+  border-radius: 14px;
+  border: 1px solid rgba(56, 225, 255, 0.14);
+  background: linear-gradient(145deg, rgba(10, 16, 28, 0.92), rgba(6, 10, 18, 0.88));
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.sound-lab__panel + .sound-lab__panel {
+  margin-top: 1rem;
+}
+
+.sound-lab__panel-title {
+  margin: 0 0 1rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(56, 225, 255, 0.75);
+}
+
+.sound-lab__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.sound-lab__btn {
+  padding: 0.55rem 1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(14, 20, 34, 0.9);
+  color: inherit;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+
+.sound-lab__btn:hover {
+  border-color: rgba(56, 225, 255, 0.45);
+  background: rgba(18, 28, 48, 0.95);
+}
+
+.sound-lab__btn:focus-visible {
+  outline: 2px solid rgba(56, 225, 255, 0.6);
+  outline-offset: 2px;
+}
+
+.sound-lab__btn--primary {
+  border-color: rgba(56, 225, 255, 0.35);
+  background: linear-gradient(135deg, rgba(20, 48, 72, 0.95), rgba(12, 24, 42, 0.95));
+  box-shadow: 0 0 20px rgba(56, 225, 255, 0.12);
+}
+
+.sound-lab__btn--danger {
+  border-color: rgba(255, 120, 140, 0.35);
+  color: rgba(255, 200, 210, 0.95);
+}
+
+.sound-lab__btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.sound-lab__timeline {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: rgba(190, 210, 230, 0.82);
+}
+
+.sound-lab__timeline li {
+  display: flex;
+  gap: 0.65rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.sound-lab__timeline li:last-child {
+  border-bottom: none;
+}
+
+.sound-lab__time {
+  flex: 0 0 3.2rem;
+  font-variant-numeric: tabular-nums;
+  color: rgba(56, 225, 255, 0.65);
+}
+
+.sound-lab__status {
+  margin-top: 1rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  font-size: 0.84rem;
+  background: rgba(0, 0, 0, 0.25);
+  color: rgba(200, 220, 240, 0.88);
+}
+
+.sound-lab__status--playing {
+  border: 1px solid rgba(56, 225, 255, 0.25);
+  color: rgba(190, 245, 255, 0.95);
+}
+
+.sound-lab__hint {
+  margin: 1rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: rgba(150, 170, 195, 0.7);
+}
+
+.sound-lab__files {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.8rem;
+  color: rgba(160, 185, 210, 0.75);
+}
+
+.sound-lab__files li {
+  margin: 0.25rem 0;
+}

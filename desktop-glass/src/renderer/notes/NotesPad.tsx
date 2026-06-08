@@ -14,7 +14,8 @@ export function NotesPad(): JSX.Element {
   const timerLabel = formatListeningDuration(Math.max(state.stt?.listeningElapsedMs ?? 0, 0));
 
   return (
-    <div className="notes-pad" data-testid="glass-notes-pad">
+    <div className="notes-pad notes-pad--composer" data-testid="glass-notes-pad">
+      <span className="notes-pad__sheen" aria-hidden="true" />
       <header className="notes-pad__header" ref={dragRef}>
         <div className="notes-pad__brand">
           <span className="notes-pad__dot" aria-hidden />
@@ -59,6 +60,7 @@ export function NotesPad(): JSX.Element {
         <LiveNotesTab state={state} />
       </div>
       <ListenInsightStrip insight={state.listenLiveNotes?.latestInsight} />
+      <span className="notes-pad__led ui-led-line" aria-hidden="true" />
     </div>
   );
 }

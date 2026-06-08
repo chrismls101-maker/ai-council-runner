@@ -16,6 +16,10 @@ files:
 npmRebuild: false
 asar: true
 
+extraResources:
+  - from: glass-update-manifest.json
+    to: glass-update-manifest.json
+
 mac:
   category: public.app-category.productivity
   # Bundle id com.iivo.glass + display name IIVO Glass — required for macOS Privacy lists.

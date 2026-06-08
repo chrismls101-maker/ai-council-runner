@@ -1,32 +1,15 @@
 import { useVoiceMode } from "../useVoiceMode.ts";
 
 /**
- * Explicit Voice Mode control surface for the command bar / overlay.
- *
- * - Mic only starts on the explicit "Start Voice Mode" action.
- * - When active, shows a visible "Voice Mode Active" badge, the current machine
- *   status (Listening… / Transcribing… / Looking… / Thinking… / Answering…),
- *   the live transcript, plus Cancel and Stop Everything.
+ * Voice Mode status surface — shown only while the loop is active.
+ * Start is the mic button on {@link CommandBar} (not a separate row above the input).
  */
-export function VoiceModePanel(): JSX.Element {
+export function VoiceModePanel(): JSX.Element | null {
   const voice = useVoiceMode();
   const { state } = voice;
 
   if (!state.active && state.status !== "error") {
-    return (
-      <div className="voice-mode" data-testid="glass-voice-mode">
-        <button
-          type="button"
-          data-testid="glass-voice-mode-start"
-          className="voice-mode__start"
-          onClick={voice.start}
-          onMouseEnter={() => window.glass.setIgnoreMouse(false)}
-          title="Start Voice Mode — mic starts only after you click"
-        >
-          🎙 Start Voice Mode
-        </button>
-      </div>
-    );
+    return null;
   }
 
   return (

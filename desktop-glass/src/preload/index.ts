@@ -4,7 +4,15 @@
  */
 
 import { contextBridge, ipcRenderer } from "electron";
-import { IPC, type GlassCommand, type GlassState, type SttProcessChunkRequest, type SttProcessChunkResponse } from "../shared/ipc.ts";
+import {
+  IPC,
+  type GlassCommand,
+  type GlassState,
+  type SaveGlassMemoryRequest,
+  type SaveGlassMemoryResponse,
+  type SttProcessChunkRequest,
+  type SttProcessChunkResponse,
+} from "../shared/ipc.ts";
 import type { WindowContext } from "../shared/windowContextTypes.ts";
 
 const glassApi = {
@@ -43,6 +51,9 @@ const glassApi = {
   setIgnoreMouse(ignore: boolean): void {
     ipcRenderer.send(IPC.setIgnoreMouse, ignore);
   },
+  setOverlayNotificationActive(active: boolean): void {
+    ipcRenderer.send(IPC.overlayNotificationActive, active);
+  },
   resizeDock(width: number, height: number): void {
     ipcRenderer.send(IPC.resizeDock, width, height);
   },
@@ -68,6 +79,9 @@ const glassApi = {
   },
   simulateE2eSystemAudioEnumFail(): Promise<{ ok: boolean }> {
     return ipcRenderer.invoke(IPC.e2eSimulateSystemAudioEnumFail) as Promise<{ ok: boolean }>;
+  },
+  saveGlassMemory(payload: SaveGlassMemoryRequest): Promise<SaveGlassMemoryResponse> {
+    return ipcRenderer.invoke(IPC.saveGlassMemory, payload) as Promise<SaveGlassMemoryResponse>;
   },
   setE2eCaptureProbes(payload: {
     screenCaptureProbe?: import("../shared/captureSourceEnumeration.ts").ScreenCaptureProbeStatus;

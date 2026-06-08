@@ -6,6 +6,7 @@ import {
   GlassCard,
   GlassPanel,
 } from "../components/glass-landing/index.ts";
+import GlassLandingFooter from "../components/glass-landing/GlassLandingFooter";
 import "../components/glass-landing/glass-landing.css";
 
 const GLASS_DMG_DOWNLOAD_URL =
@@ -136,6 +137,8 @@ export default function GlassLandingPage() {
         <DownloadButton />
         <p className="glass-landing__final-note">Mac Apple Silicon · Free Beta · No account required</p>
       </motion.section>
+
+      <GlassLandingFooter />
     </div>
   );
 }

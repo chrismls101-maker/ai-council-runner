@@ -1,4 +1,4 @@
-import type { Browser, Page } from "@playwright/test";
+import { expect, type Browser, type Page } from "@playwright/test";
 import {
   closeGlassElectronForE2E,
   GLASS_ELECTRON_BIN,
@@ -102,7 +102,34 @@ export async function readGlassState(page: Page) {
 
 export async function openPanelTab(
   panel: Page,
-  tab: "summary" | "setup" | "session" | "insights" | "context" | "hypotheses" | "actions" | "diagnostics",
+  tab: "summary" | "copilot" | "setup" | "audio" | "session" | "insights" | "context" | "hypotheses" | "actions" | "diagnostics",
 ): Promise<void> {
   await panel.locator(`[data-testid="glass-panel-tab-${tab}"]`).click();
+}
+
+/** Click Setup → CONNECT IIVO GLASS and wait for server + simulated system audio (E2E stub). */
+export async function connectIivoGlassForE2e(browser: Browser): Promise<void> {
+  const { command, dock, panel } = await getGlassWindows(browser);
+  const state = await readGlassState(command);
+  const serverOnline =
+    state.setupCapabilities?.find((row) => row.id === "server")?.label === "Online";
+  if (serverOnline && state.systemAudioStatus === "available") return;
+
+  await dock.locator('[data-testid="glass-dock-open-panel"]').click();
+  await openPanelTab(panel, "setup");
+  await expect(panel.locator('[data-testid="glass-panel-setup"]')).toBeVisible();
+  await panel.locator('[data-testid="glass-run-setup-check"]').click();
+
+  await expect
+    .poll(async () => {
+      const next = await readGlassState(command);
+      const online = next.setupCapabilities?.find((row) => row.id === "server")?.label === "Online";
+      return online && next.systemAudioStatus === "available";
+    }, { timeout: 20_000 })
+    .toBe(true);
+
+  await expect(panel.locator('[data-testid="glass-run-setup-check"]')).toHaveAttribute(
+    "data-connected",
+    "true",
+  );
 }

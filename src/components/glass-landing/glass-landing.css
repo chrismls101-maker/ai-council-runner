@@ -568,6 +568,138 @@ html.glass-landing-route body::after {
   margin-top: 4px;
 }
 
+/* Landing footer */
+.glass-landing__footer {
+  position: relative;
+  z-index: 1;
+  padding: 32px 24px 48px;
+  text-align: center;
+}
+
+.glass-landing__footer-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px 14px;
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+}
+
+.glass-landing__footer-link {
+  color: var(--gl-muted);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.glass-landing__footer-link:hover {
+  color: var(--gl-accent);
+}
+
+.glass-landing__footer-sep {
+  color: rgba(180, 195, 220, 0.35);
+  user-select: none;
+}
+
+/* Doc pages (/install, /privacy, /terms) */
+.glass-landing--doc {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.glass-landing__doc {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  width: min(720px, calc(100% - 48px));
+  margin-inline: auto;
+  padding: clamp(48px, 8vw, 88px) 0 clamp(32px, 6vw, 56px);
+}
+
+.glass-landing__doc-back {
+  margin: 0 0 28px;
+  font-size: 0.85rem;
+}
+
+.glass-landing__doc-title {
+  margin: 0 0 20px;
+  font-family: var(--gl-font-display);
+  font-size: clamp(1.6rem, 4vw, 2.2rem);
+  font-weight: 400;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.glass-landing__doc-meta {
+  margin: 0 0 28px;
+  font-size: 0.85rem;
+  color: var(--gl-muted);
+}
+
+.glass-landing__doc-lead {
+  margin: 0 0 28px;
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: rgba(220, 232, 248, 0.88);
+}
+
+.glass-landing__doc-body {
+  font-size: 0.95rem;
+  line-height: 1.65;
+  color: rgba(210, 222, 240, 0.9);
+}
+
+.glass-landing__doc-section {
+  margin-bottom: 28px;
+}
+
+.glass-landing__doc-section h2 {
+  margin: 0 0 12px;
+  font-family: var(--gl-font-body);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--gl-text);
+}
+
+.glass-landing__doc-section h3 {
+  margin: 20px 0 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: rgba(220, 232, 248, 0.92);
+}
+
+.glass-landing__doc-section p {
+  margin: 0 0 12px;
+}
+
+.glass-landing__doc-section ol,
+.glass-landing__doc-section ul {
+  margin: 0 0 12px;
+  padding-left: 1.35rem;
+}
+
+.glass-landing__doc-section li {
+  margin-bottom: 8px;
+}
+
+.glass-landing__doc-section a {
+  color: var(--gl-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.glass-landing__doc-section code {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.88em;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 @media (max-width: 768px) {
   .glass-landing__cards {
     grid-template-columns: 1fr;

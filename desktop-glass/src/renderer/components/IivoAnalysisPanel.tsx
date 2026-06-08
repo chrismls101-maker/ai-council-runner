@@ -40,6 +40,14 @@ export function IivoAnalysisPanel({ analysis }: { analysis: IivoAnalysisState })
             {analysis.text}
           </div>
           <div className="transcript__row">
+            {analysis.runId ? (
+              <button
+                className="gbtn gbtn--primary"
+                onClick={() => send({ type: "view-council-on-web", runId: analysis.runId! })}
+              >
+                View full council on web
+              </button>
+            ) : null}
             <button className="gbtn" onClick={() => void copyText(analysis.text ?? "")}>
               Copy Analysis
             </button>

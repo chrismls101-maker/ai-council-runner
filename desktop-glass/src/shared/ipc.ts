@@ -50,6 +50,7 @@ export const IPC = {
   getState: "glass:get-state",
   state: "glass:state",
   setIgnoreMouse: "glass:set-ignore-mouse",
+  overlayNotificationActive: "glass:overlay-notification-active",
   resizeDock: "glass:resize-dock",
   windowContextGet: "glass:window-context-get-current",
   sttProcessChunk: "glass:stt-process-chunk",
@@ -64,7 +65,19 @@ export const IPC = {
   e2eSimulateSystemAudioEnumFail: "glass:e2e-simulate-system-audio-enum-fail",
   e2eSetCaptureProbes: "glass:e2e-set-capture-probes",
   e2eResetSetupState: "glass:e2e-reset-setup-state",
+  saveGlassMemory: "glass:save-glass-memory",
 } as const;
+
+export interface SaveGlassMemoryRequest {
+  content: string;
+  prompt?: string;
+  runId?: string;
+}
+
+export interface SaveGlassMemoryResponse {
+  ok: boolean;
+  error?: string;
+}
 
 export type TranscriptionControlCommand =
   | { type: "start" }
@@ -116,10 +129,12 @@ export type GlassCommand =
   | { type: "reset-chrome-layout" }
   | { type: "open-feed-in-iivo"; id: string }
   | { type: "save-feed-moment"; id: string }
+  | { type: "report-command-bar-stack-height"; heightPx: number }
   | { type: "command-bar-blur" }
   | { type: "toggle-command-bar" }
   | { type: "voice-mode-start" }
   | { type: "clear-command-feed" }
+  | { type: "dismiss-overlay-chat" }
   | { type: "pin-command-feed-item"; id: string; pinned: boolean }
   | { type: "open-chat" }
   | { type: "set-tab"; tab: PanelTab }
@@ -165,6 +180,8 @@ export type GlassCommand =
       systemAudioDetail?: string;
     }
   | { type: "e2e-reset-setup-state" }
+  | { type: "complete-glass-onboarding"; profile?: import("./glassUserProfile.ts").GlassUserProfile }
+  | { type: "skip-glass-onboarding" }
   | { type: "session-start"; title?: string }
   | { type: "session-pause" }
   | { type: "session-resume" }
@@ -183,6 +200,7 @@ export type GlassCommand =
   | { type: "session-send-summary" }
   | { type: "session-open-in-iivo" }
   | { type: "session-analyze-now" }
+  | { type: "view-council-on-web"; runId: string }
   /** @deprecated use session-open-in-iivo */
   | { type: "session-analyze-council" }
   // --- Session Copilot ---
@@ -243,6 +261,10 @@ export interface GlassState {
   windows: GlassWindowState;
   operationDiagnostics: GlassOperationDiagnostics;
   commandFeed: GlassCommandFeedItem[];
+  /** Measured command bar stack height (accessories + composer). */
+  commandBarStackHeightPx?: number;
+  /** Distance from overlay work-area bottom to top of command bar stack (for response card clearance). */
+  commandBarOverlayClearancePx?: number;
   askStatus: GlassAskStatus;
   lastAskResponse?: GlassLastAskResponse;
   latestScreenshot?: GlassLatestScreenshotState | null;
@@ -274,6 +296,9 @@ export interface GlassState {
   listenLiveNotes?: import("./listenLiveNotes.ts").ListenLiveNotesState;
   /** Live Translate captions runtime (separate from Listen notes). */
   liveTranslate?: import("./liveTranslateTypes.ts").LiveTranslateRuntimeState;
+  /** First-run calibration modal blocks chrome until complete or skipped. */
+  onboardingOpen: boolean;
+  glassUserProfile: import("./glassUserProfile.ts").GlassUserProfile | null;
 }
 
 export interface SttProcessChunkRequest {

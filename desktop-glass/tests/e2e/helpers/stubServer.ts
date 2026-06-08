@@ -15,6 +15,8 @@ export interface StubServerHandle {
   getScreenshotUploadCount: () => number;
   getHandoffVisits: () => string[];
   resetHandoffState: () => void;
+  getMemoryPostCount: () => number;
+  getLastMemoryBody: () => Record<string, unknown> | null;
 }
 
 const STUB_ASK_RESPONSE = {
@@ -32,6 +34,23 @@ const STUB_VISUAL_ASK_RESPONSE = {
   model: "e2e-stub-vision",
 };
 
+function buildStubAskResponse(prompt: string, visual: boolean): typeof STUB_ASK_RESPONSE {
+  const base = visual ? STUB_VISUAL_ASK_RESPONSE : STUB_ASK_RESPONSE;
+  const trimmed = prompt.trim();
+  const quoted = trimmed.length > 140 ? `${trimmed.slice(0, 137)}…` : trimmed;
+  const answer = trimmed
+    ? `You asked: "${quoted}". ${base.answer}`
+    : base.answer;
+  const shortAnswer = trimmed
+    ? `Re: "${quoted.length > 72 ? `${quoted.slice(0, 69)}…` : quoted}" — ${base.shortAnswer}`
+    : base.shortAnswer;
+  return {
+    ...base,
+    answer,
+    shortAnswer,
+  };
+}
+
 export async function startStubServer(
   options: StubServerOptions = {},
 ): Promise<StubServerHandle> {
@@ -40,6 +59,8 @@ export async function startStubServer(
   let lastContextBody: Record<string, unknown> | null = null;
   let screenshotUploadCount = 0;
   const handoffVisits: string[] = [];
+  let memoryPostCount = 0;
+  let lastMemoryBody: Record<string, unknown> | null = null;
   let delayMs = options.askDelayMs ?? 0;
   let force413Once = false;
 
@@ -109,7 +130,7 @@ export async function startStubServer(
 
         setTimeout(() => {
           res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify(visual ? STUB_VISUAL_ASK_RESPONSE : STUB_ASK_RESPONSE));
+          res.end(JSON.stringify(buildStubAskResponse(prompt, visual)));
         }, responseDelay);
         return;
       }
@@ -135,6 +156,18 @@ export async function startStubServer(
         screenshotUploadCount += 1;
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ ok: true }));
+        return;
+      }
+
+      if (req.method === "POST" && url === "/api/memory") {
+        memoryPostCount += 1;
+        try {
+          lastMemoryBody = JSON.parse(bodyText) as Record<string, unknown>;
+        } catch {
+          lastMemoryBody = null;
+        }
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: true, id: "mem-e2e-1" }));
         return;
       }
 
@@ -168,6 +201,8 @@ export async function startStubServer(
       screenshotUploadCount = 0;
       handoffVisits.length = 0;
     },
+    getMemoryPostCount: () => memoryPostCount,
+    getLastMemoryBody: () => lastMemoryBody,
   };
 }
 

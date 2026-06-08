@@ -7,6 +7,7 @@ import { DEFAULT_GLASS_USER_SETTINGS } from "../shared/glassSettings.ts";
 import { DEFAULT_COPILOT_CONFIG } from "../shared/copilotTypes.ts";
 import { INITIAL_OPERATION_DIAGNOSTICS } from "../shared/glassOperations.ts";
 import { WINDOW_CONTEXT_UNAVAILABLE_MESSAGE } from "../shared/windowContextTypes.ts";
+import { emptyGlassAppUpdateState } from "../shared/glassAppUpdate.ts";
 
 import type { GlassSttState } from "../shared/sttTypes.ts";
 
@@ -26,7 +27,7 @@ const fallbackState: GlassState = {
   transcript: "",
   notes: emptyNotes(),
   moments: [],
-  panelTab: "summary",
+  panelTab: "setup",
   config: DEFAULT_CONFIG,
   session: null,
   sessionSummary: "",
@@ -75,6 +76,10 @@ const fallbackState: GlassState = {
     diagnosticResult: null,
     diagnosticAnalyzing: false,
   },
+  appUpdate: emptyGlassAppUpdateState("0.1.0"),
+  onboardingOpen: false,
+  glassUserProfile: null,
+  commandBarOverlayClearancePx: undefined,
 };
 
 export function useGlassState(): GlassState {

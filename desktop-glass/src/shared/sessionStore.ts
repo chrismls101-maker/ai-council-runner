@@ -2,8 +2,7 @@
  * In-memory session store for IIVO Glass Session Intelligence.
  *
  * Pure data structure (no fs/electron) so it is unit-testable. The main process
- * owns one instance and persists it via serialize()/hydrate(). At most
- * MAX_SESSIONS recent sessions are retained.
+ * owns one instance and persists it via serialize()/hydrate().
  */
 
 import type {
@@ -14,8 +13,6 @@ import type {
   GlassSessionInsight,
   GlassInsightType,
 } from "./sessionTypes.ts";
-
-export const MAX_SESSIONS = 20;
 
 export type IdFactory = () => string;
 export type Clock = () => string;
@@ -109,16 +106,6 @@ export class GlassSessionStore {
     session.updatedAt = this.clock();
   }
 
-  private prune(): void {
-    if (this.sessions.length <= MAX_SESSIONS) return;
-    const keep = this.list().slice(0, MAX_SESSIONS);
-    const keepIds = new Set(keep.map((s) => s.id));
-    if (this.currentId && !keepIds.has(this.currentId)) {
-      keepIds.add(this.currentId);
-    }
-    this.sessions = this.sessions.filter((s) => keepIds.has(s.id));
-  }
-
   createSession(title?: string): GlassSession {
     const now = this.clock();
     const session: GlassSession = {
@@ -132,7 +119,6 @@ export class GlassSessionStore {
     };
     this.sessions.push(session);
     this.currentId = session.id;
-    this.prune();
     return session;
   }
 
@@ -289,7 +275,7 @@ export class GlassSessionStore {
   }
 
   serialize(): string {
-    return JSON.stringify({ sessions: this.list().slice(0, MAX_SESSIONS), currentId: this.currentId });
+    return JSON.stringify({ sessions: this.list(), currentId: this.currentId });
   }
 
   static hydrate(json: string, deps: SessionStoreDeps = {}): GlassSessionStore {

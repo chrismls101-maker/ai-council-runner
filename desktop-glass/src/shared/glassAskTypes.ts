@@ -55,6 +55,8 @@ export interface GlassAskRequest {
   visualIntent?: boolean;
   responseStyle?: "overlay";
   modelPurpose?: "default" | "semantic" | "diagnostic";
+  /** Derived passive context summary (local Glass context engine). */
+  userContext?: string;
 }
 
 export interface GlassAskResponse {

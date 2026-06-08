@@ -62,9 +62,68 @@ const DOCK_DEFAULT_MAX_WIDTH = 720;
 const COMMAND_BAR_MAX_WIDTH = 760;
 /** Main composer row + optional accessory strips (voice, listen status, screen context). */
 export const COMMAND_BAR_HEIGHT = 280;
-const COMMAND_BAR_BOTTOM_MARGIN = 28;
+export const COMMAND_BAR_BOTTOM_MARGIN = 28;
+/** `.command-root` padding-bottom — stack sits above this inset inside the bar window. */
+export const COMMAND_BAR_ROOT_BOTTOM_PADDING_PX = 4;
 const COMMAND_BAR_SIDE_MARGIN = 48;
 const DOCK_ABOVE_COMMAND_BAR_GAP = 0;
+
+/** Gap between measured command bar stack and overlay chat cards. */
+export const OVERLAY_CHAT_STACK_GAP_PX = 14;
+
+/** Fallback stack height when the command bar has not reported measured height yet. */
+export const OVERLAY_CHAT_STACK_FALLBACK_PX = 58;
+
+/**
+ * Distance from the overlay work-area bottom to the top of the command bar stack
+ * (accounts for bar window position, tall bar window, and measured stack height).
+ */
+export function computeCommandBarOverlayClearancePx(input: {
+  workAreaBottomY: number;
+  commandBarY: number;
+  commandBarHeight: number;
+  stackHeightPx: number;
+}): number {
+  const stack = Math.max(0, Math.round(input.stackHeightPx));
+  const stackTopY =
+    input.commandBarY +
+    input.commandBarHeight -
+    COMMAND_BAR_ROOT_BOTTOM_PADDING_PX -
+    stack;
+  return Math.max(0, Math.round(input.workAreaBottomY - stackTopY));
+}
+
+/** Fallback clearance when bar bounds are unavailable (default bottom-anchored layout). */
+export function commandBarOverlayClearanceFallbackPx(stackHeightPx?: number): number {
+  const stack =
+    stackHeightPx && stackHeightPx > 0
+      ? stackHeightPx
+      : OVERLAY_CHAT_STACK_FALLBACK_PX;
+  return COMMAND_BAR_BOTTOM_MARGIN + COMMAND_BAR_ROOT_BOTTOM_PADDING_PX + stack;
+}
+
+/** @deprecated Use overlayNotificationBottomPx — kept for tests migrating off frame+stack-only math. */
+export const OVERLAY_CHAT_CLEARANCE_FALLBACK_PX = commandBarOverlayClearanceFallbackPx();
+
+/** Bottom offset (px from overlay work-area bottom) for chat response cards. */
+export function overlayNotificationBottomPx(input: {
+  commandBarOverlayClearancePx?: number;
+  commandBarStackHeightPx?: number;
+}): number {
+  const clearance =
+    input.commandBarOverlayClearancePx && input.commandBarOverlayClearancePx > 0
+      ? input.commandBarOverlayClearancePx
+      : commandBarOverlayClearanceFallbackPx(input.commandBarStackHeightPx);
+  return clearance + OVERLAY_CHAT_STACK_GAP_PX;
+}
+
+/** @deprecated Prefer overlayNotificationBottomPx with measured clearance from main process. */
+export function overlayChatNotificationBottomPx(
+  _frameBottomInsetPx: number,
+  commandBarStackHeightPx?: number,
+): number {
+  return overlayNotificationBottomPx({ commandBarStackHeightPx });
+}
 
 /** Bottom gap between workArea and display bounds (dock reserve, etc.). */
 export function displayBottomReserve(ctx: DisplayLayoutContext): number {

@@ -380,10 +380,14 @@ export function buildGlassDirectUserPrompt(
   prompt: string,
   session?: GlassAskSessionPayload,
   userProfile?: GlassUserProfile,
+  userContext?: string,
 ): string {
   const lines: string[] = [prompt.trim()];
 
-  if (userProfile) {
+  const contextBlock = userContext?.trim();
+  if (contextBlock) {
+    lines.push("", contextBlock);
+  } else if (userProfile) {
     lines.push("", formatGlassUserProfileBlock(userProfile));
   }
 
@@ -526,7 +530,8 @@ export async function runGlassDirectAsk(
   const storedProfile = await getGlassUserProfile();
   const userProfile =
     normalizeGlassUserProfile(body.userProfile) ?? storedProfile ?? undefined;
-  const userPrompt = buildGlassDirectUserPrompt(prompt, body.session, userProfile);
+  const userContext = body.userContext?.trim() || undefined;
+  const userPrompt = buildGlassDirectUserPrompt(prompt, body.session, userProfile, userContext);
   let result = await caller(GLASS_DIRECT_SYSTEM_PROMPT, userPrompt, signal, purpose);
   let formatted = formatGlassDirectAnswer(result.content);
 

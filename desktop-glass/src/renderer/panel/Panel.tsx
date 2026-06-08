@@ -34,14 +34,11 @@ import { ListeningControls, OperationDiagnosticsFooter } from "../components/Lis
 import { SetupSection } from "./SetupSection.tsx";
 import { CopilotPanel } from "./CopilotPanel.tsx";
 import { AudioTab } from "./AudioTab.tsx";
-import { LiveNotesTab } from "./LiveNotesTab.tsx";
-import { deriveActiveListeningMode } from "../../shared/activeListeningContext.ts";
-import { copilotModeIsActive } from "../../shared/copilotTypes.ts";
 
 const TABS: { id: PanelTab; label: string }[] = [
+  { id: "setup", label: "Setup" },
   { id: "summary", label: "Summary" },
   { id: "copilot", label: "Copilot" },
-  { id: "setup", label: "Setup" },
   { id: "audio", label: "Audio" },
   { id: "session", label: "Session" },
   { id: "insights", label: "Insights" },
@@ -821,16 +818,6 @@ export function Panel(): JSX.Element {
   const sessionLive =
     state.session?.status === "active" || state.session?.status === "paused";
 
-  const listenActive =
-    deriveActiveListeningMode(
-      state.copilot.config,
-      sessionLive && copilotModeIsActive(state.copilot.config.mode),
-    ) === "listen" && state.privacy.listening;
-
-  const visibleTabs = listenActive
-    ? [{ id: "live-notes" as PanelTab, label: "IIVO Notes" }, ...TABS.filter((t) => t.id !== "live-notes")]
-    : TABS;
-
   return (
     <div className="panel" data-testid="glass-panel">
       <div className="panel__header">
@@ -856,12 +843,9 @@ export function Panel(): JSX.Element {
         </button>
       </div>
 
-      {state.lastError ? <div className="error-banner">{state.lastError}</div> : null}
-      {state.lastNotice ? <div className="notice-banner">{state.lastNotice}</div> : null}
-
       <div className="panel__shell">
         <nav className="panel__nav" aria-label="Panel sections">
-          {visibleTabs.map((t) => (
+          {TABS.map((t) => (
             <button
               key={t.id}
               type="button"
@@ -886,12 +870,6 @@ export function Panel(): JSX.Element {
                 Copilot for Listen, Meetings, Work, and Fix.
               </p>
               <SummaryView state={state} />
-            </div>
-          ) : null}
-
-          {tab === "live-notes" ? (
-            <div className="panel__body" data-testid="glass-panel-live-notes-tab">
-              <LiveNotesTab state={state} />
             </div>
           ) : null}
 

@@ -50,6 +50,8 @@ export interface SttChunkHandlerDeps {
   setSttState: (next: GlassSttState) => void;
   setLastNotice: (msg: string | undefined) => void;
   setLastError: (msg: string | undefined) => void;
+  /** When false, errors from in-flight chunks after Stop Everything are suppressed. */
+  shouldReportSttErrors?: () => boolean;
   push: () => void;
 }
 
@@ -57,24 +59,30 @@ export async function processSttChunk(
   payload: SttProcessChunkPayload,
   deps: SttChunkHandlerDeps,
 ): Promise<SttProcessChunkResult> {
+  const reportErrors = deps.shouldReportSttErrors?.() ?? true;
+  const fail = (error: string): SttProcessChunkResult => {
+    if (reportErrors) {
+      deps.setSttState({ ...deps.getSttState(), transcribing: false, lastError: error });
+      deps.push();
+      return { ok: false, error };
+    }
+    deps.setSttState({ ...deps.getSttState(), transcribing: false, lastError: undefined });
+    deps.push();
+    return { ok: false };
+  };
+
   const config = getSttConfig();
   const stt = deps.getSttState();
   deps.setSttState({ ...stt, transcribing: true, lastError: undefined });
   deps.push();
 
   if (!config.enabled || config.status !== "configured") {
-    const error = sttSourceErrorMessage(payload.source, "config_missing");
-    deps.setSttState({ ...deps.getSttState(), transcribing: false, lastError: error });
-    deps.push();
-    return { ok: false, error };
+    return fail(sttSourceErrorMessage(payload.source, "config_missing"));
   }
 
   const buffer = Buffer.from(payload.buffer);
   if (buffer.length < 512) {
-    const error = sttSourceErrorMessage(payload.source, "no_signal");
-    deps.setSttState({ ...deps.getSttState(), transcribing: false, lastError: error });
-    deps.push();
-    return { ok: false, error };
+    return fail(sttSourceErrorMessage(payload.source, "no_signal"));
   }
 
   const session = deps.sessions.current();
@@ -94,10 +102,7 @@ export async function processSttChunk(
     audioPath = saved.audioPath;
     audioMimeType = saved.audioMimeType;
   } catch {
-    const error = "Failed to save audio chunk locally.";
-    deps.setSttState({ ...deps.getSttState(), transcribing: false, lastError: error });
-    deps.push();
-    return { ok: false, error };
+    return fail("Failed to save audio chunk locally.");
   }
 
   try {
@@ -175,13 +180,18 @@ export async function processSttChunk(
     const detail = err instanceof Error ? err.message : "Transcription failed.";
     const kind = classifySttFailure(detail);
     const error = sttSourceErrorMessage(payload.source, kind, detail);
-    deps.setSttState({
-      ...deps.getSttState(),
-      transcribing: false,
-      lastError: error,
-    });
-    deps.setLastError(error);
+    if (reportErrors) {
+      deps.setSttState({
+        ...deps.getSttState(),
+        transcribing: false,
+        lastError: error,
+      });
+      deps.setLastError(error);
+      deps.push();
+      return { ok: false, error, eventId };
+    }
+    deps.setSttState({ ...deps.getSttState(), transcribing: false, lastError: undefined });
     deps.push();
-    return { ok: false, error, eventId };
+    return { ok: false, eventId };
   }
 }

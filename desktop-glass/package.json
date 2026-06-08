@@ -58,7 +58,7 @@
     "package:mac:x64": "npm run build && electron-builder --mac --x64 && node scripts/write-glass-update-manifest.mjs",
     "package:mac:universal": "npm run build && electron-builder --mac --universal && node scripts/write-glass-update-manifest.mjs",
     "package:mac:release": "npm run build && electron-builder --mac --arm64 && electron-builder --mac --universal && node scripts/write-glass-update-manifest.mjs",
-    "package:mac:signed": "npm run build && electron-builder --mac --config electron-builder.signed.yml",
+    "package:mac:signed": "node scripts/package-mac-signed.mjs",
     "package:verify": "node scripts/verify-mac-package-metadata.mjs",
     "open:packaged": "node scripts/open-packaged-glass.mjs",
     "dist": "npm run build && electron-builder --mac dmg zip"

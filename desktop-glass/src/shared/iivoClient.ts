@@ -8,6 +8,7 @@ import {
   buildScreenshotApiUrl,
   type GlassConfig,
 } from "./config.ts";
+import { withIivoApiAuthHeaders } from "./iivoApiAuth.ts";
 import type { ContextCreatePayload } from "./types.ts";
 
 export interface CreatedContextItem {
@@ -19,7 +20,7 @@ export interface CreatedContextItem {
 async function postJson<T>(url: string, body: unknown): Promise<T> {
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: withIivoApiAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(body),
   });
   if (!res.ok) {

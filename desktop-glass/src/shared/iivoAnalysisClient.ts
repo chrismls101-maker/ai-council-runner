@@ -3,6 +3,7 @@
  */
 
 import type { GlassConfig } from "./config.ts";
+import { withIivoApiAuthHeaders } from "./iivoApiAuth.ts";
 import { buildSessionContextPayload, SESSION_ANALYSIS_PROMPT } from "./sessionPayload.ts";
 import type { GlassSession } from "./sessionTypes.ts";
 
@@ -98,7 +99,7 @@ export async function estimateCouncilCredits(
   try {
     const res = await fetch(buildUsageEstimateUrl(config), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: withIivoApiAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         prompt,
         workflowId: "auto",
@@ -123,7 +124,7 @@ export async function runCouncilAnalysis(
 ): Promise<GlassAnalysisResult> {
   const res = await fetch(buildRunCouncilUrl(config), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: withIivoApiAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(request),
   });
   const body = (await res.json().catch(() => ({}))) as GlassCouncilRunResponse & {

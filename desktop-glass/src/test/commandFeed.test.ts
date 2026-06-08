@@ -5,6 +5,8 @@ import {
   createCommandFeedItem,
   MAX_COMMAND_FEED_ITEMS,
   COMMAND_FEED_TITLES,
+  pickOverlayChatFeedItem,
+  resolveOverlayChatPrompt,
 } from "../shared/commandFeed.ts";
 
 test("createCommandFeedItem builds a typed, titled item", () => {
@@ -48,3 +50,21 @@ function createInitialFeed(n: number) {
   for (let i = 0; i < n; i += 1) feed.push(createCommandFeedItem("response", `seed ${i}`));
   return feed;
 }
+
+test("pickOverlayChatFeedItem skips command rows and picks latest chat card", () => {
+  const feed = [
+    createCommandFeedItem("command", "hello", { prompt: "hello" }),
+    createCommandFeedItem("thinking", "thinking…", { prompt: "hello" }),
+    createCommandFeedItem("response", "answer", { prompt: "hello" }),
+  ];
+  assert.equal(pickOverlayChatFeedItem(feed)?.kind, "response");
+});
+
+test("resolveOverlayChatPrompt falls back to preceding command row", () => {
+  const feed = [
+    createCommandFeedItem("command", "What time is it?"),
+    createCommandFeedItem("response", "Now.", { prompt: undefined }),
+  ];
+  const response = feed[1];
+  assert.equal(resolveOverlayChatPrompt(response, feed), "What time is it?");
+});

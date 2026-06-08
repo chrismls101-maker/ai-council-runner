@@ -13,6 +13,7 @@ import {
   readGlassState,
   resetE2eExternalUrls,
   openPanelTab,
+  connectIivoGlassForE2e,
   verifyHandoffUrlReachable,
   type LaunchedGlass,
 } from "./helpers/electronApp.ts";
@@ -88,10 +89,12 @@ test.describe("IIVO Glass Electron E2E", () => {
 
   test("2 — command bar direct answer renders inline", async () => {
     const { command, overlay } = await getGlassWindows(app.browser);
+    await connectIivoGlassForE2e(app.browser);
 
+    const prompt = "Help me plan the rest of my day.";
     const input = command.locator('[data-testid="glass-command-input"]');
     await input.click();
-    await input.fill("Help me plan the rest of my day.");
+    await input.fill(prompt);
     await input.press("Enter");
 
     await expect(overlay.locator('[data-testid="glass-overlay-thinking-card"]')).toBeVisible();
@@ -102,6 +105,8 @@ test.describe("IIVO Glass Electron E2E", () => {
     const responseText = await overlay
       .locator('[data-testid="glass-overlay-response-card"]')
       .innerText();
+    expect(responseText).toContain(prompt);
+    expect(responseText).toContain("You asked:");
     expect(responseText).toContain("IIVO Glass is working");
 
     for (const marker of COUNCIL_MARKERS) {
@@ -113,6 +118,7 @@ test.describe("IIVO Glass Electron E2E", () => {
 
   test("3 — cancel pending ask", async () => {
     const { command, overlay } = await getGlassWindows(app.browser);
+    await connectIivoGlassForE2e(app.browser);
 
     const input = command.locator('[data-testid="glass-command-input"]');
     await input.click();
@@ -171,10 +177,12 @@ test.describe("IIVO Glass Electron E2E", () => {
 
   test("6 — Open in IIVO only on user action", async () => {
     const { command, overlay } = await getGlassWindows(app.browser);
+    await connectIivoGlassForE2e(app.browser);
 
+    const prompt = "Help me plan the rest of my day.";
     const input = command.locator('[data-testid="glass-command-input"]');
     await input.click();
-    await input.fill("Help me plan the rest of my day.");
+    await input.fill(prompt);
     await input.press("Enter");
 
     await expect(overlay.locator('[data-testid="glass-overlay-response-card"]')).toBeVisible({
@@ -205,6 +213,7 @@ test.describe("IIVO Glass Electron E2E", () => {
 
   test("6b — visual Open in IIVO uploads screenshot on click only", async () => {
     const { command, overlay } = await getGlassWindows(app.browser);
+    await connectIivoGlassForE2e(app.browser);
     const stub = getStubHandoffFromApp(app);
     const uploadsBefore = stub.getScreenshotUploadCount();
 
@@ -229,10 +238,12 @@ test.describe("IIVO Glass Electron E2E", () => {
 
   test("7 — visual ask captures on demand and answers inline", async () => {
     const { command, overlay } = await getGlassWindows(app.browser);
+    await connectIivoGlassForE2e(app.browser);
 
+    const prompt = "What's on my screen?";
     const input = command.locator('[data-testid="glass-command-input"]');
     await input.click();
-    await input.fill("What's on my screen?");
+    await input.fill(prompt);
     await input.press("Enter");
 
     await expect(overlay.locator('[data-testid="glass-overlay-looking-card"]')).toBeVisible({
@@ -245,6 +256,7 @@ test.describe("IIVO Glass Electron E2E", () => {
     const responseText = await overlay
       .locator('[data-testid="glass-overlay-response-card"]')
       .innerText();
+    expect(responseText).toContain(prompt);
     expect(responseText).toMatch(/see the test screen/i);
 
     const state = await readGlassState(command);
@@ -254,6 +266,7 @@ test.describe("IIVO Glass Electron E2E", () => {
 
   test("8 — visual ask retries after 413 payload too large", async () => {
     const { command, overlay } = await getGlassWindows(app.browser);
+    await connectIivoGlassForE2e(app.browser);
 
     const input = command.locator('[data-testid="glass-command-input"]');
     await input.click();
@@ -267,11 +280,13 @@ test.describe("IIVO Glass Electron E2E", () => {
     const responseText = await overlay
       .locator('[data-testid="glass-overlay-response-card"]')
       .innerText();
+    expect(responseText).toContain("What do you see on my screen");
     expect(responseText).toMatch(/see the test screen/i);
   });
 
   test("9 — text/error visual ask uses text preset metadata", async () => {
     const { command, overlay } = await getGlassWindows(app.browser);
+    await connectIivoGlassForE2e(app.browser);
 
     const input = command.locator('[data-testid="glass-command-input"]');
     await input.click();

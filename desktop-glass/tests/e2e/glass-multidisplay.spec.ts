@@ -64,6 +64,13 @@ function requireMultiDisplay(): void {
 }
 
 test.describe("IIVO Glass multi-display E2E", () => {
+  test.beforeEach(async () => {
+    const windows = await getGlassWindows(app.browser);
+    await windows.command.evaluate(() => {
+      window.glass.send({ type: "stop-everything" });
+    });
+  });
+
   test("connected displays diagnostic", async () => {
     expect(displays.length).toBeGreaterThan(0);
     expect(primary).toBeDefined();

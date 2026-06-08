@@ -39,6 +39,6 @@ test("formatDisplayTargetLabel describes primary and follow mouse", () => {
 test("buildRunHistoryUrl encodes run id", () => {
   assert.equal(
     buildRunHistoryUrl(DEFAULT_CONFIG, "run-123"),
-    "http://localhost:5173/?runId=run-123",
+    "https://iivo.ai/dashboard?runId=run-123",
   );
 });
