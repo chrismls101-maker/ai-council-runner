@@ -1,6 +1,6 @@
 # IIVO Master Task List
 **All three builds — smallest to biggest. Tick off as shipped.**
-Last updated: 2026-06-10 (Tasks #59 #60 #61 completed — Glass onboarding, overlay interaction, profile editor E2E)
+Last updated: 2026-06-10 (Tasks #59–#65 + #77 + Docker health check completed)
 
 Legend: `[ ]` todo · `[x]` done · `[-]` deferred (P3)
 
@@ -62,12 +62,12 @@ Legend: `[ ]` todo · `[x]` done · `[-]` deferred (P3)
 - [x] Context lens E2E — screenshot upload → analysis → context attached to run
 - [x] Usage credits flow E2E — estimate shown, insufficient-credit guard blocks run
 - [x] Production server hardening — tighten rate limits for open beta, document `GLASS_API_SECRET` rotation story, confirm Railway deploy is stable
-- [ ] Docker health check — `GET /health` returns 200 in production container
+- [x] Docker health check — `GET /health` returns 200 in production container
 
 ### Browser Extension
 - [x] Audit content script injection scope — runs on all http/https; confirm it doesn't leak data on sensitive pages (banking, passwords)
 - [x] Context capture size guard — `MAX_VISIBLE_TEXT_CHARS = 12_000` tested at limit + over limit
-- [ ] Extension packaging + Chrome Web Store submission checklist
+- [x] Extension packaging + Chrome Web Store submission checklist
 
 ### Glass — Copilot modes (biggest untouched area)
 - [ ] Copilot **passive** mode E2E — enable passive → session runs → insights collected silently, no overlay cards shown
@@ -113,9 +113,9 @@ Legend: `[ ]` todo · `[x]` done · `[-]` deferred (P3)
 
 | Category | Total | Done | Remaining |
 |----------|-------|------|-----------|
-| Tiny | 13 | 10 | 3 |
-| Small | 17 | 15 | 2 |
-| Medium | 16 | 0 | 16 |
+| Tiny | 13 | 13 | 0 |
+| Small | 17 | 17 | 0 |
+| Medium | 16 | 6 | 10 |
 | Large | 6 | 1 | 5 |
 | Deferred | 8 | — | 8 |
-| **Total** | **60** | **25** | **27** |
+| **Total** | **60** | **31** | **21** |
