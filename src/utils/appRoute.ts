@@ -2,7 +2,7 @@ import { hasLensHandoffQueryParam } from "./lensHandoff";
 
 export const DASHBOARD_PATH = "/dashboard";
 
-export type AppRoute = "landing" | "dashboard" | "install" | "privacy" | "terms";
+export type AppRoute = "landing" | "dashboard" | "install" | "privacy" | "terms" | "not-found";
 
 export const INSTALL_PATH = "/install";
 export const PRIVACY_PATH = "/privacy";
@@ -47,5 +47,6 @@ export function resolveAppRoute(): AppRoute {
   if (pathname === INSTALL_PATH) return "install";
   if (pathname === PRIVACY_PATH) return "privacy";
   if (pathname === TERMS_PATH) return "terms";
-  return "landing";
+  if (pathname === "/" || pathname === "") return "landing";
+  return "not-found";
 }

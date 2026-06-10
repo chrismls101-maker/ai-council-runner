@@ -3,7 +3,7 @@
   "name": "IIVO Lens",
   "version": "1.1.8",
   "description": "Capture page context and send it to IIVO for decision analysis.",
-  "permissions": ["activeTab", "scripting", "storage", "downloads"],
+  "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": [
     "https://iivo.ai/*"
   ],

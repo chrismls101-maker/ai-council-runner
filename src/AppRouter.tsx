@@ -1,6 +1,7 @@
 import { useEffect, useState, type JSX } from "react";
 import App from "./App";
 import LandingGate from "./components/glass-landing/LandingGate";
+import Glass404Page from "./pages/Glass404Page";
 import GlassInstallPage from "./pages/GlassInstallPage";
 import GlassLandingPage from "./pages/GlassLandingPage";
 import GlassPrivacyPage from "./pages/GlassPrivacyPage";
@@ -13,6 +14,7 @@ const ROUTE_TITLES: Record<AppRoute, string> = {
   privacy: "Privacy Policy — IIVO Glass",
   terms: "Terms of Service — IIVO Glass",
   dashboard: "IIVO — Intelligence In. Verified Action Out.",
+  "not-found": "Page Not Found — IIVO Glass",
 };
 
 function PublicGlassPage({ route }: { route: Exclude<AppRoute, "dashboard"> }): JSX.Element {
@@ -23,6 +25,8 @@ function PublicGlassPage({ route }: { route: Exclude<AppRoute, "dashboard"> }): 
       return <GlassPrivacyPage />;
     case "terms":
       return <GlassTermsPage />;
+    case "not-found":
+      return <Glass404Page />;
     default:
       return <GlassLandingPage />;
   }

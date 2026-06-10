@@ -4,6 +4,6 @@
   "description": "IIVO Lens browser extension",
   "private": true,
   "scripts": {
-    "test": "node --test tests/popup.test.js"
+    "test": "node --test tests/popup.test.js tests/contentScript.test.js tests/background.test.js"
   }
 }
