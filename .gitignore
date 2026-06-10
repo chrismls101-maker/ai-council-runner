@@ -13,6 +13,9 @@ playwright-report/
 *.p12
 *.mobileprovision
 
-# Personal/local documents
+# Personal/local documents and stray media at repo root
 *.docx
 *.pdf
+/*.png
+/*.jpg
+/*.jpeg
