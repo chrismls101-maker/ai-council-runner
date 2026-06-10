@@ -59,8 +59,8 @@ Legend: `[ ]` todo · `[x]` done · `[-]` deferred (P3)
 ## 🟠 MEDIUM — 2–4 hours each
 
 ### Website
-- [ ] Context lens E2E — screenshot upload → analysis → context attached to run
-- [ ] Usage credits flow E2E — estimate shown, insufficient-credit guard blocks run
+- [x] Context lens E2E — screenshot upload → analysis → context attached to run
+- [x] Usage credits flow E2E — estimate shown, insufficient-credit guard blocks run
 - [x] Production server hardening — tighten rate limits for open beta, document `GLASS_API_SECRET` rotation story, confirm Railway deploy is stable
 - [ ] Docker health check — `GET /health` returns 200 in production container
 
