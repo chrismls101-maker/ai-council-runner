@@ -6,3 +6,13 @@ dist
 data/
 test-results/
 playwright-report/
+
+# Apple signing credentials — never commit these
+*.certSigningRequest
+*.cer
+*.p12
+*.mobileprovision
+
+# Personal/local documents
+*.docx
+*.pdf
