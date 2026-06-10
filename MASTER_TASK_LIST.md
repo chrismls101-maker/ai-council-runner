@@ -61,7 +61,7 @@ Legend: `[ ]` todo · `[x]` done · `[-]` deferred (P3)
 ### Website
 - [ ] Context lens E2E — screenshot upload → analysis → context attached to run
 - [ ] Usage credits flow E2E — estimate shown, insufficient-credit guard blocks run
-- [ ] Production server hardening — tighten rate limits for open beta, document `GLASS_API_SECRET` rotation story, confirm Railway deploy is stable
+- [x] Production server hardening — tighten rate limits for open beta, document `GLASS_API_SECRET` rotation story, confirm Railway deploy is stable
 - [ ] Docker health check — `GET /health` returns 200 in production container
 
 ### Browser Extension

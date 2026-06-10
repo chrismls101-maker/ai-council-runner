@@ -123,32 +123,45 @@ import {
 } from "./landingGate.js";
 import rateLimit from "express-rate-limit";
 
+// ─── Rate limiters ───────────────────────────────────────────────────────────
+// Council runs are expensive (multi-agent AI). 5 runs / 15 min per IP for open beta.
 const councilLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "Too many requests. Please wait before running another council." },
+  message: { error: "Too many council runs. Please wait before running another." },
 });
 
+// Glass overlay asks are fast but still AI — 40 / 15 min.
 const glassLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 60,
+  max: 40,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many requests from this device." },
 });
 
+// General API — 120 / 15 min. Health + landing-gate always exempt.
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 120,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many requests." },
   skip: (req) => {
-    const path = req.originalUrl.split("?")[0] ?? "";
-    return path === "/api/health" || path.startsWith("/api/landing-gate");
+    const p = req.originalUrl.split("?")[0] ?? "";
+    return p === "/api/health" || p.startsWith("/api/landing-gate");
   },
+});
+
+// Destructive bulk-delete / credit-mutation endpoints — 10 / 15 min, auth required.
+const destructiveLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many destructive operations." },
 });
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -158,7 +171,46 @@ const allowedOrigin = process.env.ALLOWED_ORIGIN?.trim();
 
 const app = express();
 app.set("trust proxy", 1);
-app.use(allowedOrigin ? cors({ origin: allowedOrigin }) : cors());
+
+// ─── Security headers (helmet-equivalent, no extra dep) ──────────────────────
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("X-XSS-Protection", "0"); // modern browsers ignore; rely on CSP
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("X-Permitted-Cross-Domain-Policies", "none");
+  res.setHeader(
+    "Content-Security-Policy",
+    [
+      "default-src 'none'",
+      "script-src 'self'",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data:",
+      "font-src 'self'",
+      "connect-src 'self'",
+      "frame-ancestors 'none'",
+    ].join("; "),
+  );
+  res.setHeader(
+    "Strict-Transport-Security",
+    "max-age=63072000; includeSubDomains; preload",
+  );
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  next();
+});
+
+// ─── CORS ─────────────────────────────────────────────────────────────────────
+if (process.env.NODE_ENV === "production" && !allowedOrigin) {
+  console.warn(
+    "[IIVO] WARNING: ALLOWED_ORIGIN is not set in production. " +
+    "Set it to https://iivo.ai to restrict cross-origin access.",
+  );
+}
+app.use(
+  allowedOrigin
+    ? cors({ origin: allowedOrigin, credentials: false })
+    : cors(),
+);
 
 /** Visual ask may include optimized JPEG data URLs — parse before the global 2mb limit. */
 app.post("/api/glass/ask", glassApiAuthMiddleware, glassLimiter, express.json({ limit: "6mb" }), async (req, res) => {
@@ -371,7 +423,7 @@ app.delete("/api/history/:runId", async (req, res) => {
   res.json({ deleted });
 });
 
-app.delete("/api/history/all", async (_req, res) => {
+app.delete("/api/history/all", glassApiAuthMiddleware, destructiveLimiter, async (_req, res) => {
   const deleted = await deleteAllRunHistory();
   await appendAuditEvent({
     eventType: "all_history_deleted",
@@ -546,7 +598,7 @@ app.delete("/api/memory/:id", async (req, res) => {
   res.json({ deleted: true });
 });
 
-app.delete("/api/memory/all", async (_req, res) => {
+app.delete("/api/memory/all", glassApiAuthMiddleware, destructiveLimiter, async (_req, res) => {
   const deleted = await deleteAllMemories();
   await appendAuditEvent({
     eventType: "all_memory_deleted",
@@ -770,7 +822,7 @@ app.get("/api/audit", async (_req, res) => {
   res.json({ entries });
 });
 
-app.delete("/api/audit", async (_req, res) => {
+app.delete("/api/audit", glassApiAuthMiddleware, destructiveLimiter, async (_req, res) => {
   const deleted = await clearAuditLog();
   res.json({ deleted });
 });
@@ -940,7 +992,7 @@ app.post("/api/usage/estimate", async (req, res) => {
   });
 });
 
-app.post("/api/usage/reset-local", async (_req, res) => {
+app.post("/api/usage/reset-local", glassApiAuthMiddleware, destructiveLimiter, async (_req, res) => {
   const state = await resetLocalCredits();
   await appendAuditEvent({
     eventType: "credits_reset",
@@ -949,7 +1001,7 @@ app.post("/api/usage/reset-local", async (_req, res) => {
   res.json(state);
 });
 
-app.post("/api/usage/add-local-credits", async (req, res) => {
+app.post("/api/usage/add-local-credits", glassApiAuthMiddleware, destructiveLimiter, async (req, res) => {
   const { credits } = req.body as { credits?: number };
   const amount = Number(credits);
   if (!Number.isFinite(amount) || amount <= 0) {
