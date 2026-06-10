@@ -30,7 +30,7 @@ test("mode labels are simple single words", () => {
   assert.equal(GLASS_MODE_PRESETS.listen.label, "Listen");
   assert.equal(GLASS_MODE_PRESETS.meetings.label, "Meetings");
   assert.equal(GLASS_MODE_PRESETS.work.label, "Work");
-  assert.equal(GLASS_MODE_PRESETS.fix.label, "Fix");
+  assert.equal(GLASS_MODE_PRESETS.wingman.label, "Wingman");
   for (const id of GLASS_MODE_ORDER) {
     assert.ok(!/\b(Copilot|Session|Diagnostic|Passive|Coaching)\b/.test(GLASS_MODE_PRESETS[id].label));
   }
@@ -49,15 +49,15 @@ test("internal mappings are correct", () => {
   assert.equal(GLASS_MODE_PRESETS.work.copilotMode, "coaching");
   assert.equal(GLASS_MODE_PRESETS.work.sessionFocus, "auto");
 
-  assert.equal(GLASS_MODE_PRESETS.fix.copilotMode, "diagnostic");
-  assert.equal(GLASS_MODE_PRESETS.fix.sessionFocus, "auto");
+  assert.equal(GLASS_MODE_PRESETS.wingman.copilotMode, "diagnostic");
+  assert.equal(GLASS_MODE_PRESETS.wingman.sessionFocus, "auto");
 });
 
-test("Listen requires system audio; Work and Fix require no audio", () => {
+test("Listen requires system audio; Work and Wingman require no audio", () => {
   assert.equal(GLASS_MODE_PRESETS.listen.requiresSystemAudio, true);
   assert.equal(GLASS_MODE_PRESETS.listen.requiresAudio, true);
   assert.equal(GLASS_MODE_PRESETS.work.requiresAudio, false);
-  assert.equal(GLASS_MODE_PRESETS.fix.requiresAudio, false);
+  assert.equal(GLASS_MODE_PRESETS.wingman.requiresAudio, false);
 });
 
 test("Listen with system audio not ready needs setup, never auto-starts capture", () => {
@@ -79,8 +79,8 @@ test("Meetings prompts for source when none chosen, never auto-starts", () => {
   assert.equal(plan.startListening, false);
 });
 
-test("Work and Fix activate immediately without source choice or audio", () => {
-  for (const id of ["work", "fix"] as const) {
+test("Work and Wingman activate immediately without source choice or audio", () => {
+  for (const id of ["work", "wingman"] as const) {
     const plan = planModeActivation(getModePreset(id), { systemAudioReady: false });
     assert.equal(plan.startSession, true);
     assert.equal(plan.needsSourceChoice, false);

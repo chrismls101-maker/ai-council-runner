@@ -83,7 +83,7 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
   // Derive which simple mode is active from copilot mode + focus.
   const activeMode = useMemo<GlassModeId | null>(() => {
     if (!copilot.active || copilot.mode === "off") return null;
-    if (copilot.mode === "diagnostic") return "fix";
+    if (copilot.mode === "diagnostic") return "wingman";
     if (config.sessionType === "meeting_call") return "meetings";
     if (config.sessionType === "video_learning") return "listen";
     return "work";

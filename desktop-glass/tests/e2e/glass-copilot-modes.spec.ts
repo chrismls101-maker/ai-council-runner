@@ -290,7 +290,7 @@ test.describe("Coaching mode (#67)", () => {
 
 test.describe("Diagnostic mode (#68)", () => {
   test("Fix mode activates copilot in diagnostic mode without audio", async () => {
-    await panelPage.locator('[data-testid="glass-mode-card-fix"]').click();
+    await panelPage.locator('[data-testid="glass-mode-card-wingman"]').click();
     await expect
       .poll(async () => (await readGlassState(commandPage)).copilot.mode, { timeout: 5_000 })
       .toBe("diagnostic");

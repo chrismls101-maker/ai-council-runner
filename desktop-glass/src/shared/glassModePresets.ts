@@ -1,7 +1,7 @@
 /**
  * IIVO Glass — simple one-click mode presets.
  *
- * Each user-facing mode (Listen / Meetings / Work / Fix) maps to the right
+ * Each user-facing mode (Listen / Meetings / Work / Wingman) maps to the right
  * internal Session Copilot + transcription settings so users never configure an
  * engine. Voice is a separate interaction loop (not one of these cards) and is
  * intentionally excluded from this preset list.
@@ -15,7 +15,7 @@ import type { GlassCopilotSessionTypeSetting } from "./copilotSessionType.ts";
 import type { CopilotInputSource } from "./copilotPanelModel.ts";
 
 /** User-facing simple mode ids (Voice is handled separately). */
-export type GlassModeId = "listen" | "meetings" | "work" | "fix" | "translate";
+export type GlassModeId = "listen" | "meetings" | "work" | "wingman" | "translate";
 
 export interface GlassModePreset {
   id: GlassModeId;
@@ -96,11 +96,11 @@ export const GLASS_MODE_PRESETS: Record<GlassModeId, GlassModePreset> = {
     debriefEnabled: true,
     activeListeningEnabled: true,
   },
-  fix: {
-    id: "fix",
-    label: "Fix",
-    description: "Watch what's stuck and help diagnose it.",
-    examples: "Bugs, setup loops, repeated errors, confusion, failed builds, stuck workflows.",
+  wingman: {
+    id: "wingman",
+    label: "Wingman",
+    description: "Your expert overwatch — watches your screen and steps in when you need it.",
+    examples: "Errors on screen, stuck builds, confusing output, debugging sessions, using other AI tools, any complex screen work where a second set of expert eyes helps.",
     copilotMode: "diagnostic",
     sessionFocus: "auto",
     preferredInputSource: "none",
@@ -133,7 +133,7 @@ export const GLASS_MODE_PRESETS: Record<GlassModeId, GlassModePreset> = {
 /** Voice is a separate primary action, not a Copilot card. */
 export const VOICE_MODE_COPY = "Talk to IIVO hands-free.";
 
-export const GLASS_MODE_ORDER: GlassModeId[] = ["listen", "meetings", "work", "fix"];
+export const GLASS_MODE_ORDER: GlassModeId[] = ["listen", "meetings", "work", "wingman"];
 
 /** Quick Tools — universal capabilities outside the main mode grid. */
 export type GlassQuickToolId = "voice" | "translate";
@@ -208,6 +208,7 @@ export function modePrimaryActionLabel(
   if (preset.id === "listen") return "Start Listening";
   if (preset.id === "meetings") return "Start Meeting";
   if (preset.id === "translate") return "Start Translate";
+  if (preset.id === "wingman") return "Activate Wingman";
   return `Start ${preset.label}`;
 }
 

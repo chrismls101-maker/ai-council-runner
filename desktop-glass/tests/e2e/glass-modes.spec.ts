@@ -57,7 +57,7 @@ test("no audio/capture starts on initial launch", async () => {
 
 test("panel shows four mode cards and Quick Tools Voice + Translate", async () => {
   await expect(panelPage.locator('[data-testid="glass-mode-panel"]')).toBeVisible();
-  for (const id of ["listen", "meetings", "work", "fix"]) {
+  for (const id of ["listen", "meetings", "work", "wingman"]) {
     await expect(panelPage.locator(`[data-testid="glass-mode-card-${id}"]`)).toBeVisible();
   }
   await expect(panelPage.locator('[data-testid="glass-mode-card-translate"]')).toHaveCount(0);
@@ -77,7 +77,7 @@ test("Work activates immediately without audio", async () => {
 });
 
 test("Fix activates immediately in diagnostic mode without audio", async () => {
-  await panelPage.locator('[data-testid="glass-mode-card-fix"]').click();
+  await panelPage.locator('[data-testid="glass-mode-card-wingman"]').click();
   await expect
     .poll(async () => (await readGlassState(commandPage)).copilot.mode)
     .toBe("diagnostic");
