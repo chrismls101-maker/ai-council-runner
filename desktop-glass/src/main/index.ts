@@ -4098,6 +4098,23 @@ async function handleCommand(
         push();
       }
       return;
+    case "e2e-copilot-tick":
+      if (process.env.IIVO_GLASS_E2E === "1") {
+        await runCopilotTick();
+      }
+      return;
+    case "e2e-set-copilot-silence":
+      if (process.env.IIVO_GLASS_E2E === "1") {
+        copilot.e2eSetSilenceWarning(command.value);
+        push();
+      }
+      return;
+    case "e2e-inject-copilot-intervention":
+      if (process.env.IIVO_GLASS_E2E === "1") {
+        copilot.e2eInjectIntervention(command.intervention);
+        push();
+      }
+      return;
     case "update-glass-profile": {
       const profile = normalizeGlassUserProfile(command.profile);
       if (profile) {

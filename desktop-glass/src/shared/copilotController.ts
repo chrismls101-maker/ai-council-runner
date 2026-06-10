@@ -339,6 +339,20 @@ export class SessionCopilotController {
     this.interventions = [];
   }
 
+  // ─── E2E-only helpers (never call in production code) ────────────────────
+
+  /** Force systemAudioSilenceWarning on for overlay-card E2E tests. */
+  e2eSetSilenceWarning(value: boolean): void {
+    this.systemAudioSilenceWarning = value;
+    if (value) this.silenceWarningSuppressedUntilMs = undefined;
+  }
+
+  /** Push a pre-built intervention for coaching/diagnostic overlay E2E tests. */
+  e2eInjectIntervention(intervention: GlassCopilotIntervention): void {
+    this.interventions = this.interventions.filter((i) => i.id !== intervention.id);
+    this.interventions.push(intervention);
+  }
+
   /**
    * Run one extraction/intervention cycle. No-op (ran:false) unless a session
    * is live AND mode is active AND there is new context.

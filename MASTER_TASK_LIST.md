@@ -1,6 +1,6 @@
 # IIVO Master Task List
 **All three builds — smallest to biggest. Tick off as shipped.**
-Last updated: 2026-06-10 (Tasks #59–#65 + #77 + Docker health check completed)
+Last updated: 2026-06-10 (Tasks #59–#65 + #66–#72 + #77 + Docker health check completed)
 
 Legend: `[ ]` todo · `[x]` done · `[-]` deferred (P3)
 
@@ -70,14 +70,14 @@ Legend: `[ ]` todo · `[x]` done · `[-]` deferred (P3)
 - [x] Extension packaging + Chrome Web Store submission checklist
 
 ### Glass — Copilot modes (biggest untouched area)
-- [ ] Copilot **passive** mode E2E — enable passive → session runs → insights collected silently, no overlay cards shown
-- [ ] Copilot **coaching** mode E2E — enable coaching → trigger insight threshold → overlay card appears with action buttons → accept / dismiss / later work
-- [ ] Copilot **diagnostic** mode E2E — enable diagnostic → simulate stuck/error pattern → diagnostic card appears → "Summarize blocker" / "Create fix plan" work
-- [ ] Copilot **debrief** flow E2E — session ends → debrief auto-generates → panel shows debrief sections → "Debrief Ready" badge
-- [ ] Copilot session type detection E2E — `auto` detects type from context → semantic refine prompt appears → user pins type → cards change tone
-- [ ] `CopilotConfigure.tsx` full audit — all settings fields wired (interval, attention level, silence timeout, mute suggestions, report style)
-- [ ] Silence timeout warning card E2E — audio silent past threshold → warning card appears → dismiss / extend work
-- [ ] Listening limit reached card E2E — max minutes hit → overlay card fires → session pause/end flow
+- [x] Copilot **passive** mode E2E — enable passive → session runs → insights collected silently, no overlay cards shown
+- [x] Copilot **coaching** mode E2E — enable coaching → trigger insight threshold → overlay card appears with action buttons → accept / dismiss / later work
+- [x] Copilot **diagnostic** mode E2E — enable diagnostic → simulate stuck/error pattern → diagnostic card appears → "Summarize blocker" / "Create fix plan" work
+- [x] Copilot **debrief** flow E2E — session ends → debrief auto-generates → panel shows debrief sections → "Debrief Ready" badge
+- [x] Copilot session type detection E2E — `auto` detects type from context → semantic refine prompt appears → user pins type → cards change tone
+- [x] `CopilotConfigure.tsx` full audit — all settings fields wired (interval, attention level, silence timeout, mute suggestions, report style)
+- [x] Silence timeout warning card E2E — audio silent past threshold → warning card appears → dismiss / extend work
+- [x] Listening limit reached card E2E — max minutes hit → overlay card fires → session pause/end flow
 
 ---
 
@@ -115,7 +115,7 @@ Legend: `[ ]` todo · `[x]` done · `[-]` deferred (P3)
 |----------|-------|------|-----------|
 | Tiny | 13 | 13 | 0 |
 | Small | 17 | 17 | 0 |
-| Medium | 16 | 6 | 10 |
+| Medium | 16 | 14 | 2 |
 | Large | 6 | 1 | 5 |
 | Deferred | 8 | — | 8 |
-| **Total** | **60** | **31** | **21** |
+| **Total** | **60** | **39** | **13** |

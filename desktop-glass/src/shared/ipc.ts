@@ -192,6 +192,12 @@ export type GlassCommand =
     }
   | { type: "e2e-reset-setup-state" }
   | { type: "e2e-open-onboarding" }
+  | { type: "e2e-copilot-tick" }
+  | { type: "e2e-set-copilot-silence"; value: boolean }
+  | {
+      type: "e2e-inject-copilot-intervention";
+      intervention: import("./copilotTypes.ts").GlassCopilotIntervention;
+    }
   | { type: "update-glass-profile"; profile: import("./glassUserProfile.ts").GlassUserProfile }
   | { type: "complete-glass-onboarding"; profile?: import("./glassUserProfile.ts").GlassUserProfile }
   | { type: "skip-glass-onboarding" }
