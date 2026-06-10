@@ -65,8 +65,8 @@ Legend: `[ ]` todo · `[x]` done · `[-]` deferred (P3)
 - [ ] Docker health check — `GET /health` returns 200 in production container
 
 ### Browser Extension
-- [ ] Audit content script injection scope — runs on all http/https; confirm it doesn't leak data on sensitive pages (banking, passwords)
-- [ ] Context capture size guard — `MAX_VISIBLE_TEXT_CHARS = 12_000` tested at limit + over limit
+- [x] Audit content script injection scope — runs on all http/https; confirm it doesn't leak data on sensitive pages (banking, passwords)
+- [x] Context capture size guard — `MAX_VISIBLE_TEXT_CHARS = 12_000` tested at limit + over limit
 - [ ] Extension packaging + Chrome Web Store submission checklist
 
 ### Glass — Copilot modes (biggest untouched area)
