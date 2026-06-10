@@ -168,6 +168,8 @@ export type GlassCommand =
   | { type: "verify-system-audio" }
   | { type: "connect-system-audio" }
   | { type: "focus-audio-setup" }
+  | { type: "save-mac-output-device" }
+  | { type: "clear-mac-output-device" }
   | { type: "test-blackhole" }
   | { type: "retry-capture-permission" }
   | { type: "retry-capture" }

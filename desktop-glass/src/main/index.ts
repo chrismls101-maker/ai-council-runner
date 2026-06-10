@@ -325,6 +325,11 @@ import {
   stopAllActiveCaptureAndListening,
 } from "./glassOperations.ts";
 import {
+  restoreMacOutputFromSettings,
+  broadcastStartupAudioRestore,
+} from "./startupAudioRestore.ts";
+import { getCurrentMacOutputDeviceName } from "./macAudioOutput.ts";
+import {
   appendCommandFeedItem,
   createCommandFeedItem,
   type GlassCommandFeedItem,
@@ -3683,6 +3688,30 @@ async function handleCommand(
       await persistGlassUserSettings(glassUserSettings);
       push();
       return;
+    case "save-mac-output-device": {
+      const deviceName = await getCurrentMacOutputDeviceName();
+      state.glassSettings = {
+        ...state.glassSettings,
+        savedMacOutputDeviceName: deviceName ?? undefined,
+      };
+      glassUserSettings = state.glassSettings;
+      await persistGlassUserSettings(glassUserSettings);
+      state.lastNotice = deviceName
+        ? `Output device saved: ${deviceName}`
+        : "Could not read current output device (is SwitchAudioSource installed?).";
+      push();
+      return;
+    }
+    case "clear-mac-output-device":
+      state.glassSettings = {
+        ...state.glassSettings,
+        savedMacOutputDeviceName: undefined,
+      };
+      glassUserSettings = state.glassSettings;
+      await persistGlassUserSettings(glassUserSettings);
+      state.lastNotice = "Saved output device cleared.";
+      push();
+      return;
     case "save-last-visual-capture": {
       if (!sessionIsLive()) {
         state.lastNotice = "Start a session to save the screen capture.";
@@ -5099,6 +5128,8 @@ app.whenReady().then(async () => {
   });
   createWindows(config, glassUserSettings.displayTarget);
   applyGlassUserSettings(glassUserSettings);
+  void restoreMacOutputFromSettings(glassUserSettings);
+  broadcastStartupAudioRestore();
   registerGlobalHotkeys();
   if (needsGlassOnboarding) {
     setOnboardingEmergencyHandler(skipGlassOnboardingEmergency);

@@ -156,6 +156,43 @@ export function AudioTab({ state }: { state: GlassState }): JSX.Element {
           System audio stays separate (right-click the mic button).
         </p>
       </PanelSection>
+
+      <PanelSection
+        title="Mac output restore"
+        description="Automatically restore your speaker output on Glass startup — useful if BlackHole routing changes it."
+      >
+        {settings.savedMacOutputDeviceName ? (
+          <p className="hint" data-testid="glass-saved-output-device">
+            Saved: <strong>{settings.savedMacOutputDeviceName}</strong>
+          </p>
+        ) : (
+          <p className="hint">No output device saved yet.</p>
+        )}
+        <div className="audio-tab__mic-actions">
+          <button
+            type="button"
+            className="gbtn gbtn--primary"
+            data-testid="glass-save-output-device"
+            onClick={() => send({ type: "save-mac-output-device" })}
+          >
+            Save current output as default
+          </button>
+          {settings.savedMacOutputDeviceName ? (
+            <button
+              type="button"
+              className="gbtn gbtn--ghost gbtn--small"
+              data-testid="glass-clear-output-device"
+              onClick={() => send({ type: "clear-mac-output-device" })}
+            >
+              Clear
+            </button>
+          ) : null}
+        </div>
+        <p className="hint">
+          Requires <code>SwitchAudioSource</code> — install with{" "}
+          <code>brew install switchaudio-osx</code>.
+        </p>
+      </PanelSection>
     </div>
   );
 }
