@@ -1,4 +1,11 @@
 import { useState } from "react";
+import type { GlassUserProfile } from "../types/userProfile";
+import { EMPTY_GLASS_USER_PROFILE } from "../types/userProfile";
+import {
+  loadLocalGlassUserProfile,
+  saveLocalGlassUserProfile,
+  syncGlassUserProfileToServer,
+} from "../utils/userProfile";
 import Collapsible from "./Collapsible";
 import ProviderDisclosureTable from "./ProviderDisclosureTable";
 import PublicReadinessChecklist from "./PublicReadinessChecklist";
@@ -103,6 +110,11 @@ export default function SettingsPanel({
   const [busy, setBusy] = useState<string | null>(null);
   const [apiUrlDraft, setApiUrlDraft] = useState<string>(getApiBaseUrl());
   const [apiUrlSaved, setApiUrlSaved] = useState(false);
+  const [profileDraft, setProfileDraft] = useState<GlassUserProfile>(
+    () => loadLocalGlassUserProfile() ?? { ...EMPTY_GLASS_USER_PROFILE },
+  );
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileSaved, setProfileSaved] = useState(false);
 
   const updateSettings = (patch: Partial<AppSettings>) => {
     const next = { ...settings, ...patch };
@@ -173,6 +185,89 @@ export default function SettingsPanel({
       </header>
 
       <UsageCreditsPanel onFeedback={onFeedback} onUsageChange={onUsageChange} />
+
+      <section className="panel-section" data-testid="profile-editor-section">
+        <h2>Your Profile</h2>
+        <p className="settings-section-intro muted">
+          IIVO uses this to personalise responses. Update any field and save.
+        </p>
+        <div className="settings-profile-fields">
+          <label className="settings-profile-field" htmlFor="profile-name">
+            <span className="settings-profile-label">Name</span>
+            <input
+              id="profile-name"
+              type="text"
+              className="settings-profile-input"
+              value={profileDraft.name}
+              onChange={(e) => {
+                setProfileDraft((p) => ({ ...p, name: e.target.value }));
+                setProfileSaved(false);
+              }}
+              placeholder="Your name"
+              autoComplete="name"
+              data-testid="profile-name-input"
+            />
+          </label>
+          <label className="settings-profile-field" htmlFor="profile-usual-work">
+            <span className="settings-profile-label">Usual work</span>
+            <input
+              id="profile-usual-work"
+              type="text"
+              className="settings-profile-input"
+              value={profileDraft.usualWork}
+              onChange={(e) => {
+                setProfileDraft((p) => ({ ...p, usualWork: e.target.value }));
+                setProfileSaved(false);
+              }}
+              placeholder="e.g. product strategy, engineering, sales"
+              data-testid="profile-usual-work-input"
+            />
+          </label>
+          <label className="settings-profile-field" htmlFor="profile-current-focus">
+            <span className="settings-profile-label">Current focus</span>
+            <input
+              id="profile-current-focus"
+              type="text"
+              className="settings-profile-input"
+              value={profileDraft.currentFocus}
+              onChange={(e) => {
+                setProfileDraft((p) => ({ ...p, currentFocus: e.target.value }));
+                setProfileSaved(false);
+              }}
+              placeholder="e.g. Q3 roadmap, launching a new feature"
+              data-testid="profile-current-focus-input"
+            />
+          </label>
+        </div>
+        <div className="settings-profile-actions">
+          <button
+            type="button"
+            className="btn ghost small"
+            disabled={profileSaving}
+            data-testid="profile-save-btn"
+            onClick={async () => {
+              setProfileSaving(true);
+              try {
+                saveLocalGlassUserProfile(profileDraft);
+                await syncGlassUserProfileToServer(profileDraft).catch(() => {
+                  /* offline — local copy saved */
+                });
+                setProfileSaved(true);
+                onFeedback("Profile saved.");
+              } finally {
+                setProfileSaving(false);
+              }
+            }}
+          >
+            {profileSaving ? "Saving…" : "Save profile"}
+          </button>
+        </div>
+        {profileSaved && (
+          <p className="settings-note muted" data-testid="profile-saved-notice">
+            Profile saved. IIVO will use it on your next run.
+          </p>
+        )}
+      </section>
 
       <section className="panel-section" data-testid="workspace-context-section">
         <h2>Workspace context</h2>

@@ -239,7 +239,7 @@ export default function MemoryVault({ onRefresh }: MemoryVaultProps) {
   };
 
   return (
-    <div className="memory-vault">
+    <div className="memory-vault" data-testid="memory-vault">
       <div className="memory-vault-toolbar">
         <input
           type="search"
@@ -247,8 +247,14 @@ export default function MemoryVault({ onRefresh }: MemoryVaultProps) {
           placeholder="Search memories…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          data-testid="memory-search"
         />
-        <button type="button" className="btn primary small memory-create-btn" onClick={openCreate}>
+        <button
+          type="button"
+          className="btn primary small memory-create-btn"
+          onClick={openCreate}
+          data-testid="memory-create-btn"
+        >
           + Create memory
         </button>
       </div>
@@ -288,9 +294,9 @@ export default function MemoryVault({ onRefresh }: MemoryVaultProps) {
       </p>
 
       {loading ? (
-        <p className="muted">Loading memories…</p>
+        <p className="muted" data-testid="memory-loading">Loading memories…</p>
       ) : filtered.length === 0 ? (
-        <div className="sidebar-empty">
+        <div className="sidebar-empty" data-testid="memory-empty-state">
           <p className="empty-title">No memories yet.</p>
           <p className="empty-hint">
             {withIivoWordmark(
@@ -300,9 +306,9 @@ export default function MemoryVault({ onRefresh }: MemoryVaultProps) {
           </p>
         </div>
       ) : (
-        <ul className="memory-card-list">
+        <ul className="memory-card-list" data-testid="memory-card-list">
           {filtered.map((memory) => (
-            <li key={memory.id} className="memory-card">
+            <li key={memory.id} className="memory-card" data-testid="memory-card" data-memory-id={memory.id}>
               <div className="memory-card-top">
                 <span className={`memory-type-badge type-${memory.type}`}>
                   {MEMORY_TYPE_LABELS[memory.type]}
@@ -340,13 +346,19 @@ export default function MemoryVault({ onRefresh }: MemoryVaultProps) {
                   Updated {formatDate(memory.updatedAt)}
                 </span>
                 <div className="memory-card-actions">
-                  <button type="button" className="btn-icon" onClick={() => openEdit(memory)}>
+                  <button
+                    type="button"
+                    className="btn-icon"
+                    onClick={() => openEdit(memory)}
+                    data-testid="memory-edit-btn"
+                  >
                     Edit
                   </button>
                   <button
                     type="button"
                     className="btn-icon danger"
                     onClick={() => handleDelete(memory.id)}
+                    data-testid="memory-delete-btn"
                   >
                     Delete
                   </button>

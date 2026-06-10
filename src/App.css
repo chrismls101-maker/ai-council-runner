@@ -4847,6 +4847,51 @@ a.md-link:hover {
   color: #f87171;
 }
 
+/* ── Profile editor ────────────────────────────────────────────────────────── */
+.settings-profile-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.settings-profile-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-profile-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted, rgba(148, 163, 184, 0.9));
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.settings-profile-input {
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border, rgba(100, 116, 139, 0.28));
+  border-radius: 6px;
+  background: var(--surface, rgba(255, 255, 255, 0.06));
+  color: inherit;
+  font-size: 0.875rem;
+  font-family: inherit;
+}
+
+.settings-profile-input:focus {
+  outline: none;
+  border-color: rgba(99, 102, 241, 0.55);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+
+.settings-profile-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .provider-disclosure-wrap {
   overflow-x: auto;
 }

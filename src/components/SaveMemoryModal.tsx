@@ -52,6 +52,7 @@ export default function SaveMemoryModal({
         role="dialog"
         aria-labelledby="save-memory-title"
         onClick={(e) => e.stopPropagation()}
+        data-testid="save-memory-modal"
       >
         <div className="memory-modal-header">
           <h2 id="save-memory-title">{editing ? "Edit Memory" : "Save to Memory"}</h2>
@@ -67,6 +68,7 @@ export default function SaveMemoryModal({
               value={draft.type}
               onChange={(e) => update("type", e.target.value)}
               disabled={editing}
+              data-testid="memory-type-select"
             >
               {(Object.keys(MEMORY_TYPE_LABELS) as MemoryType[]).map((type) => (
                 <option key={type} value={type}>
@@ -113,6 +115,7 @@ export default function SaveMemoryModal({
                   type="text"
                   value={draft.title}
                   onChange={(e) => update("title", e.target.value)}
+                  data-testid="memory-title-input"
                 />
               </label>
               <label className="memory-field">
@@ -121,6 +124,7 @@ export default function SaveMemoryModal({
                   value={draft.content}
                   onChange={(e) => update("content", e.target.value)}
                   rows={5}
+                  data-testid="memory-content-input"
                 />
               </label>
             </>
@@ -158,7 +162,7 @@ export default function SaveMemoryModal({
         </div>
 
         <div className="memory-modal-footer">
-          <button type="button" className="btn" onClick={onClose}>
+          <button type="button" className="btn" onClick={onClose} data-testid="memory-modal-cancel">
             Cancel
           </button>
           <button
@@ -166,6 +170,7 @@ export default function SaveMemoryModal({
             className="btn primary"
             onClick={handleSubmit}
             disabled={saving}
+            data-testid="memory-modal-save"
           >
             {saving ? "Saving…" : editing ? "Update memory" : "Save to Memory"}
           </button>

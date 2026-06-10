@@ -35,9 +35,9 @@ Legend: `[ ]` todo · `[x]` done · `[-]` deferred (P3)
 - [x] Council web app 27/27 Playwright E2E audit (all public routes)
 - [x] Legal acceptance step in `OnboardingModal` (terms + privacy checkbox, localStorage)
 - [x] Settings API URL editor (`apiClient.ts` + `SettingsPanel` UI)
-- [ ] In-app profile editor — allow user to edit name / work / focus after onboarding completes
-- [ ] E2E test: council run flow (submit question → answer renders, no crash)
-- [ ] E2E test: memory vault (save memory → appears in list → delete)
+- [x] In-app profile editor — `SettingsPanel` "Your Profile" section, load/save/sync with `data-testid` attrs
+- [x] E2E test: council run flow — `council-run-flow.spec.ts` (happy path, error state, 404 page, profile editor check)
+- [x] E2E test: memory vault — `memory-vault.spec.ts` (empty state, create, delete); added testids to `MemoryVault.tsx` + `SaveMemoryModal.tsx`
 
 ### Browser Extension
 - [ ] E2E test: popup opens on a page, captures context, send button active
