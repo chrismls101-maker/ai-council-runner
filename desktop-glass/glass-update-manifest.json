@@ -1,10 +1,10 @@
 {
-  "version": "0.1.11",
-  "buildId": "20260608221426",
-  "releasedAt": "2026-06-08T22:14:26.115Z",
+  "version": "0.1.15",
+  "buildId": "20260609193912",
+  "releasedAt": "2026-06-09T19:39:12.828Z",
   "title": "NEW SYSTEM UPDATE",
-  "notes": "IIVO Glass v0.1.11 is ready to install.\n\n• Fix Check for updates — pulls releases through iivo.ai (private GitHub repo).\n• Update check now shows Checking… and surfaces errors in Setup.",
-  "downloadUrl": "https://iivo.ai/api/glass/update/download/IIVO-Glass-0.1.11-arm64.dmg",
-  "darwinArm64Dmg": "https://iivo.ai/api/glass/update/download/IIVO-Glass-0.1.11-arm64.dmg",
+  "notes": "IIVO Glass v0.1.15 is ready to install.",
+  "downloadUrl": "https://iivo.ai/api/glass/update/download/IIVO-Glass-0.1.15-arm64.dmg",
+  "darwinArm64Dmg": "https://iivo.ai/api/glass/update/download/IIVO-Glass-0.1.15-arm64.dmg",
   "darwinUniversalDmg": ""
 }

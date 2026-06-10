@@ -65,7 +65,7 @@ export async function runGlassSetupCheck(input: {
     systemAudioDetail: "Run Setup Check to probe screen, window, and system audio separately.",
   };
 
-  if (input.skipCaptureProbe || process.env.IIVO_GLASS_E2E === "1") {
+  if (input.skipCaptureProbe) {
     const e2eStub = process.env.IIVO_GLASS_E2E === "1";
     return {
       ...initial,

@@ -185,7 +185,7 @@ export default function Sidebar({
   const showFilters = section === "history";
   const listTitle =
     section === "history"
-      ? "Decision History"
+      ? "Session History"
       : section === "memory"
         ? "Memory Vault"
         : section === "final-plans"
@@ -233,31 +233,36 @@ export default function Sidebar({
   return (
     <aside className={`app-nav-shell${showSidePanel ? " panel-open" : ""}`}>
       <div className="nav-rail" aria-label="IIVO navigation">
-        <button
-          type="button"
-          className={`rail-logo${section === "console" ? " active" : ""}`}
-          onClick={() => handleNavClick("console")}
-          aria-label="Decision Console"
-          data-testid="decision-console"
-        >
-          <span className="rail-logo-box" aria-hidden="true">
-            <img
-              className="rail-eye-orb"
-              src="/iivo-eye-orb.png"
-              alt=""
-              width={40}
-              height={40}
-              draggable={false}
-            />
+        <div className="rail-item-wrap">
+          <button
+            type="button"
+            className={`rail-logo${section === "console" ? " active" : ""}`}
+            onClick={() => handleNavClick("console")}
+            aria-label="Glass Console"
+            data-testid="decision-console"
+          >
+            <span className="rail-logo-box" aria-hidden="true">
+              <img
+                className="rail-eye-orb"
+                src="/iivo-eye-orb.png"
+                alt=""
+                width={40}
+                height={40}
+                draggable={false}
+              />
+            </span>
+          </button>
+          <span className="rail-tooltip" role="tooltip">
+            Glass Console
           </span>
-        </button>
+        </div>
 
         <div className="rail-item-wrap">
           <button
             type="button"
             className="rail-btn rail-new"
             onClick={onNewDecision}
-            aria-label="New Decision"
+            aria-label="New Session"
             data-testid="new-decision-btn"
           >
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -265,7 +270,7 @@ export default function Sidebar({
             </svg>
           </button>
           <span className="rail-tooltip" role="tooltip">
-            New Decision
+            New Session
           </span>
         </div>
 

@@ -42,7 +42,12 @@ export function detectLanguageHeuristic(text: string): {
   }
 
   const ranked = Object.entries(scores).sort((a, b) => b[1] - a[1]);
-  if (!ranked.length) return { language: "other", uncertain: true };
+  if (!ranked.length) {
+    if (/[a-z]/i.test(sample)) {
+      return { language: "en", uncertain: false };
+    }
+    return { language: "other", uncertain: true };
+  }
   const [best, bestScore] = ranked[0]!;
   const secondScore = ranked[1]?.[1] ?? 0;
   return {

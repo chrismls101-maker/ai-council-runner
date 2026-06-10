@@ -55,6 +55,18 @@ export function stopLiveTranslate(runtime: LiveTranslateRuntimeState): LiveTrans
   };
 }
 
+/** Live Translate is running — overlay should prioritize caption readability. */
+export function isLiveTranslateActive(
+  runtime: LiveTranslateRuntimeState | undefined,
+): boolean {
+  return Boolean(runtime?.active && runtime.config.enabled);
+}
+
+/** Mic translate uses Web Speech (real-time) instead of chunk STT. */
+export function translateUsesMicrophoneInput(config: LiveTranslateConfig): boolean {
+  return config.source === "microphone" || config.source === "both";
+}
+
 export function updateLiveTranslateConfig(
   runtime: LiveTranslateRuntimeState,
   patch: Partial<LiveTranslateConfig>,

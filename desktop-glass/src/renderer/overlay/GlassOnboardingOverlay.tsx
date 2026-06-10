@@ -27,10 +27,6 @@ export function GlassOnboardingOverlay(): JSX.Element {
   }, []);
 
   useEffect(() => {
-    window.glass.setIgnoreMouse(false);
-  }, []);
-
-  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key === "Escape") {
         event.preventDefault();

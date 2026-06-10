@@ -104,11 +104,14 @@ describe("listenMeaningNote", () => {
       rollingTranscript: "You are simply directing your mind power toward a desired end.",
     });
     assert.ok((notes.meaningNotes?.length ?? 0) > 0);
-    assert.ok(notes.latestInsight);
-    assert.ok(notes.sections.keyIdeas.length > 0);
+    // latestInsight is AI-only — no AI notes passed here so it should be undefined.
+    assert.equal(notes.latestInsight, undefined);
+    // Sections only show AI notes (single-layer design); check entries for local output.
+    const keyIdeaEntries = notes.entries.filter((e) => e.section === "keyIdeas");
+    assert.ok(keyIdeaEntries.length > 0, "expected keyIdeas entry from local moment");
     assert.equal(
-      notes.sections.keyIdeas.some((line) =>
-        /continued his speech|simply directing your mind power/i.test(line),
+      keyIdeaEntries.some((e) =>
+        /continued his speech|simply directing your mind power/i.test(e.text),
       ),
       false,
     );

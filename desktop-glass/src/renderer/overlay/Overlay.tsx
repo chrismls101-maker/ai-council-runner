@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { ensureOverlayInteractive } from "../glassTextInteraction.ts";
 import type { GlassState } from "../../shared/ipc.ts";
 import type { OverlayMode } from "../../shared/glassWindowTypes.ts";
 import type { GlassSessionInsight } from "../../shared/sessionTypes.ts";
@@ -14,12 +15,8 @@ import { GlassOnboardingOverlay } from "./GlassOnboardingOverlay.tsx";
 import { LiveTranslateCaptionsOverlay } from "./LiveTranslateCaptionsOverlay.tsx";
 import { useGlassNotification } from "./useGlassNotification.ts";
 import { overlayNotificationBottomPx } from "../../shared/glassLayoutMath.ts";
-import {
-  nextOverlayInteractiveCount,
-  overlayFeedNotificationActive,
-  overlayRequiresAlwaysInteractive,
-  overlayShouldEnableClickThrough,
-} from "../../shared/overlayPointerPolicy.ts";
+import { overlayFeedNotificationActive, overlayNoticeNotificationActive } from "../../shared/overlayPointerPolicy.ts";
+import { isLiveTranslateActive } from "../../shared/liveTranslateState.ts";
 
 const CARD_TTL_MS = 8_000;
 const MAX_CARDS = 4;
@@ -49,6 +46,10 @@ function overlayFrameBottomInsetPx(state: GlassState): number {
   }
 
   return PRIMARY_FRAME_BOTTOM_INSET_PX;
+}
+
+function overlayRootClassName(...parts: Array<string | false | undefined>): string {
+  return parts.filter(Boolean).join(" ");
 }
 
 function overlayLayoutStyle(state: GlassState): CSSProperties {
@@ -116,32 +117,9 @@ function ListenCountdownOverlay({ seconds }: { seconds: number }): JSX.Element {
 }
 
 function OverlayStatus({ state }: { state: GlassState }): JSX.Element | null {
-  const sessionStatus = state.session?.status;
-  const sessionLive = sessionStatus === "active" || sessionStatus === "paused";
   const { privacy } = state;
-  const showPulse =
-    sessionLive || privacy.listening || privacy.capturing || privacy.status === "sending";
-
-  if (!showPulse && privacy.status === "idle") {
-    return null;
-  }
-
-  return (
-    <div className="overlay-status" aria-live="polite">
-      {sessionLive ? (
-        <span
-          className={`overlay-status__chip overlay-status__chip--session overlay-status__chip--${sessionStatus}`}
-        >
-          <span className="overlay-status__pulse" aria-hidden="true" />
-          Session {sessionStatus === "active" ? "active" : "paused"}
-        </span>
-      ) : null}
-      {privacy.listening ? (
-        <span className="overlay-status__chip overlay-status__chip--listen">
-          <span className="overlay-status__pulse" aria-hidden="true" />
-          Listening
-        </span>
-      ) : null}
+  const activityChips = (
+    <>
       {privacy.capturing ? (
         <span className="overlay-status__chip overlay-status__chip--capture">
           <span className="overlay-status__pulse" aria-hidden="true" />
@@ -151,7 +129,22 @@ function OverlayStatus({ state }: { state: GlassState }): JSX.Element | null {
       {privacy.status === "sending" ? (
         <span className="overlay-status__chip overlay-status__chip--send">Sending to IIVO</span>
       ) : null}
-    </div>
+    </>
+  );
+  const hasActivity = privacy.capturing || privacy.status === "sending";
+
+  if (!hasActivity) {
+    return null;
+  }
+
+  return (
+    <>
+      {hasActivity ? (
+        <div className="overlay-status overlay-status--activity" aria-live="polite">
+          {activityChips}
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -213,19 +206,15 @@ export function Overlay(): JSX.Element {
   const state = useGlassState();
   const onboardingOpen = state.onboardingOpen;
 
-  useLayoutEffect(() => {
-    if (onboardingOpen) {
-      window.glass.setIgnoreMouse(false);
-    }
-  }, [onboardingOpen]);
-
   const overlayMode = state.windows?.overlayMode ?? state.config.overlayMode ?? "passive";
   const overlayContentVisible =
     (state.windows?.overlayVisible ?? state.config.overlayEnabled) && overlayMode !== "hidden";
   const notificationEnabled = !onboardingOpen;
+  const translateFocusActive = isLiveTranslateActive(state.liveTranslate);
   const { notification, fading, onChatHoverStart, onChatHoverEnd } = useGlassNotification(
     state,
     notificationEnabled,
+    { suppressTransientNotifications: translateFocusActive },
   );
   const notificationVisible = Boolean(notification);
   const updateVisible =
@@ -235,64 +224,15 @@ export function Overlay(): JSX.Element {
   const countdownVisible =
     state.listenCountdownSeconds != null && state.listenCountdownSeconds > 0;
   const { cards, dismissCard } = useOverlayCards(state, overlayContentVisible);
-  const interactiveCountRef = useRef(0);
   const feedNotificationActive = overlayFeedNotificationActive(notification);
-
-  const applyOverlayPointerCapture = (): void => {
-    if (onboardingOpen) return;
-    const updateOnly = updateVisible && !overlayContentVisible && !countdownVisible;
-    const passiveNoticeOnly =
-      notificationVisible &&
-      !overlayContentVisible &&
-      !updateVisible &&
-      !countdownVisible &&
-      !feedNotificationActive;
-    const copilotPrompt =
-      overlayContentVisible &&
-      (state.copilot.systemAudioSilenceWarning || state.copilot.listeningLimitReached);
-    const alwaysInteractive = overlayRequiresAlwaysInteractive({
-      updateOnly,
-      copilotPrompt,
-      passiveNoticeOnly,
-    });
-    window.glass.setIgnoreMouse(
-      overlayShouldEnableClickThrough({
-        overlayContentVisible,
-        feedNotificationActive,
-        interactiveCount: interactiveCountRef.current,
-        alwaysInteractive,
-      }),
-    );
-  };
-
-  useEffect(() => {
-    if (onboardingOpen) return;
-    interactiveCountRef.current = 0;
-    applyOverlayPointerCapture();
-  }, [notification?.id, notificationVisible, feedNotificationActive, onboardingOpen]);
-
-  useEffect(() => {
-    if (onboardingOpen) return;
-    applyOverlayPointerCapture();
-  }, [
-    onboardingOpen,
-    updateVisible,
-    overlayContentVisible,
-    notificationVisible,
-    feedNotificationActive,
-    countdownVisible,
-    state.copilot.systemAudioSilenceWarning,
-    state.copilot.listeningLimitReached,
-  ]);
+  const noticeNotificationActive = overlayNoticeNotificationActive(notification);
 
   const enterInteractive = (): void => {
-    interactiveCountRef.current = nextOverlayInteractiveCount(interactiveCountRef.current, 1);
-    applyOverlayPointerCapture();
+    ensureOverlayInteractive();
   };
 
   const leaveInteractive = (): void => {
-    interactiveCountRef.current = nextOverlayInteractiveCount(interactiveCountRef.current, -1);
-    applyOverlayPointerCapture();
+    // mousemove tracking restores click-through when the pointer leaves interactive UI
   };
 
   const translateCaptionsVisible = Boolean(
@@ -323,7 +263,14 @@ export function Overlay(): JSX.Element {
 
   if (!overlayContentVisible && !countdownVisible && !updateVisible && translateCaptionsVisible) {
     return (
-      <div className="overlay-root overlay-root--captions-only" data-testid="glass-overlay-root">
+      <div
+        className={overlayRootClassName(
+          "overlay-root",
+          "overlay-root--captions-only",
+          translateFocusActive && "overlay-root--translate-active",
+        )}
+        data-testid="glass-overlay-root"
+      >
         {state.liveTranslate ? (
           <LiveTranslateCaptionsOverlay
             runtime={state.liveTranslate}
@@ -384,7 +331,10 @@ export function Overlay(): JSX.Element {
 
   return (
     <div
-      className="overlay-root"
+      className={overlayRootClassName(
+        "overlay-root",
+        translateFocusActive && "overlay-root--translate-active",
+      )}
       data-testid="glass-overlay-root"
       style={overlayLayoutStyle(state)}
     >

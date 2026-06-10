@@ -95,6 +95,27 @@ html.glass-landing-route body::after {
   width: 100%;
 }
 
+.glass-landing__download-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.glass-landing__install-link {
+  font-size: 0.875rem;
+  letter-spacing: 0.04em;
+  color: var(--gl-muted);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.glass-landing__install-link:hover {
+  color: var(--gl-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .glass-landing__hero-note {
   margin: 14px 0 0;
   font-size: 0.8125rem;

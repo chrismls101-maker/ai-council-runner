@@ -140,9 +140,17 @@ export async function launchGlassForListenLive({ apiUrl, webUrl, log = console.l
   });
 
   let stderr = "";
-  electronProcess.stderr?.on("data", (chunk) => {
-    stderr += chunk.toString();
-  });
+  const relayElectronLog = (chunk) => {
+    const text = chunk.toString();
+    stderr += text;
+    for (const line of text.split("\n")) {
+      if (line.includes("[listenAiNotes]")) {
+        console.log(`  [glass] ${line.trim()}`);
+      }
+    }
+  };
+  electronProcess.stderr?.on("data", relayElectronLog);
+  electronProcess.stdout?.on("data", relayElectronLog);
 
   await waitForCdp(GLASS_CDP_URL, electronProcess);
   const browser = await chromium.connectOverCDP(GLASS_CDP_URL);
@@ -487,7 +495,7 @@ export async function configureSystemAudioForListen({ command, panel, log = cons
 }
 
 async function clickListenMode({ command, panel, log }) {
-  log("  3/3 Listen mode (10s countdown, then capture)…");
+  log("  3/3 Listen mode (immediate capture)…");
   await openCopilotTab(panel);
   const listenCard = panel.locator('[data-testid="glass-mode-card-listen"]');
   await listenCard.waitFor({ state: "visible", timeout: 8_000 });
@@ -505,34 +513,53 @@ async function clickListenMode({ command, panel, log }) {
 
   await command.evaluate(() => {
     window.glass.send({ type: "transcription-set-mode", mode: "system_audio" });
-    window.glass.send({ type: "request-start-listening" });
   });
+
+  // Panel click usually starts listening; if renderer state lags, arm capture once.
+  await sleep(2_000);
+  const afterClick = await readGlassState(command);
+  if (!afterClick.privacy?.listening) {
+    log("  … arming system_audio listen capture");
+    await command.evaluate(() => {
+      window.glass.send({ type: "transcription-set-mode", mode: "system_audio" });
+      window.glass.send({ type: "request-start-listening" });
+    });
+  }
 
   return { ok: true };
 }
 
+export async function waitForNotesPadVisible({ browser, command, log, timeoutMs = 45_000 }) {
+  log("  Waiting for IIVO Notes pad on screen…");
+  const ready = await pollUntil(async () => {
+    for (const ctx of browser.contexts()) {
+      for (const page of ctx.pages()) {
+        if (!page.url().includes("notes.html")) continue;
+        const pad = page.locator('[data-testid="glass-notes-pad"]');
+        if (await pad.isVisible().catch(() => false)) {
+          return page;
+        }
+      }
+    }
+    const s = await readGlassState(command);
+    if (s.privacy?.listening && s.listenLiveNotes) return true;
+    return null;
+  }, timeoutMs, 400);
+
+  if (ready) {
+    log("  ✓ IIVO Notes pad visible — ready for video");
+    return true;
+  }
+  log("  ⚠ Notes pad not visible yet — opening video anyway");
+  return false;
+}
+
 async function waitForListeningActive({ command, log }) {
-  let nudged = false;
-  let lastCountdown = -1;
   const state = await pollUntil(async () => {
     const s = await readGlassState(command);
-    const counting = s.listenCountdownSeconds != null && s.listenCountdownSeconds > 0;
-    if (counting && s.listenCountdownSeconds !== lastCountdown) {
-      lastCountdown = s.listenCountdownSeconds;
-      log(`  … countdown ${s.listenCountdownSeconds}s before listening`);
-    }
-    if (counting) return null;
     const elapsed = s.stt?.listeningElapsedMs ?? 0;
-    if (s.privacy?.listening && elapsed >= 800 && s.transcriptionMode === "system_audio") {
+    if (s.privacy?.listening && elapsed >= 200 && s.transcriptionMode === "system_audio") {
       return s;
-    }
-    if (!nudged && !counting && !s.privacy?.listening) {
-      nudged = true;
-      log("  … nudging system_audio listen start");
-      await command.evaluate(() => {
-        window.glass.send({ type: "transcription-set-mode", mode: "system_audio" });
-        window.glass.send({ type: "request-start-listening" });
-      });
     }
     return null;
   }, 60_000, 500);
@@ -546,11 +573,11 @@ async function waitForListeningActive({ command, log }) {
 }
 
 /**
- * Fast automate: Connect IIVO Glass → audio backup → Copilot Listen → countdown → listening.
+ * Fast automate: Connect IIVO Glass → audio backup → Copilot Listen → listening.
  * Open YouTube separately (before calling this) so you can press play during audio test.
  */
 export async function automateListenMode({ command, dock, panel, endurance, log = console.log }) {
-  log("Automating Listen mode (Connect → audio → Listen + countdown)…");
+  log("Automating Listen mode (Connect → audio → Listen)…");
 
   const maxListeningMin = endurance?.maxListeningMinutes ?? 0;
   const attention = endurance?.attention ?? "balanced";
@@ -658,7 +685,7 @@ export function printSetupInstructions(log = console.log) {
   log("");
   log("  3. BlackHole routing Mac audio — harness clicks Setup → Connect, Audio fallback, Copilot Listen.");
   log("");
-  log("  AUTO MODE: Connect IIVO Glass, verify audio, Listen card, 10s countdown, then capture.");
+  log("  AUTO MODE: Connect IIVO Glass, verify audio, Listen card, then capture.");
   log("");
   log("══════════════════════════════════════════════════════════════");
   log("");

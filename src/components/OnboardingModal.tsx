@@ -3,13 +3,15 @@ import { motion, useReducedMotion } from "framer-motion";
 import type { GlassUserProfile } from "../types/userProfile";
 import { completeOnboarding } from "../utils/onboarding";
 
+const LEGAL_ACCEPTED_KEY = "iivo_legal_accepted";
+
 const QUESTIONS = [
   { key: "name" as const, label: "What's your name?" },
   { key: "usualWork" as const, label: "What kind of work do you usually do?" },
   { key: "currentFocus" as const, label: "What are you focused on right now?" },
 ];
 
-type Step = 0 | 1 | 2 | "calibrated";
+type Step = "legal" | 0 | 1 | 2 | "calibrated";
 
 interface OnboardingModalProps {
   onComplete: () => void;
@@ -18,7 +20,12 @@ interface OnboardingModalProps {
 export default function OnboardingModal({ onComplete }: OnboardingModalProps) {
   const reduceMotion = useReducedMotion();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [step, setStep] = useState<Step>(0);
+
+  const initialStep: Step =
+    localStorage.getItem(LEGAL_ACCEPTED_KEY) === "1" ? 0 : "legal";
+
+  const [step, setStep] = useState<Step>(initialStep);
+  const [legalChecked, setLegalChecked] = useState(false);
   const [answers, setAnswers] = useState<GlassUserProfile>({
     name: "",
     usualWork: "",
@@ -26,7 +33,7 @@ export default function OnboardingModal({ onComplete }: OnboardingModalProps) {
   });
   const [draft, setDraft] = useState("");
 
-  const questionIndex = typeof step === "number" ? step : 2;
+  const questionIndex = typeof step === "number" ? step : 0;
   const question = QUESTIONS[questionIndex];
 
   useEffect(() => {
@@ -41,7 +48,15 @@ export default function OnboardingModal({ onComplete }: OnboardingModalProps) {
     window.setTimeout(() => onComplete(), reduceMotion ? 800 : 4200);
   }, [onComplete, reduceMotion]);
 
+  const handleLegalAccept = () => {
+    if (!legalChecked) return;
+    localStorage.setItem(LEGAL_ACCEPTED_KEY, "1");
+    setStep(0);
+  };
+
   const handleSkip = () => {
+    // Legal acceptance is required even when skipping calibration questions.
+    if (step === "legal") return;
     completeOnboarding();
     onComplete();
   };
@@ -108,6 +123,63 @@ export default function OnboardingModal({ onComplete }: OnboardingModalProps) {
             <p className="glass-onboarding-calibrated-copy">
               I&apos;ll stay above your work and keep context with you.
             </p>
+          </motion.div>
+        ) : step === "legal" ? (
+          <motion.div
+            key="legal"
+            className="glass-onboarding-step"
+            data-testid="onboarding-legal"
+            {...motionProps}
+          >
+            <p className="glass-onboarding-kicker">Before we begin</p>
+            <h2 id="glass-onboarding-title" className="glass-onboarding-question">
+              Please review and accept our terms.
+            </h2>
+            <p className="glass-onboarding-legal-copy">
+              By using IIVO Glass you agree to our{" "}
+              <a
+                href="/terms"
+                target="_blank"
+                rel="noreferrer"
+                className="glass-onboarding-legal-link"
+                data-testid="onboarding-terms-link"
+              >
+                Terms of Service
+              </a>{" "}
+              and{" "}
+              <a
+                href="/privacy"
+                target="_blank"
+                rel="noreferrer"
+                className="glass-onboarding-legal-link"
+                data-testid="onboarding-privacy-link"
+              >
+                Privacy Policy
+              </a>
+              .
+            </p>
+            <label className="glass-onboarding-legal-label" htmlFor="glass-onboarding-legal-checkbox">
+              <input
+                id="glass-onboarding-legal-checkbox"
+                type="checkbox"
+                className="glass-onboarding-legal-checkbox"
+                checked={legalChecked}
+                onChange={(e) => setLegalChecked(e.target.checked)}
+                data-testid="onboarding-legal-checkbox"
+              />
+              I have read and accept the Terms of Service and Privacy Policy
+            </label>
+            <div className="glass-onboarding-actions">
+              <button
+                type="button"
+                className="glass-onboarding-continue"
+                onClick={handleLegalAccept}
+                disabled={!legalChecked}
+                data-testid="onboarding-legal-accept"
+              >
+                Accept &amp; Continue
+              </button>
+            </div>
           </motion.div>
         ) : (
           <motion.div key={String(step)} className="glass-onboarding-step" {...motionProps}>

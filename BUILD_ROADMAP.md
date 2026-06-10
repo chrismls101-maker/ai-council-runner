@@ -53,8 +53,8 @@ Last updated: 2026-06-08
 - `GLASS_QA.md`, `GLASS_LIMITATIONS.md`, `GLASS_CONTRACT.md`, `LISTEN_MODE_ARCHITECTURE.md`.
 - Signed-build + manual `notarytool` documented in `GLASS_QA.md` §7.
 - GitHub release DMG URL wired on landing page (v0.1.8 arm64).
-- **Beta install runbook** — `BETA_INSTALL.md` + `/install` page linked from landing footer.
-- **Privacy + Terms pages** — `/privacy` and `/terms` on glass landing; footer links on `/`, `/install`, `/privacy`, `/terms`.
+- **Beta install runbook** — `BETA_INSTALL.md` + `/install` page; Installation Guide link under download CTA on landing.
+- **Privacy + Terms deploy** — Done 2026-06-08 — `/privacy` and `/terms` live on iivo.ai; footer links verified; install guide under download button redeployed.
 
 ---
 
@@ -65,35 +65,34 @@ Priority order for a **solo founder → first beta users**. Honest gaps only.
 ### P0 — Beta blockers (do these first)
 
 1. **Verify onboarding fixes on real hardware** — Recent fixes (primary display, click-through, quit cleanup) need a full dev-cycle pass on multi-monitor HDMI setup; wrong-monitor / frozen-overlay bug was reported in the wild.
-2. **Terms of Service + Privacy Policy** — `/terms` and `/privacy` pages live; confirm copy + footer links on deployed iivo.ai before widening beta.
-3. **Production server hardening for beta** — Rate limits, stable `iivo.ai` deploy, `GLASS_API_SECRET` rotation story; today is workable for friends-and-family, not hardened for open beta.
+2. **Production server hardening for beta** — Rate limits, stable `iivo.ai` deploy, `GLASS_API_SECRET` rotation story; today is workable for friends-and-family, not hardened for open beta.
 
 ### P1 — Trust & regression (before widening beta)
 
-4. **Glass onboarding E2E** — Three-question flow in Electron is implemented but **skipped** when `IIVO_GLASS_E2E=1`; no automated proof that onboarding blocks chrome and saves profile.
-5. **Overlay interaction regression suite** — Pin / Copy / Remember / scroll / command-bar right-click broke in production; unit/policy tests exist but no E2E locking the fix.
-6. **Live Notes E2E** — Contract §10: listen → notes pad sections populate (**UNCOVERED**).
-7. **Update-check E2E** — Contract §16: stub newer semver → update overlay appears (**UNCOVERED**).
-8. **Crash / error telemetry for Glass** — No Sentry or structured crash logs from packaged builds; debugging beta reports will be blind.
+3. **Glass onboarding E2E** — Three-question flow in Electron is implemented but **skipped** when `IIVO_GLASS_E2E=1`; no automated proof that onboarding blocks chrome and saves profile.
+4. **Overlay interaction regression suite** — Pin / Copy / Remember / scroll / command-bar right-click broke in production; unit/policy tests exist but no E2E locking the fix.
+5. **Live Notes E2E** — Contract §10: listen → notes pad sections populate (**UNCOVERED**).
+6. **Update-check E2E** — Contract §16: stub newer semver → update overlay appears (**UNCOVERED**).
+7. **Crash / error telemetry for Glass** — No Sentry or structured crash logs from packaged builds; debugging beta reports will be blind.
 
 ### P2 — Beta UX gaps (acceptable to ship late beta without, but users will ask)
 
-9. **In-app API URL editor** — Glass panel still depends on env vars for server URL (§15 **UNCOVERED**).
-10. **In-app profile editor** — Onboarding captures once; no way to edit name/work/focus inside Glass after skip/complete.
-11. **Passive context E2E** — Engine wired + unit tested; no test that N asks change `userContext` payload shape over time.
-12. **Intel Mac + universal builds** — Landing and packaging default to **arm64 only**; no x64/universal DMG for beta.
-13. **Windows Glass** — Not started; Mac-only beta is fine if communicated clearly.
+8. **In-app API URL editor** — Glass panel still depends on env vars for server URL (§15 **UNCOVERED**).
+9. **In-app profile editor** — Onboarding captures once; no way to edit name/work/focus inside Glass after skip/complete.
+10. **Passive context E2E** — Engine wired + unit tested; no test that N asks change `userContext` payload shape over time.
+11. **Intel Mac + universal builds** — Landing and packaging default to **arm64 only**; no x64/universal DMG for beta.
+12. **Windows Glass** — Not started; Mac-only beta is fine if communicated clearly.
 
 ### P3 — Post-first-beta (explicitly not blocking)
 
-14. **Authentication + billing** — No accounts, no Stripe; credits are local simulation (`UsageCreditsPanel` copy says so). Readiness checklist: **later**.
-15. **Production multi-tenant storage** — Run history, memory, profiles use local JSON / browser storage patterns; not cloud-backed accounts.
-16. **Account-level data deletion** — Export/delete history exists; no auth-scoped account wipe.
-17. **Answer token streaming** — Glass uses single-shot ask + latency UX bridge (`GLASS_LIMITATIONS.md` Option B); streaming deferred.
-18. **Live Vision toggle** — Documented as not implemented (`GLASS_QA.md`).
-19. **Periodic background screen capture** — Explicitly not built (`SCREENSHOT_RETENTION.md`).
-20. **CI for Glass E2E** — Requires macOS display / xvfb; not running on default GitHub Actions path.
-21. **Re-enable `electron-builder` notarize** — Blocked on hang; manual notarization is the workaround until root-caused.
+13. **Authentication + billing** — No accounts, no Stripe; credits are local simulation (`UsageCreditsPanel` copy says so). Readiness checklist: **later**.
+14. **Production multi-tenant storage** — Run history, memory, profiles use local JSON / browser storage patterns; not cloud-backed accounts.
+15. **Account-level data deletion** — Export/delete history exists; no auth-scoped account wipe.
+16. **Answer token streaming** — Glass uses single-shot ask + latency UX bridge (`GLASS_LIMITATIONS.md` Option B); streaming deferred.
+17. **Live Vision toggle** — Documented as not implemented (`GLASS_QA.md`).
+18. **Periodic background screen capture** — Explicitly not built (`SCREENSHOT_RETENTION.md`).
+19. **CI for Glass E2E** — Requires macOS display / xvfb; not running on default GitHub Actions path.
+20. **Re-enable `electron-builder` notarize** — Blocked on hang; manual notarization is the workaround until root-caused.
 
 ---
 

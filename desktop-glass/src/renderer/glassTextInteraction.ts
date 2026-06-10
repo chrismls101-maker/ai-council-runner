@@ -3,22 +3,18 @@ import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent }
 let clickThroughEnabled = true;
 let reroutingContextMenu = false;
 
-/** Keep renderer click-through state aligned with the command bar window. */
-export function syncGlassClickThrough(enabled: boolean): void {
-  clickThroughEnabled = enabled;
-  window.glass.setIgnoreMouse(enabled);
-}
+/** Overlay uses fixed OS click-through; command bar/dock are always interactive. */
+export function syncGlassClickThrough(_enabled: boolean): void {}
 
-/** Overlay response cards — disable full-screen click-through before clicks land. */
+/** Interactive overlay surfaces use CSS pointer-events; no runtime OS toggle. */
 export function ensureOverlayInteractive(): void {
   clickThroughEnabled = false;
-  window.glass.setIgnoreMouse(false);
 }
 
-/** Disable click-through on pointer down (command bar + overlay text surfaces). */
+/** Pointer down on text surfaces — local state only for context-menu rerouting. */
 export function prepareGlassTextPointerDown(event: ReactPointerEvent): void {
   if (event.currentTarget.ownerDocument?.body?.classList.contains("glass-body--command")) {
-    syncGlassClickThrough(false);
+    clickThroughEnabled = false;
     return;
   }
   if (event.currentTarget.ownerDocument?.body?.classList.contains("glass-body--overlay")) {
@@ -36,7 +32,7 @@ export function prepareGlassTextContextMenu(event: ReactMouseEvent<HTMLElement>)
   if (onOverlay) {
     ensureOverlayInteractive();
   } else {
-    syncGlassClickThrough(false);
+    clickThroughEnabled = false;
   }
 
   if (reroutingContextMenu || !wasClickThrough) {

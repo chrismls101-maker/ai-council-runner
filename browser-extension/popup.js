@@ -2,12 +2,11 @@
  * IIVO Lens — popup UI (hardened v1)
  */
 
-const VITE_PORTS = [5173, 5174, 5175];
-const DIRECT_API = "http://localhost:3001";
+const DIRECT_API = "https://iivo.ai";
 
-/** Resolved at runtime — Vite dev proxy (adds auth) or direct API. */
+/** Resolved at runtime — production API with optional stored auth. */
 let apiBase = DIRECT_API;
-let webBase = "http://localhost:5173";
+let webBase = "https://iivo.ai";
 /** @type {Record<string, string>} */
 let apiAuthHeaders = {};
 const LENS_CAPTURED_VIA = "browser_lens";
@@ -150,36 +149,11 @@ async function probeHealth(base, headers = {}) {
   }
 }
 
-async function discoverWebBase() {
-  for (const port of VITE_PORTS) {
-    try {
-      const base = `http://localhost:${port}`;
-      const res = await fetch(`${base}/`, { signal: AbortSignal.timeout(2000) });
-      if (res.ok) return base;
-    } catch {
-      /* try next port */
-    }
-  }
-  return `http://localhost:${VITE_PORTS[0]}`;
-}
-
-/** Prefer Vite dev server (proxy injects GLASS_API_SECRET); fall back to :3001 with stored secret. */
 async function discoverEndpoints() {
-  for (const port of VITE_PORTS) {
-    const base = `http://localhost:${port}`;
-    if (await probeHealth(base)) {
-      apiBase = base;
-      webBase = base;
-      apiAuthHeaders = {};
-      return true;
-    }
-  }
-
   const secret = await loadStoredApiSecret();
   const headers = secret ? { Authorization: `Bearer ${secret}` } : {};
   if (await probeHealth(DIRECT_API, headers)) {
     apiBase = DIRECT_API;
-    webBase = await discoverWebBase();
     apiAuthHeaders = headers;
     return true;
   }
@@ -693,7 +667,7 @@ async function ensureReady() {
   const online = await checkIivoHealth();
   if (!online) {
     setStatus(
-      "IIVO is not running. Start IIVO with npm run dev, then try again.",
+      "Visit iivo.ai to check service status.",
       "error",
     );
     showOfflineActions(true);

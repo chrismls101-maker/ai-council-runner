@@ -265,24 +265,31 @@ html.glass-dock-window #root {
   min-height: 0;
   max-width: none;
   max-height: none;
+  pointer-events: none;
+  background: transparent;
 }
 
 .glass-body--dock #root {
   display: block;
+  pointer-events: none;
+  background: transparent;
 }
 
 .glass-body--overlay,
+.glass-body--overlay html,
+.glass-body--overlay body,
 .glass-body--overlay #root {
   width: 100vw;
   height: 100vh;
   overflow: hidden;
   background: transparent;
   pointer-events: none;
+  --glass-command-bar-shell-bg: linear-gradient(165deg, rgba(10, 12, 18, 0.94), rgba(6, 8, 14, 0.9));
+  --glass-command-bar-shell-border: rgba(255, 255, 255, 0.2);
 }
 
 .glass-body--overlay #root,
 .glass-body--panel #root,
-.glass-body--command #root,
 .glass-body--notes-pad #root,
 .glass-body--splash #root,
 .glass-body--splash-preview #root {
@@ -491,10 +498,40 @@ html.glass-dock-window #root {
   box-shadow: inset 0 -2px 0 rgba(65, 224, 163, 0.65);
 }
 
+.live-notes__scroll-wrap {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
 .live-notes__panel {
   flex: 1;
   min-height: 0;
   padding: 10px 14px 16px;
+}
+
+.live-notes__scroll-to-bottom {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(65, 224, 163, 0.18);
+  border: 1px solid rgba(65, 224, 163, 0.45);
+  color: rgba(65, 224, 163, 0.95);
+  border-radius: 999px;
+  padding: 4px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  transition: background 0.15s, opacity 0.15s;
+  z-index: 2;
+  pointer-events: auto;
+}
+.live-notes__scroll-to-bottom:hover {
+  background: rgba(65, 224, 163, 0.28);
 }
 
 .live-notes__transcript-panel {
@@ -534,6 +571,8 @@ html.glass-dock-window #root {
 .listen-insight-strip__text {
   flex: 1;
   min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .listen-insight-strip__why {
@@ -597,6 +636,7 @@ html.glass-dock-window #root {
 .dock {
   position: relative;
   isolation: isolate;
+  pointer-events: auto;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -611,20 +651,9 @@ html.glass-dock-window #root {
   backdrop-filter: blur(32px) saturate(175%);
   -webkit-backdrop-filter: blur(32px) saturate(175%);
   box-shadow:
-    0 14px 36px rgba(0, 0, 0, 0.42),
     inset 0 1px 0 rgba(255, 255, 255, 0.1),
     0 0 0 1px rgba(0, 0, 0, 0.28);
   -webkit-app-region: no-drag;
-}
-
-.dock::before {
-  content: "";
-  position: absolute;
-  inset: 1px;
-  border-radius: inherit;
-  pointer-events: none;
-  z-index: 0;
-  background: var(--glass-apple-sheen);
 }
 
 .dock::after {
@@ -767,6 +796,67 @@ html.glass-dock-window #root {
   row-gap: 6px;
 }
 
+.dock-stack {
+  position: relative;
+  display: flex;
+  flex-direction: inherit;
+  flex-wrap: inherit;
+  align-items: inherit;
+  align-content: inherit;
+  justify-content: inherit;
+  gap: inherit;
+  width: max-content;
+  max-width: inherit;
+  min-width: inherit;
+}
+
+.dock-stack--unlocked {
+  position: relative;
+  outline: 1px dashed rgba(56, 225, 255, 0.55);
+  outline-offset: 2px;
+  border-radius: inherit;
+  cursor: grab;
+}
+
+.dock-stack--unlocked .chrome-reposition-scrim {
+  border-radius: inherit;
+}
+
+.dock-stack--unlocked .chrome-reposition-hint {
+  border-radius: inherit;
+}
+
+.dock-stack--unlocked .dock__head,
+.dock-stack--unlocked .dock__actions > .gbtn,
+.dock-stack--unlocked .dock__row--menu,
+.dock-stack--unlocked .dock__toast {
+  position: relative;
+  z-index: 3;
+  opacity: 0.55;
+  filter: saturate(0.45);
+  pointer-events: none;
+}
+
+.dock-stack--unlocked .dock__chrome {
+  position: relative;
+  z-index: 6;
+  opacity: 1;
+  filter: none;
+  pointer-events: auto;
+}
+
+.dock-stack--unlocked .dock__chrome .gbtn,
+.dock-stack--unlocked .dock__chrome .chrome-lock,
+.dock-stack--unlocked .dock__chrome .chrome-rotate {
+  pointer-events: auto;
+  opacity: 1;
+  filter: none;
+  position: relative;
+  z-index: 6;
+  -webkit-app-region: no-drag;
+  cursor: pointer;
+}
+
 .dock--unlocked.dock--minimal {
   position: relative;
 }
@@ -815,6 +905,7 @@ html.glass-dock-window #root {
 }
 
 .dock--unlocked .chrome-reposition-scrim,
+.dock-stack--unlocked .chrome-reposition-scrim,
 .command-bar-stack--unlocked .chrome-reposition-scrim {
   pointer-events: auto;
   cursor: grab;
@@ -822,6 +913,7 @@ html.glass-dock-window #root {
 }
 
 .dock--unlocked .chrome-reposition-scrim:active,
+.dock-stack--unlocked .chrome-reposition-scrim:active,
 .command-bar-stack--unlocked .chrome-reposition-scrim:active {
   cursor: grabbing;
 }
@@ -1013,8 +1105,10 @@ html.glass-dock-window #root {
 }
 
 .dock--vertical .chrome-reposition-scrim,
-.dock--vertical .chrome-reposition-hint {
-  overflow: hidden;
+.dock--vertical .chrome-reposition-hint,
+.dock-stack--unlocked.dock--vertical .chrome-reposition-scrim,
+.dock-stack--unlocked.dock--vertical .chrome-reposition-hint {
+  border-radius: inherit;
 }
 
 .chrome-lock,
@@ -2008,16 +2102,25 @@ html.glass-dock-window #root {
 
 .overlay-status {
   position: fixed;
-  top: 72px;
-  left: 50%;
-  transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  justify-content: center;
   pointer-events: none;
   z-index: 1;
+}
+
+.overlay-status--session {
+  bottom: calc(var(--overlay-frame-bottom, 10px) + 12px);
+  left: 16px;
+  justify-content: flex-start;
+}
+
+.overlay-status--activity {
+  top: 72px;
+  left: 50%;
+  transform: translateX(-50%);
+  justify-content: center;
 }
 
 .overlay-status__chip {
@@ -2029,12 +2132,15 @@ html.glass-dock-window #root {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.02em;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(10, 14, 24, 0.42);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-command-bar-shell-border, rgba(255, 255, 255, 0.2));
+  background: var(--glass-command-bar-shell-bg, linear-gradient(165deg, rgba(10, 12, 18, 0.94), rgba(6, 8, 14, 0.9)));
+  backdrop-filter: blur(32px) saturate(175%);
+  -webkit-backdrop-filter: blur(32px) saturate(175%);
   color: rgba(236, 244, 255, 0.92);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 14px 36px rgba(0, 0, 0, 0.45);
 }
 
 .overlay-status__chip--session {
@@ -2091,7 +2197,7 @@ html.glass-dock-window #root {
   width: 450px;
   max-width: 450px;
   min-width: 450px;
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 .glass-notification-host--fading {
@@ -2124,13 +2230,14 @@ html.glass-dock-window #root {
   font-size: 13px;
   line-height: 1.45;
   color: rgba(236, 244, 255, 0.96);
-  border: 1px solid rgba(74, 222, 128, 0.35);
-  background: rgba(8, 12, 20, 0.82);
-  backdrop-filter: blur(22px);
-  -webkit-backdrop-filter: blur(22px);
+  border: 1px solid var(--glass-command-bar-shell-border, rgba(255, 255, 255, 0.2));
+  background: var(--glass-command-bar-shell-bg, linear-gradient(165deg, rgba(10, 12, 18, 0.94), rgba(6, 8, 14, 0.9)));
+  backdrop-filter: blur(32px) saturate(175%);
+  -webkit-backdrop-filter: blur(32px) saturate(175%);
   box-shadow:
-    0 18px 48px rgba(0, 0, 0, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    0 0 0 1px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 14px 36px rgba(0, 0, 0, 0.45);
   animation: overlay-card-in 0.22s ease-out;
 }
 
@@ -2156,8 +2263,113 @@ html.glass-dock-window #root {
   overflow-y: auto;
 }
 
+.glass-notification-host__stack {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  width: 100%;
+}
+
+.glass-notification-host__inline {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+
+.glass-notification-host--compact {
+  width: auto;
+  max-width: min(560px, calc(100vw - 48px));
+}
+
+.glass-notification-host__card--compact {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  width: auto;
+  max-width: 100%;
+  padding: 10px 10px 10px 14px;
+}
+
+.glass-notification-host__card--compact .glass-notification-host__inline {
+  gap: 8px 12px;
+}
+
+.glass-notification-host__card--compact .glass-notification-host__message {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-height: none;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.glass-notification-host__card:not(.glass-notification-host__card--compact) .glass-notification-host__message {
+  word-break: break-word;
+}
+
+.glass-notification-host__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-end;
+  margin-top: 2px;
+}
+
+.glass-notification-host__card--compact .glass-notification-host__actions {
+  align-self: center;
+  margin-top: 0;
+}
+
+.glass-notification-host__card--compact .glass-notification-host__dismiss {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 4px 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .glass-notification-host__dismiss {
   align-self: flex-end;
+}
+
+.glass-notification-host__copy {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--glass-border);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(200, 210, 225, 0.7);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+  flex-shrink: 0;
+}
+
+.glass-notification-host__copy:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.glass-notification-host__copy:active {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Error card: tint copy button to match error palette */
+.glass-notification-host__card--error .glass-notification-host__copy {
+  border-color: rgba(255, 120, 100, 0.3);
+  color: rgba(255, 160, 140, 0.75);
+}
+
+.glass-notification-host__card--error .glass-notification-host__copy:hover {
+  background: rgba(255, 100, 80, 0.12);
+  color: rgba(255, 200, 180, 1);
 }
 
 .overlay-center-notice {
@@ -2262,11 +2474,14 @@ html.glass-dock-window #root {
   pointer-events: auto;
   padding: 12px 14px;
   border-radius: 16px;
-  background: linear-gradient(160deg, rgba(12, 16, 28, 0.92), rgba(10, 14, 24, 0.82));
-  border: 1px solid rgba(120, 235, 255, 0.28);
-  backdrop-filter: blur(22px) saturate(140%);
-  -webkit-backdrop-filter: blur(22px) saturate(140%);
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45), 0 0 24px rgba(56, 225, 255, 0.12);
+  background: var(--glass-command-bar-shell-bg, linear-gradient(165deg, rgba(10, 12, 18, 0.94), rgba(6, 8, 14, 0.9)));
+  border: 1px solid var(--glass-command-bar-shell-border, rgba(255, 255, 255, 0.2));
+  backdrop-filter: blur(32px) saturate(175%);
+  -webkit-backdrop-filter: blur(32px) saturate(175%);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 14px 36px rgba(0, 0, 0, 0.45);
   animation: overlay-card-in 0.24s ease-out;
 }
 
@@ -2540,25 +2755,28 @@ html.glass-dock-window #root {
   justify-content: flex-end;
 }
 
-/* ---------- Command bar window ---------- */
+/* ---------- Command bar window — bounded pill; fill window, not viewport ---------- */
 .glass-body--command,
 .glass-body--command html,
 .glass-body--command body,
 .glass-body--command #root {
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
   overflow: hidden;
   background: transparent;
+  pointer-events: auto;
 }
 
 .command-root {
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   display: flex;
   align-items: flex-end;
   justify-content: center;
   padding: 0 0 4px;
-  pointer-events: none;
+  pointer-events: auto;
   box-sizing: border-box;
 }
 
@@ -2962,54 +3180,104 @@ html.glass-dock-window #root {
   box-shadow: 0 10px 24px rgba(255, 107, 129, 0.35);
 }
 
-.command-bar-accessory.command-bar__translate-status {
+.command-bar-hud {
   display: flex;
-  align-items: center;
+  flex-direction: row;
+  align-items: flex-end;
   gap: 8px;
-  padding: 7px 10px 7px 12px;
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  color: rgba(210, 228, 255, 0.94);
-  border-color: rgba(100, 170, 255, 0.28);
-  background: linear-gradient(165deg, rgba(12, 18, 32, 0.92), rgba(8, 12, 22, 0.88));
+  width: 100%;
+  pointer-events: none;
 }
 
-.command-bar__translate-status-dot {
+.command-bar-hud > .command-bar.composer-shell {
+  flex: 1;
+  min-width: 0;
+}
+
+.command-bar-hud__pills {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 6px;
   flex-shrink: 0;
-  width: 6px;
-  height: 6px;
+  pointer-events: auto;
+}
+
+.command-bar-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 168px;
+  padding: 4px 6px 4px 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  color: rgba(236, 240, 248, 0.94);
+  background: linear-gradient(165deg, rgba(10, 12, 18, 0.94), rgba(6, 8, 14, 0.9));
+  backdrop-filter: blur(32px) saturate(175%);
+  -webkit-backdrop-filter: blur(32px) saturate(175%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 8px 20px rgba(0, 0, 0, 0.35);
+}
+
+.command-bar-pill__pulse,
+.command-bar-pill__dot {
+  flex-shrink: 0;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
-  background: rgba(120, 195, 255, 0.95);
-  box-shadow: 0 0 8px rgba(80, 160, 255, 0.55);
+  background: rgba(120, 220, 160, 0.95);
+  box-shadow: 0 0 6px rgba(80, 200, 140, 0.5);
   animation: command-pulse 1.2s ease-in-out infinite;
 }
 
-.command-bar__translate-status-label {
-  flex: 1;
+.command-bar-pill__dot {
+  background: rgba(120, 195, 255, 0.95);
+  box-shadow: 0 0 6px rgba(80, 160, 255, 0.5);
+}
+
+.command-bar-pill--session .command-bar-pill__pulse {
+  background: rgba(74, 222, 128, 0.95);
+  box-shadow: 0 0 6px rgba(74, 222, 128, 0.45);
+}
+
+.command-bar-pill__label {
   min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.command-bar__translate-status-stop {
+.command-bar-pill__action {
   flex-shrink: 0;
-  height: 24px;
-  padding: 0 10px;
+  height: 18px;
+  padding: 0 7px;
   border-radius: 999px;
   border: 1px solid rgba(255, 120, 130, 0.35);
   background: rgba(255, 90, 105, 0.12);
   color: rgba(255, 190, 195, 0.96);
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 9px;
+  font-weight: 700;
   cursor: pointer;
   transition: background 0.12s ease, border-color 0.12s ease;
 }
 
-.command-bar__translate-status-stop:hover {
+.command-bar-pill__action:hover {
   border-color: rgba(255, 130, 140, 0.55);
   background: rgba(255, 90, 105, 0.22);
+}
+
+.command-bar__translate-status-label {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .glass-hover-tooltip-wrap {
@@ -3080,14 +3348,14 @@ html.glass-dock-window #root {
 }
 
 .command-bar.composer-shell .command-translate-btn--active {
-  border-color: rgba(100, 185, 255, 0.55);
+  border-color: rgba(60, 200, 120, 0.6);
   background:
-    linear-gradient(145deg, rgba(80, 160, 255, 0.28), rgba(40, 90, 180, 0.16)),
-    rgba(30, 70, 140, 0.18);
+    linear-gradient(145deg, rgba(40, 180, 100, 0.28), rgba(20, 120, 60, 0.16)),
+    rgba(15, 90, 45, 0.18);
   box-shadow:
-    inset 0 1px 0 rgba(180, 220, 255, 0.22),
-    0 0 14px rgba(70, 150, 255, 0.22);
-  color: rgba(190, 225, 255, 1);
+    inset 0 1px 0 rgba(160, 240, 190, 0.22),
+    0 0 14px rgba(50, 200, 110, 0.28);
+  color: rgba(160, 240, 190, 1);
 }
 
 .command-translate-btn__icon {
@@ -3097,6 +3365,389 @@ html.glass-dock-window #root {
 
 .command-bar.composer-shell .composer-trailing .command-translate-btn {
   margin-right: 4px;
+}
+
+.command-bar.composer-shell .command-lens-btn {
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  margin: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04)),
+    rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  color: rgba(220, 235, 255, 0.88);
+  cursor: pointer;
+  transition:
+    transform 0.12s ease,
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease,
+    color 0.15s ease;
+}
+
+.command-bar.composer-shell .command-lens-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.98);
+}
+
+.command-bar.composer-shell .command-lens-btn--active {
+  border-color: rgba(120, 220, 255, 0.55);
+  background:
+    linear-gradient(145deg, rgba(80, 200, 255, 0.24), rgba(30, 90, 160, 0.16)),
+    rgba(20, 60, 120, 0.18);
+  box-shadow:
+    inset 0 1px 0 rgba(180, 230, 255, 0.22),
+    0 0 14px rgba(70, 180, 255, 0.2);
+  color: rgba(190, 235, 255, 1);
+}
+
+.command-lens-btn__icon {
+  display: block;
+  pointer-events: none;
+}
+
+.command-bar.composer-shell .composer-trailing .command-lens-btn {
+  margin-right: 4px;
+}
+
+.command-bar-accessory.command-bar__lens-attached {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px 7px 10px;
+}
+
+.command-bar__lens-attached-back {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  text-shadow:
+    0 0 6px rgba(255, 255, 255, 0.95),
+    0 0 14px rgba(255, 255, 255, 0.45);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    0 0 10px rgba(255, 255, 255, 0.14);
+}
+
+.command-bar__lens-attached-back:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.42);
+  text-shadow:
+    0 0 8px rgba(255, 255, 255, 1),
+    0 0 18px rgba(255, 255, 255, 0.65);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    0 0 14px rgba(255, 255, 255, 0.22);
+}
+
+.command-bar__lens-attached-label {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  color: rgba(180, 220, 255, 0.92);
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.command-bar__lens-attached-label:hover {
+  color: rgba(210, 235, 255, 0.98);
+}
+
+.command-bar__lens-attached-dismiss {
+  flex-shrink: 0;
+  margin-left: auto;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.glass-lens-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(120, 200, 255, 0.28);
+  background: rgba(8, 12, 20, 0.9);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.32);
+  animation: glass-lens-panel-in 0.22s ease-out;
+}
+
+@keyframes glass-lens-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.glass-lens-panel__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.glass-lens-panel__head-title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.glass-lens-panel__section-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: rgba(200, 225, 255, 0.88);
+}
+
+.glass-lens-panel__section-icon {
+  display: inline-flex;
+  color: rgba(160, 210, 255, 0.92);
+}
+
+.glass-lens-panel__section-led {
+  width: 100%;
+  max-width: 140px;
+}
+
+.glass-lens-panel__live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(120, 200, 255, 0.22);
+  background: rgba(56, 120, 200, 0.12);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: rgba(180, 225, 255, 0.9);
+  white-space: nowrap;
+}
+
+.glass-lens-panel__live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #5ee87a;
+  box-shadow: 0 0 8px rgba(94, 232, 122, 0.75);
+}
+
+.glass-lens-panel__close {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.78);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.glass-lens-panel__domain-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.glass-lens-panel__globe {
+  flex-shrink: 0;
+  color: rgba(150, 200, 255, 0.82);
+}
+
+.glass-lens-panel__domain {
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(220, 235, 255, 0.92);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.glass-lens-panel__verified {
+  flex-shrink: 0;
+}
+
+.glass-lens-panel__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: rgba(255, 255, 255, 0.96);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.glass-lens-panel__preview-wrap {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  width: 100%;
+  min-height: 96px;
+  max-height: 132px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.32);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0 rgba(190, 225, 255, 0.06);
+}
+
+.glass-lens-panel__preview {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 132px;
+  object-fit: contain;
+  object-position: top center;
+}
+
+.glass-lens-panel__preview-empty {
+  border-radius: 10px;
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  padding: 18px 12px;
+  text-align: center;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.glass-lens-panel__pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.glass-lens-panel__pill {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.glass-lens-panel__pill:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.34);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.glass-lens-panel__pill--primary {
+  border-color: rgba(120, 200, 255, 0.45);
+  background: rgba(60, 140, 220, 0.18);
+}
+
+.glass-lens-panel__pill:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.glass-lens-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+}
+
+.glass-lens-lightbox__backdrop {
+  position: absolute;
+  inset: 0;
+  border: none;
+  background: rgba(0, 0, 0, 0.72);
+  cursor: pointer;
+}
+
+.glass-lens-lightbox__figure {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  max-width: 85vw;
+  max-height: 80vh;
+}
+
+.glass-lens-lightbox__img {
+  display: block;
+  width: 85vw;
+  height: 80vh;
+  max-width: 85vw;
+  max-height: 80vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+}
+
+.glass-lens-lightbox__close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(8, 12, 20, 0.88);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
 }
 
 .command-bar.composer-shell .command-chrome-lock.composer-icon-btn {
@@ -3698,6 +4349,15 @@ html.glass-dock-window #root {
   max-width: min(700px, calc(100vw - 40px));
 }
 
+.overlay-copilot:has([data-testid="glass-copilot-debrief"]) {
+  left: 50%;
+  right: auto;
+  bottom: var(--overlay-notification-bottom, calc(var(--overlay-frame-bottom, 10px) + 96px));
+  transform: translateX(-50%);
+  max-width: min(480px, calc(100vw - 48px));
+  align-items: stretch;
+}
+
 .overlay-copilot-card.glass-answer-shell {
   padding: 0;
   border: none;
@@ -3713,11 +4373,14 @@ html.glass-dock-window #root {
   pointer-events: auto;
   padding: 12px 14px;
   border-radius: 14px;
-  background: linear-gradient(160deg, rgba(14, 18, 32, 0.94), rgba(10, 14, 24, 0.84));
-  border: 1px solid rgba(120, 235, 255, 0.3);
-  backdrop-filter: blur(22px) saturate(140%);
-  -webkit-backdrop-filter: blur(22px) saturate(140%);
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45), 0 0 24px rgba(56, 225, 255, 0.12);
+  background: var(--glass-command-bar-shell-bg, linear-gradient(165deg, rgba(10, 12, 18, 0.94), rgba(6, 8, 14, 0.9)));
+  border: 1px solid var(--glass-command-bar-shell-border, rgba(255, 255, 255, 0.2));
+  backdrop-filter: blur(32px) saturate(175%);
+  -webkit-backdrop-filter: blur(32px) saturate(175%);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 14px 36px rgba(0, 0, 0, 0.45);
   animation: overlay-card-in 0.24s ease-out;
 }
 
@@ -3881,6 +4544,182 @@ html.glass-dock-window #root {
   opacity: 0.85;
 }
 
+/* ── Live Notes v2 — section headers, note cards, insight banner ─────────── */
+
+.live-notes__section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(180, 190, 210, 0.65);
+  margin: 0 0 7px;
+}
+
+.live-notes__section-icon {
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0.8;
+}
+
+.live-notes__cards {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Base note card */
+.note-card {
+  position: relative;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 9px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+/* AI-generated note card — subtle violet tint */
+.note-card--ai {
+  background: rgba(148, 110, 255, 0.07);
+  border-color: rgba(148, 110, 255, 0.22);
+}
+
+/* Still-developing note — dashed border, reduced opacity */
+.note-card--developing {
+  opacity: 0.72;
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.07);
+}
+
+.note-card__text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(225, 232, 245, 0.95);
+}
+
+/* Transcript anchor quote — smaller, muted italic */
+.note-card__anchor {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: rgba(160, 174, 200, 0.6);
+  font-style: italic;
+}
+
+.note-card__quote-mark {
+  opacity: 0.45;
+  font-style: normal;
+}
+
+/* "Why it matters" line — separator + muted text */
+.note-card__why {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: rgba(150, 165, 195, 0.65);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding-top: 4px;
+  margin-top: 1px;
+}
+
+/* AI badge pill inside card */
+.note-card__ai-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: rgba(188, 162, 255, 0.9);
+  background: rgba(148, 110, 255, 0.15);
+  border-radius: 4px;
+  padding: 1px 6px;
+  align-self: flex-start;
+  margin-bottom: 1px;
+}
+
+/* ── Insight of the moment banner ── */
+.live-notes__insight-banner {
+  background: rgba(255, 196, 82, 0.07);
+  border: 1px solid rgba(255, 196, 82, 0.22);
+  border-radius: 10px;
+  padding: 10px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.live-notes__insight-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 210, 100, 0.82);
+}
+
+.live-notes__insight-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(255, 232, 178, 0.95);
+}
+
+.live-notes__insight-anchor {
+  margin: 0;
+  font-size: 11.5px;
+  font-style: italic;
+  color: rgba(255, 210, 128, 0.5);
+}
+
+/* ── Note card "Ask about this" button ── */
+.note-card__footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 3px;
+}
+
+.note-card__ask-btn {
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: rgba(150, 165, 200, 0.55);
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 5px;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+  line-height: 1.6;
+}
+
+.note-card__ask-btn:hover {
+  color: rgba(210, 220, 242, 0.92);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.note-card__ask-btn:active {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* AI card gets a tinted hover */
+.note-card--ai .note-card__ask-btn:hover {
+  background: rgba(148, 110, 255, 0.14);
+  border-color: rgba(148, 110, 255, 0.32);
+  color: rgba(200, 180, 255, 0.95);
+}
+
+/* ── AI Enhanced status pill ── */
+.live-notes__pill--ai {
+  background: rgba(148, 110, 255, 0.12);
+  border-color: rgba(148, 110, 255, 0.28);
+  color: rgba(190, 162, 255, 0.9);
+}
+
 /* ---------- Session Copilot panel row ---------- */
 .copilot-config {
   display: flex;
@@ -3998,7 +4837,10 @@ html.glass-dock-window #root {
 
 .mode-card:hover {
   background: rgba(255, 255, 255, 0.07);
-  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.22);
+  /* No transform here — translateY on hover causes pointer jitter: the card
+     moves away from the cursor, removing :hover, moving it back, re-applying
+     :hover, creating infinite oscillation especially near card edges. */
 }
 
 .mode-card--active {
@@ -4123,6 +4965,11 @@ html.glass-dock-window #root {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
   text-align: center;
   transition: opacity 0.15s ease;
+  /* Prevent text cursor on caption copy — overlay must stay click-through over captions
+     so the cursor-changed listener only fires "pointer" for the Hide button, never "text"
+     for the caption text (which would block underlying app clicks). */
+  cursor: default;
+  user-select: none;
 }
 
 .live-translate-captions__inner--interim {
@@ -4150,6 +4997,15 @@ html.glass-dock-window #root {
   font-weight: 600;
   line-height: 1.35;
   color: rgba(255, 255, 255, 0.96);
+}
+
+/* Previous committed line — dimmer so active line stays prominent */
+.live-translate-captions__text--previous {
+  margin: 0 0 4px;
+  font-size: clamp(15px, 2vw, 22px);
+  font-weight: 500;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.48);
 }
 
 .live-translate-captions__original {
@@ -4183,8 +5039,75 @@ html.glass-dock-window #root {
   pointer-events: auto;
 }
 
+/* Live Translate — captions dominate; other overlay chrome recedes automatically. */
+.overlay-root--translate-active .overlay-status--activity,
+.overlay-root--translate-active .overlay-badge {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.overlay-root--translate-active .overlay-glass-sheet,
+.overlay-root--translate-active .overlay-glass-grid,
+.overlay-root--translate-active .overlay-glass-border,
+.overlay-root--translate-active .overlay-glass-glow {
+  opacity: 0.35;
+}
+
+.overlay-root--translate-active .glass-notification-host--compact,
+.overlay-root--translate-active .glass-notification-host--compact .glass-notification-host__card--compact {
+  opacity: 0.92;
+  transform: none;
+}
+
+.overlay-root--translate-active .glass-notification-host:not(.glass-notification-host--chat),
+.overlay-root--translate-active .overlay-copilot,
+.overlay-root--translate-active .overlay-cards {
+  opacity: 0.32;
+  transform: translateY(-6px) scale(0.96);
+  transform-origin: center bottom;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  pointer-events: none;
+}
+
+.overlay-root--translate-active .glass-notification-host:hover,
+.overlay-root--translate-active .glass-notification-host:focus-within,
+.overlay-root--translate-active .overlay-copilot:hover,
+.overlay-root--translate-active .overlay-copilot:focus-within,
+.overlay-root--translate-active .overlay-cards:hover,
+.overlay-root--translate-active .overlay-cards:focus-within {
+  opacity: 0.98;
+  transform: translateY(0) scale(1);
+}
+
+.overlay-root--translate-active .glass-notification-host:has(.glass-chat-reply--error),
+.overlay-root--translate-active .glass-notification-host:has(.glass-notification-host__card--error) {
+  opacity: 1;
+  transform: none;
+}
+
+.overlay-root--translate-active .overlay-status--session {
+  bottom: calc(var(--overlay-notification-bottom, 82px) + 96px);
+  z-index: 55;
+}
+
+.overlay-root--translate-active .live-translate-captions {
+  z-index: 60;
+}
+
+.overlay-root--translate-active .live-translate-captions__inner {
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+
 .live-notes__translate-toggle {
   padding: 0 0 8px;
+}
+
+.mode-panel__quick-tool .command-translate-btn__icon {
+  display: inline-block;
+  vertical-align: -3px;
+  margin-right: 2px;
 }
 
 .mode-panel__quick-tools {

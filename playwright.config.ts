@@ -3,7 +3,8 @@ import { defineConfig, devices } from "@playwright/test";
 const recordMode = process.env.QA_VISUAL_RECORD === "1";
 
 export default defineConfig({
-  testDir: "tests/visual",
+  testDir: "tests",
+  testMatch: ["visual/**/*.spec.ts", "e2e/**/*.spec.ts"],
   fullyParallel: false,
   workers: 1,
   timeout: 600_000,

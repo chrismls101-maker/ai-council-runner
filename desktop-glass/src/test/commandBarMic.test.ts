@@ -16,20 +16,26 @@ import {
   transcriptionReducer,
 } from "../shared/transcriptionTypes.ts";
 import { stopMediaStreamState } from "../shared/systemAudioCapture.ts";
-import { COMMAND_BAR_HEIGHT } from "../shared/glassLayoutMath.ts";
+import { COMMAND_BAR_HEIGHT, COMMAND_BAR_MIN_WINDOW_HEIGHT } from "../shared/glassLayoutMath.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
 
 test("command bar window height fits accessory strips above the composer pill", () => {
-  assert.ok(COMMAND_BAR_HEIGHT >= 240, "command bar window must fit stacked accessories");
+  assert.ok(
+    COMMAND_BAR_MIN_WINDOW_HEIGHT >= 58,
+    "command bar window must fit the composer row without a tall dead zone",
+  );
+  assert.ok(COMMAND_BAR_HEIGHT >= 240, "command bar window must fit stacked accessories when expanded");
   const commandBar = readFileSync(join(ROOT, "renderer", "command", "CommandBar.tsx"), "utf8");
   assert.ok(commandBar.includes("command-bar-stack"), "stack wrapper present");
   assert.ok(commandBar.includes("command-bar-accessories"), "accessories sit above pill");
   assert.ok(commandBar.includes('data-testid="glass-command-bar-stack"'), "stack test id for e2e");
   assert.ok(commandBar.includes("<VoiceModePanel />"), "voice panel in accessory stack");
   assert.ok(commandBar.includes('data-testid="glass-command-translate"'), "Translate on command bar");
-  assert.ok(commandBar.includes("command-bar__translate-status"), "Translate status strip when active");
+  // Translate pill was removed in v0.1.16 overhaul — button uses command-translate-btn--active now.
+  assert.ok(commandBar.includes("command-translate-btn--active"), "Translate active state class on button");
+  assert.ok(commandBar.includes('"glass-command-translate"'), "Translate button test id present");
   assert.ok(commandBar.includes("prepareGlassTextContextMenu"), "native context menu helper on input");
   assert.ok(commandBar.includes("prepareGlassTextPointerDown"), "right-click disables click-through");
 });

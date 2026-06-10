@@ -18,7 +18,6 @@ import {
   meaningKindToSection,
   meaningNoteFromMoment,
   meaningNoteFromStreamingSentence,
-  pickLatestMatureInsight,
   type ListenMeaningNote,
 } from "./listenMeaningNote.ts";
 
@@ -26,6 +25,34 @@ import {
 export const LIVE_NOTES_REFRESH_MS = 15_000;
 export const LIVE_NOTES_REFRESH_MIN_MS = 10_000;
 export const LIVE_NOTES_REFRESH_MAX_MS = 20_000;
+
+/**
+ * AI refresh interval: every ~15s when transcript is flowing.
+ * Reduced from 35s — GPT-5.5 is the sole visible note author so it needs
+ * to feel live. At normal speaking pace (~130 wpm) 15s yields ~45 new words,
+ * enough context for a meaningful pass without hammering the API.
+ */
+export const LIVE_NOTES_AI_REFRESH_MS = 15_000;
+/**
+ * Minimum new transcript chars before triggering an AI refresh pass.
+ * Reduced from 300 → 150 to match the tighter 15s cadence.
+ * ~150 chars ≈ 25-30 words — enough for at least one complete thought.
+ */
+export const LIVE_NOTES_AI_MIN_DELTA_CHARS = 150;
+
+/**
+ * A single note produced by the AI (GPT-5.5) background quality pass.
+ * These are higher-quality than local regex notes and shown first in each section.
+ */
+export interface ListenAiNote {
+  id: string;
+  section: LiveNoteSection;
+  note: string;
+  anchor?: string;
+  why?: string;
+  generatedAt: string;
+  model?: string;
+}
 
 export type LiveNoteSection =
   | "keyIdeas"
@@ -70,6 +97,15 @@ export interface ListenLiveNotesState {
   listeningStatus?: "listening" | "building" | "idle";
   sourceLabel?: string;
   micStatus?: "off" | "on";
+  /** How many AI-generated notes are currently showing. */
+  aiNotesCount?: number;
+  /** Timestamp of the last successful AI notes refresh. */
+  lastAiRefreshMs?: number;
+  /**
+   * AI-generated notes from the GPT-5.5 background pass, passed through to the
+   * renderer so cards can show the rich anchor + why fields.
+   */
+  aiNotes?: ListenAiNote[];
 }
 
 const SECTION_LABELS: Record<LiveNoteSection, string> = {
@@ -202,6 +238,7 @@ function dedupeEntries(entries: ListenLiveNoteEntry[]): ListenLiveNoteEntry[] {
 function buildSections(
   entries: ListenLiveNoteEntry[],
   meaningNotes: ListenMeaningNote[] = [],
+  aiNotes: ListenAiNote[] = [],
 ): Record<LiveNoteSection, string[]> {
   const sections: Record<LiveNoteSection, string[]> = {
     keyIdeas: [],
@@ -214,29 +251,15 @@ function buildSections(
     developing: [],
   };
 
-  for (const mn of meaningNotes) {
-    const section = meaningKindToSection(mn.kind);
-    const line = formatMeaningNoteForDisplay(mn);
-    if (sections[section].some((existing) => isDuplicateText(existing, line))) continue;
-    sections[section].push(line);
-  }
-
-  for (const entry of entries) {
-    const prefix =
-      entry.status === "developing"
-        ? "(developing) "
-        : entry.status === "uncertain"
-          ? "(needs more context) "
-          : "";
-    const line = `${prefix}${entry.text}`;
-    const target =
-      entry.status === "developing" && !sections.developing.length
-        ? "developing"
-        : entry.section;
-    if (!sections[target].some((existing) => isDuplicateText(existing, line))) {
-      sections[target].push(line);
+  // Section strings are AI-only. Meaning notes render via `meaningNotes` in the UI
+  // (EnrichedNoteSection) — do not mirror them here or cards appear twice.
+  for (const ai of aiNotes) {
+    const sec = ai.section in sections ? ai.section : "keyIdeas";
+    if (!sections[sec].some((existing) => isDuplicateText(existing, ai.note))) {
+      sections[sec].push(ai.note);
     }
   }
+
   return sections;
 }
 
@@ -250,6 +273,10 @@ export interface BuildListenLiveNotesInput {
   checkpoints?: ListenCheckpointSummary[];
   listeningStatus?: ListenLiveNotesState["listeningStatus"];
   duplicateFragmentCount?: number;
+  /** AI-generated notes from the GPT-5.5 background pass. Shown first in each section. */
+  aiNotes?: ListenAiNote[];
+  /** When the last successful AI refresh happened. */
+  lastAiRefreshMs?: number;
 }
 
 export function shouldRefreshStreamingLiveNotes(
@@ -358,6 +385,7 @@ export function buildListenLiveNotes(input: BuildListenLiveNotesInput): ListenLi
     listenStartedMs,
     lastRefreshMs,
     checkpoints = [],
+    aiNotes = [],
   } = input;
   const nowMs = input.nowMs ?? Date.now();
 
@@ -405,7 +433,24 @@ export function buildListenLiveNotes(input: BuildListenLiveNotesInput): ListenLi
     nowMs,
   );
   const deduped = dedupeEntries([...promoteMatureStreamingEntries(momentEntries), ...streamCandidates]);
-  const latestInsight = pickLatestMatureInsight(dedupedMeaning);
+  // Only show the insight strip when AI notes have landed — local template notes
+  // (both moment-based and streaming) are too low-quality to surface in the gold
+  // banner. The strip stays hidden until GPT-5.5 runs (~15s after enough audio).
+  const latestInsight: ListenMeaningNote | undefined =
+    aiNotes.length > 0
+      ? {
+          id: aiNotes[0]!.id,
+          kind: "key_idea",
+          title: "Key idea",
+          note: aiNotes[0]!.note,
+          whyItMatters: aiNotes[0]!.why,
+          transcriptAnchor: aiNotes[0]!.anchor,
+          confidence: "high",
+          status: "mature",
+          createdAt: aiNotes[0]!.generatedAt,
+          updatedAt: aiNotes[0]!.generatedAt,
+        }
+      : undefined;
   const topicFallback = rollingTranscript.slice(-160).trim();
   const currentTopic =
     pickCurrentTopic(activeMoments) ??
@@ -423,7 +468,10 @@ export function buildListenLiveNotes(input: BuildListenLiveNotesInput): ListenLi
     entries: deduped,
     meaningNotes: dedupedMeaning,
     latestInsight,
-    sections: buildSections(deduped, dedupedMeaning),
+    sections: buildSections(deduped, dedupedMeaning, aiNotes),
+    aiNotesCount: aiNotes.length,
+    aiNotes: aiNotes.length > 0 ? aiNotes : undefined,
+    lastAiRefreshMs: input.lastAiRefreshMs,
     transcriptChunkCount: transcriptChunks.length,
     duplicateTranscriptCount,
     lastUpdatedAt: deduped.length ? deduped[deduped.length - 1]!.updatedAt : new Date(nowMs).toISOString(),

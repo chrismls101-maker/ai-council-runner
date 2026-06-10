@@ -1,6 +1,5 @@
 /**
- * IIVO Public Readiness — onboarding calibration flow
- *
+ * @legacy Web dashboard onboarding was removed in favor of Electron Glass onboarding (§2).
  * Onboarding now lives in the IIVO Glass Electron app (see desktop-glass/GLASS_CONTRACT.md §2),
  * not in the web dashboard. These web UI tests are retired; run Glass E2E or manual QA instead.
  */

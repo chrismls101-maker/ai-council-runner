@@ -2,9 +2,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   classifySttFailure,
+  isSttNoSignalFailure,
   sttRetryActionForSource,
   sttSourceErrorMessage,
 } from "../shared/sttTypes.ts";
+
+test("isSttNoSignalFailure detects silence-only STT failures", () => {
+  assert.equal(isSttNoSignalFailure("Audio chunk too small to transcribe."), true);
+  assert.equal(isSttNoSignalFailure("OpenAI transcription failed (500): boom"), false);
+});
 
 test("classifySttFailure distinguishes no-signal vs transcription vs config vs server", () => {
   assert.equal(classifySttFailure("Audio chunk too small to transcribe."), "no_signal");

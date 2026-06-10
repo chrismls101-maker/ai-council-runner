@@ -1,0 +1,9 @@
+{
+  "name": "iivo-lens",
+  "version": "1.1.8",
+  "description": "IIVO Lens browser extension",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/popup.test.js"
+  }
+}

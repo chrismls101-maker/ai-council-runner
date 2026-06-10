@@ -8,9 +8,7 @@ import {
 } from "../components/glass-landing/index.ts";
 import GlassLandingFooter from "../components/glass-landing/GlassLandingFooter";
 import "../components/glass-landing/glass-landing.css";
-
-const GLASS_DMG_DOWNLOAD_URL =
-  "https://github.com/chrismls101-maker/ai-council-runner/releases/download/v0.1.8/IIVO.Glass-0.1.8-arm64.dmg";
+import { GLASS_DMG_DOWNLOAD_URL } from "../utils/glassRelease";
 
 const FEATURES = [
   <>It listens to <span className="glass-landing__your">YOUR</span> meetings and captures what matters.</>,
@@ -45,11 +43,26 @@ const fadeUp = {
   visible: { opacity: 1, y: 0 },
 };
 
-function DownloadButton() {
+function DownloadCta({
+  installTestId,
+  downloadTestId,
+}: {
+  installTestId?: string;
+  downloadTestId?: string;
+}) {
   return (
-    <GlassButton href={GLASS_DMG_DOWNLOAD_URL} data-testid="glass-landing-download">
-      Download for Mac — Apple Silicon
-    </GlassButton>
+    <div className="glass-landing__download-stack">
+      <GlassButton href={GLASS_DMG_DOWNLOAD_URL} data-testid={downloadTestId}>
+        Download for Mac — Apple Silicon
+      </GlassButton>
+      <a
+        href="/install"
+        className="glass-landing__install-link"
+        data-testid={installTestId}
+      >
+        Installation Guide
+      </a>
+    </div>
   );
 }
 
@@ -83,7 +96,10 @@ export default function GlassLandingPage() {
           <span className="glass-landing__your">YOU</span> sit above them all.
         </p>
         <div className="glass-landing__hero-cta">
-          <DownloadButton />
+          <DownloadCta
+            installTestId="glass-landing-install-link"
+            downloadTestId="glass-landing-download"
+          />
         </div>
         <p className="glass-landing__hero-note">Free beta. No account required.</p>
       </motion.section>
@@ -134,7 +150,9 @@ export default function GlassLandingPage() {
         {...motionProps}
       >
         <h2 className="glass-landing__section-title">Ready to think above everything else?</h2>
-        <DownloadButton />
+        <div className="glass-landing__hero-cta">
+          <DownloadCta />
+        </div>
         <p className="glass-landing__final-note">Mac Apple Silicon · Free Beta · No account required</p>
       </motion.section>
 

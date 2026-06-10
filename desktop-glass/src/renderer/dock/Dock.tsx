@@ -6,6 +6,14 @@ import { send, useGlassState } from "../useGlassState.ts";
 import { useChromeLockToggle } from "../useChromeLockToggle.ts";
 import { useChromeWindowDrag } from "../useChromeWindowDrag.ts";
 import { useDockResize } from "./useDockResize.ts";
+import {
+  resolvePanelLabel,
+  resolveOverlayLabel,
+  resolveChromeLockLabel,
+  resolveDockOrientationLabel,
+  resolveSendLabel,
+  DOCK_LABELS,
+} from "./dockLabels.ts";
 
 const OVERLAY_MODE_LABELS: Record<OverlayMode, string> = {
   passive: "Passive overlay",
@@ -21,6 +29,7 @@ function nextOverlayMode(current: OverlayMode): OverlayMode {
 export function Dock(): JSX.Element {
   const state = useGlassState();
   const dockRef = useRef<HTMLDivElement>(null);
+  const stackRef = useRef<HTMLDivElement>(null);
   const actionsRef = useRef<HTMLDivElement>(null);
   const dragHandleRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -32,7 +41,7 @@ export function Dock(): JSX.Element {
   const overlayVisible = state.windows?.overlayVisible ?? state.config.overlayEnabled;
   const chromeLocked = state.glassSettings.chromeLayoutLocked !== false;
   const toggleChromeLock = useChromeLockToggle(chromeLocked);
-  useChromeWindowDrag(!chromeLocked, chromeLocked ? dragHandleRef : dockRef);
+  useChromeWindowDrag(!chromeLocked, stackRef);
   const vertical = state.glassSettings.dockOrientation === "vertical";
 
   useDockResize(dockRef, actionsRef, [
@@ -56,14 +65,18 @@ export function Dock(): JSX.Element {
 
   return (
     <div
-      className={`dock dock--minimal${vertical ? " dock--vertical" : ""}${!chromeLocked ? " dock--unlocked" : ""}`}
+      className={`dock dock--minimal${vertical ? " dock--vertical" : ""}`}
       ref={dockRef}
       data-testid="glass-dock"
-      title={chromeLocked ? undefined : "Layout unlocked — hold and drag to move, then lock when done"}
     >
-      {!chromeLocked ? <ChromeRepositionOverlay /> : null}
+      <div
+        className={`dock-stack${!chromeLocked ? " dock-stack--unlocked" : ""}`}
+        ref={stackRef}
+        title={chromeLocked ? undefined : "Layout unlocked — hold and drag to move, then lock when done"}
+      >
+        {!chromeLocked ? <ChromeRepositionOverlay /> : null}
 
-      <div className="dock__actions" ref={actionsRef}>
+        <div className="dock__actions" ref={actionsRef}>
         {/* 1 — Identity + session transport (most used) */}
         <div className="dock__head">
           <div
@@ -88,7 +101,7 @@ export function Dock(): JSX.Element {
               onClick={() => send({ type: "session-start" })}
               title="Start a work session"
             >
-              Start Session
+              {DOCK_LABELS["start-session"]}
             </button>
           ) : (
             <>
@@ -100,7 +113,7 @@ export function Dock(): JSX.Element {
                   title="Pause session"
                   onClick={() => send({ type: "session-pause" })}
                 >
-                  Pause
+                  {DOCK_LABELS["pause-session"]}
                 </button>
               ) : (
                 <button
@@ -110,16 +123,17 @@ export function Dock(): JSX.Element {
                   title="Resume session"
                   onClick={() => send({ type: "session-resume" })}
                 >
-                  Resume
+                  {DOCK_LABELS["resume-session"]}
                 </button>
               )}
               <button
                 type="button"
                 className="gbtn"
+                data-testid="glass-dock-end-session"
                 title="End session"
                 onClick={() => send({ type: "session-end" })}
               >
-                End
+                {DOCK_LABELS["end-session"]}
               </button>
             </>
           )}
@@ -133,7 +147,7 @@ export function Dock(): JSX.Element {
           title="Open Glass panel"
           onClick={() => send({ type: "toggle-panel" })}
         >
-          {state.panelVisible ? "Close Panel" : "Open Panel"}
+          {resolvePanelLabel(state.panelVisible)}
         </button>
 
         {/* 3 — Emergency stop */}
@@ -144,7 +158,7 @@ export function Dock(): JSX.Element {
           onClick={() => send({ type: "stop-everything" })}
           title="Stop listening, capture, and translation"
         >
-          Stop Everything
+          {DOCK_LABELS["stop-everything"]}
         </button>
 
         {/* 4 — Active listening control */}
@@ -152,10 +166,11 @@ export function Dock(): JSX.Element {
           <button
             type="button"
             className="gbtn gbtn--danger"
+            data-testid="glass-dock-stop-listening"
             title="Stop listening"
             onClick={() => send({ type: "pause" })}
           >
-            Stop Listening
+            {DOCK_LABELS["stop-listening"]}
           </button>
         ) : null}
 
@@ -169,17 +184,18 @@ export function Dock(): JSX.Element {
             send(sessionLive ? { type: "session-capture" } : { type: "capture-screen-only" })
           }
         >
-          Capture
+          {DOCK_LABELS["capture"]}
         </button>
 
         {/* 6 — Overlay visibility */}
         <button
           type="button"
           className="gbtn"
+          data-testid={overlayVisible ? "glass-dock-hide-overlay" : "glass-dock-show-overlay"}
           onClick={() => send({ type: "toggle-overlay" })}
           title="Toggle the full-screen glass overlay"
         >
-          {overlayVisible ? "Hide Overlay" : "Show Overlay"}
+          {resolveOverlayLabel(overlayVisible)}
         </button>
 
         {/* 7 — Layout chrome */}
@@ -188,9 +204,14 @@ export function Dock(): JSX.Element {
             type="button"
             data-testid="glass-dock-chrome-lock"
             className={`gbtn gbtn--ghost gbtn--icon chrome-lock${chromeLocked ? " chrome-lock--locked" : " chrome-lock--unlocked"}`}
-            title={chromeLocked ? "Unlock layout" : "Lock layout"}
-            aria-label={chromeLocked ? "Unlock layout" : "Lock layout"}
-            onClick={toggleChromeLock}
+            title={resolveChromeLockLabel(chromeLocked)}
+            aria-label={resolveChromeLockLabel(chromeLocked)}
+            data-chrome-no-drag=""
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              toggleChromeLock();
+            }}
           >
             {chromeLocked ? "🔒" : "🔓"}
           </button>
@@ -198,14 +219,17 @@ export function Dock(): JSX.Element {
             type="button"
             data-testid="glass-dock-orientation"
             className="gbtn gbtn--ghost gbtn--icon chrome-rotate"
-            title={vertical ? "Switch to horizontal dock" : "Switch to vertical dock"}
-            aria-label={vertical ? "Switch to horizontal dock" : "Switch to vertical dock"}
-            onClick={() =>
+            title={resolveDockOrientationLabel(vertical)}
+            aria-label={resolveDockOrientationLabel(vertical)}
+            data-chrome-no-drag=""
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
               send({
                 type: "set-dock-orientation",
                 orientation: vertical ? "horizontal" : "vertical",
-              })
-            }
+              });
+            }}
           >
             ↻
           </button>
@@ -216,7 +240,7 @@ export function Dock(): JSX.Element {
           type="button"
           className={`gbtn gbtn--ghost gbtn--icon dock-menu__trigger${menuOpen ? " dock-menu__trigger--open" : ""}`}
           aria-expanded={menuOpen}
-          title="More actions"
+          title={DOCK_LABELS["more-actions"]}
           onClick={() => setMenuOpen((open) => !open)}
         >
           ⋯
@@ -256,7 +280,7 @@ export function Dock(): JSX.Element {
               setMenuOpen(false);
             }}
           >
-            {hasSession ? "Send Session" : "Send to IIVO"}
+            {resolveSendLabel(hasSession)}
           </button>
           <button
             type="button"
@@ -266,10 +290,11 @@ export function Dock(): JSX.Element {
               setMenuOpen(false);
             }}
           >
-            Open in IIVO
+            {DOCK_LABELS["open-in-iivo"]}
           </button>
         </div>
       ) : null}
+      </div>
     </div>
   );
 }

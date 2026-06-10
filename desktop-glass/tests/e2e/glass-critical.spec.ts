@@ -107,7 +107,7 @@ test.describe("IIVO Glass Electron E2E", () => {
       .innerText();
     expect(responseText).toContain(prompt);
     expect(responseText).toContain("You asked:");
-    expect(responseText).toContain("IIVO Glass is working");
+    expect(responseText).toMatch(/IIVO Glass is working|The command bar is working/);
 
     for (const marker of COUNCIL_MARKERS) {
       expect(responseText).not.toContain(marker);
@@ -317,7 +317,6 @@ test.describe("IIVO Glass Electron E2E", () => {
         status: "requires_virtual_device",
         detail: "No audio track from display media.",
       });
-      window.glass.send({ type: "run-setup-check" });
     });
 
     await expect
@@ -443,6 +442,7 @@ test.describe("IIVO Glass Electron E2E", () => {
     await dock.locator('[data-testid="glass-dock-open-panel"]').click();
 
     await command.evaluate(() => {
+      window.glass.send({ type: "report-virtual-audio-devices", devices: [] });
       window.glass.send({
         type: "e2e-set-capture-probes",
         screenCaptureProbe: "ready",
@@ -466,9 +466,11 @@ test.describe("IIVO Glass Electron E2E", () => {
     const state = await readGlassState(command);
     const sys = state.setupCapabilities?.find((r) => r.id === "systemAudio");
     expect(sys?.label).toBe("Source enumeration failed");
-    await expect(panel.locator('[data-testid="glass-system-audio-configure"]')).toContainText(
-      /Enumeration failed|Source enumeration failed/i,
-    );
+    await expect
+      .poll(async () =>
+        panel.locator('[data-testid="glass-system-audio-configure"] strong').first().innerText(),
+      )
+      .toBe("Enumeration failed");
     await expect(panel.locator('[data-testid="glass-setup-row-systemAudio"]')).toHaveCount(0);
 
     await openPanelTab(panel, "setup");

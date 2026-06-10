@@ -52,6 +52,10 @@ export interface SttChunkHandlerDeps {
   setLastError: (msg: string | undefined) => void;
   /** When false, errors from in-flight chunks after Stop Everything are suppressed. */
   shouldReportSttErrors?: () => boolean;
+  /** When true, silent/no-signal chunks do not surface as STT errors (Live Translate waiting). */
+  shouldSuppressNoSignalErrors?: () => boolean;
+  /** When true, suppress all STT errors during translate startup grace (before audio arrives). */
+  shouldSuppressTranslateStartupErrors?: () => boolean;
   push: () => void;
 }
 
@@ -60,7 +64,13 @@ export async function processSttChunk(
   deps: SttChunkHandlerDeps,
 ): Promise<SttProcessChunkResult> {
   const reportErrors = deps.shouldReportSttErrors?.() ?? true;
+  const suppressStartup = deps.shouldSuppressTranslateStartupErrors?.() ?? false;
   const fail = (error: string): SttProcessChunkResult => {
+    if (suppressStartup) {
+      deps.setSttState({ ...deps.getSttState(), transcribing: false, lastError: undefined });
+      deps.push();
+      return { ok: true, text: "" };
+    }
     if (reportErrors) {
       deps.setSttState({ ...deps.getSttState(), transcribing: false, lastError: error });
       deps.push();
@@ -82,6 +92,12 @@ export async function processSttChunk(
 
   const buffer = Buffer.from(payload.buffer);
   if (buffer.length < 512) {
+    // Silence / no-signal: suppress quietly when translate is active (waiting for video to start).
+    if (deps.shouldSuppressNoSignalErrors?.()) {
+      deps.setSttState({ ...deps.getSttState(), transcribing: false });
+      deps.push();
+      return { ok: true, text: "" };
+    }
     return fail(sttSourceErrorMessage(payload.source, "no_signal"));
   }
 
@@ -179,7 +195,17 @@ export async function processSttChunk(
   } catch (err) {
     const detail = err instanceof Error ? err.message : "Transcription failed.";
     const kind = classifySttFailure(detail);
+    if (kind === "no_signal" && deps.shouldSuppressNoSignalErrors?.()) {
+      deps.setSttState({ ...deps.getSttState(), transcribing: false, lastError: undefined });
+      deps.push();
+      return { ok: true, text: "" };
+    }
     const error = sttSourceErrorMessage(payload.source, kind, detail);
+    if (suppressStartup) {
+      deps.setSttState({ ...deps.getSttState(), transcribing: false, lastError: undefined });
+      deps.push();
+      return { ok: true, text: "", eventId };
+    }
     if (reportErrors) {
       deps.setSttState({
         ...deps.getSttState(),

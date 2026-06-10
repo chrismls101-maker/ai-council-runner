@@ -78,11 +78,8 @@ test("live notes update from rolling transcript fragments", () => {
     listenStartedMs: 0,
     nowMs: 5000,
   });
-  const total =
-    notes.sections.keyIdeas.length +
-    notes.sections.concepts.length +
-    notes.sections.quotes.length;
-  assert.ok(total >= 1);
+  // Sections empty pre-AI-pass. Streaming candidates land in entries.
+  assert.ok(notes.entries.length >= 1, "expected streaming candidates in entries");
   assert.ok(notes.rollingPreview);
 });
 

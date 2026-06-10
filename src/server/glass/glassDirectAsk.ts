@@ -11,6 +11,7 @@ import {
 import { callOpenAIWithModelChain, ProviderError } from "../providers/openai.js";
 import type { GlassAskRequestBody, GlassAskResponseBody, GlassAskSessionPayload } from "./glassAskTypes.js";
 import { buildActiveListeningPromptBlock } from "./activeListeningPrompt.js";
+import { buildGlassLensContextBlock, type GlassAskLensContext } from "./glassLensContext.js";
 import { formatGlassUserProfileBlock, normalizeGlassUserProfile } from "../userProfile/formatUserProfile.js";
 import { getGlassUserProfile } from "../userProfile/userProfileStore.js";
 import type { GlassUserProfile } from "../userProfile/types.js";
@@ -381,6 +382,7 @@ export function buildGlassDirectUserPrompt(
   session?: GlassAskSessionPayload,
   userProfile?: GlassUserProfile,
   userContext?: string,
+  lensContext?: GlassAskLensContext,
 ): string {
   const lines: string[] = [prompt.trim()];
 
@@ -389,6 +391,11 @@ export function buildGlassDirectUserPrompt(
     lines.push("", contextBlock);
   } else if (userProfile) {
     lines.push("", formatGlassUserProfileBlock(userProfile));
+  }
+
+  const lensBlock = buildGlassLensContextBlock(lensContext);
+  if (lensBlock) {
+    lines.push("", lensBlock);
   }
 
   if (session?.summary?.trim()) {
@@ -474,12 +481,16 @@ export function buildGlassDirectRetryPrompt(userPrompt: string): string {
   return `${userPrompt}\n\nYour previous answer was too similar/generic to another answer in this session. Rewrite using only the distinct facts from THIS session — specific names, owners, dates, sprint numbers, decisions, metrics, customer names, and blockers. If distinct facts are missing, list the missing fields explicitly instead of filling with generic advice. Do not repeat the same structure or headings.`;
 }
 
-/** Strip council-style formatting and cap overlay length. */
-export function formatGlassDirectAnswer(raw: string): {
+/** Strip council-style formatting; optionally cap for overlay HUD. */
+export function formatGlassDirectAnswer(
+  raw: string,
+  opts?: { overlayCap?: boolean },
+): {
   answer: string;
   shortAnswer?: string;
   warnings?: string[];
 } {
+  const overlayCapEnabled = opts?.overlayCap !== false;
   const cleaned = raw
     .trim()
     .replace(/^#{1,6}\s+/gm, "")
@@ -500,7 +511,7 @@ export function formatGlassDirectAnswer(raw: string): {
   const full = withoutCouncilLines || cleaned;
   const overlayCap = 720;
 
-  if (full.length <= overlayCap) {
+  if (!overlayCapEnabled || full.length <= overlayCap) {
     return { answer: full, warnings: warnings.length ? warnings : undefined };
   }
 
@@ -531,9 +542,17 @@ export async function runGlassDirectAsk(
   const userProfile =
     normalizeGlassUserProfile(body.userProfile) ?? storedProfile ?? undefined;
   const userContext = body.userContext?.trim() || undefined;
-  const userPrompt = buildGlassDirectUserPrompt(prompt, body.session, userProfile, userContext);
+  const userPrompt = buildGlassDirectUserPrompt(
+    prompt,
+    body.session,
+    userProfile,
+    userContext,
+    body.lensContext,
+  );
   let result = await caller(GLASS_DIRECT_SYSTEM_PROMPT, userPrompt, signal, purpose);
-  let formatted = formatGlassDirectAnswer(result.content);
+  let formatted = formatGlassDirectAnswer(result.content, {
+    overlayCap: body.responseStyle !== "full",
+  });
 
   const lastAnswer = body.session?.recentEvents
     ?.filter((event) => event.kind === "iivo_response" && event.text?.trim())
@@ -546,7 +565,9 @@ export async function runGlassDirectAsk(
       signal,
       purpose,
     );
-    formatted = formatGlassDirectAnswer(result.content);
+    formatted = formatGlassDirectAnswer(result.content, {
+      overlayCap: body.responseStyle !== "full",
+    });
   }
 
   const title = prompt.length > 60 ? `${prompt.slice(0, 59)}…` : prompt;

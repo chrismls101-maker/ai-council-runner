@@ -54,17 +54,21 @@ test("panel width scales down on narrow display", () => {
   assert.equal(layout.width, 720);
 });
 
-test("dock compact preset stacks flush above command bar left edge", () => {
+test("dock compact preset is top-centered like the command bar", () => {
   const bar = commandBarLayoutFromDisplay(macBook13);
   const layout = dockLayoutFromDisplay(macBook13, "compact_dock");
-  assert.equal(layout.y + layout.height, bar.y);
-  assert.equal(layout.x, bar.x);
+  const dockCenter = layout.x + layout.width / 2;
+  const barCenter = bar.x + bar.width / 2;
+  assert.equal(dockCenter, barCenter);
+  assert.equal(layout.y, macBook13.workArea.y + 12);
   assert.ok(layout.width <= 720);
 });
 
-test("dock floating preset anchors to bottom workArea", () => {
+test("dock floating preset anchors to top workArea center", () => {
   const layout = dockLayoutFromDisplay(macBook13, "floating_dock", 400, 72);
-  assert.equal(layout.y, macBook13.workArea.y + macBook13.workArea.height - 72 - 24);
+  assert.equal(layout.y, macBook13.workArea.y + 12);
+  const center = layout.x + layout.width / 2;
+  assert.equal(center, macBook13.workArea.x + macBook13.workArea.width / 2);
 });
 
 test("clamp dock size respects workArea margins", () => {

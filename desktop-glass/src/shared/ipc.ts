@@ -56,6 +56,7 @@ export const IPC = {
   sttProcessChunk: "glass:stt-process-chunk",
   transcriptionControl: "glass:transcription-control",
   commandBarFocus: "glass:command-bar-focus",
+  commandBarPrefill: "glass:command-bar-prefill",
   e2eGetExternalUrls: "glass:e2e-get-external-urls",
   e2eResetExternalUrls: "glass:e2e-reset-external-urls",
   e2eGetWindowMetadata: "glass:e2e-get-window-metadata",
@@ -66,6 +67,11 @@ export const IPC = {
   e2eSetCaptureProbes: "glass:e2e-set-capture-probes",
   e2eResetSetupState: "glass:e2e-reset-setup-state",
   saveGlassMemory: "glass:save-glass-memory",
+  lensCapture: "glass:lens-capture",
+  lensScreenshot: "glass:lens-screenshot",
+  hideForCapture: "glass:hide-for-capture",
+  restoreAfterCapture: "glass:restore-after-capture",
+  deepgramAudioChunk: "glass:deepgram-audio-chunk",
 } as const;
 
 export interface SaveGlassMemoryRequest {
@@ -98,7 +104,7 @@ export type GlassCommand =
   | { type: "stop-everything" }
   | { type: "request-start-listening" }
   | { type: "append-transcript"; text: string }
-  | { type: "add-transcript-chunk"; text: string; tags?: string[]; interim?: boolean }
+  | { type: "add-transcript-chunk"; text: string; tags?: string[]; interim?: boolean; speakerId?: number }
   | { type: "clear-transcript" }
   | { type: "transcription-set-mode"; mode: TranscriptionMode }
   | { type: "system-audio-set-status"; status: SystemAudioStatus; detail?: string }
@@ -113,8 +119,9 @@ export type GlassCommand =
   | { type: "send-transcript" }
   | { type: "send-moment"; id: string }
   | { type: "ask-iivo" }
-  | { type: "submit-command"; text: string }
+  | { type: "submit-command"; text: string; lensContext?: import("./glassLensContext.ts").GlassLensContext }
   | { type: "ask-iivo-direct"; text: string }
+  | { type: "prefill-command-bar"; text: string }
   | { type: "cancel-glass-ask" }
   | { type: "set-glass-hotkey"; preset: GlassUserSettings["hotkeyPreset"] }
   | { type: "set-glass-display"; target: GlassUserSettings["displayTarget"] }
@@ -144,7 +151,7 @@ export type GlassCommand =
   | { type: "set-overlay-mode"; mode: OverlayMode }
   | { type: "window-context-refresh" }
   | { type: "capture-media-context" }
-  | { type: "run-setup-check"; silent?: boolean }
+  | { type: "run-setup-check"; silent?: boolean; forceCaptureProbe?: boolean }
   | { type: "run-capture-diagnostics" }
   | { type: "clear-last-notice" }
   | { type: "clear-last-error" }
@@ -236,7 +243,8 @@ export type GlassCommand =
   | { type: "translate-start"; targetLanguage?: import("./liveTranslateTypes.ts").LiveTranslateTargetLanguage }
   | { type: "translate-stop" }
   | { type: "translate-set-captions-visible"; visible: boolean }
-  | { type: "translate-enable-microphone"; enabled: boolean };
+  | { type: "translate-enable-microphone"; enabled: boolean }
+  | { type: "open-translate-setup" };
 
 export interface GlassState {
   privacy: PrivacyState;
@@ -287,6 +295,8 @@ export interface GlassState {
   copilot: import("./copilotTypes.ts").GlassCopilotRuntimeState;
   /** Incremented when the panel requests Voice Mode; the command bar starts it. */
   voiceModeStartNonce?: number;
+  /** Incremented to open Live Translate setup in the Copilot panel (command bar parity). */
+  translateSetupRequestId?: number;
   /** Latest media/page context for Listen mode (text metadata only). */
   mediaContext?: import("./mediaContextTypes.ts").MediaContext | null;
   appUpdate: import("./glassAppUpdate.ts").GlassAppUpdateState;

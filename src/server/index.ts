@@ -145,6 +145,10 @@ const apiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many requests." },
+  skip: (req) => {
+    const path = req.originalUrl.split("?")[0] ?? "";
+    return path === "/api/health" || path.startsWith("/api/landing-gate");
+  },
 });
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

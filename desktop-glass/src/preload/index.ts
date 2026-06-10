@@ -48,6 +48,11 @@ const glassApi = {
     ipcRenderer.on(IPC.commandBarFocus, handler);
     return () => ipcRenderer.removeListener(IPC.commandBarFocus, handler);
   },
+  onCommandBarPrefill(listener: (text: string) => void): () => void {
+    const handler = (_event: unknown, text: string): void => listener(text);
+    ipcRenderer.on(IPC.commandBarPrefill, handler);
+    return () => ipcRenderer.removeListener(IPC.commandBarPrefill, handler);
+  },
   setIgnoreMouse(ignore: boolean): void {
     ipcRenderer.send(IPC.setIgnoreMouse, ignore);
   },
@@ -82,6 +87,25 @@ const glassApi = {
   },
   saveGlassMemory(payload: SaveGlassMemoryRequest): Promise<SaveGlassMemoryResponse> {
     return ipcRenderer.invoke(IPC.saveGlassMemory, payload) as Promise<SaveGlassMemoryResponse>;
+  },
+  captureLens(): Promise<import("../shared/glassLensContext.ts").GlassLensCaptureResult> {
+    return ipcRenderer.invoke(IPC.lensCapture) as Promise<
+      import("../shared/glassLensContext.ts").GlassLensCaptureResult
+    >;
+  },
+  captureLensScreenshot(): Promise<import("../shared/glassLensContext.ts").GlassLensScreenshotResult> {
+    return ipcRenderer.invoke(IPC.lensScreenshot) as Promise<
+      import("../shared/glassLensContext.ts").GlassLensScreenshotResult
+    >;
+  },
+  hideForCapture(): Promise<void> {
+    return ipcRenderer.invoke(IPC.hideForCapture) as Promise<void>;
+  },
+  restoreAfterCapture(): Promise<void> {
+    return ipcRenderer.invoke(IPC.restoreAfterCapture) as Promise<void>;
+  },
+  sendDeepgramAudioChunk(buffer: ArrayBuffer): void {
+    ipcRenderer.send(IPC.deepgramAudioChunk, buffer);
   },
   setE2eCaptureProbes(payload: {
     screenCaptureProbe?: import("../shared/captureSourceEnumeration.ts").ScreenCaptureProbeStatus;

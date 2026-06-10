@@ -4,7 +4,7 @@
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "IIVO_LENS_OPEN_APP") {
-    const url = message.url || "http://localhost:5173/";
+    const url = message.url || "https://iivo.ai/";
     chrome.tabs.create({ url }, () => sendResponse({ ok: true }));
     return true;
   }

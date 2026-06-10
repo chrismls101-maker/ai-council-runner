@@ -3,19 +3,25 @@
  * Packaged macOS builds only — dev keeps the manifest/DMG fallback in glassAppUpdate.ts.
  */
 
-import { app } from "electron";
+import { app, shell } from "electron";
 import pkg from "electron-updater";
 const { autoUpdater } = pkg;
 import {
   defaultGlassUpdateTitle,
   type GlassAppUpdateState,
 } from "../shared/glassAppUpdate.ts";
+import {
+  GLASS_GITHUB_UPDATE_OWNER,
+  GLASS_GITHUB_UPDATE_REPO,
+  glassGitHubReleaseDmgUrl,
+} from "../shared/glassAppUpdateFeed.ts";
 
 type StatePatch = Partial<GlassAppUpdateState>;
 
 let pushState: ((patch: StatePatch) => void) | null = null;
 let downloadReady = false;
 let updateOffered = false;
+let offeredVersion: string | undefined;
 
 export function isGlassAutoUpdateEnabled(): boolean {
   if (process.env.IIVO_GLASS_E2E === "1") return false;
@@ -46,7 +52,7 @@ function formatReleaseNotes(notes: unknown): string | undefined {
 
 export function initGlassAutoUpdater(
   onPatch: (patch: StatePatch) => void,
-  apiBaseUrl = "https://iivo.ai",
+  _apiBaseUrl = "https://iivo.ai",
 ): void {
   if (!isGlassAutoUpdateEnabled()) return;
 
@@ -57,10 +63,11 @@ export function initGlassAutoUpdater(
   autoUpdater.autoRunAppAfterInstall = true;
   autoUpdater.allowPrerelease = false;
 
-  const feedBase = `${apiBaseUrl.replace(/\/+$/, "")}/api/glass/update/electron`;
   autoUpdater.setFeedURL({
-    provider: "generic",
-    url: feedBase,
+    provider: "github",
+    owner: GLASS_GITHUB_UPDATE_OWNER,
+    repo: GLASS_GITHUB_UPDATE_REPO,
+    releaseType: "release",
   });
 
   autoUpdater.on("checking-for-update", () => {
@@ -77,6 +84,7 @@ export function initGlassAutoUpdater(
   autoUpdater.on("update-available", (info) => {
     downloadReady = false;
     updateOffered = true;
+    offeredVersion = info.version;
     onPatch({
       phase: "available",
       latestVersion: info.version,
@@ -117,6 +125,24 @@ export function initGlassAutoUpdater(
 
   autoUpdater.on("error", (_error, message) => {
     const text = message?.trim() || (_error instanceof Error ? _error.message : String(_error));
+    if (/code signature|ShipIt|notori/i.test(text) && offeredVersion) {
+      void openReleaseDmgFallback(offeredVersion).then((result) => {
+        if (result.ok) {
+          onPatch({
+            phase: "available",
+            latestVersion: offeredVersion,
+            error:
+              "In-app install needs a notarized build. The DMG opened in your browser — drag IIVO Glass to Applications, then reopen.",
+          });
+          return;
+        }
+        onPatch({
+          phase: updateOffered ? "available" : "idle",
+          error: text,
+        });
+      });
+      return;
+    }
     onPatch({
       phase: updateOffered ? "available" : "idle",
       error: text,
@@ -143,23 +169,34 @@ export async function checkGlassAutoUpdate(): Promise<void> {
   }
 }
 
-export async function applyGlassAutoUpdate(): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (!isGlassAutoUpdateEnabled()) {
-    return { ok: false, error: "Auto-update is only available in the packaged Mac app." };
+async function openReleaseDmgFallback(
+  latestVersion?: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const version = latestVersion?.trim() || app.getVersion();
+  if (!version) {
+    return { ok: false, error: "No update version is available for DMG fallback." };
   }
-
   try {
-    if (downloadReady) {
-      autoUpdater.quitAndInstall(false, true);
-      return { ok: true };
-    }
-
-    pushState?.({ phase: "downloading", error: undefined, downloadPercent: 0 });
-    await autoUpdater.downloadUpdate();
-    autoUpdater.quitAndInstall(false, true);
+    await shell.openExternal(glassGitHubReleaseDmgUrl(version));
     return { ok: true };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { ok: false, error: message };
   }
+}
+
+export async function applyGlassAutoUpdate(
+  latestVersion?: string,
+): Promise<{ ok: true; usedDmgFallback?: boolean } | { ok: false; error: string }> {
+  if (!isGlassAutoUpdateEnabled()) {
+    return { ok: false, error: "Auto-update is only available in the packaged Mac app." };
+  }
+
+  const version = latestVersion?.trim() || offeredVersion?.trim() || app.getVersion();
+  // Squirrel/ShipIt requires notarized macOS builds. Open the release DMG until notarized zips ship.
+  const dmg = await openReleaseDmgFallback(version);
+  if (dmg.ok) {
+    return { ok: true, usedDmgFallback: true };
+  }
+  return dmg;
 }

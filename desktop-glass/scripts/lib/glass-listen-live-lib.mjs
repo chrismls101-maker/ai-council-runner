@@ -43,6 +43,7 @@ export {
   applyHarnessMomentDecision,
   buildHarnessListenReport,
   createListenHarnessRuntime,
+  evaluateListenMomentsFromTranscript,
   evaluateListenMomentsFromTranscript as evaluateListenMomentsFromChunks,
   gradeListenLiveAnswer,
   gradeMediaExtraction,

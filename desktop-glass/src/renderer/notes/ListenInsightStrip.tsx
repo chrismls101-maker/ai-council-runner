@@ -10,7 +10,7 @@ export function ListenInsightStrip({
   const [expanded, setExpanded] = useState(false);
   if (!insight) return null;
 
-  const preview = insight.note.length > 140 ? `${insight.note.slice(0, 137)}…` : insight.note;
+  const hasWhy = Boolean(insight.whyItMatters?.trim());
 
   return (
     <div className="listen-insight-strip" data-testid="glass-listen-insight-strip">
@@ -19,12 +19,13 @@ export function ListenInsightStrip({
         className="listen-insight-strip__toggle"
         data-testid="glass-listen-insight-toggle"
         aria-expanded={expanded}
-        onClick={() => setExpanded((v) => !v)}
+        disabled={!hasWhy}
+        onClick={() => hasWhy && setExpanded((v) => !v)}
       >
         <span className="listen-insight-strip__bulb" aria-hidden="true">
           💡
         </span>
-        <span className="listen-insight-strip__text">{expanded ? insight.note : preview}</span>
+        <span className="listen-insight-strip__text">{insight.note}</span>
       </button>
       {expanded && insight.whyItMatters ? (
         <p className="listen-insight-strip__why" data-testid="glass-listen-insight-why">

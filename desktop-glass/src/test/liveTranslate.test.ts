@@ -1,5 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   applyCaptionChunk,
   formatCaptionForOverlay,
@@ -28,6 +31,7 @@ import {
   initialLiveTranslateRuntime,
   shouldPersistTranslateChunk,
   shouldPersistTranslationOnly,
+  isLiveTranslateActive,
   startLiveTranslate,
   stopLiveTranslate,
   translateAllowsMicrophone,
@@ -40,6 +44,24 @@ import {
 } from "../shared/glassModePresets.ts";
 import { translateEventMetadata } from "../main/liveTranslateMain.ts";
 import { liveTranslateOverlayPairLabel } from "../shared/liveTranslateTypes.ts";
+
+test("isLiveTranslateActive is true only when translate is running", () => {
+  const idle = initialLiveTranslateRuntime();
+  assert.equal(isLiveTranslateActive(idle), false);
+  assert.equal(isLiveTranslateActive(startLiveTranslate(idle)), true);
+  assert.equal(isLiveTranslateActive(stopLiveTranslate(startLiveTranslate(idle))), false);
+  assert.equal(isLiveTranslateActive(undefined), false);
+});
+
+test("command bar quick translate defaults to English target", () => {
+  assert.equal(DEFAULT_LIVE_TRANSLATE_CONFIG.targetLanguage, "en");
+  const commandBar = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), "..", "renderer", "command", "CommandBar.tsx"),
+    "utf8",
+  );
+  assert.doesNotMatch(commandBar, /targetLanguage \?\? "es"/);
+  assert.match(commandBar, /DEFAULT_LIVE_TRANSLATE_CONFIG\.targetLanguage/);
+});
 
 test("Translate preset exists but is not in main mode card order", () => {
   assert.ok(GLASS_MODE_PRESETS.translate);
@@ -159,7 +181,7 @@ test("duplicate captions dedupe", () => {
   assert.equal(caps.lines.length, before);
 });
 
-test("original + translation display mode uses short language codes", () => {
+test("original + translation display mode shows plain text without language tags", () => {
   const formatted = formatCaptionForOverlay(
     {
       id: "1",
@@ -171,9 +193,18 @@ test("original + translation display mode uses short language codes", () => {
     "original_and_translation",
     { originalCode: "ES", translatedCode: "EN" },
   );
-  assert.match(formatted!.primary, /^EN:/);
-  assert.match(formatted!.secondary!, /^ES:/);
+  assert.equal(formatted!.primary, "I need to review that tomorrow.");
+  assert.equal(formatted!.secondary, "Necesito revisar eso mañana.");
   assert.equal(formatted!.interim, false);
+});
+
+test("strip bracket language prefix from translated captions", () => {
+  const caps = applyCaptionChunk(initialLiveTranslateCaptions(DEFAULT_LIVE_TRANSLATE_CONFIG), {
+    original: "Hello",
+    translated: "[en] Hello",
+    id: "1",
+  });
+  assert.equal(caps.current?.translated, "Hello");
 });
 
 test("interim caption has interim state", () => {

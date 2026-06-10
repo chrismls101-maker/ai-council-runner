@@ -56,6 +56,8 @@ export type LiveTranslateStatus = "idle" | "starting" | "active" | "paused" | "e
 
 export interface LiveTranslateCaptionLine {
   id: string;
+  /** Groups caption chunks from the same continuous utterance — used to append words. */
+  sentenceId?: string;
   original: string;
   translated: string;
   interim: boolean;
@@ -113,11 +115,29 @@ export function liveTranslateLanguagePairLabel(
 ): string {
   const from =
     source === "auto"
-      ? detected && detected !== "auto"
+      ? detected && detected !== "auto" && detected !== "other"
         ? LIVE_TRANSLATE_LANGUAGE_LABELS[detected]
         : "Auto"
       : LIVE_TRANSLATE_LANGUAGE_LABELS[source];
   return `${from} → ${LIVE_TRANSLATE_LANGUAGE_LABELS[target]}`;
+}
+
+/** Compact pair for command-bar pills (Auto → ES). */
+export function liveTranslateCompactPairLabel(
+  source: LiveTranslateLanguage,
+  target: LiveTranslateTargetLanguage,
+  detected?: LiveTranslateLanguage,
+): string {
+  const code = (lang: LiveTranslateLanguage | undefined): string | undefined => {
+    if (!lang || lang === "auto" || lang === "other") return undefined;
+    return LIVE_TRANSLATE_LANGUAGE_CODES[lang];
+  };
+  const from =
+    source === "auto"
+      ? code(detected) ?? "Auto"
+      : (code(source) ?? source.toUpperCase());
+  const to = code(target) ?? LIVE_TRANSLATE_LANGUAGE_LABELS[target];
+  return `${from} → ${to}`;
 }
 
 export function liveTranslateOverlayPairLabel(

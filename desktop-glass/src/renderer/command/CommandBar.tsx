@@ -5,9 +5,11 @@ import { ensureCommandBarClickable, useChromeLockToggle } from "../useChromeLock
 import { useChromeWindowDrag } from "../useChromeWindowDrag.ts";
 import { useTranscriptionContext } from "../TranscriptionProvider.tsx";
 import { VoiceModePanel } from "./VoiceModePanel.tsx";
+import { GlassLensPanel, type GlassLensPageState } from "./GlassLensPanel.tsx";
 import { CommandMicIcon } from "./CommandMicIcon.tsx";
 import { CommandSendIcon, CommandStopIcon } from "./CommandSendIcon.tsx";
 import { CommandTranslateIcon } from "./CommandTranslateIcon.tsx";
+import { CommandLensIcon } from "./CommandLensIcon.tsx";
 import { GlassHoverTooltip } from "../components/GlassHoverTooltip.tsx";
 import type { TranscriptionMode } from "../../shared/audioCaptureTypes.ts";
 import { useVoiceMode } from "../useVoiceMode.ts";
@@ -21,9 +23,10 @@ import {
   shouldShowMicPermissionDenied,
 } from "../../shared/commandBarMic.ts";
 import { formatListeningDuration } from "../../shared/audioChunks.ts";
-import { buildTranslateStartPatch } from "../../shared/liveTranslateConfig.ts";
-import { liveTranslateLanguagePairLabel } from "../../shared/liveTranslateTypes.ts";
+import { buildTranslateStartPatch, DEFAULT_LIVE_TRANSLATE_CONFIG } from "../../shared/liveTranslateConfig.ts";
 import type { LiveTranslateTargetLanguage } from "../../shared/liveTranslateTypes.ts";
+import type { GlassLensContext } from "../../shared/glassLensContext.ts";
+import { lensContextHostname } from "../../shared/glassLensContext.ts";
 
 /**
  * Bottom-centered Glass command bar. Direct ask renders inline on the overlay;
@@ -41,43 +44,70 @@ export function CommandBar(): JSX.Element {
   const stackRef = useRef<HTMLDivElement | null>(null);
   const [text, setText] = useState("");
   const [showSources, setShowSources] = useState(false);
+  const [lensOpen, setLensOpen] = useState(false);
+  const [lensLoading, setLensLoading] = useState(false);
+  const [lensScreenshotLoading, setLensScreenshotLoading] = useState(false);
+  const [lensPage, setLensPage] = useState<GlassLensPageState | null>(null);
+  const [lensPreviewScreenshot, setLensPreviewScreenshot] = useState("");
+  const [lensContext, setLensContext] = useState<GlassLensContext | null>(null);
+  const [lensPlaceholder, setLensPlaceholder] = useState<string | null>(null);
+  const [translateElapsedMs, setTranslateElapsedMs] = useState(0);
   const focusedRef = useRef(false);
-  const hoverCountRef = useRef(0);
   const micInputTouchedRef = useRef(false);
   const wasListeningRef = useRef(false);
 
+  const translateRuntime = state.liveTranslate;
+  const translateActive = translateRuntime?.active && translateRuntime.config.enabled;
+
   const listening = tx.status === "listening";
   const countdownActive = (state.listenCountdownSeconds ?? 0) > 0;
-  const listeningDesynced = !listening && state.privacy.listening && !countdownActive;
   const listenElapsedMs = Math.max(state.stt?.listeningElapsedMs ?? 0, 0);
+  const transcribing = state.stt?.transcribing === true;
+  const listenCopilotActive =
+    state.copilot?.active === true && state.copilot.config.sessionType === "video_learning";
+  // Listen capture runs in the panel window; command bar shares main-process state.
+  const captureConfirmed =
+    listening ||
+    transcribing ||
+    (listenCopilotActive && state.privacy.listening && listenElapsedMs >= 500);
+  const listeningDesynced =
+    !captureConfirmed &&
+    state.privacy.listening &&
+    !countdownActive &&
+    !translateActive &&
+    !listenCopilotActive;
   const listenDurationLabel = formatListeningDuration(
     listening ? Math.max(listenElapsedMs, 0) : listenElapsedMs,
   );
   const buildingContext = state.copilot?.listenBuildingContext === true;
   const micListening = listening && tx.isMicrophoneCapture;
   const systemListening = listening && tx.isSystemAudioCapture;
-  const transcribing = state.stt?.transcribing === true;
   const askPending = state.askStatus === "pending";
   const screenLooking = state.screenContextStatus?.kind === "looking";
   const micDenied = shouldShowMicPermissionDenied({
     micPermission: state.micPermission,
     lastError: tx.lastError,
   });
-  const listenCopilotActive =
-    state.copilot?.active === true && state.copilot.config.sessionType === "video_learning";
 
-  const translateRuntime = state.liveTranslate;
-  const translateActive = translateRuntime?.active && translateRuntime.config.enabled;
   const translateTarget: LiveTranslateTargetLanguage =
-    translateRuntime?.config.targetLanguage ?? "es";
-  const translatePairLabel = translateActive
-    ? liveTranslateLanguagePairLabel(
-        translateRuntime.config.sourceLanguage,
-        translateRuntime.config.targetLanguage,
-        translateRuntime.detectedSourceLanguage,
-      )
-    : undefined;
-  const translateStatusLabel = translateActive ? `Live Translate · ${translatePairLabel}` : undefined;
+    translateRuntime?.config.targetLanguage ?? DEFAULT_LIVE_TRANSLATE_CONFIG.targetLanguage;
+  const translateDurationLabel = formatListeningDuration(translateElapsedMs);
+
+  useEffect(() => {
+    if (!translateActive) {
+      setTranslateElapsedMs(0);
+      return;
+    }
+    const startedAt = translateRuntime?.lastUpdatedAt
+      ? Date.parse(translateRuntime.lastUpdatedAt)
+      : Date.now();
+    const tick = (): void => {
+      setTranslateElapsedMs(Math.max(0, Date.now() - startedAt));
+    };
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [translateActive, translateRuntime?.lastUpdatedAt]);
 
   const toggleTranslate = useCallback(() => {
     if (translateActive) {
@@ -91,37 +121,11 @@ export function CommandBar(): JSX.Element {
     send({ type: "translate-start", targetLanguage: translateTarget });
     if (!systemListening) {
       tx.setMode("system_audio");
-      void tx.startSystemAudioListening();
+      // Pass forTranslate=true so startChunkRecorder picks the right chunk size/path
+      // before the IPC state round-trip completes.
+      void tx.startSystemAudioListening(true);
     }
   }, [translateActive, translateTarget, systemListening, tx]);
-
-  useEffect(() => {
-    syncGlassClickThrough(true);
-  }, []);
-
-  const updateIgnore = useCallback(() => {
-    const interactive = focusedRef.current || hoverCountRef.current > 0;
-    syncGlassClickThrough(!interactive);
-  }, []);
-
-  const enterInteractive = useCallback(() => {
-    hoverCountRef.current += 1;
-    updateIgnore();
-  }, [updateIgnore]);
-
-  const leaveInteractive = useCallback(() => {
-    hoverCountRef.current = Math.max(0, hoverCountRef.current - 1);
-    updateIgnore();
-  }, [updateIgnore]);
-
-  useEffect(() => {
-    const unsubscribe = window.glass.onCommandBarFocus(() => {
-      syncGlassClickThrough(false);
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    });
-    return unsubscribe;
-  }, []);
 
   useEffect(() => {
     if (!micListening) {
@@ -140,15 +144,29 @@ export function CommandBar(): JSX.Element {
   }, [listening, tx.commandBarListenText]);
 
   const submit = useCallback(() => {
-    const value = (micListening ? tx.commandBarListenText : text).trim();
+    let value = (micListening ? tx.commandBarListenText : text).trim();
+    if (!value && lensContext) {
+      value = lensContext.screenshot.trim()
+        ? "What should I know about this screenshot?"
+        : "What should I know about this page?";
+    }
     if (!value || askPending) return;
     if (listening) {
       send({ type: "pause" });
     }
-    send({ type: "submit-command", text: value });
+    send({
+      type: "submit-command",
+      text: value,
+      ...(lensContext ? { lensContext } : {}),
+    });
     setText("");
+    setLensContext(null);
+    setLensPlaceholder(null);
+    setLensOpen(false);
+    setLensPage(null);
+    setLensPreviewScreenshot("");
     micInputTouchedRef.current = false;
-  }, [text, askPending, listening, micListening, tx.commandBarListenText]);
+  }, [text, askPending, listening, micListening, tx.commandBarListenText, lensContext]);
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>): void => {
     if (event.key === "Enter") {
@@ -160,7 +178,6 @@ export function CommandBar(): JSX.Element {
       focusedRef.current = false;
       setShowSources(false);
       send({ type: "command-bar-blur" });
-      updateIgnore();
     }
   };
 
@@ -192,16 +209,116 @@ export function CommandBar(): JSX.Element {
     void tx.startMicrophoneListening(text);
   };
 
+  const clearLensState = useCallback((): void => {
+    setLensOpen(false);
+    setLensContext(null);
+    setLensPage(null);
+    setLensPreviewScreenshot("");
+    setLensPlaceholder(null);
+  }, []);
+
+  const focusLensInput = useCallback((placeholder: string): void => {
+    setLensPlaceholder(placeholder);
+    inputRef.current?.focus();
+  }, []);
+
+  const handleLensClick = useCallback(async (): Promise<void> => {
+    if (lensLoading) return;
+    ensureCommandBarClickable();
+    setLensLoading(true);
+    try {
+      const result = await window.glass.captureLens();
+      if (result.error || !result.url.trim()) {
+        clearLensState();
+        return;
+      }
+      setLensPage({
+        url: result.url,
+        title: result.title,
+        text: result.text,
+      });
+      setLensPreviewScreenshot("");
+      setLensOpen(true);
+    } finally {
+      setLensLoading(false);
+    }
+  }, [lensLoading, clearLensState]);
+
+  const handleTakeLensScreenshot = useCallback(async (): Promise<void> => {
+    if (lensScreenshotLoading) return;
+    setLensScreenshotLoading(true);
+    try {
+      const result = await window.glass.captureLensScreenshot();
+      if (result.screenshot) {
+        setLensPreviewScreenshot(result.screenshot);
+      }
+    } finally {
+      setLensScreenshotLoading(false);
+    }
+  }, [lensScreenshotLoading]);
+
+  const handleAskAboutLensPage = useCallback((): void => {
+    if (!lensPage) return;
+    setLensContext({
+      url: lensPage.url,
+      title: lensPage.title,
+      text: lensPage.text,
+      screenshot: "",
+    });
+    setLensOpen(false);
+    focusLensInput("Ask about this page…");
+  }, [lensPage, focusLensInput]);
+
+  const handleAskAboutLensScreenshot = useCallback((): void => {
+    if (!lensPage || !lensPreviewScreenshot.trim()) return;
+    setLensContext({
+      url: lensPage.url,
+      title: lensPage.title,
+      text: lensPage.text,
+      screenshot: lensPreviewScreenshot,
+    });
+    setLensOpen(false);
+    focusLensInput("Ask about this screenshot…");
+  }, [lensPage, lensPreviewScreenshot, focusLensInput]);
+
+  const handleLensAttachedBack = useCallback((): void => {
+    if (!lensPage) return;
+    setLensContext(null);
+    setLensPlaceholder(null);
+    setLensOpen(true);
+  }, [lensPage]);
+
   const chromeLocked = state.glassSettings.chromeLayoutLocked !== false;
   const toggleChromeLock = useChromeLockToggle(chromeLocked);
   useChromeWindowDrag(!chromeLocked, stackRef);
 
   useEffect(() => {
+    const unsubscribe = window.glass.onCommandBarFocus(() => {
+      syncGlassClickThrough(false);
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    });
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = window.glass.onCommandBarPrefill((prefillText: string) => {
+      syncGlassClickThrough(false);
+      setText(prefillText);
+      // Put cursor at end so user can edit or just press Enter
+      requestAnimationFrame(() => {
+        const el = inputRef.current;
+        if (!el) return;
+        el.focus();
+        el.setSelectionRange(prefillText.length, prefillText.length);
+      });
+    });
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
     if (!chromeLocked) {
       ensureCommandBarClickable();
-      return () => {
-        syncGlassClickThrough(true);
-      };
     }
   }, [chromeLocked]);
 
@@ -224,11 +341,15 @@ export function CommandBar(): JSX.Element {
   const voiceActive = voice.state.active || voice.state.status === "error";
   const micActive = voiceActive || micListening;
   const sessionListening = state.privacy.listening || listening;
+  const sessionStatus = state.session?.status;
+  const sessionLive = sessionStatus === "active" || sessionStatus === "paused";
+  const showSessionPill = sessionLive;
+  const showListenPill =
+    !translateActive && (countdownActive || listening || state.privacy.listening);
   const showSecondary =
-    countdownActive ||
     listeningDesynced ||
     (!voiceActive &&
-      (sessionListening || listening || showSources || (micDenied && !listenCopilotActive)));
+      (!showListenPill && (showSources || (micDenied && !listenCopilotActive))));
 
   const screenContextLine =
     state.visualAskRetention?.usedForAnswer ? (
@@ -236,11 +357,20 @@ export function CommandBar(): JSX.Element {
         {state.visualAskRetention.label}
         {state.visualAskRetention.detail ? ` · ${state.visualAskRetention.detail}` : ""}
       </>
-    ) : state.screenContextStatus && state.screenContextStatus.kind !== "none" ? (
+    ) : state.screenContextStatus &&
+        state.screenContextStatus.kind !== "none" &&
+        state.screenContextStatus.kind !== "captured" &&
+        state.screenContextStatus.kind !== "ready" ? (
       state.screenContextStatus.label
     ) : null;
 
-  const hasAccessories = Boolean(screenContextLine || voiceActive || showSecondary || translateActive);
+  const hasAccessories = Boolean(
+    screenContextLine ||
+      voiceActive ||
+      showSecondary ||
+      lensOpen ||
+      (lensContext && !lensOpen),
+  );
 
   return (
     <div className="command-root">
@@ -248,8 +378,6 @@ export function CommandBar(): JSX.Element {
         ref={stackRef}
         className={`command-bar-stack${!chromeLocked ? " command-bar-stack--unlocked" : ""}`}
         data-testid="glass-command-bar-stack"
-        onMouseEnter={chromeLocked ? enterInteractive : undefined}
-        onMouseLeave={chromeLocked ? leaveInteractive : undefined}
       >
         {!chromeLocked ? <ChromeRepositionOverlay /> : null}
 
@@ -270,20 +398,52 @@ export function CommandBar(): JSX.Element {
 
             <VoiceModePanel />
 
-            {translateActive && translateStatusLabel ? (
+            {lensOpen && lensPage ? (
+              <GlassLensPanel
+                page={lensPage}
+                screenshot={lensPreviewScreenshot}
+                pageLoading={lensLoading}
+                screenshotLoading={lensScreenshotLoading}
+                onTakeScreenshot={() => void handleTakeLensScreenshot()}
+                onAskAboutPage={handleAskAboutLensPage}
+                onAskAboutScreenshot={handleAskAboutLensScreenshot}
+                onDismiss={clearLensState}
+              />
+            ) : null}
+
+            {lensContext && !lensOpen ? (
               <div
-                className="command-bar-accessory command-bar__translate-status"
-                data-testid="glass-command-translate-status"
+                className="command-bar-accessory command-bar__lens-attached"
+                data-testid="glass-command-lens-attached"
               >
-                <span className="command-bar__translate-status-dot" aria-hidden="true" />
-                <span className="command-bar__translate-status-label">{translateStatusLabel}</span>
                 <button
                   type="button"
-                  className="command-bar__translate-status-stop"
-                  data-testid="glass-command-translate-stop"
-                  onClick={() => send({ type: "translate-stop" })}
+                  className="command-bar__lens-attached-back"
+                  data-testid="glass-command-lens-attached-back"
+                  aria-label="Back to Lens panel"
+                  onClick={handleLensAttachedBack}
                 >
-                  Stop
+                  ←
+                </button>
+                <button
+                  type="button"
+                  className="command-bar__lens-attached-label"
+                  data-testid="glass-command-lens-attached-reopen"
+                  aria-label={`Reopen Lens panel for ${lensContextHostname(lensContext.url)}`}
+                  onClick={handleLensAttachedBack}
+                >
+                  <span data-testid="glass-command-lens-attached-label">
+                    Page: {lensContextHostname(lensContext.url)}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="command-bar__lens-attached-dismiss"
+                  data-testid="glass-command-lens-attached-dismiss"
+                  aria-label="Remove page context"
+                  onClick={clearLensState}
+                >
+                  ×
                 </button>
               </div>
             ) : null}
@@ -293,11 +453,6 @@ export function CommandBar(): JSX.Element {
                 className="command-bar-accessory command-bar__secondary"
                 data-testid="glass-command-bar-secondary"
               >
-                {countdownActive ? (
-                  <span className="command-listen-status" data-testid="glass-command-countdown-status">
-                    Listen starts in {state.listenCountdownSeconds}s…
-                  </span>
-                ) : null}
                 {micDenied && !listening && !listenCopilotActive ? (
                   <>
                     <span
@@ -336,50 +491,74 @@ export function CommandBar(): JSX.Element {
                       Reset
                     </button>
                   </>
-                ) : null}
-                {listening || state.privacy.listening ? (
+                ) : !micDenied || listenCopilotActive ? (
                   <>
-                    <span className="command-listen-status" data-testid="glass-command-listen-status">
-                      <span className="command-listen-status__pulse" aria-hidden="true" />
-                      {buildingContext
-                        ? "Listening… building context"
-                        : `Listening ${tx.listeningDuration || listenDurationLabel} · ${systemListening || state.privacy.listening ? "system audio" : "microphone"}`}
-                      {tx.transcribing ? " · transcribing…" : ""}
-                    </span>
+                    <span className="command-listen-status">Other sources (optional)</span>
                     <button
                       type="button"
-                      data-testid="glass-command-stop-listening"
-                      className="command-mini command-mini--danger"
-                      onClick={() => send({ type: listening ? "pause" : "stop-everything" })}
+                      className={`command-mini${tx.selectedMode === "microphone_web_speech" ? " command-mini--on" : ""}`}
+                      onClick={() => pickSource("microphone_web_speech")}
                     >
-                      Stop Listening
+                      Microphone
+                    </button>
+                    <button
+                      type="button"
+                      className={`command-mini${tx.selectedMode === "system_audio" ? " command-mini--on" : ""}`}
+                      onClick={() => pickSource("system_audio")}
+                    >
+                      System Audio
                     </button>
                   </>
-                ) : !micDenied || listenCopilotActive ? (
-                  !countdownActive && !listening ? (
-                    <>
-                      <span className="command-listen-status">Other sources (optional)</span>
-                      <button
-                        type="button"
-                        className={`command-mini${tx.selectedMode === "microphone_web_speech" ? " command-mini--on" : ""}`}
-                        onClick={() => pickSource("microphone_web_speech")}
-                      >
-                        Microphone
-                      </button>
-                      <button
-                        type="button"
-                        className={`command-mini${tx.selectedMode === "system_audio" ? " command-mini--on" : ""}`}
-                        onClick={() => pickSource("system_audio")}
-                      >
-                        System Audio
-                      </button>
-                    </>
-                  ) : null
                 ) : null}
               </div>
             ) : null}
           </div>
         ) : null}
+
+        <div className="command-bar-hud" data-testid="glass-command-bar-hud">
+          {showSessionPill || showListenPill ? (
+            <div className="command-bar-hud__pills" data-testid="glass-command-bar-pills">
+              {showSessionPill ? (
+                <div
+                  className="command-bar-pill command-bar-pill--session"
+                  data-testid="glass-command-session-status"
+                >
+                  <span className="command-bar-pill__pulse" aria-hidden="true" />
+                  <span className="command-bar-pill__label">
+                    Session {sessionStatus === "active" ? "active" : "paused"}
+                  </span>
+                </div>
+              ) : null}
+              {countdownActive ? (
+                <div className="command-bar-pill command-bar-pill--listen" data-testid="glass-command-countdown-status">
+                  <span className="command-bar-pill__pulse" aria-hidden="true" />
+                  <span className="command-bar-pill__label">
+                    Listen {state.listenCountdownSeconds}s
+                  </span>
+                </div>
+              ) : null}
+              {!countdownActive && (listening || state.privacy.listening) ? (
+                <div className="command-bar-pill command-bar-pill--listen" data-testid="glass-command-listen-status">
+                  <span className="command-bar-pill__pulse" aria-hidden="true" />
+                  <span className="command-bar-pill__label">
+                    {buildingContext
+                      ? "Listening…"
+                      : `${tx.listeningDuration || listenDurationLabel}${tx.transcribing ? " · STT" : ""}`}
+                  </span>
+                  <button
+                    type="button"
+                    data-testid="glass-command-stop-listening"
+                    className="command-bar-pill__action command-bar-pill__action--danger"
+                    onClick={() => {
+                      send({ type: listening ? "pause" : "stop-everything" });
+                    }}
+                  >
+                    Stop
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
         <div
           data-testid="glass-command-bar"
@@ -424,19 +603,21 @@ export function CommandBar(): JSX.Element {
                 type="text"
                 value={inputValue}
                 placeholder={
-                  transcribing
-                    ? "Transcribing…"
-                    : micListening
-                      ? "Listening… speak into your microphone"
-                      : systemListening
-                        ? "Listening… system audio"
-                        : screenLooking
-                          ? "Looking…"
-                          : askPending
-                            ? "IIVO is thinking…"
-                            : "Ask IIVO while you work…"
+                  translateActive
+                    ? "Translating…"
+                    : transcribing
+                      ? "Transcribing…"
+                      : micListening
+                        ? "Listening… speak into your microphone"
+                        : systemListening
+                          ? "Listening… system audio"
+                          : screenLooking
+                            ? "Looking…"
+                            : askPending
+                              ? "IIVO is thinking…"
+                              : lensPlaceholder ?? "Ask IIVO while you work…"
                 }
-                disabled={askPending || transcribing}
+                disabled={askPending || (transcribing && !translateActive)}
                 onChange={(e) => {
                   const next = e.target.value;
                   micInputTouchedRef.current = true;
@@ -449,11 +630,9 @@ export function CommandBar(): JSX.Element {
                 onContextMenu={prepareGlassTextContextMenu}
                 onFocus={() => {
                   focusedRef.current = true;
-                  syncGlassClickThrough(false);
                 }}
                 onBlur={() => {
                   focusedRef.current = false;
-                  updateIgnore();
                 }}
               />
             </div>
@@ -474,6 +653,28 @@ export function CommandBar(): JSX.Element {
                 </button>
               </GlassHoverTooltip>
 
+              <GlassHoverTooltip label={lensOpen ? "Close Lens" : "Capture page with Lens"}>
+                <button
+                  type="button"
+                  data-testid={lensLoading ? "glass-command-lens-loading" : "glass-command-lens"}
+                  className={`command-lens-btn${lensOpen ? " command-lens-btn--active" : ""}`}
+                  aria-label={lensOpen ? "Close Lens panel" : "Capture page with IIVO Lens"}
+                  aria-pressed={lensOpen}
+                  disabled={lensLoading}
+                  onClick={() => {
+                    if (lensOpen) {
+                      clearLensState();
+                      return;
+                    }
+                    void handleLensClick();
+                  }}
+                  onPointerDown={ensureCommandBarClickable}
+                  onMouseEnter={ensureCommandBarClickable}
+                >
+                  <CommandLensIcon />
+                </button>
+              </GlassHoverTooltip>
+
               {askPending ? (
                 <button
                   type="button"
@@ -490,7 +691,9 @@ export function CommandBar(): JSX.Element {
                   data-testid="glass-command-submit"
                   className="composer-send-btn"
                   onClick={submit}
-                  disabled={!(micListening ? tx.commandBarListenText : text).trim()}
+                  disabled={
+                    !(micListening ? tx.commandBarListenText : text).trim() && !lensContext
+                  }
                   aria-label="Send to IIVO"
                 >
                   <CommandSendIcon />
@@ -514,6 +717,7 @@ export function CommandBar(): JSX.Element {
           </div>
 
           <span className="composer-led-rim ui-led-line" aria-hidden="true" />
+        </div>
         </div>
       </div>
     </div>

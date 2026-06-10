@@ -15,6 +15,7 @@ import { runVisionAnswer, type VisionAnswerResult } from "../agents/runVisionAns
 import { callOpenAIVisionWithModelChain } from "../providers/openai.js";
 import { getMaxOutputTokens } from "../config/tokenModes.js";
 import { formatGlassDirectAnswer } from "./glassDirectAsk.js";
+import { buildGlassLensContextBlock } from "./glassLensContext.js";
 import type { GlassAskLatestScreenshot, GlassAskRequestBody, GlassAskResponseBody } from "./glassAskTypes.js";
 
 const GLASS_VISUAL_SYSTEM = `You are IIVO Glass, a live AI companion over the user's workspace. When an image is provided, answer based on the image and the user's question. Be concise, practical, and conversational. If the image is unclear, say so. Do not claim to see anything not visible in the image. Do not use council/report formatting.
@@ -35,11 +36,16 @@ function buildVisualUserPrompt(
   prompt: string,
   meta?: GlassAskLatestScreenshot,
   userContext?: string,
+  lensContext?: GlassAskRequestBody["lensContext"],
 ): string {
   const lines = [prompt.trim()];
   const contextBlock = userContext?.trim();
   if (contextBlock) {
     lines.push("", contextBlock);
+  }
+  const lensBlock = buildGlassLensContextBlock(lensContext);
+  if (lensBlock) {
+    lines.push("", lensBlock);
   }
   if (meta?.label || meta?.sourceTitle) {
     lines.push("", "Capture metadata:");
@@ -57,9 +63,10 @@ async function runVisionFromContextItem(
   signal?: AbortSignal,
   purpose: GlassModelPurpose = "default",
   userContext?: string,
+  lensContext?: GlassAskRequestBody["lensContext"],
 ): Promise<VisionAnswerResult> {
   return runVisionAnswer({
-    prompt: buildVisualUserPrompt(prompt, undefined, userContext),
+    prompt: buildVisualUserPrompt(prompt, undefined, userContext, lensContext),
     contextItem: item,
     signal,
     modelPurpose: purpose,
@@ -73,6 +80,7 @@ async function runVisionFromDataUrl(
   signal?: AbortSignal,
   purpose: GlassModelPurpose = "default",
   userContext?: string,
+  lensContext?: GlassAskRequestBody["lensContext"],
 ): Promise<VisionAnswerResult> {
   const config = getImageVisionConfig();
   const startedAt = new Date().toISOString();
@@ -101,7 +109,7 @@ async function runVisionFromDataUrl(
     const chain = buildGlassModelTryChain(selected);
     const result = await callOpenAIVisionWithModelChain(
       GLASS_VISUAL_SYSTEM,
-      buildVisualUserPrompt(prompt, meta, userContext),
+      buildVisualUserPrompt(prompt, meta, userContext, lensContext),
       imageDataUrl,
       chain,
       signal,
@@ -225,7 +233,11 @@ export async function runGlassVisualDirectAsk(
   const shot = body.latestScreenshot;
   const purpose = body.modelPurpose ?? "default";
 
-  const inlineImage = resolveImageDataUrl(shot);
+  const inlineImage =
+    resolveImageDataUrl(shot) ??
+    (body.lensContext?.screenshot?.startsWith("data:")
+      ? body.lensContext.screenshot
+      : undefined);
   if (!shot?.contextId && !inlineImage) {
     return {
       answer: GLASS_CAPTURE_FIRST_MESSAGE,
@@ -241,7 +253,15 @@ export async function runGlassVisualDirectAsk(
     const item = await getContextItem(contextId);
     if (!item || item.type !== "screenshot") {
       if (inlineImage) {
-        vision = await runVisionFromDataUrl(prompt, inlineImage, shot, signal, purpose, userContext);
+        vision = await runVisionFromDataUrl(
+          prompt,
+          inlineImage,
+          shot,
+          signal,
+          purpose,
+          userContext,
+          body.lensContext,
+        );
       } else {
         return {
           answer: GLASS_CAPTURE_FIRST_MESSAGE,
@@ -250,10 +270,25 @@ export async function runGlassVisualDirectAsk(
         };
       }
     } else {
-      vision = await runVisionFromContextItem(prompt, item, signal, purpose, userContext);
+      vision = await runVisionFromContextItem(
+        prompt,
+        item,
+        signal,
+        purpose,
+        userContext,
+        body.lensContext,
+      );
     }
   } else if (inlineImage) {
-    vision = await runVisionFromDataUrl(prompt, inlineImage, shot, signal, purpose, userContext);
+    vision = await runVisionFromDataUrl(
+      prompt,
+      inlineImage,
+      shot,
+      signal,
+      purpose,
+      userContext,
+      body.lensContext,
+    );
   } else {
     return {
       answer: GLASS_CAPTURE_FIRST_MESSAGE,

@@ -5,10 +5,7 @@
   "description": "Capture page context and send it to IIVO for decision analysis.",
   "permissions": ["activeTab", "scripting", "storage", "downloads"],
   "host_permissions": [
-    "http://localhost:3001/*",
-    "http://localhost:5173/*",
-    "http://localhost:5174/*",
-    "http://localhost:5175/*"
+    "https://iivo.ai/*"
   ],
   "icons": {
     "16": "assets/icon-16.png",

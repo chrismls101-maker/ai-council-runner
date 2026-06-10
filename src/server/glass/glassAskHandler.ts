@@ -43,7 +43,8 @@ export async function handleGlassAsk(
     const hasScreenshot = Boolean(
       body.latestScreenshot?.imageDataUrl ||
         body.latestScreenshot?.imageBase64 ||
-        body.latestScreenshot?.contextId,
+        body.latestScreenshot?.contextId ||
+        body.lensContext?.screenshot,
     );
     const visual = resolveGlassAskUsesVisual(prompt, {
       visualIntent: body.visualIntent,

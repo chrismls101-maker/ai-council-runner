@@ -1,3 +1,6 @@
+import { useEffect, useRef } from "react";
+import { formatOverlayPlainText } from "../../shared/overlayPlainText.ts";
+import { ensureOverlayInteractive } from "../glassTextInteraction.ts";
 import { send } from "../useGlassState.ts";
 import type { GlassState } from "../../shared/ipc.ts";
 import type {
@@ -40,10 +43,20 @@ export function CopilotOverlay({
   const showListeningLimit = copilot.listeningLimitReached;
   const showSilence = copilot.systemAudioSilenceWarning;
   const debrief = copilot.debrief ?? null;
+  const debriefHoverRef = useRef(false);
   const diagnosticResult = copilot.diagnosticResult ?? null;
   const diagnosticAnalyzing = copilot.diagnosticAnalyzing ?? false;
   const listenMode = isListenModeActive(state);
   const interventions = listenMode ? [] : copilot.pendingInterventions;
+
+  useEffect(() => {
+    if (!debrief) return;
+    const timer = window.setTimeout(() => {
+      if (debriefHoverRef.current) return;
+      send({ type: "copilot-dismiss-debrief" });
+    }, 90_000);
+    return () => window.clearTimeout(timer);
+  }, [debrief?.sessionId]);
 
   if (
     !showOffer &&
@@ -182,12 +195,19 @@ export function CopilotOverlay({
         <article
           className="overlay-copilot-card overlay-copilot-card--debrief glass-answer-shell glass-answer-shell--auto"
           data-testid="glass-copilot-debrief"
+          onMouseEnter={() => {
+            debriefHoverRef.current = true;
+          }}
+          onMouseLeave={() => {
+            debriefHoverRef.current = false;
+          }}
+          onPointerDownCapture={ensureOverlayInteractive}
         >
           <span className="glass-answer-shell__sheen" aria-hidden="true" />
           <div className="glass-answer-shell__content">
             <div className="overlay-copilot-card__eyebrow">Session Debrief</div>
             <pre className="overlay-copilot-card__debrief-body overlay-copilot-card__debrief-body--auto">
-              {debrief.markdown}
+              {formatOverlayPlainText(debrief.markdown)}
             </pre>
             <div className="overlay-copilot-card__actions">
               <button
@@ -200,6 +220,8 @@ export function CopilotOverlay({
               <button
                 type="button"
                 className="gbtn gbtn--ghost"
+                data-testid="glass-copilot-debrief-dismiss"
+                onPointerDown={ensureOverlayInteractive}
                 onClick={() => send({ type: "copilot-dismiss-debrief" })}
               >
                 Dismiss
@@ -240,7 +262,7 @@ function DiagnosticResultCard({ result }: { result: GlassCopilotDiagnosticResult
         <div className="overlay-copilot-card__eyebrow">Diagnostic</div>
         <div className="overlay-copilot-card__title">{result.rootCauseSummary}</div>
         <pre className="overlay-copilot-card__debrief-body overlay-copilot-card__debrief-body--auto">
-          {result.fullMarkdown || result.probableRootCause}
+          {formatOverlayPlainText(result.fullMarkdown || result.probableRootCause)}
         </pre>
         <div className="overlay-copilot-card__actions">
           <button

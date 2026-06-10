@@ -4816,6 +4816,32 @@ a.md-link:hover {
   gap: 10px;
 }
 
+.settings-api-url-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.settings-api-url-input {
+  flex: 1 1 280px;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border, rgba(100, 116, 139, 0.28));
+  border-radius: 6px;
+  background: var(--surface, rgba(255, 255, 255, 0.06));
+  color: inherit;
+  font-size: 0.875rem;
+  font-family: inherit;
+}
+
+.settings-api-url-input:focus {
+  outline: none;
+  border-color: rgba(99, 102, 241, 0.55);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+
 .btn.danger.ghost {
   border-color: rgba(248, 113, 113, 0.35);
   color: #f87171;

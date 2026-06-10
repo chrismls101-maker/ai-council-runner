@@ -15,16 +15,24 @@ test("command bar wires native text context menu helpers", () => {
     "utf8",
   );
   const windows = readFileSync(join(ROOT, "main", "windows.ts"), "utf8");
+  const dockMain = readFileSync(join(ROOT, "renderer", "dock", "main.tsx"), "utf8");
+  const commandMain = readFileSync(join(ROOT, "renderer", "command", "main.tsx"), "utf8");
+  const overlay = readFileSync(join(ROOT, "renderer", "overlay", "Overlay.tsx"), "utf8");
 
   assert.match(interaction, /prepareGlassTextContextMenu/);
   assert.match(interaction, /prepareGlassTextPointerDown/);
   assert.match(interaction, /ensureOverlayInteractive/);
-  assert.match(interaction, /syncGlassClickThrough/);
-  assert.match(commandBar, /onPointerDownCapture=\{prepareGlassTextPointerDown\}/);
+  assert.doesNotMatch(interaction, /setIgnoreMouse/);
   assert.match(commandBar, /onContextMenu=\{prepareGlassTextContextMenu\}/);
-  assert.match(commandBar, /syncGlassClickThrough/);
   assert.match(notificationHost, /onPointerDownCapture=\{handlePointerDownCapture\}/);
   assert.match(notificationHost, /ensureOverlayInteractive/);
+  assert.match(windows, /configureOverlayClickThrough/);
+  assert.match(windows, /ensureChromeWindowInteractive/);
+  assert.doesNotMatch(windows, /configureChromeClickThrough/);
+  assert.doesNotMatch(windows, /reapplyClickThrough/);
+  assert.doesNotMatch(dockMain, /glassClickThroughTracking/);
+  assert.doesNotMatch(commandMain, /glassClickThroughTracking/);
+  assert.doesNotMatch(overlay, /glassClickThroughTracking/);
   const syncRaised = windows.match(
     /export function syncOverlayPresentationRaised[\s\S]*?^}/m,
   )?.[0];

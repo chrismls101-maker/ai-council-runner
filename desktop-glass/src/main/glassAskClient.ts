@@ -30,7 +30,10 @@ export async function askIivoGlass(
   const res = await fetch(buildGlassAskUrl(config), {
     method: "POST",
     headers: withIivoApiAuthHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify({ ...request, responseStyle: "overlay" }),
+    body: JSON.stringify({
+      ...request,
+      responseStyle: request.responseStyle ?? "overlay",
+    }),
     signal,
   });
 

@@ -52,8 +52,10 @@ export interface GlassAskRequestBody {
   prompt: string;
   session?: GlassAskSessionPayload;
   latestScreenshot?: GlassAskLatestScreenshot;
+  lensContext?: import("./glassLensContext.js").GlassAskLensContext;
   visualIntent?: boolean;
-  responseStyle?: "overlay";
+  /** overlay = cap length for HUD; full = no cap (structured JSON, long answers). */
+  responseStyle?: "overlay" | "full";
   /** Selects env model slot: default text, semantic refine, or diagnostic. */
   modelPurpose?: "default" | "semantic" | "diagnostic";
   userProfile?: import("../userProfile/types.js").GlassUserProfile;

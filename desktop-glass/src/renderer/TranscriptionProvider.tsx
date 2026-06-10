@@ -4,6 +4,8 @@ import { useTranscription, type TranscriptionController } from "./useTranscripti
 const TranscriptionContext = createContext<TranscriptionController | null>(null);
 
 const PANEL_ONLY_TRANSCRIPTION_COMMANDS = new Set([
+  "start",
+  "stop",
   "probe-microphone",
   "probe-virtual-audio-devices",
   "connect-system-audio",

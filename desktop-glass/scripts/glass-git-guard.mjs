@@ -43,7 +43,6 @@ const WIP_ONLY_PATTERNS = [
   /(?:^|\/)src\/shared\/audioRoutingReady\.ts$/,
   /(?:^|\/)src\/renderer\/panel\/PermissionsPanel\.tsx$/,
   /(?:^|\/)src\/renderer\/panel\/SystemAudioLiveMeter\.tsx$/,
-  /(?:^|\/)src\/renderer\/dock\/dockLabels\.ts$/,
   /(?:^|\/)browser-extension\/prototype-/,
   /(?:^|\/)scripts\/generate-glass-(?:boot|lift)/,
   /(?:^|\/)vite\.sound-lab\.config\.ts$/,

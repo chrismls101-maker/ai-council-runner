@@ -7,6 +7,7 @@
  */
 
 import { loadGlassEnv } from "./loadGlassEnv.ts";
+import * as Sentry from "@sentry/electron/main";
 import { installGlassE2eHooks, getE2eExternalUrls, resetE2eExternalUrls } from "./e2eMainHooks.ts";
 import { installDefaultGlassHandoffOpener, openGlassHandoffUrl } from "./glassBrowserHandoff.ts";
 import { getGlassE2eWindowMetadata } from "./e2eWindowMetadata.ts";
@@ -94,11 +95,11 @@ import {
   resizeDockWindow,
   setChromeLayoutPersistHandler,
   syncChromeLayoutFromSettings,
-  setIgnoreMouseFromWindow,
-  setOverlayClickThrough,
+  setOverlayPinnedForTranslate,
   setOverlayMode,
   toggleCommandBar,
   focusCommandBar,
+  prefillCommandBar,
   toggleOverlay,
   togglePanel,
   unregisterCommandBarHotkeys,
@@ -108,8 +109,13 @@ import {
   registerOnboardingEmergencyShortcut,
   unregisterOnboardingEmergencyShortcut,
   setCommandBarLayoutChangedHandler,
+  hideGlassWindowsForCapture,
+  restoreGlassWindowsAfterCapture,
+  syncCommandBarWindowToStackHeight,
+  setIgnoreMouseFromWindow,
 } from "./windows.ts";
 import { computeCommandBarOverlayClearancePx } from "../shared/glassLayoutMath.ts";
+import { logGlassClickDebug } from "./glassClickDebug.ts";
 import {
   completeGlassOnboardingStore,
   loadGlassOnboardingState,
@@ -146,6 +152,7 @@ import { release } from "node:os";
 import { resolveInitialSystemAudioStatus, darwinMajorFromRelease } from "../shared/systemAudioCapture.ts";
 import type { SystemAudioStatus } from "../shared/systemAudioTypes.ts";
 import { buildGlassSttState, resolveSttConfig } from "../shared/sttTypes.ts";
+import { DeepgramStreamingSession } from "./deepgramStreamingSTT.ts";
 import { listeningCostWarningMessage } from "../shared/audioChunks.ts";
 import { MIC_PAUSED_AUTO_MESSAGE } from "../shared/commandBarMic.ts";
 import { SessionCopilotController } from "../shared/copilotController.ts";
@@ -184,6 +191,7 @@ import {
   applyGlassAppUpdate,
   checkForGlassAppUpdate,
 } from "./glassAppUpdate.ts";
+import { captureGlassLensPage, captureGlassLensScreenshot } from "./glassLensCapture.ts";
 import {
   applyGlassAutoUpdate,
   checkGlassAutoUpdate,
@@ -221,10 +229,6 @@ import {
   type ListenModeRuntime,
 } from "../shared/listenModeRuntime.ts";
 import {
-  LISTEN_START_COUNTDOWN_SECONDS,
-  shouldSkipListenCountdown,
-} from "../shared/listenCountdown.ts";
-import {
   initialListenMomentEngineState,
   type ListenMoment,
 } from "../shared/listenMomentTypes.ts";
@@ -233,9 +237,15 @@ import {
   buildListenLiveNotes,
   listenTranscriptChunksFromEvents,
   LIVE_NOTES_REFRESH_MS,
+  LIVE_NOTES_AI_REFRESH_MS,
+  LIVE_NOTES_AI_MIN_DELTA_CHARS,
   computeLiveNotesRefreshInterval,
   shouldRefreshStreamingLiveNotes,
+  type ListenAiNote,
+  type ListenLiveNotesState,
 } from "../shared/listenLiveNotes.ts";
+import { refreshListenNotesWithAI } from "./listenNotesAiRefresh.ts";
+import { extractSpeakerNames, extractNamesFromTitle } from "../shared/speakerNameExtraction.ts";
 import {
   initialLiveTranslateRuntime,
   shouldPersistTranslateChunk,
@@ -246,6 +256,12 @@ import {
   translateAllowsMicrophone,
 } from "../shared/liveTranslateState.ts";
 import type { LiveTranslateRuntimeState } from "../shared/liveTranslateTypes.ts";
+import {
+  shouldSuppressTranslateStartupError,
+  isTranslateHardError,
+  TRANSLATE_SILENCE_GRACE_MS,
+  TRANSLATE_WAITING_CAPTION,
+} from "../shared/liveTranslateGrace.ts";
 import { processTranslateTranscriptChunk, translateEventMetadata } from "./liveTranslateMain.ts";
 import { applyCaptionChunk } from "../shared/liveTranslateCaptions.ts";
 import {
@@ -387,8 +403,18 @@ import {
 import { detectVirtualAudioDevices } from "../shared/virtualAudioDevices.ts";
 import { BLACKHOLE_SETUP_INSTRUCTIONS } from "../shared/virtualAudioCapture.ts";
 import type { VirtualAudioDeviceMatch } from "../shared/virtualAudioDevices.ts";
+import { lookupGlassErrorAnswer } from "../shared/glassErrorFAQ.ts";
 
 loadGlassEnv();
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  release: app.getVersion(),
+  environment: app.isPackaged ? "production" : "development",
+  // Only report errors in packaged (production) builds.
+  // Dev builds throw various expected errors (auth mismatches, missing env vars,
+  // audio probe failures) that are noise in the Sentry dashboard.
+  enabled: app.isPackaged,
+});
 app.setName(glassMenuAppName(app.isPackaged));
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 installDefaultGlassHandoffOpener();
@@ -458,11 +484,15 @@ interface AppState {
   selectedVirtualAudioDeviceId?: string;
   nativeLoopbackTested: boolean;
   voiceModeStartNonce: number;
+  translateSetupRequestId: number;
   mediaContext: MediaContext | null;
   appUpdate: GlassAppUpdateState;
   listenCountdownSeconds?: number;
   onboardingOpen: boolean;
   glassUserProfile: GlassUserProfile | null;
+  commandBarStackHeightPx?: number;
+  commandBarOverlayClearancePx?: number;
+  listenLiveNotes?: ListenLiveNotesState;
 }
 
 let askAbortController: AbortController | null = null;
@@ -483,7 +513,9 @@ const state: AppState = {
   ),
   windowContext: defaultWindowContext,
   iivoAnalysis: { status: "idle" },
-  stt: buildGlassSttState(sttConfig),
+  stt: buildGlassSttState(sttConfig, {
+    deepgramEnabled: !!(process.env.DEEPGRAM_API_KEY?.trim()),
+  }),
   operationDiagnostics: createInitialOperationDiagnostics(),
   commandFeed: [],
   commandBarStackHeightPx: undefined,
@@ -506,6 +538,7 @@ const state: AppState = {
   virtualAudioDevices: [],
   nativeLoopbackTested: false,
   voiceModeStartNonce: 0,
+  translateSetupRequestId: 0,
   mediaContext: null,
   appUpdate: emptyGlassAppUpdateState(app.getVersion()),
   onboardingOpen: false,
@@ -558,25 +591,9 @@ function completeListenCountdown(): void {
 }
 
 function beginListenCountdown(): void {
-  if (listenCountdownTimer) return;
-
-  if (shouldSkipListenCountdown(process.env)) {
-    broadcastTranscriptionControl({ type: "start" });
-    return;
-  }
-
-  state.listenCountdownSeconds = LISTEN_START_COUNTDOWN_SECONDS;
-  push();
-
-  listenCountdownTimer = setInterval(() => {
-    const next = (state.listenCountdownSeconds ?? 1) - 1;
-    if (next <= 0) {
-      completeListenCountdown();
-      return;
-    }
-    state.listenCountdownSeconds = next;
-    push();
-  }, 1000);
+  cancelListenCountdown();
+  if (state.privacy.listening) return;
+  broadcastTranscriptionControl({ type: "start" });
 }
 
 function sessionIsLive(): boolean {
@@ -601,14 +618,128 @@ let copilotTimer: ReturnType<typeof setInterval> | null = null;
 let copilotBoundSessionId: string | null = null;
 let copilotOffered = false;
 let systemAudioLastSignalMs: number | undefined;
+/** Suppress translate startup errors until this timestamp (covers IPC race). */
+let translateGraceUntilMs = 0;
 let copilotVisualAskFailures = 0;
 const copilotRecentCommands: string[] = [];
 const copilotRecentResponses: string[] = [];
 let activeListeningRuntime: ActiveListeningRuntimeState = initialActiveListeningRuntime();
 let listenMomentRuntime: ListenModeRuntime = initialListenMomentEngineState();
+/** AI-generated notes from the GPT-5.5 background pass. Reset on listen stop. */
+let listenAiNotes: ListenAiNote[] = [];
+/** Timestamp of the last successful AI notes refresh (ms). */
+let lastAiNotesRefreshMs: number | undefined;
+/** Rolling transcript length at the last AI notes trigger — used to gate on delta. */
+let lastAiTranscriptLen = 0;
 let liveTranslateRuntime: LiveTranslateRuntimeState = initialLiveTranslateRuntime();
+let deepgramSession: DeepgramStreamingSession | null = null;
+/**
+ * Separate Deepgram session dedicated to listen mode (Live Notes).
+ * Runs alongside the translate session when both are active.
+ * Receives the same raw audio bytes via the IPC audio chunk handler.
+ * Produces diarized transcript chunks tagged [S0]/[S1] for the rolling transcript.
+ */
+let listenDeepgramSession: DeepgramStreamingSession | null = null;
+
+/**
+ * Push raw interim text directly to captions as a live preview — no translation API call.
+ * The translated final will replace this when speech_final fires.
+ */
+function pushInterimCaptionPreview(text: string): void {
+  if (!isTranslateActive()) return;
+  liveTranslateRuntime = {
+    ...liveTranslateRuntime,
+    captions: applyCaptionChunk(liveTranslateRuntime.captions, {
+      original: text,
+      translated: text, // raw preview; translation replaces this on final
+      interim: true,
+      id: "deepgram-interim",
+    }),
+  };
+  push();
+}
+
+function stopDeepgramSession(): void {
+  if (deepgramSession) {
+    deepgramSession.close();
+    deepgramSession = null;
+    console.log("[deepgram] session closed");
+  }
+}
+
+/**
+ * Seed `listenSpeakerNames` from the active browser tab title before Deepgram
+ * connects.  Catches names mentioned in the video intro that play during the
+ * ~2-5s Deepgram warm-up gap.
+ *
+ * Fire-and-forget — failures are silently ignored (missing app, no tab, etc.).
+ */
+function seedSpeakerNamesFromBrowserTitle(): void {
+  // Try Chrome first, fall back to Safari.
+  const script = `
+    set chromeTitle to ""
+    set safariTitle to ""
+    try
+      tell application "Google Chrome" to set chromeTitle to title of active tab of front window
+    end try
+    try
+      tell application "Safari" to set safariTitle to name of front document
+    end try
+    if chromeTitle is not "" then
+      return chromeTitle
+    else
+      return safariTitle
+    end if
+  `.trim();
+
+  import("child_process").then(({ exec }) => {
+    exec(`osascript -e '${script.replace(/'/g, "'\\''")}'`, (err, stdout) => {
+      const title = stdout?.trim();
+      if (err || !title) return;
+      const fromTitle = extractNamesFromTitle(title);
+      if (Object.keys(fromTitle).length === 0) return;
+      // Merge — don't overwrite names already resolved from earlier transcript.
+      listenSpeakerNames = { ...fromTitle, ...listenSpeakerNames };
+      console.log("[listenNames] seeded from title:", fromTitle, "| title:", title.slice(0, 80));
+    });
+  }).catch(() => {/* child_process unavailable — skip */});
+}
+
+/** Start a diarization-enabled Deepgram session for listen mode (Live Notes). */
+function startListenDeepgramSession(): void {
+  const dgKey = process.env.DEEPGRAM_API_KEY?.trim();
+  if (!dgKey) return; // no key → fall back to OpenAI STT chunks (no diarization)
+  stopListenDeepgramSession();
+  listenDeepgramSession = new DeepgramStreamingSession(dgKey, "auto", {
+    onTranscript: ({ text, isFinal, speakerId }) => {
+      if (!isFinal) return; // interim not needed for listen-mode notes
+      // Prefix with speaker tag so the AI pass and classifier can attribute notes.
+      const speakerPrefix = speakerId != null ? `[S${speakerId}] ` : "";
+      void processListenModeChunk(`${speakerPrefix}${text}`, ["system_audio"]);
+    },
+    onError: (err) => {
+      console.error("[deepgram:listen] error:", err.message);
+    },
+  });
+  listenDeepgramSession.connect().catch((err: unknown) => {
+    console.error("[deepgram:listen] connect failed:", (err as Error).message ?? err);
+    listenDeepgramSession = null;
+  });
+  console.log("[deepgram:listen] session started (diarization enabled)");
+}
+
+/** Stop the listen-mode Deepgram session. */
+function stopListenDeepgramSession(): void {
+  if (listenDeepgramSession) {
+    listenDeepgramSession.close();
+    listenDeepgramSession = null;
+    console.log("[deepgram:listen] session closed");
+  }
+}
 let listenLastChunkMs: number | undefined;
 let listenRollingTranscript: ListenRollingTranscriptState = initialListenRollingTranscript();
+/** Speaker names resolved from transcript patterns — e.g. { "0": "Lex", "1": "Sam Altman" }. */
+let listenSpeakerNames: Record<string, string> = {};
 
 function listenCheckpointsForSession(): import("../shared/listenCheckpoint.ts").ListenCheckpointSummary[] {
   const session = sessions.current();
@@ -654,6 +785,8 @@ function buildCurrentListenLiveNotes() {
     checkpoints,
     listeningStatus: building ? "building" : state.privacy.listening ? "listening" : "idle",
     duplicateFragmentCount: listenRollingTranscript.duplicateFragmentCount,
+    aiNotes: listenAiNotes,
+    lastAiRefreshMs: lastAiNotesRefreshMs,
   });
 }
 
@@ -693,6 +826,43 @@ async function refreshStreamingListenNotes(nowMs: number, force = false): Promis
   }
 
   listenMomentRuntime.lastLiveNotesRefreshMs = nowMs;
+
+  // ── AI-quality note refresh (GPT-5.5 background pass) ──────────────────────
+  // Fire-and-forget: never blocks the local refresh loop.
+  // Gate: 35s since last AI refresh AND ≥300 new chars since last AI trigger.
+  // FIX 3: also gate out when the most-recent segment was an ad or sponsor —
+  // ad audio doesn't enter the rolling transcript (Fix 1) but the timer might
+  // still fire; we skip the AI pass so we don't trigger a refresh on stale
+  // content during an ad break and produce misleading "notes" from the boundary.
+  const aiRefreshDue =
+    isListenModeActive() &&
+    nowMs - (lastAiNotesRefreshMs ?? 0) >= LIVE_NOTES_AI_REFRESH_MS &&
+    rolling.length - lastAiTranscriptLen >= LIVE_NOTES_AI_MIN_DELTA_CHARS &&
+    listenMomentRuntime.lastSegmentKind !== "ad" &&
+    listenMomentRuntime.lastSegmentKind !== "sponsor";
+
+  if (aiRefreshDue) {
+    lastAiTranscriptLen = rolling.length;
+    const currentTopicHint = state.listenLiveNotes?.currentTopic ?? rolling.slice(-120).trim();
+    void refreshListenNotesWithAI(config, rolling, currentTopicHint, listenSpeakerNames).then((result) => {
+      if (!isListenModeActive()) return; // user stopped listening while AI was thinking
+      if (result.notes.length > 0) {
+        listenAiNotes = result.notes;
+        lastAiNotesRefreshMs = Date.now();
+        console.log(
+          `[listenAiNotes] refreshed: ${result.notes.length} notes (model: ${result.model ?? "unknown"})`,
+        );
+        push(); // re-render with AI notes now in sections
+      } else {
+        // Log zero-note result to help diagnose why GPT-5.5 isn't producing notes.
+        console.warn(
+          `[listenAiNotes] AI pass returned 0 notes (model: ${result.model ?? "none"}, transcript len: ${rolling.length})`,
+        );
+      }
+    });
+  }
+  // ───────────────────────────────────────────────────────────────────────────
+
   push();
 }
 
@@ -834,8 +1004,98 @@ function isListenModeActive(): boolean {
   );
 }
 
+function shouldRunListenNotesPipeline(): boolean {
+  const config = copilot.getConfig();
+  return config.sessionType === "video_learning" && copilotModeIsActive(config.mode);
+}
+
+function ensureListenSession(): void {
+  if (sessionIsLive()) return;
+  sessions.startSession("Listen");
+  bindCopilotToSession();
+  startCopilotLoop();
+}
+
+/** Start the notes refresh loop without clearing in-flight transcript (chunk safety net). */
+function ensureListenNotesLoopRunning(): void {
+  if (!shouldRunListenNotesPipeline() || listenNotesTimer) return;
+  ensureListenSession();
+  if (!listenMomentRuntime.listenStartedMs) {
+    listenMomentRuntime = prepareListenModeSession(listenMomentRuntime, Date.now());
+    listenRollingTranscript = initialListenRollingTranscript();
+    listenMomentRuntime.lastLiveNotesRefreshMs = undefined;
+    listenMomentRuntime.lastEvalTranscriptLen = 0;
+  }
+  copilot.clearPendingInterventions();
+  clearListenCardState();
+  startListenNotesLoop();
+  setListenNotesPadVisible(true);
+  startListenDeepgramSession();
+  seedSpeakerNamesFromBrowserTitle();
+}
+
+/** Fresh listen capture — reset runtime and start the notes loop. */
+function bootstrapListenNotesPipeline(): void {
+  if (!shouldRunListenNotesPipeline()) return;
+  ensureListenSession();
+  listenMomentRuntime = prepareListenModeSession(listenMomentRuntime, Date.now());
+  listenRollingTranscript = initialListenRollingTranscript();
+  listenMomentRuntime.lastLiveNotesRefreshMs = undefined;
+  listenMomentRuntime.lastEvalTranscriptLen = 0;
+  copilot.clearPendingInterventions();
+  clearListenCardState();
+  startListenNotesLoop();
+  setListenNotesPadVisible(true);
+  startListenDeepgramSession();
+  seedSpeakerNamesFromBrowserTitle();
+}
+
 function isTranslateActive(): boolean {
   return liveTranslateRuntime.active && liveTranslateRuntime.config.enabled;
+}
+
+function armTranslateGracePeriod(nowMs = Date.now()): void {
+  translateGraceUntilMs = nowMs + TRANSLATE_SILENCE_GRACE_MS;
+}
+
+function clearTranslateGracePeriod(): void {
+  translateGraceUntilMs = 0;
+}
+
+function shouldSuppressTranslateStartupErrors(error?: string): boolean {
+  return shouldSuppressTranslateStartupError({
+    runtime: liveTranslateRuntime,
+    error,
+    systemAudioLastSignalMs,
+    graceUntilMs: translateGraceUntilMs,
+  });
+}
+
+function clearTranslateStartupErrors(): void {
+  state.lastError = undefined;
+  state.stt = { ...state.stt, lastError: undefined };
+  if (liveTranslateRuntime.lastError) {
+    liveTranslateRuntime = { ...liveTranslateRuntime, lastError: undefined, status: "starting" };
+  }
+}
+
+/** Stop translate capture: renderer STT, HUD timer, and in-flight chunk reporting. */
+function stopTranslateListening(): void {
+  cancelListenCountdown();
+  broadcastTranscriptionControl({ type: "stop" });
+  if (!state.privacy.listening) {
+    state.stt = { ...state.stt, transcribing: false, lastError: undefined };
+    return;
+  }
+  dispatchPrivacy({ type: "PAUSE", at: new Date().toISOString() });
+  state.stt = {
+    ...state.stt,
+    listeningElapsedMs: 0,
+    transcribing: false,
+    lastError: undefined,
+  };
+  resetListeningLimitTracking();
+  state.operationDiagnostics = recordOperation(state.operationDiagnostics, "pause", "ok");
 }
 
 function shouldSaveTranscriptToSession(): boolean {
@@ -847,16 +1107,30 @@ function shouldSaveTranscriptToSession(): boolean {
 
 async function ingestTranslateChunk(
   text: string,
-  opts?: { interim?: boolean; tags?: string[] },
+  opts?: { interim?: boolean; tags?: string[]; sentenceId?: string },
 ): Promise<void> {
   if (!isTranslateActive()) return;
+  const chunkId = opts?.interim ? `tr-interim-${Date.now()}` : `tr-${Date.now()}`;
+  if (!opts?.interim) {
+    liveTranslateRuntime = {
+      ...liveTranslateRuntime,
+      status: "active",
+      captions: applyCaptionChunk(liveTranslateRuntime.captions, {
+        original: text,
+        translated: text,
+        interim: true,
+        id: chunkId,
+      }),
+    };
+    push();
+  }
   if (process.env.IIVO_GLASS_E2E === "1") {
     liveTranslateRuntime = {
       ...liveTranslateRuntime,
       status: "active",
       captions: applyCaptionChunk(liveTranslateRuntime.captions, {
         original: text,
-        translated: `[${liveTranslateRuntime.config.targetLanguage}] ${text}`,
+        translated: text,
         interim: opts?.interim === true,
         id: `e2e-${Date.now()}`,
       }),
@@ -870,11 +1144,12 @@ async function ingestTranslateChunk(
     {
       text,
       interim: opts?.interim,
-      chunkId: `tr-${Date.now()}`,
+      chunkId,
       tags: opts?.tags,
       appContext: appContext ?? undefined,
+      sentenceId: opts?.sentenceId,
     },
-    { config, runtime: liveTranslateRuntime },
+    { config, runtime: liveTranslateRuntime, shouldSuppressErrors: () => shouldSuppressTranslateStartupErrors() },
   );
   liveTranslateRuntime = result.runtime;
   if (
@@ -1003,30 +1278,21 @@ async function processListenModeChunk(
   const config = copilot.getConfig();
   if (config.mode === "off") return;
 
+  if (state.privacy.listening) {
+    ensureListenNotesLoopRunning();
+  }
+
   const nowMs = Date.now();
   listenLastChunkMs = nowMs;
   if (!listenMomentRuntime.listenStartedMs) {
     listenMomentRuntime.listenStartedMs = nowMs;
   }
 
-  listenRollingTranscript = applyListenTranscriptFragment(listenRollingTranscript, {
-    text: newText,
-    isInterim: opts?.interim ?? false,
-    nowMs,
-    idFactory: () => `lf-${nowMs}-${Math.random().toString(36).slice(2, 8)}`,
-  });
-
-  if (opts?.interim) {
-    await refreshStreamingListenNotes(nowMs, true);
-    push();
-    return;
-  }
-
-  const rolling = rollingTranscriptWindow(listenRollingTranscript);
-  const ctx = buildActiveListeningAskContext();
-  const recentTranscript = rolling || (ctx?.recentTranscriptWindow ?? "");
+  // ── FIX 1: classify segment BEFORE appending to rolling transcript ──────────
+  // Ad / sponsor audio must never enter the rolling transcript — otherwise it
+  // reaches extractStreamingNoteCandidates and the GPT-5.5 prompt window.
+  // We classify with the incoming text + screen context before any append.
   const media = state.mediaContext;
-
   const segment = classifyListenSegment({
     transcript: newText,
     visibleText: media?.visibleTextSummary,
@@ -1039,8 +1305,42 @@ async function processListenModeChunk(
     [segment.kind]: (listenMomentRuntime.segmentCounts?.[segment.kind] ?? 0) + 1,
   };
 
+  const isNonContentSegment = segment.kind === "ad" || segment.kind === "sponsor";
+
+  // Only append content audio to the rolling transcript — ads and sponsor reads
+  // are excluded so they can never surface as streaming notes or feed the AI pass.
+  if (!isNonContentSegment) {
+    listenRollingTranscript = applyListenTranscriptFragment(listenRollingTranscript, {
+      text: newText,
+      isInterim: opts?.interim ?? false,
+      nowMs,
+      idFactory: () => `lf-${nowMs}-${Math.random().toString(36).slice(2, 8)}`,
+    });
+    // Incrementally resolve speaker names from the transcript (free — no API call).
+    // Only runs when there are [Sx] tags or the transcript is long enough to contain intros.
+    if (newText.includes("[S") || listenRollingTranscript.rollingText.length > 120) {
+      listenSpeakerNames = extractSpeakerNames(listenRollingTranscript.rollingText, listenSpeakerNames);
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  if (opts?.interim) {
+    await refreshStreamingListenNotes(nowMs, true);
+    push();
+    return;
+  }
+
+  const rolling = rollingTranscriptWindow(listenRollingTranscript);
+  const ctx = buildActiveListeningAskContext();
+  const recentTranscript = rolling || (ctx?.recentTranscriptWindow ?? "");
+
+  // ── FIX 2: skip moment detection entirely during ads / sponsor reads ─────────
+  // evaluateListenMoments still runs for lifecycle updates (staleness, maturity)
+  // but detectCandidates is gated inside evaluateListenMoments via segmentKind.
+  // Passing isNonContentSegment lets the function skip new-candidate detection
+  // while still aging out old moments correctly.
   listenMomentRuntime.moments = evaluateListenMoments({
-    newText,
+    newText: isNonContentSegment ? "" : newText,   // empty text = no new candidates
     recentTranscript,
     existingMoments: listenMomentRuntime.moments,
     nowMs,
@@ -1048,6 +1348,7 @@ async function processListenModeChunk(
     segmentKind: segment.kind,
     mediaContext: state.mediaContext,
   });
+  // ─────────────────────────────────────────────────────────────────────────────
 
   const surfaceContext = {
     attentionLevel: config.listenAttentionLevel,
@@ -1326,6 +1627,10 @@ function bindCopilotToSession(): void {
   listenMomentRuntime = clearListenModeRuntime();
   listenLastChunkMs = undefined;
   listenRollingTranscript = initialListenRollingTranscript();
+  listenAiNotes = [];
+  lastAiNotesRefreshMs = undefined;
+  listenSpeakerNames = {};
+  lastAiTranscriptLen = 0;
   stopListenNotesLoop();
   copilot.bindSession(id);
   if (session?.copilot) {
@@ -1481,7 +1786,7 @@ function refreshSetupCapabilities(): void {
 
 async function applyGlassSetupCheckResult(
   result: Awaited<ReturnType<typeof runGlassSetupCheck>>,
-  options: { silent?: boolean; noticePrefix?: string } = {},
+  options: { silent?: boolean; noticePrefix?: string; showSummaryNotice?: boolean } = {},
 ): Promise<void> {
   state.serverHealthForSetup = result.serverHealth;
   state.screenCaptureProbe = result.screenCaptureProbe;
@@ -1520,8 +1825,12 @@ async function applyGlassSetupCheckResult(
   }
   refreshSetupCapabilities();
   state.setupCheckSummary = formatSetupCheckSummary(state.setupCapabilities);
-  if (!options.silent && options.noticePrefix) {
-    state.lastNotice = options.noticePrefix;
+  if (!options.silent) {
+    if (options.noticePrefix) {
+      state.lastNotice = options.noticePrefix;
+    } else if (options.showSummaryNotice && state.setupCheckSummary) {
+      state.lastNotice = state.setupCheckSummary;
+    }
   }
   push();
   if (
@@ -1619,6 +1928,7 @@ function snapshot(): GlassState {
     micPermission: state.micPermission,
     copilot: copilotRuntime(),
     voiceModeStartNonce: state.voiceModeStartNonce,
+    translateSetupRequestId: state.translateSetupRequestId,
     mediaContext: state.mediaContext,
     appUpdate: state.appUpdate,
     listenCountdownSeconds: state.listenCountdownSeconds,
@@ -2304,7 +2614,10 @@ async function recordGlassContextAfterResponse(prompt: string): Promise<void> {
   await persistGlassContextProfile(glassContextProfile);
 }
 
-async function submitCommand(rawText: string): Promise<void> {
+async function submitCommand(
+  rawText: string,
+  lensContext?: import("../shared/glassLensContext.ts").GlassLensContext | null,
+): Promise<void> {
   const text = rawText.trim();
   if (!text || state.askInFlight) return;
 
@@ -2318,12 +2631,44 @@ async function submitCommand(rawText: string): Promise<void> {
     return;
   }
 
+  // Pasted Glass error (from the error card copy button) — answer locally with
+  // specific explanation + fix steps, no server round-trip needed.
+  const errorFaqAnswer = lookupGlassErrorAnswer(text);
+  if (errorFaqAnswer) {
+    trackCopilotCommand(text);
+    pushFeed(createCommandFeedItem("command", text, { prompt: text }));
+    const answer = `**${errorFaqAnswer.title}**\n\n${errorFaqAnswer.body}`;
+    state.lastAskResponse = {
+      prompt: text,
+      answer,
+      fullAnswer: answer,
+      at: new Date().toISOString(),
+      routeUsed: "glass_direct",
+    };
+    pushFeed(createCommandFeedItem("response", answer, { prompt: text, fullBody: answer }));
+    push();
+    return;
+  }
+
   const requestGeneration = ++askRequestGeneration;
   askAbortController?.abort();
   askAbortController = new AbortController();
   const signal = askAbortController.signal;
 
   const visualIntent = shouldCaptureScreenForGlassAsk(text);
+  const lensAttached =
+    lensContext && (lensContext.url || lensContext.text || lensContext.screenshot)
+      ? lensContext
+      : null;
+  let lensScreenshotPayload: import("../shared/glassAskTypes.ts").GlassAskLatestScreenshot | undefined;
+  if (lensAttached?.screenshot) {
+    lensScreenshotPayload = {
+      imageDataUrl: lensAttached.screenshot,
+      sourceTitle: lensAttached.title,
+      label: lensAttached.url,
+    };
+  }
+  const wantsVisualCapture = visualIntent && !lensScreenshotPayload;
   clearVisualAskRetentionDismissTimer();
   state.visualAskRetention = null;
   state.askInFlight = true;
@@ -2377,7 +2722,7 @@ async function submitCommand(rawText: string): Promise<void> {
   let visualCaptureFull: { imageDataUrl: string; width: number; height: number } | null = null;
   let visualAsk413Retried = false;
 
-  if (visualIntent) {
+  if (wantsVisualCapture) {
     state.visualAskPayloadDiagnostics = null;
     state.visualAskDiagnostics = null;
 
@@ -2572,18 +2917,20 @@ async function submitCommand(rawText: string): Promise<void> {
     }
     removeLookingFeedItems();
   }
-  if (visualIntent) {
+  if (visualIntent || lensScreenshotPayload) {
     state.visualAskPhase = "analyzing";
     push();
   }
 
   thinkingStartedAtMs = Date.now();
   const interruptLabel = listenInterruptStatusLabel(activeCtx);
+  const thinkingLabel =
+    interruptLabel ??
+    (visualIntent || lensScreenshotPayload ? "Analyzing screen…" : "IIVO is thinking…");
   pushFeed(
     createCommandFeedItem(
       "thinking",
-      interruptLabel ??
-        (visualIntent ? "Analyzing screen…" : "IIVO is thinking…"),
+      thinkingLabel,
       { prompt: text },
     ),
   );
@@ -2596,8 +2943,9 @@ async function submitCommand(rawText: string): Promise<void> {
       {
         prompt: text,
         session: buildGlassAskSessionPayload(text),
-        latestScreenshot,
-        visualIntent: visualIntent || undefined,
+        latestScreenshot: latestScreenshot ?? lensScreenshotPayload,
+        lensContext: lensAttached ?? undefined,
+        visualIntent: visualIntent || Boolean(lensScreenshotPayload) || undefined,
         responseStyle: "overlay",
         ...(userContext ? { userContext } : {}),
       },
@@ -2870,35 +3218,30 @@ async function handleCommand(
     case "capture-screen":
     case "capture-screen-only":
       await handleCapture();
-      if (command.type === "capture-screen-only" && !sessionIsLive()) {
-        state.lastNotice = state.lastError ? undefined : CAPTURE_NO_SESSION_HINT;
+      if (command.type === "capture-screen-only" && !sessionIsLive() && !state.lastError) {
+        state.lastNotice = CAPTURE_NO_SESSION_HINT;
         push();
       }
       return;
     case "request-start-listening": {
+      logGlassClickDebug("request-start-listening", {
+        transcriptionMode: state.transcriptionMode,
+        translateActive: isTranslateActive(),
+      });
       state.operationDiagnostics = recordOperation(state.operationDiagnostics, "request-start-listening", "pending");
       push();
       beginListenCountdown();
       return;
     }
     case "start-listening":
+      logGlassClickDebug("start-listening", {
+        transcriptionMode: state.transcriptionMode,
+        translateActive: isTranslateActive(),
+        privacyListening: state.privacy.listening,
+      });
       dispatchPrivacy({ type: "START_LISTENING", at: new Date().toISOString() });
       state.stt = { ...state.stt, listeningElapsedMs: 0, lastError: undefined };
-      if (
-        deriveActiveListeningMode(
-          copilot.getConfig(),
-          sessionIsLive() && copilotModeIsActive(copilot.getConfig().mode),
-        ) === "listen"
-      ) {
-        listenMomentRuntime = prepareListenModeSession(listenMomentRuntime, Date.now());
-        listenRollingTranscript = initialListenRollingTranscript();
-        listenMomentRuntime.lastLiveNotesRefreshMs = undefined;
-        listenMomentRuntime.lastEvalTranscriptLen = 0;
-        copilot.clearPendingInterventions();
-        clearListenCardState();
-        startListenNotesLoop();
-        setListenNotesPadVisible(true);
-      }
+      bootstrapListenNotesPipeline();
       resetListeningLimitTracking();
       state.operationDiagnostics = diagnosticsForListening(
         recordOperation(state.operationDiagnostics, "start-listening", "ok"),
@@ -2909,6 +3252,10 @@ async function handleCommand(
       push();
       return;
     case "pause":
+      logGlassClickDebug("pause / stop-listening", {
+        transcriptionMode: state.transcriptionMode,
+        translateActive: isTranslateActive(),
+      });
       cancelListenCountdown();
       broadcastTranscriptionControl({ type: "stop" });
       dispatchPrivacy({ type: "PAUSE", at: new Date().toISOString() });
@@ -2934,7 +3281,7 @@ async function handleCommand(
       state.privacy = stopped.privacy;
       state.stt = stopped.stt;
       state.operationDiagnostics = stopped.diagnostics;
-      state.lastNotice = stopped.lastNotice;
+      state.lastNotice = undefined;
       state.lastError = stopped.lastError;
       stopCopilotLoop();
       stopListenNotesLoop();
@@ -2944,8 +3291,22 @@ async function handleCommand(
       listenMomentRuntime = clearListenModeRuntime();
       listenLastChunkMs = undefined;
       listenRollingTranscript = initialListenRollingTranscript();
+      listenAiNotes = [];
+      lastAiNotesRefreshMs = undefined;
+      listenSpeakerNames = {};
+      lastAiTranscriptLen = 0;
       state.mediaContext = null;
+      stopListenDeepgramSession();
       liveTranslateRuntime = stopLiveTranslate(liveTranslateRuntime);
+      setOverlayPinnedForTranslate(false);
+      copilot.setDebrief(null);
+      const endingSession = sessions.current();
+      if (
+        endingSession &&
+        (endingSession.status === "active" || endingSession.status === "paused")
+      ) {
+        sessions.endSession();
+      }
       setListenNotesPadVisible(false);
       push();
       return;
@@ -2956,20 +3317,108 @@ async function handleCommand(
       return;
     case "translate-set-config": {
       liveTranslateRuntime = updateLiveTranslateConfig(liveTranslateRuntime, command.patch);
+      if (command.patch.enabled !== false) {
+        armTranslateGracePeriod();
+        clearTranslateStartupErrors();
+      }
+      push();
+      return;
+    }
+    case "open-translate-setup": {
+      if (!isPanelVisible()) togglePanel();
+      state.panelTab = "copilot";
+      state.translateSetupRequestId += 1;
       push();
       return;
     }
     case "translate-start": {
+      logGlassClickDebug("translate-start", {
+        targetLanguage: command.targetLanguage ?? liveTranslateRuntime.config.targetLanguage,
+        transcriptionMode: state.transcriptionMode,
+        privacyListening: state.privacy.listening,
+      });
+      // Guard: key check BEFORE starting the session so no overlay/caption appears on failure.
+      const dgKey = process.env.DEEPGRAM_API_KEY?.trim();
+      if (!dgKey) {
+        state.lastError = "DEEPGRAM_API_KEY is not set — add it to desktop-glass/.env and restart.";
+        push();
+        return;
+      }
+      armTranslateGracePeriod();
+      clearTranslateStartupErrors();
       liveTranslateRuntime = startLiveTranslate(liveTranslateRuntime, {
         targetLanguage: command.targetLanguage ?? liveTranslateRuntime.config.targetLanguage,
       });
-      state.lastNotice = `Live Translate — ${liveTranslateRuntime.captions.languagePairLabel}`;
+      setOverlayPinnedForTranslate(true);
+      state.lastNotice = undefined;
+      {
+        stopDeepgramSession();
+        const srcLang = liveTranslateRuntime.config.sourceLanguage ?? "auto";
+        deepgramSession = new DeepgramStreamingSession(dgKey, srcLang, {
+          onTranscript: ({ text, isFinal, sentenceId }) => {
+            if (!isFinal) {
+              // Show interim as live preview only when source == target (no translation flip).
+              if (liveTranslateRuntime.config.sourceLanguage === liveTranslateRuntime.config.targetLanguage) {
+                pushInterimCaptionPreview(text);
+              }
+              return;
+            }
+            // Final: translate and append to the current sentence line in the display.
+            void ingestTranslateChunk(text, { tags: ["system_audio"], sentenceId });
+          },
+          onError: (err) => {
+            console.error("[deepgram] error:", err.message);
+            if (isTranslateActive()) {
+              state.lastError = `Translate audio error: ${err.message}`;
+              push();
+            }
+          },
+        });
+        const attemptDeepgramConnect = (attemptsLeft: number) => {
+          deepgramSession?.connect().catch((err: unknown) => {
+            const msg = (err as Error).message ?? String(err);
+            console.error(`[deepgram] connect failed (${attemptsLeft} retries left):`, msg);
+            if (attemptsLeft > 0 && isTranslateActive()) {
+              console.log("[deepgram] retrying in 1.5s…");
+              setTimeout(() => {
+                if (!isTranslateActive()) return;
+                deepgramSession = new DeepgramStreamingSession(dgKey, srcLang, {
+                  onTranscript: ({ text, isFinal, sentenceId }) => {
+                    if (!isFinal) { pushInterimCaptionPreview(text); return; }
+                    void ingestTranslateChunk(text, { tags: ["system_audio"], sentenceId });
+                  },
+                  onError: (err) => {
+                    console.error("[deepgram] error:", err.message);
+                    if (isTranslateActive()) { state.lastError = `Translate audio error: ${err.message}`; push(); }
+                  },
+                });
+                attemptDeepgramConnect(attemptsLeft - 1);
+              }, 1500);
+            } else {
+              deepgramSession = null;
+              if (isTranslateActive()) {
+                state.lastError = `Deepgram connection failed: ${msg}`;
+                push();
+              }
+            }
+          });
+        };
+        attemptDeepgramConnect(2);
+      }
       push();
       return;
     }
     case "translate-stop": {
+      logGlassClickDebug("translate-stop", {
+        transcriptionMode: state.transcriptionMode,
+        privacyListening: state.privacy.listening,
+      });
+      clearTranslateGracePeriod();
+      stopDeepgramSession();
       liveTranslateRuntime = stopLiveTranslate(liveTranslateRuntime);
-      state.lastNotice = "Translation stopped.";
+      setOverlayPinnedForTranslate(false);
+      state.lastNotice = undefined;
+      stopTranslateListening();
       push();
       return;
     }
@@ -3030,6 +3479,11 @@ async function handleCommand(
         push();
         return;
       }
+      if (isInterim && isTranslateActive()) {
+        void ingestTranslateChunk(chunk, { interim: true, tags: command.tags });
+        push();
+        return;
+      }
       if (sessionIsLive() && sessions.current()?.status === "active" && shouldSaveTranscriptToSession()) {
         const ctxFields = eventContextFields();
         sessions.addEvent({
@@ -3041,7 +3495,7 @@ async function handleCommand(
         });
         await pruneCurrentSessionEvents();
         await persistSessions(sessions);
-      } else if (!sessionIsLive()) {
+      } else if (!sessionIsLive() && !isTranslateActive()) {
         state.lastNotice = "Transcript saved. Start a session to keep chunks in the timeline.";
       }
       maybeShowActiveListeningProactive(chunk, command.tags);
@@ -3164,15 +3618,21 @@ async function handleCommand(
       push();
       return;
     case "submit-command":
+      await submitCommand(command.text, command.lensContext);
+      return;
     case "ask-iivo-direct":
       await submitCommand(command.text);
+      return;
+    case "prefill-command-bar":
+      prefillCommandBar(command.text);
       return;
     case "report-command-bar-stack-height": {
       const heightPx = Math.max(0, Math.round(command.heightPx));
       const stackChanged = state.commandBarStackHeightPx !== heightPx;
       state.commandBarStackHeightPx = heightPx;
+      const barResized = syncCommandBarWindowToStackHeight(heightPx);
       const clearanceChanged = refreshCommandBarOverlayClearance();
-      if (stackChanged || clearanceChanged) {
+      if (stackChanged || barResized || clearanceChanged) {
         push();
       }
       return;
@@ -3322,7 +3782,6 @@ async function handleCommand(
       return;
     case "clear-command-feed":
       state.commandFeed = [];
-      setOverlayClickThrough(true);
       push();
       return;
     case "dismiss-overlay-chat":
@@ -3380,18 +3839,30 @@ async function handleCommand(
       return;
     case "run-setup-check":
     case "retry-system-audio": {
+      const userInitiatedSetupCheck =
+        command.type === "run-setup-check" && command.forceCaptureProbe === true;
+      if (userInitiatedSetupCheck) {
+        state.lastNotice = "Running setup check…";
+        push();
+      }
       const result = await runGlassSetupCheck({
         config,
         displayTarget: state.glassSettings.displayTarget,
         skipCaptureProbe:
-          process.env.IIVO_GLASS_E2E === "1" && process.env.IIVO_GLASS_E2E_CAPTURE_FAIL !== "1",
+          !userInitiatedSetupCheck &&
+          process.env.IIVO_GLASS_E2E === "1" &&
+          process.env.IIVO_GLASS_E2E_CAPTURE_FAIL !== "1",
       });
       const silent = command.type === "run-setup-check" && command.silent;
       const noticePrefix =
         command.type === "retry-system-audio"
           ? `System audio probe: ${result.systemAudioStatus}${result.systemAudioDiagnostics ? ` (${result.systemAudioDiagnostics})` : ""}`
           : undefined;
-      await applyGlassSetupCheckResult(result, { silent, noticePrefix });
+      await applyGlassSetupCheckResult(result, {
+        silent,
+        noticePrefix,
+        showSummaryNotice: userInitiatedSetupCheck,
+      });
       return;
     }
     case "run-capture-diagnostics": {
@@ -3504,10 +3975,20 @@ async function handleCommand(
       };
       push();
       const result = isGlassAutoUpdateEnabled()
-        ? await applyGlassAutoUpdate()
+        ? await applyGlassAutoUpdate(state.appUpdate.latestVersion)
         : await applyGlassAppUpdate();
       if (!result.ok) {
         state.appUpdate = { ...state.appUpdate, phase: "available", error: result.error };
+        push();
+      } else if ("usedDmgFallback" in result && result.usedDmgFallback) {
+        state.appUpdate = {
+          ...state.appUpdate,
+          phase: "available",
+          error:
+            "In-app install needs a notarized build. The DMG opened in your browser — drag IIVO Glass to Applications, then reopen.",
+        };
+        state.lastNotice =
+          "Update DMG opened — drag IIVO Glass to Applications, replace the old copy, then reopen.";
         push();
       }
       return;
@@ -3807,13 +4288,6 @@ async function generateCopilotDebrief(): Promise<void> {
 
   copilot.setDebrief(debrief);
   syncCopilotToSession();
-  pushFeed(
-    createCommandFeedItem("response", debrief.markdown, {
-      title: "Session Debrief",
-      fullBody: debrief.markdown,
-    }),
-  );
-  state.lastNotice = "Session debrief ready.";
 }
 
 async function maybeAutoDebriefOnEnd(): Promise<void> {
@@ -4400,6 +4874,33 @@ function registerIpc(): void {
     }
   });
   ipcMain.handle(IPC.windowContextGet, () => getCurrentWindowContext());
+  ipcMain.handle(IPC.lensCapture, async () => {
+    if (process.env.IIVO_GLASS_E2E === "1") {
+      const { glassLensCaptureForE2e } = await import("./glassLensE2eStubs.ts");
+      return glassLensCaptureForE2e();
+    }
+    return captureGlassLensPage(state.glassSettings.displayTarget);
+  });
+  ipcMain.handle(IPC.lensScreenshot, async () => {
+    if (process.env.IIVO_GLASS_E2E === "1") {
+      const { glassLensScreenshotForE2e } = await import("./glassLensE2eStubs.ts");
+      return glassLensScreenshotForE2e();
+    }
+    return captureGlassLensScreenshot(state.glassSettings.displayTarget, {
+      hideForCapture: async () => {
+        hideGlassWindowsForCapture();
+      },
+      restoreAfterCapture: async () => {
+        restoreGlassWindowsAfterCapture();
+      },
+    });
+  });
+  ipcMain.handle(IPC.hideForCapture, (event) => {
+    hideGlassWindowsForCapture(event.sender);
+  });
+  ipcMain.handle(IPC.restoreAfterCapture, () => {
+    restoreGlassWindowsAfterCapture();
+  });
   ipcMain.handle(IPC.sttProcessChunk, async (_event, payload: SttProcessChunkPayload) => {
     const result = await processSttChunk(payload, {
       userDataPath: app.getPath("userData"),
@@ -4420,9 +4921,16 @@ function registerIpc(): void {
       },
       setLastError(msg) {
         if (!state.privacy.listening) return;
+        // When translate is active, Deepgram handles audio — suppress all non-hard
+        // errors from the old Whisper/server STT path so they don't show as red cards.
+        if (isTranslateActive() && !isTranslateHardError(msg)) return;
+        if (shouldSuppressTranslateStartupErrors(msg)) return;
         state.lastError = msg;
       },
       shouldReportSttErrors: () => state.privacy.listening,
+      shouldSuppressNoSignalErrors: () =>
+        isTranslateActive() || Date.now() < translateGraceUntilMs,
+      shouldSuppressTranslateStartupErrors: () => shouldSuppressTranslateStartupErrors(),
       push,
     });
     if (result.ok && result.text?.trim()) {
@@ -4431,6 +4939,13 @@ function registerIpc(): void {
       void ingestTranslateChunk(result.text.trim(), { tags });
     }
     return result;
+  });
+
+  ipcMain.on(IPC.deepgramAudioChunk, (_event, buffer: ArrayBuffer) => {
+    const buf = Buffer.from(buffer);
+    // Forward to both active sessions — translate session and listen-mode diarization session.
+    deepgramSession?.sendAudio(buf);
+    listenDeepgramSession?.sendAudio(buf);
   });
 
   ipcMain.on(IPC.command, (event, command: GlassCommand) => {
@@ -4443,6 +4958,7 @@ function registerIpc(): void {
   ipcMain.on(IPC.setIgnoreMouse, (event, ignore: boolean) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win) return;
+    logGlassClickDebug("IPC setIgnoreMouse", { ignore: !!ignore, webContentsId: event.sender.id });
     setIgnoreMouseFromWindow(win, !!ignore);
   });
   ipcMain.on(IPC.overlayNotificationActive, (_event, active: boolean) => {
@@ -4529,6 +5045,9 @@ app.whenReady().then(async () => {
   moments = await loadMoments();
   sessions = await loadSessions();
   glassUserSettings = await loadGlassUserSettings();
+  if (!app.isPackaged && process.env.IIVO_GLASS_E2E !== "1") {
+    glassUserSettings = { ...glassUserSettings, displayTarget: "primary" };
+  }
   let glassOnboardingState = await loadGlassOnboardingState();
   if (process.env.IIVO_GLASS_E2E === "1") {
     glassOnboardingState = { ...glassOnboardingState, completed: true };

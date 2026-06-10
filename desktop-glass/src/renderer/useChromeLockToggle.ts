@@ -12,7 +12,7 @@ export function useChromeLockToggle(chromeLocked: boolean): () => void {
   }, [chromeLocked]);
 }
 
-/** Command bar sits on a click-through window; ensure controls receive clicks. */
+/** Command bar window is always interactive — kept for call sites that run on unlock. */
 export function ensureCommandBarClickable(): void {
   syncGlassClickThrough(false);
 }

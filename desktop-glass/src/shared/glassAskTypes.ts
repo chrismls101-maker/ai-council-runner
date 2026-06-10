@@ -52,8 +52,10 @@ export interface GlassAskRequest {
   prompt: string;
   session?: GlassAskSessionPayload;
   latestScreenshot?: GlassAskLatestScreenshot;
+  lensContext?: import("./glassLensContext.ts").GlassLensContext;
   visualIntent?: boolean;
-  responseStyle?: "overlay";
+  /** overlay = cap length for HUD; full = no cap (structured JSON, long answers). */
+  responseStyle?: "overlay" | "full";
   modelPurpose?: "default" | "semantic" | "diagnostic";
   /** Derived passive context summary (local Glass context engine). */
   userContext?: string;

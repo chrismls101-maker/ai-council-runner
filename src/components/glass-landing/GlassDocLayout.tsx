@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactNode, JSX } from "react";
 import AnimatedGlassBackground from "./AnimatedGlassBackground";
 import GlassLandingFooter from "./GlassLandingFooter";
 import "./glass-landing.css";

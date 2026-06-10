@@ -129,12 +129,14 @@ test("incomplete action fragment saved as note not card", () => {
 });
 
 test("buildListenLiveNotes creates structured notes from moments", () => {
+  // Sections only show AI notes (single-layer design). Local moments → entries.
   const notes = buildListenLiveNotes({
     moments: [readyMoment()],
     transcriptChunks: ["Desire is the starting point of all achievement."],
     listenStartedMs: Date.now() - 60_000,
   });
-  assert.ok(notes.sections.keyIdeas.length >= 1);
+  const keyIdeaEntries = notes.entries.filter((e) => e.section === "keyIdeas");
+  assert.ok(keyIdeaEntries.length >= 1);
   assert.ok(notes.currentTopic);
   assert.equal(notes.transcriptChunkCount, 1);
 });
@@ -172,8 +174,9 @@ test("clear action item saved as note not action-first card text", () => {
     "content",
   );
   const notes = buildListenLiveNotes({ moments: [moment] });
-  assert.ok(notes.sections.actionIdeas.length >= 1);
-  assert.equal(isActionFirstListenCard(notes.sections.actionIdeas[0] ?? ""), false);
+  const actionEntries = notes.entries.filter((e) => e.section === "actionIdeas");
+  assert.ok(actionEntries.length >= 1);
+  assert.equal(isActionFirstListenCard(actionEntries[0]?.text ?? ""), false);
 });
 
 test("raw transcript and notes are separate", () => {
@@ -191,7 +194,11 @@ test("raw transcript and notes are separate", () => {
   const chunks = listenTranscriptChunksFromEvents(events);
   const notes = buildListenLiveNotes({ moments: [readyMoment()], transcriptChunks: chunks });
   assert.equal(chunks[0], "Raw transcript line one.");
-  assert.ok(notes.sections.keyIdeas[0]!.includes("definite desire") || notes.sections.keyIdeas[0]!.includes("starting point"));
+  // Sections empty pre-AI-pass; check the entry text instead.
+  const keyIdeaEntries = notes.entries.filter((e) => e.section === "keyIdeas");
+  assert.ok(keyIdeaEntries.length >= 1, "expected keyIdeas entry from moment");
+  const firstText = keyIdeaEntries[0]!.text;
+  assert.ok(firstText.includes("definite desire") || firstText.includes("starting point") || firstText.length >= 20);
 });
 
 test("unclear transcript fragment note does not become action", () => {

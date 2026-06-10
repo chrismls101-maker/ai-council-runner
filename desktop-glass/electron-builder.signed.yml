@@ -65,7 +65,7 @@ mac:
   entitlementsInherit: build/entitlements.mac.plist
   entitlementsLoginHelper: build/entitlements.mac.plist
   # Temporarily off — submit manually: xcrun notarytool submit … after build
-  notarize: false
+  notarize: true
   artifactName: ${productName}-${version}-${arch}-${os}.${ext}
 
 dmg:

@@ -10,12 +10,15 @@ import {
   COMMAND_BAR_BOTTOM_MARGIN,
   COMMAND_BAR_HEIGHT,
   COMMAND_BAR_ROOT_BOTTOM_PADDING_PX,
+  COMMAND_BAR_STACK_TOP_PADDING_PX,
+  commandBarWindowHeightForStack,
   computeCommandBarOverlayClearancePx,
   commandBarOverlayClearanceFallbackPx,
   dockLayoutFromDisplay,
   listenNotesPadLayoutFromDisplay,
   overlayLayoutFromDisplay,
   overlayNotificationBottomPx,
+  OVERLAY_CHAT_STACK_FALLBACK_PX,
   panelLayoutFromDisplay,
   type DisplayLayoutContext,
 } from "../shared/glassLayoutMath.ts";
@@ -110,6 +113,27 @@ test("default bottom-anchored bar clearance equals margin + padding + stack", ()
     COMMAND_BAR_BOTTOM_MARGIN + COMMAND_BAR_ROOT_BOTTOM_PADDING_PX + stackHeightPx,
   );
   assert.equal(commandBarOverlayClearanceFallbackPx(stackHeightPx), clearance);
+});
+
+test("command bar default window height matches compact stack, not legacy 280px shell", () => {
+  const bar = commandBarLayoutFromDisplay(primaryDisplay);
+  assert.equal(
+    bar.height,
+    commandBarWindowHeightForStack(OVERLAY_CHAT_STACK_FALLBACK_PX),
+  );
+  assert.ok(bar.height < COMMAND_BAR_HEIGHT);
+});
+
+test("command bar window grows with tall accessory stacks (Lens panel)", () => {
+  assert.equal(
+    commandBarWindowHeightForStack(61),
+    61 + COMMAND_BAR_ROOT_BOTTOM_PADDING_PX + COMMAND_BAR_STACK_TOP_PADDING_PX,
+  );
+  const tallStack = 340;
+  assert.equal(
+    commandBarWindowHeightForStack(tallStack),
+    tallStack + COMMAND_BAR_ROOT_BOTTOM_PADDING_PX + COMMAND_BAR_STACK_TOP_PADDING_PX,
+  );
 });
 
 test("command bar shrinks to fit a small display", () => {

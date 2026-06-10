@@ -41,22 +41,27 @@ const AD_SCREEN = [
 ];
 
 const AD_TRANSCRIPT = [
-  /\bbrought to you by\b/i,
   /\bsponsored by\b/i,
   /\blimited time offer\b/i,
-  /\buse code\b/i,
   /\bclick the link below\b/i,
   /\bvisit\s+\w+\.com\b/i,
-  /\bdiscount code\b/i,
-  /\baffiliate link\b/i,
+  /\bget\b.*\b(off|percent|discount)\b.*\b(using|with|code)\b/i,  // "get 60% off using code"
+  /\bcheck out\b.*\blink\b.*\b(below|bio|description)\b/i,       // "check out the link below"
+  /\bfree trial\b.*\blink\b/i,
+  /\bexclusive (discount|deal|offer)\b/i,
 ];
 
 const SPONSOR_TRANSCRIPT = [
-  /\bthis episode is brought to you by\b/i,
+  /\bthis (episode|video) is brought to you by\b/i,
+  /\bbrought to you by\b/i,           // "this video brought to you by NordVPN"
   /\btoday'?s sponsor\b/i,
   /\bour sponsor\b/i,
   /\bproud partner\b/i,
   /\bpartnered with\b/i,
+  /\baffiliate link\b/i,              // "my affiliate link in bio/below"
+  /\buse code\s+\w{2,}/i,             // "use code FOUNDER" — requires a code word after
+  /\bdiscount code\s+\w{2,}/i,        // "discount code SILICON"
+  /\bpromo code\s+\w{2,}/i,           // "promo code GLASS"
 ];
 
 const INTRO_TRANSCRIPT = [

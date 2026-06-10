@@ -91,6 +91,7 @@ export function FeedCard({
                 <button
                   type="button"
                   className="gbtn gbtn--ghost"
+                  data-testid="glass-overlay-copy"
                   onClick={() => void copyFeedText(item.fullBody ?? item.body)}
                 >
                   Copy
@@ -115,6 +116,7 @@ export function FeedCard({
                       <button
                         type="button"
                         className="gbtn gbtn--ghost"
+                        data-testid="glass-overlay-save-moment"
                         onClick={() => send({ type: "save-feed-moment", id: item.id })}
                       >
                         Save Moment

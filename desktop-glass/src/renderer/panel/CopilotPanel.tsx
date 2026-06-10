@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { CommandTranslateIcon } from "../command/CommandTranslateIcon.tsx";
 import { send, useGlassState } from "../useGlassState.ts";
 import { useTranscriptionContext } from "../TranscriptionProvider.tsx";
 import {
@@ -66,12 +67,18 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
   const [pendingMeetingChoice, setPendingMeetingChoice] = useState(false);
   const [pendingTranslateSetup, setPendingTranslateSetup] = useState(false);
   const [listenNeedsAudio, setListenNeedsAudio] = useState(false);
+  const lastTranslateSetupRequest = useRef(0);
 
   const copilot = state.copilot;
   const config = copilot.config;
   const listening = state.privacy.listening || tx.status === "listening";
   const systemAudioReady = tx.systemAudioStatus === "available";
-  const hasError = Boolean(state.lastError || tx.lastError);
+  // Gate error display on listening being active. The startup setup check broadcasts
+  // "connect-system-audio" which probes BlackHole and can dispatch SET_ERROR in the
+  // renderer before the user has clicked anything. Without this gate, a restored
+  // listen session (copilot.active=true) shows "Error" on the card immediately on
+  // open — before the user has interacted with audio at all.
+  const hasError = Boolean((state.lastError || tx.lastError) && listening);
 
   // Derive which simple mode is active from copilot mode + focus.
   const activeMode = useMemo<GlassModeId | null>(() => {
@@ -99,6 +106,11 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
     );
 
   const onModeClick = (preset: GlassModePreset) => {
+    // Clear any stale error from the previous session before activating.
+    // Without this, resolveModeStatus sees isActive=true + hasError=true on the
+    // very first render after click (copilot goes active before state.lastError
+    // drains), flashing "Error" on the card until the next state push clears it.
+    send({ type: "clear-last-error" });
     const plan = planModeActivation(preset, { systemAudioReady });
     applyModePreset(preset);
     setPendingMeetingChoice(false);
@@ -141,6 +153,13 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
     setListenNeedsAudio(false);
     setPendingTranslateSetup(true);
   };
+
+  useEffect(() => {
+    const requestId = state.translateSetupRequestId ?? 0;
+    if (requestId <= lastTranslateSetupRequest.current) return;
+    lastTranslateSetupRequest.current = requestId;
+    openTranslateSetup();
+  }, [state.translateSetupRequestId]);
 
   const onQuickToolClick = (tool: GlassQuickToolId) => {
     if (tool === "voice") {
@@ -203,7 +222,11 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
               title={GLASS_QUICK_TOOL_COPY[tool]}
               onClick={() => onQuickToolClick(tool)}
             >
-              {tool === "voice" ? "🎙 " : "🌐 "}
+              {tool === "voice" ? (
+                "🎙 "
+              ) : (
+                <CommandTranslateIcon />
+              )}{" "}
               {GLASS_QUICK_TOOL_LABELS[tool]}
             </button>
           ))}

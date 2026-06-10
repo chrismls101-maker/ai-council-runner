@@ -97,7 +97,8 @@ for (const target of targets) {
 
 console.log(JSON.stringify(manifest, null, 2));
 
-const arm64Zip = dmgPath(`IIVO Glass-${version}-arm64-mac.zip`);
+const arm64Zip = dmgPath(`IIVO-Glass-${version}-arm64-mac.zip`)
+  || dmgPath(`IIVO Glass-${version}-arm64-mac.zip`);
 const latestMacYml = path.join(releaseDir, "latest-mac.yml");
 if (arm64Zip || fs.existsSync(latestMacYml)) {
   console.log("\n[glass:release] Squirrel auto-update assets (upload to GitHub release v" + version + "):");

@@ -10,6 +10,11 @@ import { join } from "node:path";
 import { BrowserWindow, globalShortcut, screen, shell, type WebContents } from "electron";
 import { GLASS_BOOT_SOUND_ENABLED } from "../shared/bootSound.ts";
 import type { GlassConfig } from "../shared/config.ts";
+import {
+  attachGlassWindowFocusDebug,
+  debugSetIgnoreMouseEvents,
+  logGlassClickDebug,
+} from "./glassClickDebug.ts";
 import type { OverlayMode } from "../shared/glassWindowTypes.ts";
 import {
   GLASS_HOTKEY_PRESETS,
@@ -26,7 +31,11 @@ import {
   sanitizeDisplayTarget,
 } from "./displayRegistry.ts";
 import { GlassLayoutManager, getPrimaryDisplayContext } from "./glassLayoutManager.ts";
-import { overlayLayoutFromDisplay } from "../shared/glassLayoutMath.ts";
+import {
+  commandBarWindowHeightForStack,
+  COMMAND_BAR_ROOT_BOTTOM_PADDING_PX,
+  overlayLayoutFromDisplay,
+} from "../shared/glassLayoutMath.ts";
 import {
   isFollowMouseTrackingActive,
   startFollowMouseTracking,
@@ -65,6 +74,8 @@ let layoutManager: GlassLayoutManager | null = null;
 let overlayVisible = true;
 /** Keep overlay window up for center-screen notices even when the user hid the overlay. */
 let overlayNoticePinned = false;
+/** Keep overlay window visible for live-translate captions when overlay chrome is hidden. */
+let overlayPinnedForTranslate = false;
 let overlayClickThrough = true;
 let commandBarClickThrough = false;
 let overlayMode: OverlayMode = "passive";
@@ -116,22 +127,103 @@ function loadRenderer(
 const OVERLAY_ALWAYS_ON_TOP_LEVEL = "screen-saver" as const;
 const OVERLAY_ALWAYS_ON_TOP_RELATIVE = 0;
 const OVERLAY_RAISED_FOR_NOTIFICATIONS_RELATIVE = 3;
-const DOCK_ALWAYS_ON_TOP_RELATIVE = 1;
-const COMMAND_BAR_ALWAYS_ON_TOP_RELATIVE = 2;
-const COMMAND_BAR_TOP_RELATIVE = 5;
-const NOTES_PAD_ALWAYS_ON_TOP_RELATIVE = 6;
-const PANEL_ALWAYS_ON_TOP_RELATIVE = 7;
+/** Chrome uses panel type on macOS — keep well above overlay relative levels. */
+const DOCK_ALWAYS_ON_TOP_RELATIVE = 8;
+const COMMAND_BAR_ALWAYS_ON_TOP_RELATIVE = 10;
+const COMMAND_BAR_TOP_RELATIVE = 12;
+const NOTES_PAD_ALWAYS_ON_TOP_RELATIVE = 14;
+const PANEL_ALWAYS_ON_TOP_RELATIVE = 16;
 
 let overlayRaisedForNotifications = false;
 
-function applyOverlayClickThrough(overlay: BrowserWindow, enabled: boolean): void {
-  if (onboardingPending && enabled) return;
-  overlayClickThrough = enabled;
-  if (enabled) {
-    overlay.setIgnoreMouseEvents(true, { forward: true });
-  } else {
-    overlay.setIgnoreMouseEvents(false);
+const CHROME_MOUSE_FORWARD = { forward: true } as const;
+
+/**
+ * Dock + command bar are bounded chrome pills (not full-screen). They must always
+ * receive clicks — never use OS click-through or cursor-changed toggling.
+ */
+function ensureChromeWindowInteractive(win: BrowserWindow, windowName: string): void {
+  if (win.isDestroyed()) return;
+  debugSetIgnoreMouseEvents(win, windowName, false);
+  if (!glassBootPending && !onboardingPending) {
+    win.moveTop();
   }
+}
+
+/** Dock + command bar must stay above a temporarily interactive full-screen overlay. */
+function raiseChromeAboveOverlay(w: GlassWindows): void {
+  if (glassBootPending || onboardingPending) return;
+
+  if (!w.dock.isDestroyed()) {
+    w.dock.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, DOCK_ALWAYS_ON_TOP_RELATIVE);
+    ensureChromeWindowInteractive(w.dock, "dock");
+  }
+
+  if (!w.commandBar.isDestroyed() && commandBarVisible) {
+    const commandBarRelative = overlayRaisedForNotifications
+      ? COMMAND_BAR_TOP_RELATIVE
+      : COMMAND_BAR_ALWAYS_ON_TOP_RELATIVE;
+    w.commandBar.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, commandBarRelative);
+    ensureChromeWindowInteractive(w.commandBar, "commandBar");
+  }
+
+  if (!w.panel.isDestroyed() && w.panel.isVisible()) {
+    w.panel.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, PANEL_ALWAYS_ON_TOP_RELATIVE);
+    w.panel.moveTop();
+  }
+
+  if (!w.notesPad.isDestroyed() && notesPadVisible) {
+    w.notesPad.setAlwaysOnTop(
+      true,
+      OVERLAY_ALWAYS_ON_TOP_LEVEL,
+      NOTES_PAD_ALWAYS_ON_TOP_RELATIVE,
+    );
+    w.notesPad.moveTop();
+  }
+}
+
+/** Full-screen overlay — reset to click-through (called after every showInactive). */
+function configureOverlayClickThrough(overlay: BrowserWindow): void {
+  if (overlay.isDestroyed()) return;
+  debugSetIgnoreMouseEvents(overlay, "overlay", true, true);
+}
+
+/**
+ * Attach a one-time cursor-changed listener to the overlay so that interactive
+ * overlay elements (notification dismiss buttons, translate Hide button) receive
+ * clicks.  Only "pointer"/"hand" toggle the overlay — text-cursor captions must
+ * NOT block underlying app clicks.
+ *
+ * Called once at createOverlayWindow() time; configureOverlayClickThrough() resets
+ * the OS state after each showInactive() and the listener re-arms on the next
+ * cursor movement.
+ */
+function attachOverlayCursorClickThrough(overlay: BrowserWindow): void {
+  const wc = overlay.webContents;
+  const onCursorChanged = (_event: Electron.Event, type: string) => {
+    if (overlay.isDestroyed()) return;
+    // CRITICAL GUARD: the overlay is full-screen. If we call setIgnoreMouseEvents(false)
+    // while captions-only / passive modes are active, the entire display becomes
+    // unclickable — nothing underneath (Glass dock, commandBar, browser, apps) receives
+    // any click. Only toggle interactive when a notification card is actually raised.
+    if (!overlayRaisedForNotifications) {
+      // Ensure any stale interactive state is cleared.
+      debugSetIgnoreMouseEvents(overlay, "overlay", true, true);
+      return;
+    }
+    logGlassClickDebug("cursor-changed", { window: "overlay", type });
+    if (type === "pointer" || type === "hand") {
+      debugSetIgnoreMouseEvents(overlay, "overlay", false);
+      // Full-screen overlay becomes click-blocking — re-raise bounded chrome above it.
+      if (windows) raiseChromeAboveOverlay(windows);
+    } else {
+      debugSetIgnoreMouseEvents(overlay, "overlay", true, true);
+    }
+  };
+  wc.on("cursor-changed", onCursorChanged);
+  wc.once("destroyed", () => {
+    wc.removeListener("cursor-changed", onCursorChanged);
+  });
 }
 
 /** First-run onboarding always uses the primary display and must receive clicks/focus. */
@@ -139,7 +231,6 @@ function presentOnboardingOverlay(overlay: BrowserWindow): void {
   const layout = overlayLayoutFromDisplay(getPrimaryDisplayContext());
   overlay.setBounds(layout);
   overlay.setFocusable(true);
-  applyOverlayClickThrough(overlay, false);
   overlay.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, OVERLAY_ALWAYS_ON_TOP_RELATIVE);
   overlay.show();
   overlay.focus();
@@ -151,14 +242,37 @@ function presentOnboardingOverlay(overlay: BrowserWindow): void {
 
 function shouldShowOverlayWindow(): boolean {
   if (overlayNoticePinned) return true;
+  if (overlayPinnedForTranslate) return overlayMode !== "hidden";
   return overlayVisible && overlayMode !== "hidden";
+}
+
+/** Show the overlay window for live-translate captions (even if overlay chrome is hidden). */
+export function setOverlayPinnedForTranslate(pinned: boolean): void {
+  overlayPinnedForTranslate = pinned;
+  logGlassClickDebug("setOverlayPinnedForTranslate", { pinned });
+  if (glassBootPending || onboardingPending) return;
+  if (!windows?.overlay || windows.overlay.isDestroyed()) return;
+  if (shouldShowOverlayWindow()) {
+    if (layoutManager) {
+      windows.overlay.setBounds(layoutManager.getOverlayLayout());
+    }
+    windows.overlay.showInactive();
+    // Guard: Electron resets setIgnoreMouseEvents on show — re-apply immediately.
+    configureOverlayClickThrough(windows.overlay);
+  } else {
+    windows.overlay.hide();
+  }
+  stackGlassWindows(windows);
 }
 
 /** Show/hide the overlay window and raise it above the dock when notifications are active. */
 export function syncOverlayPresentationRaised(raised: boolean): void {
   overlayNoticePinned = raised;
   overlayRaisedForNotifications = raised;
-  if (glassBootPending) return;
+  if (glassBootPending) {
+    if (windows) suppressChromeDuringBoot(windows);
+    return;
+  }
   if (!windows?.overlay || windows.overlay.isDestroyed()) return;
   if (onboardingPending) {
     if (shouldShowOverlayWindow()) {
@@ -173,8 +287,8 @@ export function syncOverlayPresentationRaised(raised: boolean): void {
       windows.overlay.setBounds(layoutManager.getOverlayLayout());
     }
     windows.overlay.showInactive();
-    // Preserve renderer hover/interaction state — do not force click-through here.
-    // stackGlassWindows() applies overlayClickThrough below.
+    // Guard: Electron resets setIgnoreMouseEvents on show — re-apply immediately.
+    configureOverlayClickThrough(windows.overlay);
   } else {
     windows.overlay.hide();
   }
@@ -208,8 +322,24 @@ function trackedGlassWindowIds(): Set<number> {
   return globalRef[GLASS_WINDOW_REGISTRY_KEY];
 }
 
-function trackGlassWindow(win: BrowserWindow): void {
+function trackGlassWindow(win: BrowserWindow, windowName: string): void {
   trackedGlassWindowIds().add(win.id);
+  attachGlassWindowFocusDebug(win, windowName);
+  if (windowName === "dock" || windowName === "commandBar") {
+    const onShow = (): void => {
+      if (win.isDestroyed()) return;
+      if (glassBootPending) {
+        win.hide();
+        return;
+      }
+      ensureChromeWindowInteractive(win, windowName);
+      if (windows) raiseChromeAboveOverlay(windows);
+    };
+    win.on("show", onShow);
+    win.once("closed", () => {
+      win.removeListener("show", onShow);
+    });
+  }
   win.once("closed", () => {
     trackedGlassWindowIds().delete(win.id);
   });
@@ -259,6 +389,14 @@ function completeGlassBootSequence(): void {
   onGlassBootSequenceComplete?.();
 }
 
+/** Keep dock/command bar/overlay hidden while the boot splash is up (renderer load can flash windows). */
+function suppressChromeDuringBoot(w: GlassWindows): void {
+  if (!glassBootPending) return;
+  if (!w.dock.isDestroyed()) w.dock.hide();
+  if (!w.commandBar.isDestroyed()) w.commandBar.hide();
+  if (!w.overlay.isDestroyed()) w.overlay.hide();
+}
+
 /** Abort boot splash when the page fails to load — show Glass windows immediately. */
 export function abortGlassBootSequence(reason?: string): void {
   if (!glassBootPending) return;
@@ -285,11 +423,19 @@ function showPrimaryGlassWindows(): void {
     windows.overlay.setBounds(layoutManager.getOverlayLayout());
     windows.overlay.setFocusable(false);
     windows.overlay.showInactive();
-    applyOverlayClickThrough(windows.overlay, true);
+    // Guard: Electron resets setIgnoreMouseEvents on show — re-apply immediately.
+    configureOverlayClickThrough(windows.overlay);
   }
   if (commandBarVisible && !windows.commandBar.isDestroyed()) {
     windows.commandBar.setBounds(layoutManager.getCommandBarLayout());
     windows.commandBar.showInactive();
+    // Re-apply last known interactive state; Electron resets setIgnoreMouseEvents on show
+    // but cursor-changed won't re-fire if cursor hasn't moved — preserve the state.
+    ensureChromeWindowInteractive(windows.commandBar, "commandBar");
+  }
+  if (!windows.dock.isDestroyed()) {
+    windows.dock.showInactive();
+    ensureChromeWindowInteractive(windows.dock, "dock");
   }
   stackGlassWindows(windows);
   logDiagnostics();
@@ -358,7 +504,10 @@ export function setOnboardingPending(pending: boolean): void {
 
 /** Overlay above desktop apps; dock/panel stack above overlay via relativeLevel. */
 export function stackGlassWindows(w: GlassWindows): void {
-  if (glassBootPending) return;
+  if (glassBootPending) {
+    suppressChromeDuringBoot(w);
+    return;
+  }
   if (onboardingPending) {
     if (!w.overlay.isDestroyed() && shouldShowOverlayWindow()) {
       presentOnboardingOverlay(w.overlay);
@@ -372,12 +521,15 @@ export function stackGlassWindows(w: GlassWindows): void {
       ? OVERLAY_RAISED_FOR_NOTIFICATIONS_RELATIVE
       : OVERLAY_ALWAYS_ON_TOP_RELATIVE;
     w.overlay.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, overlayRelative);
-    applyOverlayClickThrough(w.overlay, overlayClickThrough);
     w.overlay.showInactive();
+    // Guard: Electron resets setIgnoreMouseEvents on show — re-apply immediately.
+    configureOverlayClickThrough(w.overlay);
   }
 
   w.dock.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, DOCK_ALWAYS_ON_TOP_RELATIVE);
-  w.dock.show();
+  // Use showInactive (not show) — show() steals focus from whatever app the user is in.
+  w.dock.showInactive();
+  if (!w.dock.isDestroyed()) ensureChromeWindowInteractive(w.dock, "dock");
 
   if (
     overlayRaisedForNotifications &&
@@ -394,6 +546,7 @@ export function stackGlassWindows(w: GlassWindows): void {
     w.commandBar.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, commandBarRelative);
     w.commandBar.showInactive();
     w.commandBar.moveTop();
+    ensureChromeWindowInteractive(w.commandBar, "commandBar");
   } else {
     w.dock.moveTop();
   }
@@ -418,7 +571,7 @@ function logDiagnostics(): void {
   if (!windows || !layoutManager) return;
   const line = formatGlassWindowDiagnostics({
     display: layoutManager.getDisplay(),
-    overlay: overlayVisible ? rectFromWindow(windows.overlay) : null,
+    overlay: shouldShowOverlayWindow() ? rectFromWindow(windows.overlay) : null,
     overlayVisible,
     overlayClickThrough,
     dock: rectFromWindow(windows.dock),
@@ -468,7 +621,7 @@ function applyCommandBarLayout(resetPosition = false): void {
   } else if (commandBarCustomOrigin) {
     next = resolveChromeWindowBounds(auto, commandBarCustomOrigin, workArea);
   } else if (!chromeLayoutLocked) {
-    next = { ...auto, x: current.x, y: current.y };
+    next = { ...auto, x: current.x, y: current.y, height: current.height };
   }
   if (
     current.x === next.x &&
@@ -549,9 +702,6 @@ function relayoutAllWindows(options?: { resetDock?: boolean }): void {
 
   if (!windows.overlay.isDestroyed()) {
     windows.overlay.setBounds(layoutManager.getOverlayLayout());
-    if (overlayVisible) {
-      applyOverlayClickThrough(windows.overlay, overlayClickThrough);
-    }
   }
 
   if (!windows.panel.isDestroyed()) {
@@ -615,8 +765,12 @@ function createOverlayWindow(): BrowserWindow {
     },
   });
   overlay.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  configureOverlayClickThrough(overlay);
+  // Attach cursor-changed listener once so interactive overlay elements
+  // (notification dismiss, translate Hide) become clickable when hovered.
+  attachOverlayCursorClickThrough(overlay);
   loadRenderer(overlay, "overlay.html");
-  trackGlassWindow(overlay);
+  trackGlassWindow(overlay, "overlay");
   return overlay;
 }
 
@@ -638,6 +792,7 @@ function createDockWindow(): BrowserWindow {
     show: false,
     backgroundColor: "#00000000",
     acceptFirstMouse: true,
+    ...(process.platform === "darwin" ? { type: "panel" as const } : {}),
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
@@ -646,8 +801,12 @@ function createDockWindow(): BrowserWindow {
     },
   });
   dock.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  ensureChromeWindowInteractive(dock, "dock");
+  dock.webContents.once("did-finish-load", () => {
+    if (glassBootPending || onboardingPending) dock.hide();
+  });
   loadRenderer(dock, "index.html");
-  trackGlassWindow(dock);
+  trackGlassWindow(dock, "dock");
   return dock;
 }
 
@@ -678,7 +837,7 @@ function createPanelWindow(): BrowserWindow {
   });
   panel.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   loadRenderer(panel, "panel.html");
-  trackGlassWindow(panel);
+  trackGlassWindow(panel, "panel");
   return panel;
 }
 
@@ -700,6 +859,7 @@ function createCommandBarWindow(): BrowserWindow {
     show: false,
     backgroundColor: "#00000000",
     acceptFirstMouse: true,
+    ...(process.platform === "darwin" ? { type: "panel" as const } : {}),
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
@@ -708,8 +868,12 @@ function createCommandBarWindow(): BrowserWindow {
     },
   });
   commandBar.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  ensureChromeWindowInteractive(commandBar, "commandBar");
+  commandBar.webContents.once("did-finish-load", () => {
+    if (glassBootPending || onboardingPending) commandBar.hide();
+  });
   loadRenderer(commandBar, "command.html");
-  trackGlassWindow(commandBar);
+  trackGlassWindow(commandBar, "commandBar");
   return commandBar;
 }
 
@@ -742,7 +906,7 @@ function createNotesPadWindow(): BrowserWindow {
   });
   notesPad.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   loadRenderer(notesPad, "notes.html");
-  trackGlassWindow(notesPad);
+  trackGlassWindow(notesPad, "notesPad");
   return notesPad;
 }
 
@@ -809,6 +973,7 @@ export function createWindows(glassConfig: GlassConfig, displayTarget: GlassDisp
   wireWindowStacking(windows);
   ensureVisibleOnAllWorkspaces();
   stackGlassWindows(windows);
+  if (glassBootPending) suppressChromeDuringBoot(windows);
   syncFollowMouseMode();
   logDiagnostics();
   return windows;
@@ -851,7 +1016,7 @@ export function createSplashWindow(): BrowserWindow {
   // Sit above every Glass window (overlay/dock/command/panel) while booting.
   splash.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, 12);
   splash.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  splash.setIgnoreMouseEvents(true);
+  debugSetIgnoreMouseEvents(splash, "splash", true);
   splash.once("ready-to-show", () => {
     if (!splash.isDestroyed()) splash.showInactive();
   });
@@ -932,6 +1097,81 @@ export function getWindows(): GlassWindows | null {
   return windows;
 }
 
+type HiddenForCaptureEntry = {
+  win: BrowserWindow;
+  wasVisible: boolean;
+};
+
+let hiddenForCaptureState: HiddenForCaptureEntry[] | null = null;
+
+function collectGlassBrowserWindows(excludeWebContents?: WebContents): BrowserWindow[] {
+  const excludeWin = excludeWebContents ? BrowserWindow.fromWebContents(excludeWebContents) : null;
+  const wins: BrowserWindow[] = [];
+  if (windows) {
+    for (const win of [
+      windows.dock,
+      windows.panel,
+      windows.overlay,
+      windows.commandBar,
+      windows.notesPad,
+    ]) {
+      if (!win.isDestroyed()) wins.push(win);
+    }
+  }
+  if (splashWindow && !splashWindow.isDestroyed()) wins.push(splashWindow);
+  return wins.filter((win) => win !== excludeWin);
+}
+
+/** Hide Glass chrome so display capture excludes our UI. Restores prior visibility via {@link restoreGlassWindowsAfterCapture}. */
+export function hideGlassWindowsForCapture(excludeWebContents?: WebContents): void {
+  if (hiddenForCaptureState) return;
+  logGlassClickDebug("hideGlassWindowsForCapture", {
+    excludeWebContentsId: excludeWebContents?.id,
+  });
+  const wins = collectGlassBrowserWindows(excludeWebContents);
+  hiddenForCaptureState = wins.map((win) => ({ win, wasVisible: win.isVisible() }));
+  for (const { win, wasVisible } of hiddenForCaptureState) {
+    if (wasVisible) win.hide();
+  }
+}
+
+export function restoreGlassWindowsAfterCapture(): void {
+  if (!hiddenForCaptureState) return;
+  logGlassClickDebug("restoreGlassWindowsAfterCapture");
+  for (const { win, wasVisible } of hiddenForCaptureState) {
+    if (!win.isDestroyed() && wasVisible) win.show();
+  }
+  hiddenForCaptureState = null;
+}
+
+/** Grow or shrink the command bar window to fit the measured stack (bottom-anchored). */
+export function syncCommandBarWindowToStackHeight(stackHeightPx: number): boolean {
+  if (!windows?.commandBar || windows.commandBar.isDestroyed()) return false;
+  const bar = windows.commandBar;
+  const current = bar.getBounds();
+  const nextHeight = commandBarWindowHeightForStack(stackHeightPx);
+  if (current.height === nextHeight) {
+    if (glassBootPending || onboardingPending) bar.hide();
+    return false;
+  }
+  logGlassClickDebug("syncCommandBarWindowToStackHeight", {
+    fromHeight: current.height,
+    toHeight: nextHeight,
+    stackHeightPx,
+  });
+  const nextY = current.y + current.height - nextHeight;
+  bar.setBounds({
+    x: current.x,
+    y: nextY,
+    width: current.width,
+    height: nextHeight,
+  });
+  if (glassBootPending || onboardingPending) bar.hide();
+  ensureChromeWindowInteractive(bar, "commandBar");
+  notifyCommandBarLayoutChanged();
+  return true;
+}
+
 export function getLayoutManager(): GlassLayoutManager | null {
   return layoutManager;
 }
@@ -954,7 +1194,7 @@ export function getGlassWindowState() {
   }
   const diagnostics = formatGlassWindowDiagnostics({
     display: layoutManager.getDisplay(),
-    overlay: isOverlayVisible() ? rectFromWindow(windows.overlay) : null,
+    overlay: shouldShowOverlayWindow() ? rectFromWindow(windows.overlay) : null,
     overlayVisible: isOverlayVisible(),
     overlayClickThrough,
     dock: rectFromWindow(windows.dock),
@@ -973,42 +1213,50 @@ export function getGlassWindowState() {
 }
 
 export function getOverlayClickThrough(): boolean {
-  return overlayClickThrough;
+  return true;
 }
 
 export function getCommandBarClickThrough(): boolean {
-  return commandBarClickThrough;
+  return false;
 }
 
-export function setOverlayClickThrough(enabled: boolean): void {
-  if (!windows?.overlay || windows.overlay.isDestroyed() || !shouldShowOverlayWindow()) return;
-  applyOverlayClickThrough(windows.overlay, enabled);
+/** @deprecated Command bar is always interactive — no click-through toggling. */
+export function resetCommandBarClickThrough(): void {}
+
+/** @deprecated Dock is always interactive — no click-through toggling. */
+export function applyDockClickThrough(_enabled: boolean): void {}
+
+/** @deprecated Dock is always interactive — no click-through toggling. */
+export function resetDockClickThrough(): void {}
+
+/** @deprecated Click-through policies are fixed at window creation. */
+export function applyGlassChromeClickThrough(): void {}
+
+export function getDockClickThrough(): boolean {
+  return false;
 }
 
-export function setOverlayClickThroughFromWindow(win: BrowserWindow, enabled: boolean): void {
-  if (!windows?.overlay || win.id !== windows.overlay.id) return;
-  setOverlayClickThrough(enabled);
-}
+export function setOverlayClickThrough(_enabled: boolean): void {}
 
-/**
- * Route a renderer's ignore-mouse request to the right window. The overlay is
- * full-screen click-through; the command bar toggles click-through so only the
- * floating pill captures clicks while the transparent margins pass through.
- */
+export function setOverlayClickThroughFromWindow(_win: BrowserWindow, _enabled: boolean): void {}
+
+/** @deprecated Renderer IPC ignored — overlay/dock/command bar click policy is fixed in main. */
 export function setIgnoreMouseFromWindow(win: BrowserWindow, enabled: boolean): void {
-  if (!windows) return;
-  if (win.id === windows.overlay.id) {
-    setOverlayClickThrough(enabled);
-    return;
-  }
-  if (win.id === windows.commandBar.id && !windows.commandBar.isDestroyed()) {
-    commandBarClickThrough = enabled;
-    if (enabled) {
-      windows.commandBar.setIgnoreMouseEvents(true, { forward: true });
-    } else {
-      windows.commandBar.setIgnoreMouseEvents(false);
-    }
-  }
+  const windowName = resolveGlassWindowName(win);
+  logGlassClickDebug("setIgnoreMouseFromWindow IPC (no-op)", {
+    window: windowName,
+    ignore: enabled,
+  });
+}
+
+function resolveGlassWindowName(win: BrowserWindow): string {
+  if (!windows) return `win:${win.id}`;
+  if (!windows.overlay.isDestroyed() && win.id === windows.overlay.id) return "overlay";
+  if (!windows.dock.isDestroyed() && win.id === windows.dock.id) return "dock";
+  if (!windows.commandBar.isDestroyed() && win.id === windows.commandBar.id) return "commandBar";
+  if (!windows.panel.isDestroyed() && win.id === windows.panel.id) return "panel";
+  if (!windows.notesPad.isDestroyed() && win.id === windows.notesPad.id) return "notesPad";
+  return `win:${win.id}`;
 }
 
 export function toggleOverlay(): boolean {
@@ -1024,7 +1272,8 @@ export function toggleOverlay(): boolean {
       windows.overlay.setBounds(layoutManager.getOverlayLayout());
     }
     windows.overlay.showInactive();
-    applyOverlayClickThrough(windows.overlay, true);
+    // Guard: Electron resets setIgnoreMouseEvents on show — re-apply immediately.
+    configureOverlayClickThrough(windows.overlay);
   } else {
     windows.overlay.hide();
   }
@@ -1046,7 +1295,8 @@ export function setOverlayMode(mode: OverlayMode): void {
       windows.overlay.setBounds(layoutManager.getOverlayLayout());
     }
     windows.overlay.showInactive();
-    applyOverlayClickThrough(windows.overlay, true);
+    // Guard: Electron resets setIgnoreMouseEvents on show — re-apply immediately.
+    configureOverlayClickThrough(windows.overlay);
   } else {
     windows.overlay.hide();
   }
@@ -1119,6 +1369,8 @@ export function isCommandBarVisible(): boolean {
 
 export function focusCommandBar(): void {
   if (!windows?.commandBar || windows.commandBar.isDestroyed()) return;
+  if (glassBootPending || onboardingPending) return;
+  logGlassClickDebug("focusCommandBar");
   if (!commandBarVisible) {
     commandBarVisible = true;
     if (layoutManager) {
@@ -1132,6 +1384,12 @@ export function focusCommandBar(): void {
   logDiagnostics();
 }
 
+export function prefillCommandBar(text: string): void {
+  if (!windows?.commandBar || windows.commandBar.isDestroyed()) return;
+  focusCommandBar();
+  windows.commandBar.webContents.send("glass:command-bar-prefill", text);
+}
+
 export function blurCommandBar(): void {
   if (!windows?.commandBar || windows.commandBar.isDestroyed()) return;
   windows.commandBar.blur();
@@ -1139,12 +1397,14 @@ export function blurCommandBar(): void {
 
 export function toggleCommandBar(): boolean {
   if (!windows?.commandBar || windows.commandBar.isDestroyed()) return commandBarVisible;
+  if (glassBootPending || onboardingPending) return commandBarVisible;
   commandBarVisible = !commandBarVisible;
   if (commandBarVisible) {
     if (layoutManager) {
       windows.commandBar.setBounds(layoutManager.getCommandBarLayout());
     }
     windows.commandBar.showInactive();
+    ensureChromeWindowInteractive(windows.commandBar, "commandBar");
   } else {
     windows.commandBar.hide();
   }
@@ -1289,7 +1549,6 @@ export function lockChromeLayout(): {
   captureChromeOriginsFromWindows();
   chromeLayoutLocked = true;
   applyChromeMovability();
-  applyCommandBarClickThroughWhenLocked();
   return getChromeLayoutOrigins();
 }
 
@@ -1299,10 +1558,6 @@ export function unlockChromeLayout(): void {
     stackGlassWindows(windows);
   }
   applyChromeMovability();
-  if (windows?.commandBar && !windows.commandBar.isDestroyed()) {
-    commandBarClickThrough = false;
-    windows.commandBar.setIgnoreMouseEvents(false);
-  }
 }
 
 /** Move dock or command bar by screen delta while layout is unlocked (pointer drag). */
@@ -1318,26 +1573,23 @@ export function nudgeChromeWindowFromWebContents(
 
   const bounds = win.getBounds();
   const workArea = layoutManager.getDisplay().workArea;
+  const workBottom = workArea.y + workArea.height;
+  let maxY = workBottom - bounds.height;
+  if (win.id === windows.commandBar.id) {
+    // Bottom-anchored stack: allow the visible pill to sit flush with the work-area edge.
+    maxY = workBottom - bounds.height + COMMAND_BAR_ROOT_BOTTOM_PADDING_PX;
+  }
   const x = Math.max(
     workArea.x,
     Math.min(workArea.x + workArea.width - bounds.width, bounds.x + dx),
   );
-  const y = Math.max(
-    workArea.y,
-    Math.min(workArea.y + workArea.height - bounds.height, bounds.y + dy),
-  );
+  const y = Math.max(workArea.y, Math.min(maxY, bounds.y + dy));
   if (x === bounds.x && y === bounds.y) return;
 
   win.setBounds({ x, y, width: bounds.width, height: bounds.height });
   captureChromeOriginsFromWindows();
   scheduleChromeLayoutPersist();
   notifyCommandBarLayoutChanged();
-}
-
-function applyCommandBarClickThroughWhenLocked(): void {
-  if (!windows?.commandBar || windows.commandBar.isDestroyed() || !chromeLayoutLocked) return;
-  commandBarClickThrough = true;
-  windows.commandBar.setIgnoreMouseEvents(true, { forward: true });
 }
 
 export function resetChromeLayoutOrigins(): void {

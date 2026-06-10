@@ -30,6 +30,14 @@ function normalizeCaptionText(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
+/** Strip model/mock language tags like `[en]` or `EN:` from translated caption text. */
+function stripCaptionLanguagePrefix(text: string): string {
+  return text
+    .replace(/^\[(?:[a-z]{2,3}(?:-[a-z]{2})?)\]\s*/i, "")
+    .replace(/^[A-Za-z]{2,3}:\s*/, "")
+    .trim();
+}
+
 function captionKey(original: string, translated: string): string {
   return `${normalizeCaptionText(original).toLowerCase()}|${normalizeCaptionText(translated).toLowerCase()}`;
 }
@@ -54,19 +62,25 @@ export interface ApplyCaptionChunkInput {
   translated: string;
   interim?: boolean;
   id?: string;
+  /**
+   * Groups chunks from the same continuous utterance (resets on UtteranceEnd / long silence).
+   * Chunks sharing a sentenceId are APPENDED to the current caption line rather than replacing it,
+   * producing YouTube-style captions that build up word by word within a sentence.
+   */
+  sentenceId?: string;
   detectedLanguage?: LiveTranslateLanguage;
   languageUncertain?: boolean;
   alreadyTargetLanguage?: boolean;
   nowIso?: string;
 }
 
-/** Update captions — interim replaces current; final commits line. */
+/** Update captions — interim replaces current; final appends within sentence, rolls on new sentence. */
 export function applyCaptionChunk(
   state: LiveTranslateCaptionsState,
   input: ApplyCaptionChunkInput,
 ): LiveTranslateCaptionsState {
   const original = normalizeCaptionText(input.original);
-  const translated = normalizeCaptionText(input.translated);
+  const translated = stripCaptionLanguagePrefix(normalizeCaptionText(input.translated));
   if (!original && !translated) return state;
 
   const nowIso = input.nowIso ?? new Date().toISOString();
@@ -76,36 +90,84 @@ export function applyCaptionChunk(
 
   if (!finalizeInterim && isDuplicateCaption(state, original, translated)) return state;
 
-  const line: LiveTranslateCaptionLine = {
+  // --- Interim: update current in place, no history push ---
+  if (input.interim) {
+    return {
+      ...state,
+      current: {
+        id: input.id ?? `cap-${nowIso}`,
+        sentenceId: input.sentenceId,
+        original,
+        translated: translated || original,
+        interim: true,
+        detectedLanguage: input.detectedLanguage,
+        languageUncertain: input.languageUncertain,
+        alreadyTargetLanguage: input.alreadyTargetLanguage,
+        updatedAt: nowIso,
+      },
+    };
+  }
+
+  // --- Finalize interim: promote current interim to final ---
+  if (finalizeInterim) {
+    const finalized: LiveTranslateCaptionLine = {
+      id: input.id!,
+      sentenceId: input.sentenceId ?? state.current?.sentenceId,
+      original,
+      translated: translated || original,
+      interim: false,
+      detectedLanguage: input.detectedLanguage,
+      languageUncertain: input.languageUncertain,
+      alreadyTargetLanguage: input.alreadyTargetLanguage,
+      updatedAt: nowIso,
+    };
+    const lines = [...state.lines, finalized].slice(-MAX_HISTORY);
+    return { ...state, lines, current: finalized };
+  }
+
+  // --- Final chunk: append within sentence or start a new line ---
+  const sameSentence =
+    input.sentenceId &&
+    state.current &&
+    !state.current.interim &&
+    state.current.sentenceId === input.sentenceId;
+
+  if (sameSentence && state.current) {
+    // Append to current sentence — builds up like YouTube captions.
+    // Trim accumulated text to MAX_VISIBLE_CHARS so one very long sentence doesn't overflow.
+    const appendedOriginal = normalizeCaptionText(`${state.current.original} ${original}`).slice(0, MAX_VISIBLE_CHARS);
+    const appendedTranslated = normalizeCaptionText(`${state.current.translated} ${translated}`).slice(0, MAX_VISIBLE_CHARS);
+    return {
+      ...state,
+      current: {
+        ...state.current,
+        original: appendedOriginal,
+        translated: appendedTranslated,
+        updatedAt: nowIso,
+      },
+    };
+  }
+
+  // New sentence — commit previous current to history, start fresh.
+  const newLine: LiveTranslateCaptionLine = {
     id: input.id ?? `cap-${nowIso}`,
+    sentenceId: input.sentenceId,
     original,
     translated: translated || original,
-    interim: input.interim === true,
+    interim: false,
     detectedLanguage: input.detectedLanguage,
     languageUncertain: input.languageUncertain,
     alreadyTargetLanguage: input.alreadyTargetLanguage,
     updatedAt: nowIso,
   };
 
-  if (finalizeInterim) {
-    const finalized = { ...line, interim: false };
-    const lines = [...state.lines, finalized].slice(-MAX_HISTORY);
-    return { ...state, lines, current: finalized };
-  }
+  // If current was a completed (non-interim) sentence, push it to history.
+  const prevLine = state.current && !state.current.interim ? state.current : null;
+  const lines = prevLine
+    ? [...state.lines, prevLine].slice(-MAX_HISTORY)
+    : state.lines;
 
-  if (input.interim) {
-    return {
-      ...state,
-      current: line,
-    };
-  }
-
-  const lines = [...state.lines, line].slice(-MAX_HISTORY);
-  return {
-    ...state,
-    lines,
-    current: line,
-  };
+  return { ...state, lines, current: newLine };
 }
 
 function shortLanguageCode(
@@ -134,26 +196,22 @@ export function formatCaptionForOverlay(
   if (line.alreadyTargetLanguage) {
     return {
       primary: line.original.slice(0, MAX_VISIBLE_CHARS),
-      note: `Already ${languageLabels.translated ?? "target language"}`,
       interim: line.interim,
     };
   }
 
   if (displayMode === "original_and_translation") {
-    const origLabel = languageLabels.originalCode ?? languageLabels.original ?? "Original";
-    const transLabel = languageLabels.translatedCode ?? languageLabels.translated ?? "Translation";
     const orig = line.original.slice(0, MAX_VISIBLE_CHARS);
-    const trans = line.translated.slice(0, MAX_VISIBLE_CHARS);
+    const trans = stripCaptionLanguagePrefix(line.translated).slice(0, MAX_VISIBLE_CHARS);
     return {
-      primary: `${transLabel}: ${trans}`,
-      secondary: `${origLabel}: ${orig}`,
+      primary: trans,
+      secondary: orig,
       interim: line.interim,
     };
   }
 
   return {
-    primary: line.translated.slice(0, MAX_VISIBLE_CHARS),
-    secondary: line.languageUncertain ? "Language detection uncertain…" : undefined,
+    primary: stripCaptionLanguagePrefix(line.translated).slice(0, MAX_VISIBLE_CHARS),
     interim: line.interim,
   };
 }

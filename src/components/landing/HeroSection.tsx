@@ -15,10 +15,10 @@ export default function HeroSection() {
             <IivoWordmark as="h1" className="landing-title" />
             <DotMatrixAccent side="right" />
           </div>
-          <p className="landing-sub">INTELLIGENCE IN. VERIFIED ACTION OUT.</p>
+          <p className="landing-sub">YOUR GLASS COMMAND CENTER.</p>
           <p className="landing-desc">
             {withIivoWordmark(
-              "Ask a serious question. IIVO will choose the right path: one model, verified search, or a specialist council.",
+              "Glass thinks with you in real time. Come here to review sessions, manage your memory vault, and run council queries that don't need to be in the moment.",
               "landing-desc",
             )}
           </p>

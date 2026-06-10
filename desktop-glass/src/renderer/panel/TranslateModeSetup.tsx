@@ -8,7 +8,7 @@ import {
   type LiveTranslateTargetLanguage,
   type LiveTranslateWorkflowMode,
 } from "../../shared/liveTranslateTypes.ts";
-import { configDefaultsForMode, saveModeStatusLabel, buildTranslateStartPatch } from "../../shared/liveTranslateConfig.ts";
+import { configDefaultsForMode, saveModeStatusLabel, buildTranslateStartPatch, DEFAULT_LIVE_TRANSLATE_CONFIG } from "../../shared/liveTranslateConfig.ts";
 import { translateSourceStatusLabel } from "../../shared/liveTranslateState.ts";
 import type { GlassState } from "../../shared/ipc.ts";
 
@@ -42,7 +42,7 @@ export function TranslateModeSetup({
   );
   const modeDefaults = configDefaultsForMode(workflowMode);
   const [target, setTarget] = useState<LiveTranslateTargetLanguage>(
-    runtime?.config.targetLanguage ?? "es",
+    runtime?.config.targetLanguage ?? DEFAULT_LIVE_TRANSLATE_CONFIG.targetLanguage,
   );
   const [source, setSource] = useState<LiveTranslateSource>(modeDefaults.source ?? "system_audio");
   const [displayMode, setDisplayMode] = useState<LiveTranslateDisplayMode>(
@@ -225,7 +225,8 @@ export function ShowTranslatedCaptionsToggle({
 }): JSX.Element {
   const active = state.liveTranslate?.active && state.liveTranslate.config.enabled;
   const defaults = configDefaultsForMode(mode);
-  const targetLanguage = state.liveTranslate?.config.targetLanguage ?? "es";
+  const targetLanguage =
+    state.liveTranslate?.config.targetLanguage ?? DEFAULT_LIVE_TRANSLATE_CONFIG.targetLanguage;
 
   return (
     <div className="live-notes__translate-toggle" data-testid={testId}>

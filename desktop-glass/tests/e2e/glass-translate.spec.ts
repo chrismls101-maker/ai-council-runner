@@ -88,11 +88,9 @@ test.describe("IIVO Glass Live Translate", () => {
     await expect(overlayPage.locator('[data-testid="glass-live-translate-captions"]')).toBeVisible({
       timeout: 10_000,
     });
-    await expect(overlayPage.locator('[data-testid="glass-translate-language-pair"]')).toContainText(
-      "Translating",
-    );
+    await expect(overlayPage.locator('[data-testid="glass-translate-language-pair"]')).toHaveCount(0);
     await expect(overlayPage.locator('[data-testid="glass-translate-caption-text"]')).toContainText(
-      "[es]",
+      "Hello, this is a test caption",
     );
   });
 
@@ -116,6 +114,127 @@ test.describe("IIVO Glass Live Translate", () => {
       timeout: 10_000,
     });
     await expect(overlayPage.locator('[data-testid="glass-translate-caption-text"]')).toBeVisible();
+  });
+
+  test("glass-translate-caption-renders-on-overlay", async () => {
+    const chunkText = "Overlay caption render check line.";
+    await panelPage.locator('[data-testid="glass-quick-tool-translate"]').click();
+    await panelPage.locator('[data-testid="glass-translate-target-language"]').selectOption("en");
+    await panelPage.locator('[data-testid="glass-translate-start"]').click();
+
+    await commandPage.evaluate((text) =>
+      window.glass.send({
+        type: "add-transcript-chunk",
+        text,
+        tags: ["system_audio"],
+      }),
+    chunkText);
+
+    const caption = overlayPage.locator('[data-testid="glass-translate-caption-text"]');
+    await expect(caption).toBeVisible({ timeout: 10_000 });
+    await expect(caption).toContainText(chunkText);
+  });
+
+  test("glass-translate-caption-updates-with-chunks", async () => {
+    const chunkA = "First caption line alpha.";
+    const chunkB = "Second caption line beta.";
+    await panelPage.locator('[data-testid="glass-quick-tool-translate"]').click();
+    await panelPage.locator('[data-testid="glass-translate-target-language"]').selectOption("en");
+    await panelPage.locator('[data-testid="glass-translate-start"]').click();
+
+    const caption = overlayPage.locator('[data-testid="glass-translate-caption-text"]');
+
+    await commandPage.evaluate((text) =>
+      window.glass.send({
+        type: "add-transcript-chunk",
+        text,
+        tags: ["system_audio"],
+      }),
+    chunkA);
+    await expect(caption).toBeVisible({ timeout: 10_000 });
+    await expect(caption).toContainText("alpha");
+
+    await overlayPage.waitForTimeout(500);
+
+    await commandPage.evaluate((text) =>
+      window.glass.send({
+        type: "add-transcript-chunk",
+        text,
+        tags: ["system_audio"],
+      }),
+    chunkB);
+    await expect(caption).toContainText("beta");
+    await expect(caption).not.toContainText("alpha");
+  });
+
+  test("glass-translate-both-lines-on-overlay", async () => {
+    const chunkText = "Both lines overlay check phrase.";
+    await panelPage.locator('[data-testid="glass-quick-tool-translate"]').click();
+    await panelPage.locator('[data-testid="glass-translate-mode-conversation"]').click();
+    await panelPage.locator('[data-testid="glass-translate-target-language"]').selectOption("en");
+    await panelPage.locator('[data-testid="glass-translate-display-mode"]').selectOption(
+      "original_and_translation",
+    );
+    await panelPage.locator('[data-testid="glass-translate-start"]').click();
+
+    await commandPage.evaluate((text) =>
+      window.glass.send({
+        type: "add-transcript-chunk",
+        text,
+        tags: ["system_audio"],
+      }),
+    chunkText);
+
+    const original = overlayPage.locator('[data-testid="glass-translate-caption-original"]');
+    const translated = overlayPage.locator('[data-testid="glass-translate-caption-text"]');
+    await expect(original).toBeVisible({ timeout: 10_000 });
+    await expect(translated).toBeVisible();
+    await expect(original).toContainText(chunkText);
+    await expect(translated).toContainText(chunkText);
+  });
+
+  test("glass-translate-caption-position-and-style", async () => {
+    const chunkText = "Caption position and style check.";
+    await panelPage.locator('[data-testid="glass-quick-tool-translate"]').click();
+    await panelPage.locator('[data-testid="glass-translate-target-language"]').selectOption("en");
+    await panelPage.locator('[data-testid="glass-translate-start"]').click();
+
+    await commandPage.evaluate((text) =>
+      window.glass.send({
+        type: "add-transcript-chunk",
+        text,
+        tags: ["system_audio"],
+      }),
+    chunkText);
+
+    const caption = overlayPage.locator('[data-testid="glass-translate-caption-text"]');
+    await expect(caption).toBeVisible({ timeout: 10_000 });
+
+    const layout = await overlayPage.evaluate(() => {
+      const el = document.querySelector('[data-testid="glass-translate-caption-text"]');
+      if (!el) return null;
+      const rect = el.getBoundingClientRect();
+      const fontSize = parseFloat(window.getComputedStyle(el).fontSize);
+      const viewportHeight = window.innerHeight;
+      const viewportWidth = window.innerWidth;
+      return {
+        fontSize,
+        top: rect.top,
+        topRatio: rect.top / viewportHeight,
+        withinBounds:
+          rect.left >= 0 &&
+          rect.top >= 0 &&
+          rect.right <= viewportWidth &&
+          rect.bottom <= viewportHeight &&
+          rect.width > 0 &&
+          rect.height > 0,
+      };
+    });
+
+    expect(layout).not.toBeNull();
+    expect(layout!.withinBounds).toBe(true);
+    expect(layout!.fontSize).toBeGreaterThanOrEqual(16);
+    expect(layout!.topRatio).toBeGreaterThan(0.5);
   });
 
   test("Stop Translation clears captions", async () => {

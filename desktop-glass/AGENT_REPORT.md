@@ -1,0 +1,1427 @@
+# Glass Autonomous Agent — Morning Report
+
+**Session**: 6/10/2026, 2:39:40 AM → 6/10/2026, 9:12:11 AM (6.5h)
+**Cycles run**: 77
+**Fix attempts**: 5  |  ✅ Succeeded: 0  |  ❌ Failed: 0
+**Baseline updates**: 0
+**Visual inspections**: ✅ 0 passed  |  ❌ 0 failed
+
+## Timeline
+
+- `02:39:40` **[AGENT]** Budget: 8h | Interval: 5min | MaxFixes: 5
+- `02:39:40` **[AGENT]** Glass root: /Users/newuser/Desktop/ai-council-runner/desktop-glass
+- `02:39:40` **[AGENT]** Visual inspection: OFF (add --visual to enable)
+- `02:39:40` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `02:39:44` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `02:39:44` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `02:39:44` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `02:39:44` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `02:39:44` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `02:39:44` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `02:39:44` **[FIX]** Invoking Claude Code CLI (timeout: 600s)…
+- `02:39:44` **[FIX]** Claude output saved → /tmp/glass-agent/fix-cycle1-1781084384110.txt
+- `02:39:44` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `02:39:46` **[TYPECHECK]** ⚠️ 12 Glass errors remain after fix attempt
+- `02:39:46` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `02:39:50` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `02:39:50` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `02:39:50` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `02:39:50` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `02:39:50` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `02:39:50` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `02:39:50` **[FIX]** Invoking Claude Code CLI (timeout: 600s)…
+- `02:39:50` **[FIX]** Claude output saved → /tmp/glass-agent/fix-cycle1-1781084390697.txt
+- `02:39:50` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `02:39:54` **[TYPECHECK]** ⚠️ 6 Web App errors remain after fix attempt
+- `02:39:54` **[TEST]** Running npm test…
+- `02:39:58` **[TEST]** Results: 0/0 passing, 0 failing
+- `02:39:58` **[TEST]** ✅ All 0 tests passing (streak: 1)
+- `02:39:58` **[TASKS]** 📋 TONIGHT_TASKS.md found — invoking Claude Code for proactive P1 work…
+- `02:39:58` **[TASKS]** Task queue output saved → /tmp/glass-agent/tasks-1781084398284.txt
+- `02:39:58` **[TASKS]** ⚠️ Task queue exited with status null — check /tmp/glass-agent/tasks-1781084398284.txt
+- `02:39:58` **[TEST]** Running npm test…
+- `02:40:02` **[TEST]** Post-task-queue: 0/0 passing, 0 failing
+- `02:40:02` **[AGENT]** Sleeping 0.5min before next cycle…
+- `02:40:32` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `02:40:36` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `02:40:36` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `02:40:36` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `02:40:36` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `02:40:36` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `02:40:36` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `02:40:36` **[FIX]** Invoking Claude Code CLI (timeout: 600s)…
+- `02:40:36` **[FIX]** Claude output saved → /tmp/glass-agent/fix-cycle2-1781084436748.txt
+- `02:40:36` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `02:40:41` **[TYPECHECK]** ⚠️ 12 Glass errors remain after fix attempt
+- `02:40:41` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `02:40:45` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `02:40:45` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `02:40:45` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `02:40:45` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `02:40:45` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `02:40:45` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `02:40:45` **[FIX]** Invoking Claude Code CLI (timeout: 600s)…
+- `02:40:45` **[FIX]** Claude output saved → /tmp/glass-agent/fix-cycle2-1781084445414.txt
+- `02:40:45` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `02:40:50` **[TYPECHECK]** ⚠️ 6 Web App errors remain after fix attempt
+- `02:40:50` **[TEST]** Running npm test…
+- `02:40:55` **[TEST]** Results: 0/0 passing, 0 failing
+- `02:40:55` **[TEST]** ✅ All 0 tests passing (streak: 2)
+- `02:40:55` **[AGENT]** Sleeping 5.0min before next cycle…
+- `02:45:55` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `02:45:58` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `02:45:58` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `02:45:58` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `02:45:58` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `02:45:58` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `02:45:58` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `02:45:58` **[FIX]** Invoking Claude Code CLI (timeout: 600s)…
+- `02:45:58` **[FIX]** Claude output saved → /tmp/glass-agent/fix-cycle3-1781084758679.txt
+- `02:45:58` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `02:46:01` **[TYPECHECK]** ⚠️ 12 Glass errors remain after fix attempt
+- `02:46:01` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `02:46:05` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `02:46:05` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `02:46:05` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `02:46:05` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `02:46:05` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `02:46:05` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `02:46:05` **[TEST]** Running npm test…
+- `02:46:09` **[TEST]** Results: 0/0 passing, 0 failing
+- `02:46:09` **[TEST]** ✅ All 0 tests passing (streak: 3)
+- `02:46:09` **[AGENT]** Sleeping 5.0min before next cycle…
+- `02:51:09` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `02:51:13` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `02:51:13` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `02:51:13` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `02:51:13` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `02:51:13` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `02:51:13` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `02:51:13` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `02:51:17` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `02:51:17` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `02:51:17` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `02:51:17` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `02:51:17` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `02:51:17` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `02:51:17` **[TEST]** Running npm test…
+- `02:51:21` **[TEST]** Results: 0/0 passing, 0 failing
+- `02:51:21` **[TEST]** ✅ All 0 tests passing (streak: 4)
+- `02:51:21` **[AGENT]** Sleeping 5.0min before next cycle…
+- `02:56:21` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `02:56:26` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `02:56:26` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `02:56:26` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `02:56:26` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `02:56:26` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `02:56:26` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `02:56:26` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `02:56:29` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `02:56:29` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `02:56:29` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `02:56:29` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `02:56:29` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `02:56:29` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `02:56:29` **[TEST]** Running npm test…
+- `02:56:34` **[TEST]** Results: 0/0 passing, 0 failing
+- `02:56:34` **[TEST]** ✅ All 0 tests passing (streak: 5)
+- `02:56:34` **[AGENT]** Sleeping 5.0min before next cycle…
+- `03:01:34` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `03:01:37` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `03:01:37` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `03:01:37` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `03:01:37` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `03:01:37` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `03:01:37` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `03:01:37` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `03:01:41` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `03:01:41` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `03:01:41` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `03:01:41` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `03:01:41` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `03:01:41` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `03:01:41` **[TEST]** Running npm test…
+- `03:01:46` **[TEST]** Results: 0/0 passing, 0 failing
+- `03:01:46` **[TEST]** ✅ All 0 tests passing (streak: 6)
+- `03:01:46` **[AGENT]** Sleeping 5.0min before next cycle…
+- `03:06:46` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `03:06:49` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `03:06:49` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `03:06:49` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `03:06:49` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `03:06:49` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `03:06:49` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `03:06:49` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `03:06:53` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `03:06:53` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `03:06:53` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `03:06:53` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `03:06:53` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `03:06:53` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `03:06:53` **[TEST]** Running npm test…
+- `03:06:57` **[TEST]** Results: 0/0 passing, 0 failing
+- `03:06:57` **[TEST]** ✅ All 0 tests passing (streak: 7)
+- `03:06:57` **[AGENT]** Sleeping 5.0min before next cycle…
+- `03:11:57` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `03:12:01` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `03:12:01` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `03:12:01` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `03:12:01` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `03:12:01` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `03:12:01` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `03:12:01` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `03:12:05` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `03:12:05` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `03:12:05` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `03:12:05` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `03:12:05` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `03:12:05` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `03:12:05` **[TEST]** Running npm test…
+- `03:12:09` **[TEST]** Results: 0/0 passing, 0 failing
+- `03:12:09` **[TEST]** ✅ All 0 tests passing (streak: 8)
+- `03:12:09` **[AGENT]** Sleeping 5.0min before next cycle…
+- `03:17:09` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `03:17:12` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `03:17:12` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `03:17:12` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `03:17:12` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `03:17:12` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `03:17:12` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `03:17:12` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `03:17:16` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `03:17:16` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `03:17:16` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `03:17:16` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `03:17:16` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `03:17:16` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `03:17:16` **[TEST]** Running npm test…
+- `03:17:21` **[TEST]** Results: 0/0 passing, 0 failing
+- `03:17:21` **[TEST]** ✅ All 0 tests passing (streak: 9)
+- `03:17:21` **[AGENT]** Sleeping 5.0min before next cycle…
+- `03:22:21` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `03:22:24` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `03:22:24` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `03:22:24` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `03:22:24` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `03:22:24` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `03:22:24` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `03:22:24` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `03:22:28` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `03:22:28` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `03:22:28` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `03:22:28` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `03:22:28` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `03:22:28` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `03:22:28` **[TEST]** Running npm test…
+- `03:22:33` **[TEST]** Results: 0/0 passing, 0 failing
+- `03:22:33` **[TEST]** ✅ All 0 tests passing (streak: 10)
+- `03:22:33` **[AGENT]** Sleeping 5.0min before next cycle…
+- `03:27:33` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `03:27:36` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `03:27:36` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `03:27:36` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `03:27:36` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `03:27:36` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `03:27:36` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `03:27:36` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `03:27:40` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `03:27:40` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `03:27:40` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `03:27:40` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `03:27:40` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `03:27:40` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `03:27:40` **[TEST]** Running npm test…
+- `03:27:44` **[TEST]** Results: 0/0 passing, 0 failing
+- `03:27:44` **[TEST]** ✅ All 0 tests passing (streak: 11)
+- `03:27:44` **[AGENT]** Sleeping 5.0min before next cycle…
+- `03:32:44` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `03:32:48` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `03:32:48` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `03:32:48` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `03:32:48` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `03:32:48` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `03:32:48` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `03:32:48` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `03:32:52` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `03:32:52` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `03:32:52` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `03:32:52` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `03:32:52` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `03:32:52` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `03:32:52` **[TEST]** Running npm test…
+- `03:32:56` **[TEST]** Results: 0/0 passing, 0 failing
+- `03:32:56` **[TEST]** ✅ All 0 tests passing (streak: 12)
+- `03:32:56` **[AGENT]** Sleeping 5.0min before next cycle…
+- `03:37:56` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `03:38:00` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `03:38:00` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `03:38:00` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `03:38:00` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `03:38:00` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `03:38:00` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `03:38:00` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `03:38:04` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `03:38:04` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `03:38:04` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `03:38:04` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `03:38:04` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `03:38:04` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `03:38:04` **[TEST]** Running npm test…
+- `03:38:08` **[TEST]** Results: 0/0 passing, 0 failing
+- `03:38:08` **[TEST]** ✅ All 0 tests passing (streak: 13)
+- `03:38:08` **[AGENT]** Sleeping 5.0min before next cycle…
+- `03:43:08` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `03:43:12` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `03:43:12` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `03:43:12` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `03:43:12` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `03:43:12` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `03:43:12` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `03:43:12` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `03:43:16` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `03:43:16` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `03:43:16` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `03:43:16` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `03:43:16` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `03:43:16` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `03:43:16` **[TEST]** Running npm test…
+- `03:43:20` **[TEST]** Results: 0/0 passing, 0 failing
+- `03:43:20` **[TEST]** ✅ All 0 tests passing (streak: 14)
+- `03:43:20` **[AGENT]** Sleeping 5.0min before next cycle…
+- `03:48:20` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `03:48:24` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `03:48:24` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `03:48:24` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `03:48:24` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `03:48:24` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `03:48:24` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `03:48:24` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `03:48:27` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `03:48:27` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `03:48:27` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `03:48:27` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `03:48:27` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `03:48:27` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `03:48:27` **[TEST]** Running npm test…
+- `03:48:32` **[TEST]** Results: 0/0 passing, 0 failing
+- `03:48:32` **[TEST]** ✅ All 0 tests passing (streak: 15)
+- `03:48:32` **[AGENT]** Sleeping 5.0min before next cycle…
+- `03:53:32` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `03:53:35` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `03:53:35` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `03:53:35` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `03:53:35` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `03:53:35` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `03:53:35` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `03:53:35` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `03:53:39` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `03:53:39` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `03:53:39` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `03:53:39` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `03:53:39` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `03:53:39` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `03:53:39` **[TEST]** Running npm test…
+- `03:53:44` **[TEST]** Results: 0/0 passing, 0 failing
+- `03:53:44` **[TEST]** ✅ All 0 tests passing (streak: 16)
+- `03:53:44` **[AGENT]** Sleeping 5.0min before next cycle…
+- `03:58:44` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `03:58:47` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `03:58:47` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `03:58:47` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `03:58:47` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `03:58:47` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `03:58:47` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `03:58:47` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `03:58:51` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `03:58:51` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `03:58:51` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `03:58:51` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `03:58:51` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `03:58:51` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `03:58:51` **[TEST]** Running npm test…
+- `03:58:55` **[TEST]** Results: 0/0 passing, 0 failing
+- `03:58:55` **[TEST]** ✅ All 0 tests passing (streak: 17)
+- `03:58:55` **[AGENT]** Sleeping 5.0min before next cycle…
+- `04:03:55` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `04:03:59` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `04:03:59` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `04:03:59` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `04:03:59` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `04:03:59` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `04:03:59` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `04:03:59` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `04:04:03` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `04:04:03` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `04:04:03` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `04:04:03` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `04:04:03` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `04:04:03` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `04:04:03` **[TEST]** Running npm test…
+- `04:04:07` **[TEST]** Results: 0/0 passing, 0 failing
+- `04:04:07` **[TEST]** ✅ All 0 tests passing (streak: 18)
+- `04:04:07` **[AGENT]** Sleeping 5.0min before next cycle…
+- `04:09:07` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `04:09:11` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `04:09:11` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `04:09:11` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `04:09:11` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `04:09:11` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `04:09:11` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `04:09:11` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `04:09:14` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `04:09:14` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `04:09:14` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `04:09:14` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `04:09:14` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `04:09:14` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `04:09:14` **[TEST]** Running npm test…
+- `04:09:19` **[TEST]** Results: 0/0 passing, 0 failing
+- `04:09:19` **[TEST]** ✅ All 0 tests passing (streak: 19)
+- `04:09:19` **[AGENT]** Sleeping 5.0min before next cycle…
+- `04:14:19` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `04:14:23` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `04:14:23` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `04:14:23` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `04:14:23` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `04:14:23` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `04:14:23` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `04:14:23` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `04:14:27` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `04:14:27` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `04:14:27` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `04:14:27` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `04:14:27` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `04:14:27` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `04:14:27` **[TEST]** Running npm test…
+- `04:14:31` **[TEST]** Results: 0/0 passing, 0 failing
+- `04:14:31` **[TEST]** ✅ All 0 tests passing (streak: 20)
+- `04:14:31` **[AGENT]** Sleeping 5.0min before next cycle…
+- `04:19:31` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `04:19:34` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `04:19:34` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `04:19:34` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `04:19:34` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `04:19:34` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `04:19:34` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `04:19:34` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `04:19:38` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `04:19:38` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `04:19:38` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `04:19:38` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `04:19:38` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `04:19:38` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `04:19:38` **[TEST]** Running npm test…
+- `04:19:43` **[TEST]** Results: 0/0 passing, 0 failing
+- `04:19:43` **[TEST]** ✅ All 0 tests passing (streak: 21)
+- `04:19:43` **[AGENT]** Sleeping 5.0min before next cycle…
+- `04:24:43` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `04:24:46` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `04:24:46` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `04:24:46` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `04:24:46` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `04:24:46` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `04:24:46` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `04:24:46` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `04:24:50` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `04:24:50` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `04:24:50` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `04:24:50` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `04:24:50` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `04:24:50` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `04:24:50` **[TEST]** Running npm test…
+- `04:24:55` **[TEST]** Results: 0/0 passing, 0 failing
+- `04:24:55` **[TEST]** ✅ All 0 tests passing (streak: 22)
+- `04:24:55` **[AGENT]** Sleeping 5.0min before next cycle…
+- `04:29:55` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `04:29:58` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `04:29:58` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `04:29:58` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `04:29:58` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `04:29:58` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `04:29:58` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `04:29:58` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `04:30:02` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `04:30:02` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `04:30:02` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `04:30:02` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `04:30:02` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `04:30:02` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `04:30:02` **[TEST]** Running npm test…
+- `04:30:06` **[TEST]** Results: 0/0 passing, 0 failing
+- `04:30:06` **[TEST]** ✅ All 0 tests passing (streak: 23)
+- `04:30:06` **[AGENT]** Sleeping 5.0min before next cycle…
+- `04:35:06` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `04:35:10` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `04:35:10` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `04:35:10` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `04:35:10` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `04:35:10` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `04:35:10` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `04:35:10` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `04:35:14` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `04:35:14` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `04:35:14` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `04:35:14` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `04:35:14` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `04:35:14` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `04:35:14` **[TEST]** Running npm test…
+- `04:35:18` **[TEST]** Results: 0/0 passing, 0 failing
+- `04:35:18` **[TEST]** ✅ All 0 tests passing (streak: 24)
+- `04:35:18` **[AGENT]** Sleeping 5.0min before next cycle…
+- `04:40:18` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `04:40:22` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `04:40:22` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `04:40:22` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `04:40:22` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `04:40:22` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `04:40:22` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `04:40:22` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `04:40:25` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `04:40:25` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `04:40:25` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `04:40:25` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `04:40:25` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `04:40:25` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `04:40:25` **[TEST]** Running npm test…
+- `04:40:30` **[TEST]** Results: 0/0 passing, 0 failing
+- `04:40:30` **[TEST]** ✅ All 0 tests passing (streak: 25)
+- `04:40:30` **[AGENT]** Sleeping 5.0min before next cycle…
+- `04:45:30` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `04:45:33` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `04:45:33` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `04:45:33` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `04:45:33` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `04:45:33` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `04:45:33` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `04:45:33` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `04:45:37` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `04:45:37` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `04:45:37` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `04:45:37` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `04:45:37` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `04:45:37` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `04:45:37` **[TEST]** Running npm test…
+- `04:45:42` **[TEST]** Results: 0/0 passing, 0 failing
+- `04:45:42` **[TEST]** ✅ All 0 tests passing (streak: 26)
+- `04:45:42` **[AGENT]** Sleeping 5.0min before next cycle…
+- `04:50:42` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `04:50:45` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `04:50:45` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `04:50:45` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `04:50:45` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `04:50:45` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `04:50:45` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `04:50:45` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `04:50:49` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `04:50:49` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `04:50:49` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `04:50:49` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `04:50:49` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `04:50:49` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `04:50:49` **[TEST]** Running npm test…
+- `04:50:53` **[TEST]** Results: 0/0 passing, 0 failing
+- `04:50:53` **[TEST]** ✅ All 0 tests passing (streak: 27)
+- `04:50:53` **[AGENT]** Sleeping 5.0min before next cycle…
+- `04:55:53` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `04:55:57` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `04:55:57` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `04:55:57` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `04:55:57` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `04:55:57` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `04:55:57` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `04:55:57` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `04:56:01` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `04:56:01` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `04:56:01` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `04:56:01` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `04:56:01` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `04:56:01` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `04:56:01` **[TEST]** Running npm test…
+- `04:56:05` **[TEST]** Results: 0/0 passing, 0 failing
+- `04:56:05` **[TEST]** ✅ All 0 tests passing (streak: 28)
+- `04:56:05` **[AGENT]** Sleeping 5.0min before next cycle…
+- `05:01:05` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `05:01:09` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `05:01:09` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `05:01:09` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `05:01:09` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `05:01:09` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `05:01:09` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `05:01:09` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `05:01:12` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `05:01:12` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `05:01:12` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `05:01:12` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `05:01:12` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `05:01:12` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `05:01:12` **[TEST]** Running npm test…
+- `05:01:17` **[TEST]** Results: 0/0 passing, 0 failing
+- `05:01:17` **[TEST]** ✅ All 0 tests passing (streak: 29)
+- `05:01:17` **[AGENT]** Sleeping 5.0min before next cycle…
+- `05:06:17` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `05:06:21` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `05:06:21` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `05:06:21` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `05:06:21` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `05:06:21` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `05:06:21` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `05:06:21` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `05:06:25` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `05:06:25` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `05:06:25` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `05:06:25` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `05:06:25` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `05:06:25` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `05:06:25` **[TEST]** Running npm test…
+- `05:06:29` **[TEST]** Results: 0/0 passing, 0 failing
+- `05:06:29` **[TEST]** ✅ All 0 tests passing (streak: 30)
+- `05:06:29` **[AGENT]** Sleeping 5.0min before next cycle…
+- `05:11:29` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `05:11:32` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `05:11:32` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `05:11:32` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `05:11:32` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `05:11:32` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `05:11:32` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `05:11:32` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `05:11:36` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `05:11:36` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `05:11:36` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `05:11:36` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `05:11:36` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `05:11:36` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `05:11:36` **[TEST]** Running npm test…
+- `05:11:41` **[TEST]** Results: 0/0 passing, 0 failing
+- `05:11:41` **[TEST]** ✅ All 0 tests passing (streak: 31)
+- `05:11:41` **[AGENT]** Sleeping 5.0min before next cycle…
+- `05:16:41` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `05:16:44` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `05:16:44` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `05:16:44` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `05:16:44` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `05:16:44` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `05:16:44` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `05:16:44` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `05:16:48` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `05:16:48` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `05:16:48` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `05:16:48` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `05:16:48` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `05:16:48` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `05:16:48` **[TEST]** Running npm test…
+- `05:16:53` **[TEST]** Results: 0/0 passing, 0 failing
+- `05:16:53` **[TEST]** ✅ All 0 tests passing (streak: 32)
+- `05:16:53` **[AGENT]** Sleeping 5.0min before next cycle…
+- `05:21:53` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `05:21:56` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `05:21:56` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `05:21:56` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `05:21:56` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `05:21:56` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `05:21:56` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `05:21:56` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `05:22:00` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `05:22:00` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `05:22:00` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `05:22:00` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `05:22:00` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `05:22:00` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `05:22:00` **[TEST]** Running npm test…
+- `05:22:04` **[TEST]** Results: 0/0 passing, 0 failing
+- `05:22:04` **[TEST]** ✅ All 0 tests passing (streak: 33)
+- `05:22:04` **[AGENT]** Sleeping 5.0min before next cycle…
+- `05:27:04` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `05:27:08` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `05:27:08` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `05:27:08` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `05:27:08` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `05:27:08` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `05:27:08` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `05:27:08` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `05:27:12` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `05:27:12` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `05:27:12` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `05:27:12` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `05:27:12` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `05:27:12` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `05:27:12` **[TEST]** Running npm test…
+- `05:27:16` **[TEST]** Results: 0/0 passing, 0 failing
+- `05:27:16` **[TEST]** ✅ All 0 tests passing (streak: 34)
+- `05:27:16` **[AGENT]** Sleeping 5.0min before next cycle…
+- `05:32:16` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `05:32:20` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `05:32:20` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `05:32:20` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `05:32:20` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `05:32:20` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `05:32:20` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `05:32:20` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `05:32:24` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `05:32:24` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `05:32:24` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `05:32:24` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `05:32:24` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `05:32:24` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `05:32:24` **[TEST]** Running npm test…
+- `05:32:28` **[TEST]** Results: 0/0 passing, 0 failing
+- `05:32:28` **[TEST]** ✅ All 0 tests passing (streak: 35)
+- `05:32:28` **[AGENT]** Sleeping 5.0min before next cycle…
+- `05:37:28` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `05:37:32` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `05:37:32` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `05:37:32` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `05:37:32` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `05:37:32` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `05:37:32` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `05:37:32` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `05:37:36` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `05:37:36` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `05:37:36` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `05:37:36` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `05:37:36` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `05:37:36` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `05:37:36` **[TEST]** Running npm test…
+- `05:37:40` **[TEST]** Results: 0/0 passing, 0 failing
+- `05:37:40` **[TEST]** ✅ All 0 tests passing (streak: 36)
+- `05:37:40` **[AGENT]** Sleeping 5.0min before next cycle…
+- `05:42:40` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `05:42:44` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `05:42:44` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `05:42:44` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `05:42:44` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `05:42:44` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `05:42:44` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `05:42:44` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `05:42:47` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `05:42:47` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `05:42:47` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `05:42:47` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `05:42:47` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `05:42:47` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `05:42:47` **[TEST]** Running npm test…
+- `05:42:52` **[TEST]** Results: 0/0 passing, 0 failing
+- `05:42:52` **[TEST]** ✅ All 0 tests passing (streak: 37)
+- `05:42:52` **[AGENT]** Sleeping 5.0min before next cycle…
+- `05:47:52` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `05:47:55` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `05:47:55` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `05:47:55` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `05:47:55` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `05:47:55` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `05:47:55` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `05:47:55` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `05:47:59` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `05:47:59` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `05:47:59` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `05:47:59` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `05:47:59` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `05:47:59` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `05:47:59` **[TEST]** Running npm test…
+- `05:48:03` **[TEST]** Results: 0/0 passing, 0 failing
+- `05:48:03` **[TEST]** ✅ All 0 tests passing (streak: 38)
+- `05:48:03` **[AGENT]** Sleeping 5.0min before next cycle…
+- `05:53:03` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `05:53:07` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `05:53:07` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `05:53:07` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `05:53:07` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `05:53:07` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `05:53:07` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `05:53:07` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `05:53:11` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `05:53:11` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `05:53:11` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `05:53:11` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `05:53:11` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `05:53:11` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `05:53:11` **[TEST]** Running npm test…
+- `05:53:15` **[TEST]** Results: 0/0 passing, 0 failing
+- `05:53:15` **[TEST]** ✅ All 0 tests passing (streak: 39)
+- `05:53:15` **[AGENT]** Sleeping 5.0min before next cycle…
+- `05:58:15` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `05:58:19` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `05:58:19` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `05:58:19` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `05:58:19` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `05:58:19` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `05:58:19` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `05:58:19` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `05:58:22` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `05:58:22` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `05:58:22` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `05:58:22` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `05:58:22` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `05:58:22` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `05:58:22` **[TEST]** Running npm test…
+- `05:58:27` **[TEST]** Results: 0/0 passing, 0 failing
+- `05:58:27` **[TEST]** ✅ All 0 tests passing (streak: 40)
+- `05:58:27` **[AGENT]** Sleeping 5.0min before next cycle…
+- `06:03:27` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `06:03:30` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `06:03:30` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `06:03:30` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `06:03:30` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `06:03:30` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `06:03:30` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `06:03:30` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `06:03:34` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `06:03:34` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `06:03:34` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `06:03:34` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `06:03:34` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `06:03:34` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `06:03:34` **[TEST]** Running npm test…
+- `06:03:38` **[TEST]** Results: 0/0 passing, 0 failing
+- `06:03:38` **[TEST]** ✅ All 0 tests passing (streak: 41)
+- `06:03:38` **[AGENT]** Sleeping 5.0min before next cycle…
+- `06:08:38` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `06:08:42` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `06:08:42` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `06:08:42` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `06:08:42` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `06:08:42` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `06:08:42` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `06:08:42` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `06:08:46` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `06:08:46` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `06:08:46` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `06:08:46` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `06:08:46` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `06:08:46` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `06:08:46` **[TEST]** Running npm test…
+- `06:08:50` **[TEST]** Results: 0/0 passing, 0 failing
+- `06:08:50` **[TEST]** ✅ All 0 tests passing (streak: 42)
+- `06:08:50` **[AGENT]** Sleeping 5.0min before next cycle…
+- `06:13:50` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `06:13:53` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `06:13:53` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `06:13:53` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `06:13:53` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `06:13:53` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `06:13:53` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `06:13:53` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `06:13:57` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `06:13:57` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `06:13:57` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `06:13:57` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `06:13:57` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `06:13:57` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `06:13:57` **[TEST]** Running npm test…
+- `06:14:02` **[TEST]** Results: 0/0 passing, 0 failing
+- `06:14:02` **[TEST]** ✅ All 0 tests passing (streak: 43)
+- `06:14:02` **[AGENT]** Sleeping 5.0min before next cycle…
+- `06:19:02` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `06:19:05` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `06:19:05` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `06:19:05` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `06:19:05` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `06:19:05` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `06:19:05` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `06:19:05` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `06:19:09` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `06:19:09` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `06:19:09` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `06:19:09` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `06:19:09` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `06:19:09` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `06:19:09` **[TEST]** Running npm test…
+- `06:19:13` **[TEST]** Results: 0/0 passing, 0 failing
+- `06:19:13` **[TEST]** ✅ All 0 tests passing (streak: 44)
+- `06:19:13` **[AGENT]** Sleeping 5.0min before next cycle…
+- `06:24:13` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `06:24:17` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `06:24:17` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `06:24:17` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `06:24:17` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `06:24:17` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `06:24:17` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `06:24:17` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `06:24:21` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `06:24:21` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `06:24:21` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `06:24:21` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `06:24:21` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `06:24:21` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `06:24:21` **[TEST]** Running npm test…
+- `06:24:26` **[TEST]** Results: 0/0 passing, 0 failing
+- `06:24:26` **[TEST]** ✅ All 0 tests passing (streak: 45)
+- `06:24:26` **[AGENT]** Sleeping 5.0min before next cycle…
+- `06:29:26` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `06:29:29` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `06:29:29` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `06:29:29` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `06:29:29` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `06:29:29` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `06:29:29` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `06:29:29` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `06:29:33` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `06:29:33` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `06:29:33` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `06:29:33` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `06:29:33` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `06:29:33` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `06:29:33` **[TEST]** Running npm test…
+- `06:29:37` **[TEST]** Results: 0/0 passing, 0 failing
+- `06:29:37` **[TEST]** ✅ All 0 tests passing (streak: 46)
+- `06:29:37` **[AGENT]** Sleeping 5.0min before next cycle…
+- `06:34:37` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `06:34:41` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `06:34:41` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `06:34:41` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `06:34:41` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `06:34:41` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `06:34:41` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `06:34:41` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `06:34:45` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `06:34:45` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `06:34:45` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `06:34:45` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `06:34:45` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `06:34:45` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `06:34:45` **[TEST]** Running npm test…
+- `06:34:49` **[TEST]** Results: 0/0 passing, 0 failing
+- `06:34:49` **[TEST]** ✅ All 0 tests passing (streak: 47)
+- `06:34:49` **[AGENT]** Sleeping 5.0min before next cycle…
+- `06:39:49` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `06:39:53` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `06:39:53` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `06:39:53` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `06:39:53` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `06:39:53` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `06:39:53` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `06:39:53` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `06:39:57` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `06:39:57` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `06:39:57` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `06:39:57` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `06:39:57` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `06:39:57` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `06:39:57` **[TEST]** Running npm test…
+- `06:40:01` **[TEST]** Results: 0/0 passing, 0 failing
+- `06:40:01` **[TEST]** ✅ All 0 tests passing (streak: 48)
+- `06:40:01` **[AGENT]** Sleeping 5.0min before next cycle…
+- `06:45:01` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `06:45:04` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `06:45:04` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `06:45:04` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `06:45:04` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `06:45:04` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `06:45:04` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `06:45:04` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `06:45:08` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `06:45:08` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `06:45:08` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `06:45:08` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `06:45:08` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `06:45:08` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `06:45:08` **[TEST]** Running npm test…
+- `06:45:12` **[TEST]** Results: 0/0 passing, 0 failing
+- `06:45:12` **[TEST]** ✅ All 0 tests passing (streak: 49)
+- `06:45:12` **[AGENT]** Sleeping 5.0min before next cycle…
+- `06:50:13` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `06:50:16` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `06:50:16` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `06:50:16` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `06:50:16` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `06:50:16` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `06:50:16` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `06:50:16` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `06:50:20` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `06:50:20` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `06:50:20` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `06:50:20` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `06:50:20` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `06:50:20` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `06:50:20` **[TEST]** Running npm test…
+- `06:50:24` **[TEST]** Results: 0/0 passing, 0 failing
+- `06:50:24` **[TEST]** ✅ All 0 tests passing (streak: 50)
+- `06:50:24` **[AGENT]** Sleeping 5.0min before next cycle…
+- `06:55:24` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `06:55:28` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `06:55:28` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `06:55:28` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `06:55:28` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `06:55:28` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `06:55:28` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `06:55:28` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `06:55:32` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `06:55:32` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `06:55:32` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `06:55:32` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `06:55:32` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `06:55:32` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `06:55:32` **[TEST]** Running npm test…
+- `06:55:36` **[TEST]** Results: 0/0 passing, 0 failing
+- `06:55:36` **[TEST]** ✅ All 0 tests passing (streak: 51)
+- `06:55:36` **[AGENT]** Sleeping 5.0min before next cycle…
+- `07:00:36` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `07:00:39` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `07:00:39` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `07:00:39` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `07:00:39` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `07:00:39` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `07:00:39` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `07:00:39` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `07:00:43` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `07:00:43` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `07:00:43` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `07:00:43` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `07:00:43` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `07:00:43` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `07:00:43` **[TEST]** Running npm test…
+- `07:00:47` **[TEST]** Results: 0/0 passing, 0 failing
+- `07:00:47` **[TEST]** ✅ All 0 tests passing (streak: 52)
+- `07:00:47` **[AGENT]** Sleeping 5.0min before next cycle…
+- `07:05:47` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `07:05:51` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `07:05:51` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `07:05:51` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `07:05:51` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `07:05:51` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `07:05:51` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `07:05:51` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `07:05:55` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `07:05:55` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `07:05:55` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `07:05:55` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `07:05:55` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `07:05:55` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `07:05:55` **[TEST]** Running npm test…
+- `07:05:59` **[TEST]** Results: 0/0 passing, 0 failing
+- `07:05:59` **[TEST]** ✅ All 0 tests passing (streak: 53)
+- `07:05:59` **[AGENT]** Sleeping 5.0min before next cycle…
+- `07:10:59` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `07:11:03` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `07:11:03` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `07:11:03` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `07:11:03` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `07:11:03` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `07:11:03` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `07:11:03` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `07:11:06` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `07:11:06` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `07:11:06` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `07:11:06` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `07:11:06` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `07:11:06` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `07:11:06` **[TEST]** Running npm test…
+- `07:11:11` **[TEST]** Results: 0/0 passing, 0 failing
+- `07:11:11` **[TEST]** ✅ All 0 tests passing (streak: 54)
+- `07:11:11` **[AGENT]** Sleeping 5.0min before next cycle…
+- `07:16:11` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `07:16:14` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `07:16:14` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `07:16:14` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `07:16:14` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `07:16:14` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `07:16:14` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `07:16:14` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `07:16:18` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `07:16:18` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `07:16:18` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `07:16:18` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `07:16:18` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `07:16:18` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `07:16:18` **[TEST]** Running npm test…
+- `07:16:23` **[TEST]** Results: 0/0 passing, 0 failing
+- `07:16:23` **[TEST]** ✅ All 0 tests passing (streak: 55)
+- `07:16:23` **[AGENT]** Sleeping 5.0min before next cycle…
+- `07:21:23` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `07:21:26` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `07:21:26` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `07:21:26` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `07:21:26` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `07:21:26` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `07:21:26` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `07:21:26` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `07:21:30` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `07:21:30` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `07:21:30` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `07:21:30` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `07:21:30` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `07:21:30` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `07:21:30` **[TEST]** Running npm test…
+- `07:21:35` **[TEST]** Results: 0/0 passing, 0 failing
+- `07:21:35` **[TEST]** ✅ All 0 tests passing (streak: 56)
+- `07:21:35` **[AGENT]** Sleeping 5.0min before next cycle…
+- `07:26:35` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `07:26:38` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `07:26:38` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `07:26:38` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `07:26:38` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `07:26:38` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `07:26:38` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `07:26:38` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `07:26:42` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `07:26:42` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `07:26:42` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `07:26:42` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `07:26:42` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `07:26:42` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `07:26:42` **[TEST]** Running npm test…
+- `07:26:47` **[TEST]** Results: 0/0 passing, 0 failing
+- `07:26:47` **[TEST]** ✅ All 0 tests passing (streak: 57)
+- `07:26:47` **[AGENT]** Sleeping 5.0min before next cycle…
+- `07:31:47` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `07:31:50` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `07:31:50` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `07:31:50` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `07:31:50` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `07:31:50` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `07:31:50` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `07:31:50` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `07:31:54` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `07:31:54` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `07:31:54` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `07:31:54` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `07:31:54` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `07:31:54` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `07:31:54` **[TEST]** Running npm test…
+- `07:31:59` **[TEST]** Results: 0/0 passing, 0 failing
+- `07:31:59` **[TEST]** ✅ All 0 tests passing (streak: 58)
+- `07:31:59` **[AGENT]** Sleeping 5.0min before next cycle…
+- `07:36:59` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `07:37:02` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `07:37:02` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `07:37:02` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `07:37:02` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `07:37:02` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `07:37:02` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `07:37:02` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `07:37:06` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `07:37:06` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `07:37:06` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `07:37:06` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `07:37:06` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `07:37:06` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `07:37:06` **[TEST]** Running npm test…
+- `07:37:10` **[TEST]** Results: 0/0 passing, 0 failing
+- `07:37:10` **[TEST]** ✅ All 0 tests passing (streak: 59)
+- `07:37:10` **[AGENT]** Sleeping 5.0min before next cycle…
+- `07:42:10` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `07:42:14` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `07:42:14` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `07:42:14` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `07:42:14` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `07:42:14` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `07:42:14` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `07:42:14` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `07:42:17` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `07:42:17` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `07:42:17` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `07:42:17` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `07:42:17` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `07:42:17` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `07:42:17` **[TEST]** Running npm test…
+- `07:42:22` **[TEST]** Results: 0/0 passing, 0 failing
+- `07:42:22` **[TEST]** ✅ All 0 tests passing (streak: 60)
+- `07:42:22` **[AGENT]** Sleeping 5.0min before next cycle…
+- `07:47:22` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `07:47:25` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `07:47:25` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `07:47:25` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `07:47:25` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `07:47:25` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `07:47:25` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `07:47:25` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `07:47:29` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `07:47:29` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `07:47:29` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `07:47:29` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `07:47:29` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `07:47:29` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `07:47:29` **[TEST]** Running npm test…
+- `07:47:34` **[TEST]** Results: 0/0 passing, 0 failing
+- `07:47:34` **[TEST]** ✅ All 0 tests passing (streak: 61)
+- `07:47:34` **[AGENT]** Sleeping 5.0min before next cycle…
+- `07:52:34` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `07:52:37` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `07:52:37` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `07:52:37` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `07:52:37` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `07:52:37` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `07:52:37` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `07:52:37` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `07:52:41` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `07:52:41` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `07:52:41` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `07:52:41` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `07:52:41` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `07:52:41` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `07:52:41` **[TEST]** Running npm test…
+- `07:52:46` **[TEST]** Results: 0/0 passing, 0 failing
+- `07:52:46` **[TEST]** ✅ All 0 tests passing (streak: 62)
+- `07:52:46` **[AGENT]** Sleeping 5.0min before next cycle…
+- `07:57:46` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `07:57:49` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `07:57:49` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `07:57:49` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `07:57:49` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `07:57:49` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `07:57:49` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `07:57:49` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `07:57:53` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `07:57:53` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `07:57:53` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `07:57:53` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `07:57:53` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `07:57:53` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `07:57:53` **[TEST]** Running npm test…
+- `07:57:57` **[TEST]** Results: 0/0 passing, 0 failing
+- `07:57:57` **[TEST]** ✅ All 0 tests passing (streak: 63)
+- `07:57:57` **[AGENT]** Sleeping 5.0min before next cycle…
+- `08:02:57` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `08:03:01` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `08:03:01` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `08:03:01` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `08:03:01` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `08:03:01` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `08:03:01` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `08:03:01` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `08:03:05` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `08:03:05` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `08:03:05` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `08:03:05` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `08:03:05` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `08:03:05` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `08:03:05` **[TEST]** Running npm test…
+- `08:03:09` **[TEST]** Results: 0/0 passing, 0 failing
+- `08:03:09` **[TEST]** ✅ All 0 tests passing (streak: 64)
+- `08:03:09` **[AGENT]** Sleeping 5.0min before next cycle…
+- `08:08:09` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `08:08:12` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `08:08:12` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `08:08:12` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `08:08:12` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `08:08:12` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `08:08:12` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `08:08:12` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `08:08:16` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `08:08:16` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `08:08:16` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `08:08:16` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `08:08:16` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `08:08:16` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `08:08:16` **[TEST]** Running npm test…
+- `08:08:21` **[TEST]** Results: 0/0 passing, 0 failing
+- `08:08:21` **[TEST]** ✅ All 0 tests passing (streak: 65)
+- `08:08:21` **[AGENT]** Sleeping 5.0min before next cycle…
+- `08:13:21` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `08:13:24` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `08:13:24` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `08:13:24` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `08:13:24` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `08:13:24` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `08:13:24` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `08:13:24` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `08:13:28` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `08:13:28` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `08:13:28` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `08:13:28` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `08:13:28` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `08:13:28` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `08:13:28` **[TEST]** Running npm test…
+- `08:13:33` **[TEST]** Results: 0/0 passing, 0 failing
+- `08:13:33` **[TEST]** ✅ All 0 tests passing (streak: 66)
+- `08:13:33` **[AGENT]** Sleeping 5.0min before next cycle…
+- `08:18:33` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `08:18:36` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `08:18:36` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `08:18:36` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `08:18:36` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `08:18:36` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `08:18:36` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `08:18:36` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `08:18:40` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `08:18:40` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `08:18:40` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `08:18:40` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `08:18:40` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `08:18:40` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `08:18:40` **[TEST]** Running npm test…
+- `08:18:45` **[TEST]** Results: 0/0 passing, 0 failing
+- `08:18:45` **[TEST]** ✅ All 0 tests passing (streak: 67)
+- `08:18:45` **[AGENT]** Sleeping 5.0min before next cycle…
+- `08:23:45` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `08:23:48` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `08:23:48` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `08:23:48` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `08:23:48` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `08:23:48` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `08:23:48` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `08:23:48` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `08:23:52` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `08:23:52` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `08:23:52` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `08:23:52` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `08:23:52` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `08:23:52` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `08:23:52` **[TEST]** Running npm test…
+- `08:23:56` **[TEST]** Results: 0/0 passing, 0 failing
+- `08:23:56` **[TEST]** ✅ All 0 tests passing (streak: 68)
+- `08:23:56` **[AGENT]** Sleeping 5.0min before next cycle…
+- `08:28:56` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `08:29:00` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `08:29:00` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `08:29:00` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `08:29:00` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `08:29:00` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `08:29:00` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `08:29:00` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `08:29:04` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `08:29:04` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `08:29:04` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `08:29:04` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `08:29:04` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `08:29:04` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `08:29:04` **[TEST]** Running npm test…
+- `08:29:08` **[TEST]** Results: 0/0 passing, 0 failing
+- `08:29:08` **[TEST]** ✅ All 0 tests passing (streak: 69)
+- `08:29:08` **[AGENT]** Sleeping 5.0min before next cycle…
+- `08:34:08` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `08:34:11` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `08:34:11` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `08:34:11` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `08:34:11` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `08:34:11` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `08:34:11` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `08:34:11` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `08:34:15` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `08:34:15` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `08:34:15` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `08:34:15` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `08:34:15` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `08:34:15` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `08:34:15` **[TEST]** Running npm test…
+- `08:34:20` **[TEST]** Results: 0/0 passing, 0 failing
+- `08:34:20` **[TEST]** ✅ All 0 tests passing (streak: 70)
+- `08:34:20` **[AGENT]** Sleeping 5.0min before next cycle…
+- `08:39:20` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `08:39:23` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `08:39:23` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `08:39:23` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `08:39:23` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `08:39:23` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `08:39:23` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `08:39:23` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `08:39:27` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `08:39:27` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `08:39:27` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `08:39:27` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `08:39:27` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `08:39:27` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `08:39:27` **[TEST]** Running npm test…
+- `08:39:31` **[TEST]** Results: 0/0 passing, 0 failing
+- `08:39:31` **[TEST]** ✅ All 0 tests passing (streak: 71)
+- `08:39:31` **[AGENT]** Sleeping 5.0min before next cycle…
+- `08:44:31` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `08:44:35` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `08:44:35` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `08:44:35` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `08:44:35` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `08:44:35` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `08:44:35` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `08:44:35` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `08:44:39` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `08:44:39` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `08:44:39` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `08:44:39` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `08:44:39` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `08:44:39` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `08:44:39` **[TEST]** Running npm test…
+- `08:44:43` **[TEST]** Results: 0/0 passing, 0 failing
+- `08:44:43` **[TEST]** ✅ All 0 tests passing (streak: 72)
+- `08:44:43` **[AGENT]** Sleeping 5.0min before next cycle…
+- `08:49:43` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `08:49:46` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `08:49:46` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `08:49:46` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `08:49:46` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `08:49:46` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `08:49:46` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `08:49:46` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `08:49:50` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `08:49:50` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `08:49:50` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `08:49:50` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `08:49:50` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `08:49:50` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `08:49:50` **[TEST]** Running npm test…
+- `08:49:55` **[TEST]** Results: 0/0 passing, 0 failing
+- `08:49:55` **[TEST]** ✅ All 0 tests passing (streak: 73)
+- `08:49:55` **[AGENT]** Sleeping 5.0min before next cycle…
+- `08:54:55` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `08:54:58` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `08:54:58` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `08:54:58` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `08:54:58` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `08:54:58` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `08:54:58` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `08:54:58` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `08:55:02` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `08:55:02` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `08:55:02` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `08:55:02` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `08:55:02` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `08:55:02` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `08:55:02` **[TEST]** Running npm test…
+- `08:55:06` **[TEST]** Results: 0/0 passing, 0 failing
+- `08:55:06` **[TEST]** ✅ All 0 tests passing (streak: 74)
+- `08:55:06` **[AGENT]** Sleeping 5.0min before next cycle…
+- `09:00:06` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `09:00:10` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `09:00:10` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `09:00:10` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `09:00:10` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `09:00:10` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `09:00:10` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `09:00:10` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `09:00:14` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `09:00:14` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `09:00:14` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `09:00:14` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `09:00:14` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `09:00:14` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `09:00:14` **[TEST]** Running npm test…
+- `09:00:18` **[TEST]** Results: 0/0 passing, 0 failing
+- `09:00:18` **[TEST]** ✅ All 0 tests passing (streak: 75)
+- `09:00:18` **[AGENT]** Sleeping 5.0min before next cycle…
+- `09:05:18` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `09:05:21` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `09:05:21` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `09:05:21` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `09:05:21` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `09:05:21` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `09:05:21` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `09:05:21` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `09:05:25` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `09:05:25` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `09:05:25` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `09:05:25` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `09:05:25` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `09:05:25` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `09:05:25` **[TEST]** Running npm test…
+- `09:05:30` **[TEST]** Results: 0/0 passing, 0 failing
+- `09:05:30` **[TEST]** ✅ All 0 tests passing (streak: 76)
+- `09:05:30` **[AGENT]** Sleeping 5.0min before next cycle…
+- `09:10:30` **[TYPECHECK]** Running npm run typecheck (Glass)…
+- `09:10:34` **[TYPECHECK]** ❌ Glass: 12 TypeScript error(s):
+- `09:10:34` **[TYPECHECK]**   src/main/glassLensCapture.ts(77,7): error TS2353: Object literal may only specify known properties, and 'preset' does not exist in type '{ width: number; height: number; }'.
+- `09:10:34` **[TYPECHECK]**   src/main/index.ts(517,3): error TS2353: Object literal may only specify known properties, and 'commandBarStackHeightPx' does not exist in type 'AppState'.
+- `09:10:34` **[TYPECHECK]**   src/main/index.ts(842,36): error TS2339: Property 'listenLiveNotes' does not exist on type 'AppState'.
+- `09:10:34` **[TYPECHECK]**   src/main/index.ts(1843,31): error TS2339: Property 'commandBarStackHeightPx' does not exist on type 'AppState'.
+- `09:10:34` **[TYPECHECK]**   src/main/index.ts(1855,13): error TS2339: Property 'commandBarOverlayClearancePx' does not exist on type 'AppState'.
+- `09:10:34` **[TYPECHECK]** Running npm run typecheck (Web App)…
+- `09:10:38` **[TYPECHECK]** ❌ Web App: 6 TypeScript error(s):
+- `09:10:38` **[TYPECHECK]**   src/AppRouter.tsx(18,81): error TS2503: Cannot find namespace 'JSX'.
+- `09:10:38` **[TYPECHECK]**   src/components/glass-landing/GlassDocLayout.tsx(18,26): error TS2503: Cannot find namespace 'JSX'.
+- `09:10:38` **[TYPECHECK]**   src/components/glass-landing/GlassLandingFooter.tsx(1,47): error TS2503: Cannot find namespace 'JSX'.
+- `09:10:38` **[TYPECHECK]**   src/pages/GlassInstallPage.tsx(6,45): error TS2503: Cannot find namespace 'JSX'.
+- `09:10:38` **[TYPECHECK]**   src/pages/GlassPrivacyPage.tsx(3,45): error TS2503: Cannot find namespace 'JSX'.
+- `09:10:38` **[TEST]** Running npm test…
+- `09:10:43` **[TEST]** Results: 0/0 passing, 0 failing
+- `09:10:43` **[TEST]** ✅ All 0 tests passing (streak: 77)
+- `09:10:43` **[AGENT]** Sleeping 5.0min before next cycle…
+
+---
+*Generated by glass-autonomous-agent.mjs*

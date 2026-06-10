@@ -14,7 +14,7 @@ Install IIVO Glass on your Mac and run your first question. No terminal, no conf
 2. If you see a **password** screen, enter the preview password your invite included.
 3. Click **Download for Mac — Apple Silicon**.
 
-The file is named something like `IIVO Glass-0.1.8-arm64.dmg`. It will land in your **Downloads** folder.
+The file is named something like `IIVO Glass-0.1.9-arm64.dmg`. It will land in your **Downloads** folder.
 
 ---
 

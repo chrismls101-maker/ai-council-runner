@@ -18,11 +18,14 @@ export function isIivoGlassConnected(input: {
   if (rows.length === 0) return false;
   const server = rows.find((row) => row.id === "server");
   if (server?.severity === "error") return false;
+  const screen = rows.find((row) => row.id === "screenRecording");
+  const window = rows.find((row) => row.id === "windowCapture");
+  if (screen?.status !== "ready" || window?.status !== "ready") return false;
   return permissionsSummaryFromSetup(rows).level !== "error";
 }
 
 /** Full Glass connect: device scan + setup check (includes system-audio connect). */
 export async function connectIivoGlass(): Promise<void> {
   await reportVirtualAudioDevices();
-  send({ type: "run-setup-check" });
+  send({ type: "run-setup-check", forceCaptureProbe: true });
 }

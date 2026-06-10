@@ -60,19 +60,29 @@ const DOCK_MAX_HEIGHT_RATIO = 0.25;
 const DOCK_MAX_HEIGHT_CAP = 960;
 const DOCK_DEFAULT_MAX_WIDTH = 720;
 const COMMAND_BAR_MAX_WIDTH = 760;
-/** Main composer row + optional accessory strips (voice, listen status, screen context). */
+/** Max bar window height when Lens / voice accessories expand the stack. */
 export const COMMAND_BAR_HEIGHT = 280;
 export const COMMAND_BAR_BOTTOM_MARGIN = 28;
 /** `.command-root` padding-bottom — stack sits above this inset inside the bar window. */
 export const COMMAND_BAR_ROOT_BOTTOM_PADDING_PX = 4;
+/** Extra headroom above the measured stack inside the bar window (Lens panel, etc.). */
+export const COMMAND_BAR_STACK_TOP_PADDING_PX = 8;
 const COMMAND_BAR_SIDE_MARGIN = 48;
 const DOCK_ABOVE_COMMAND_BAR_GAP = 0;
+/** Top inset for dock — mirrors command bar bottom margin. */
+export const DOCK_TOP_MARGIN = 12;
 
 /** Gap between measured command bar stack and overlay chat cards. */
 export const OVERLAY_CHAT_STACK_GAP_PX = 14;
 
 /** Fallback stack height when the command bar has not reported measured height yet. */
 export const OVERLAY_CHAT_STACK_FALLBACK_PX = 58;
+
+/** Compact bar window — composer row only (no 280px invisible drag dead zone). */
+export const COMMAND_BAR_MIN_WINDOW_HEIGHT =
+  OVERLAY_CHAT_STACK_FALLBACK_PX +
+  COMMAND_BAR_ROOT_BOTTOM_PADDING_PX +
+  COMMAND_BAR_STACK_TOP_PADDING_PX;
 
 /**
  * Distance from the overlay work-area bottom to the top of the command bar stack
@@ -170,7 +180,9 @@ export function listenNotesPadLayoutFromDisplay(ctx: DisplayLayoutContext): Pane
     ),
   );
   const commandReserve =
-    COMMAND_BAR_HEIGHT + COMMAND_BAR_BOTTOM_MARGIN + EDGE_MARGIN;
+    commandBarWindowHeightForStack(OVERLAY_CHAT_STACK_FALLBACK_PX) +
+    COMMAND_BAR_BOTTOM_MARGIN +
+    EDGE_MARGIN;
   const height = Math.max(
     LISTEN_NOTES_PANEL_WIDTH_MIN,
     ctx.workArea.height - TOP_INSET - commandReserve,
@@ -187,13 +199,21 @@ export function listenNotesPadLayoutFromDisplay(ctx: DisplayLayoutContext): Pane
 /** @deprecated Use listenNotesPadLayoutFromDisplay */
 export const listenNotesPanelLayoutFromDisplay = listenNotesPadLayoutFromDisplay;
 
+/** Bar window height that fits a measured accessory stack without clipping the top. */
+export function commandBarWindowHeightForStack(stackHeightPx: number): number {
+  const stack = Math.max(0, Math.round(stackHeightPx));
+  if (stack <= 0) return COMMAND_BAR_MIN_WINDOW_HEIGHT;
+  const fitted = stack + COMMAND_BAR_ROOT_BOTTOM_PADDING_PX + COMMAND_BAR_STACK_TOP_PADDING_PX;
+  return Math.max(COMMAND_BAR_MIN_WINDOW_HEIGHT, fitted);
+}
+
 /** Bottom-centered command bar inside the visible work area. */
 export function commandBarLayoutFromDisplay(ctx: DisplayLayoutContext): CommandBarLayout {
   const width = Math.min(
     COMMAND_BAR_MAX_WIDTH,
     Math.max(320, ctx.workArea.width - COMMAND_BAR_SIDE_MARGIN),
   );
-  const height = COMMAND_BAR_HEIGHT;
+  const height = commandBarWindowHeightForStack(OVERLAY_CHAT_STACK_FALLBACK_PX);
   const x = ctx.workArea.x + Math.round((ctx.workArea.width - width) / 2);
   const y = ctx.workArea.y + ctx.workArea.height - height - COMMAND_BAR_BOTTOM_MARGIN;
 
@@ -239,19 +259,8 @@ export function clampDockSize(
   };
 }
 
-function dockAnchorX(ctx: DisplayLayoutContext, preset: GlassLayoutPreset, width: number): number {
-  switch (preset) {
-    case "floating_dock":
-    case "focus_mode":
-      return ctx.workArea.x + Math.round((ctx.workArea.width - width) / 2);
-    case "compact_dock":
-    case "full_glass_overlay":
-    case "side_panel":
-    default: {
-      const bar = commandBarLayoutFromDisplay(ctx);
-      return bar.x;
-    }
-  }
+function dockAnchorX(ctx: DisplayLayoutContext, _preset: GlassLayoutPreset, width: number): number {
+  return ctx.workArea.x + Math.round((ctx.workArea.width - width) / 2);
 }
 
 function dockAnchorY(
@@ -259,18 +268,9 @@ function dockAnchorY(
   preset: GlassLayoutPreset,
   height: number,
 ): number {
-  switch (preset) {
-    case "floating_dock":
-    case "focus_mode":
-      return ctx.workArea.y + ctx.workArea.height - height - EDGE_MARGIN;
-    case "compact_dock":
-    case "full_glass_overlay":
-    case "side_panel":
-    default: {
-      const bar = commandBarLayoutFromDisplay(ctx);
-      return bar.y - height - DOCK_ABOVE_COMMAND_BAR_GAP;
-    }
-  }
+  void preset;
+  void height;
+  return ctx.workArea.y + DOCK_TOP_MARGIN;
 }
 
 function dockDefaultWidth(ctx: DisplayLayoutContext, limits: DockSizeLimits): number {

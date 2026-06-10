@@ -7,10 +7,12 @@ import {
   pickGlassNotification,
   type GlassNotificationView,
 } from "../../shared/glassNotifications.ts";
+import { shouldSuppressTranslateStartupError } from "../../shared/liveTranslateGrace.ts";
 import { send } from "../useGlassState.ts";
 
 const NON_CHAT_FEED_TTL_MS = 12_000;
 const TOAST_TTL_MS = 5_000;
+const NOTICE_TTL_MS = 8_000;
 const CHAT_AUTO_DISMISS_MS = 17_000;
 const CHAT_FADE_MS = 380;
 const MAX_VISIBLE_FEED = 5;
@@ -67,7 +69,6 @@ function useToastQueue(state: GlassState, enabled: boolean): QueuedToast | null 
   const queueRef = useRef<QueuedToast[]>([]);
   const seenMomentsRef = useRef<Set<string>>(new Set());
   const seededMomentsRef = useRef(false);
-  const wasListeningRef = useRef(false);
   const wasCapturingRef = useRef(false);
 
   useEffect(() => {
@@ -118,14 +119,6 @@ function useToastQueue(state: GlassState, enabled: boolean): QueuedToast | null 
 
   useEffect(() => {
     if (!enabled) return;
-    if (state.privacy.listening && !wasListeningRef.current) {
-      enqueue("Listening started", "listen");
-    }
-    wasListeningRef.current = state.privacy.listening;
-  }, [enabled, state.privacy.listening]);
-
-  useEffect(() => {
-    if (!enabled) return;
     if (state.privacy.capturing && !wasCapturingRef.current) {
       enqueue("Capturing screen…", "capture");
     }
@@ -133,6 +126,16 @@ function useToastQueue(state: GlassState, enabled: boolean): QueuedToast | null 
   }, [enabled, state.privacy.capturing]);
 
   return enabled ? active : null;
+}
+
+function useNoticeAutoDismiss(notification: GlassNotificationView | null): void {
+  useEffect(() => {
+    if (notification?.source !== "notice") return;
+    const timer = window.setTimeout(() => {
+      send({ type: "clear-last-notice" });
+    }, NOTICE_TTL_MS);
+    return () => window.clearTimeout(timer);
+  }, [notification?.id, notification?.message]);
 }
 
 function useChatAutoDismiss(notification: GlassNotificationView | null): {
@@ -194,20 +197,32 @@ function useChatAutoDismiss(notification: GlassNotificationView | null): {
 export function useGlassNotification(
   state: GlassState,
   enabled: boolean,
+  options?: { suppressTransientNotifications?: boolean },
 ): {
   notification: GlassNotificationView | null;
   fading: boolean;
   onChatHoverStart: () => void;
   onChatHoverEnd: () => void;
 } {
+  const suppressTransient = options?.suppressTransientNotifications === true;
   const visibleFeed = useVisibleCommandFeed(state, enabled);
-  const activeToast = useToastQueue(state, enabled);
+  const activeToast = useToastQueue(state, enabled && !suppressTransient);
+
+  const visibleLastError =
+    enabled && state.lastError?.trim()
+      ? shouldSuppressTranslateStartupError({
+          runtime: state.liveTranslate,
+          error: state.lastError,
+        })
+        ? undefined
+        : state.lastError
+      : undefined;
 
   const notification = pickGlassNotification({
-    lastError: enabled ? state.lastError : undefined,
-    lastNotice: enabled ? state.lastNotice : undefined,
+    lastError: visibleLastError,
+    lastNotice: enabled && !suppressTransient ? state.lastNotice : undefined,
     feedItems: visibleFeed,
-    toastMessage: activeToast?.message,
+    toastMessage: suppressTransient ? undefined : activeToast?.message,
     toastTone:
       activeToast?.tone === "success"
         ? "success"
@@ -219,6 +234,7 @@ export function useGlassNotification(
   });
 
   const { fading, onChatHoverStart, onChatHoverEnd } = useChatAutoDismiss(notification);
+  useNoticeAutoDismiss(notification);
 
   useEffect(() => {
     const rendererOnly = Boolean(notification) && notification?.source === "toast";

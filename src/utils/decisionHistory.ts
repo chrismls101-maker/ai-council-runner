@@ -47,7 +47,7 @@ export const HISTORY_FILTERS: { value: HistoryFilter; label: string }[] = [
 ];
 
 export const SIDEBAR_NAV: { id: SidebarSection; label: string; icon: string }[] = [
-  { id: "history", label: "Decision History", icon: "history" },
+  { id: "history", label: "Session History", icon: "history" },
   { id: "memory", label: "Memory Vault", icon: "memory" },
   { id: "context-library", label: "Context Library", icon: "context" },
   { id: "settings", label: "Settings", icon: "settings" },

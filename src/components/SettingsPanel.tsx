@@ -16,6 +16,12 @@ import { resetOnboarding } from "../utils/onboarding";
 import { memoryDisplayTitle } from "../types/memory";
 import type { AppSettings } from "../types/settings";
 import type { Memory } from "../types/memory";
+import {
+  apiFetch,
+  getApiBaseUrl,
+  setApiBaseUrl,
+  API_BASE_URL_DEFAULT,
+} from "../utils/apiClient";
 
 interface SettingsPanelProps {
   settings: AppSettings;
@@ -68,7 +74,7 @@ function ToggleRow({
 
 async function postAudit(eventType: string, metadata?: string): Promise<void> {
   try {
-    await fetch("/api/audit/log", {
+    await apiFetch("/api/audit/log", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ eventType, metadata }),
@@ -95,6 +101,8 @@ export default function SettingsPanel({
   selectedPresetId = "none",
 }: SettingsPanelProps) {
   const [busy, setBusy] = useState<string | null>(null);
+  const [apiUrlDraft, setApiUrlDraft] = useState<string>(getApiBaseUrl());
+  const [apiUrlSaved, setApiUrlSaved] = useState(false);
 
   const updateSettings = (patch: Partial<AppSettings>) => {
     const next = { ...settings, ...patch };
@@ -105,7 +113,7 @@ export default function SettingsPanel({
   const runExport = async (kind: "history" | "memory" | "audit") => {
     setBusy(`export-${kind}`);
     try {
-      const res = await fetch(`/api/export/${kind}`, { method: "POST" });
+      const res = await apiFetch(`/api/export/${kind}`, { method: "POST" });
       if (!res.ok) throw new Error("Export failed");
       const data = await res.json();
       const stamp = new Date().toISOString().slice(0, 10);
@@ -127,7 +135,7 @@ export default function SettingsPanel({
     try {
       const path =
         kind === "history" ? "/api/history/all" : kind === "memory" ? "/api/memory/all" : "/api/audit";
-      const res = await fetch(path, { method: "DELETE" });
+      const res = await apiFetch(path, { method: "DELETE" });
       if (!res.ok) throw new Error("Delete failed");
       if (kind === "history") onRefreshHistory();
       if (kind === "memory") onRefreshMemories();
@@ -358,6 +366,64 @@ export default function SettingsPanel({
         >
           Reset onboarding
         </button>
+      </section>
+
+      <section className="panel-section" data-testid="api-url-section">
+        <h2>API Server URL</h2>
+        <p className="settings-section-intro muted">
+          Override the server address if Glass is running on a different port or machine. Leave
+          blank to use the same origin (default).
+        </p>
+        <div className="settings-api-url-row">
+          <input
+            type="url"
+            className="settings-api-url-input"
+            value={apiUrlDraft}
+            onChange={(e) => {
+              setApiUrlDraft(e.target.value);
+              setApiUrlSaved(false);
+            }}
+            placeholder="http://localhost:3001"
+            aria-label="API server base URL"
+            data-testid="api-url-input"
+          />
+          <button
+            type="button"
+            className="btn ghost small"
+            data-testid="api-url-save"
+            onClick={() => {
+              setApiBaseUrl(apiUrlDraft);
+              setApiUrlSaved(true);
+              onFeedback(
+                apiUrlDraft.trim()
+                  ? `API URL set to ${apiUrlDraft.trim()}`
+                  : "API URL reset to default (same origin)",
+              );
+            }}
+          >
+            Save
+          </button>
+          {apiUrlDraft !== API_BASE_URL_DEFAULT && (
+            <button
+              type="button"
+              className="btn ghost small"
+              data-testid="api-url-reset"
+              onClick={() => {
+                setApiUrlDraft(API_BASE_URL_DEFAULT);
+                setApiBaseUrl(API_BASE_URL_DEFAULT);
+                setApiUrlSaved(true);
+                onFeedback("API URL reset to default (same origin)");
+              }}
+            >
+              Reset
+            </button>
+          )}
+        </div>
+        {apiUrlSaved && (
+          <p className="settings-note muted" data-testid="api-url-saved-notice">
+            Saved. New API calls will use this URL.
+          </p>
+        )}
       </section>
 
       <PublicReadinessChecklist />

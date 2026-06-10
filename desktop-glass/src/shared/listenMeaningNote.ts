@@ -244,11 +244,17 @@ export function meaningNoteFromStreamingSentence(
   const mature = trimmed.length >= 72 && /[.!?]$/.test(trimmed);
   const kind: ListenMeaningKind = mature ? "key_idea" : "developing";
 
+  // Truncate the anchor excerpt so the note stays clearly longer than anchor×1.35
+  // (prevents the isTranscriptLikeNote word-overlap filter from false-positiving).
+  const excerpt = trimmed.slice(0, 72);
+  const ellipsis = trimmed.length > 72 ? "…" : "";
   const note = mature
-    ? `The speaker is arguing that ${trimmed.charAt(0).toLowerCase()}${trimmed.slice(1)}`
-    : `Developing idea: The speaker is building toward a point about ${trimmed.slice(0, 100)}${trimmed.length > 100 ? "…" : ""}. Wait for the full principle.`;
+    ? `The speaker is making the case that ${excerpt.charAt(0).toLowerCase()}${excerpt.slice(1)}${ellipsis} — worth holding onto from this moment.`
+    : `Developing idea: The speaker is building toward a point about ${trimmed.slice(0, 60)}${trimmed.length > 60 ? "…" : ""}. Wait for the full principle before treating it as settled.`;
 
-  if (isTranscriptLikeNote(note, trimmed)) return null;
+  // NOTE: we deliberately skip isTranscriptLikeNote(note, trimmed) here.
+  // These notes are template-generated and intentionally anchored to the transcript.
+  // isTranscriptLikeNote is designed to catch AI hallucinations, not templates.
 
   return {
     id,
@@ -256,10 +262,14 @@ export function meaningNoteFromStreamingSentence(
     title: titleForKind(kind, !mature),
     note,
     whyItMatters: mature
-      ? "This is a clear enough fragment to capture as a takeaway."
+      ? "This is a clear enough statement to capture as a takeaway while the context is fresh."
       : "Still gathering context from the audio.",
     transcriptAnchor: trimmed.slice(0, 80),
-    confidence: mature ? "medium" : "low",
+    // Streaming sentence notes are always "low" confidence so they never appear in
+    // the insight strip (pickLatestMatureInsight skips confidence === "low").
+    // These are pure transcript-wrapping templates — useful as draft entries and
+    // for the AI prompt context, but not quality enough to surface as a gold banner.
+    confidence: "low",
     status: mature ? "mature" : "developing",
     createdAt: nowIso,
     updatedAt: nowIso,

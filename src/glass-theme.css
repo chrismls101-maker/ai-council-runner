@@ -3422,6 +3422,44 @@ body::after {
   color: rgba(45, 58, 78, 0.82);
 }
 
+/* Legal acceptance step */
+.glass-onboarding-legal-copy {
+  margin: 0 0 20px;
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  color: rgba(45, 58, 78, 0.78);
+}
+
+.glass-onboarding-legal-link {
+  color: rgba(60, 110, 200, 0.9);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.glass-onboarding-legal-link:hover {
+  color: rgba(40, 90, 180, 1);
+}
+
+.glass-onboarding-legal-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 28px;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: rgba(28, 36, 52, 0.82);
+  cursor: pointer;
+}
+
+.glass-onboarding-legal-checkbox {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  accent-color: rgba(60, 110, 200, 0.9);
+  cursor: pointer;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;

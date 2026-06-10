@@ -36,21 +36,34 @@ interface MomentPattern {
 }
 
 const PATTERNS: MomentPattern[] = [
-  { type: "framework", re: /\b(framework|model|process|methodology|step \d|phase \d|playbook)\b/i, importance: "high", baseConfidence: 0.78 },
-  { type: "tactic", re: /\b(tactic|strategy|approach|technique|hack|tip)\b/i, importance: "medium", baseConfidence: 0.72 },
-  { type: "warning", re: /\b(warning|caution|don'?t|avoid|mistake|risk|pitfall|trap)\b/i, importance: "high", baseConfidence: 0.8 },
-  { type: "claim", re: /\b(claim|believe|think|argue|the reason|because|therefore)\b/i, importance: "medium", baseConfidence: 0.68 },
-  { type: "number_stat", re: /\b(\d{1,3}(?:,\d{3})*(?:\.\d+)?%|\$\d|\d+x|\d+\s*(million|billion|percent))\b/i, importance: "medium", baseConfidence: 0.75 },
-  { type: "business_opportunity", re: /\b(opportunity|market|revenue|growth|moat|distribution|positioning)\b/i, importance: "high", baseConfidence: 0.74 },
-  { type: "sales_tactic", re: /\b(objection|qualify|discovery|roi|pain point|close|pipeline|demo)\b/i, importance: "high", baseConfidence: 0.76 },
-  { type: "implementation_idea", re: /\b(implement|build|automate|integrate|cursor|prompt|workflow|ship)\b/i, importance: "medium", baseConfidence: 0.7 },
-  { type: "confusing_concept", re: /\b(complex|confus|hard to|unclear|what is|how does)\b/i, importance: "medium", baseConfidence: 0.65 },
+  // --- High-signal structural patterns ---
+  { type: "framework", re: /\b(framework|model|process|methodology|step \d|phase \d|playbook|system|structure|formula)\b/i, importance: "high", baseConfidence: 0.78 },
+  { type: "tactic", re: /\b(tactic|strategy|approach|technique|hack|tip|way to|how to)\b/i, importance: "medium", baseConfidence: 0.72 },
+  { type: "warning", re: /\b(warning|caution|don'?t|avoid|mistake|risk|pitfall|trap|never|careful|watch out|problem is)\b/i, importance: "high", baseConfidence: 0.8 },
+  // --- Argument and reasoning patterns ---
+  { type: "claim", re: /\b(claim|believe|think|argue|the reason|because|therefore|which means|that's why|so the|point is|what this means)\b/i, importance: "medium", baseConfidence: 0.68 },
+  { type: "key_idea", re: /\b(key idea|takeaway|important|main point|remember|insight|the truth|the reality|what matters|the thing is|what this is|fundamentally|essentially|ultimately|the bottom line)\b/i, importance: "high", baseConfidence: 0.82 },
+  // --- Numbers and evidence ---
+  { type: "number_stat", re: /\b(\d{1,3}(?:,\d{3})*(?:\.\d+)?%|\$\d|\d+x|\d+\s*(million|billion|percent)|study (shows|found)|research (shows|suggests)|data (shows|suggests))\b/i, importance: "medium", baseConfidence: 0.75 },
+  // --- Business and market ---
+  { type: "business_opportunity", re: /\b(opportunity|market|revenue|growth|moat|distribution|positioning|competitive|advantage|scale|profitable|monetize)\b/i, importance: "high", baseConfidence: 0.74 },
+  { type: "sales_tactic", re: /\b(objection|qualify|discovery|roi|pain point|close|pipeline|demo|customer|buyer|prospect|conversion)\b/i, importance: "high", baseConfidence: 0.76 },
+  // --- Implementation ---
+  { type: "implementation_idea", re: /\b(implement|build|automate|integrate|cursor|prompt|workflow|ship|deploy|set up|configure|create|design)\b/i, importance: "medium", baseConfidence: 0.7 },
+  // --- Concepts and explanations ---
+  { type: "confusing_concept", re: /\b(complex|confus|hard to|unclear|what is|how does|the difference|distinguish|define|means that|refers to)\b/i, importance: "medium", baseConfidence: 0.65 },
+  // --- Quotes ---
   { type: "quote", re: /^["'""].{8,120}["'""]$/i, importance: "medium", baseConfidence: 0.7 },
-  { type: "action_step", re: /\b(action item|next step|you should|do this|start by|first,|then,)\b/i, importance: "high", baseConfidence: 0.77 },
-  { type: "prompt_idea", re: /\b(prompt|template|script|checklist|copy)\b/i, importance: "medium", baseConfidence: 0.71 },
-  { type: "key_idea", re: /\b(key idea|takeaway|important|main point|remember|insight)\b/i, importance: "high", baseConfidence: 0.82 },
-  { type: "example", re: /\b(for example|for instance|case study|story|when we)\b/i, importance: "medium", baseConfidence: 0.66 },
-  { type: "entity_mention", re: /\b(openai|cursor|github|notion|figma|hubspot|salesforce|stripe|vercel|anthropic)\b/i, importance: "low", baseConfidence: 0.6 },
+  // --- Action items ---
+  { type: "action_step", re: /\b(action item|next step|you should|do this|start by|first,|then,|make sure|need to|have to|want to|go ahead|let's|we need)\b/i, importance: "high", baseConfidence: 0.77 },
+  // --- Prompts and templates ---
+  { type: "prompt_idea", re: /\b(prompt|template|script|checklist|copy|formula|format)\b/i, importance: "medium", baseConfidence: 0.71 },
+  // --- Examples and stories ---
+  { type: "example", re: /\b(for example|for instance|case study|story|when we|like when|imagine|think about|consider|suppose)\b/i, importance: "medium", baseConfidence: 0.66 },
+  // --- Entity mentions ---
+  { type: "entity_mention", re: /\b(openai|cursor|github|notion|figma|hubspot|salesforce|stripe|vercel|anthropic|google|apple|microsoft|amazon|meta|netflix)\b/i, importance: "low", baseConfidence: 0.6 },
+  // --- Catch-all: general informational statements ("X is Y", "X means Y", "X leads to Y") ---
+  { type: "key_idea", re: /\b(is the (key|secret|reason|way|answer|solution|problem|difference|most important)|leads to|results in|depends on|comes down to|all about)\b/i, importance: "medium", baseConfidence: 0.64 },
 ];
 
 const TYPE_RANK: Record<ListenMomentType, number> = {

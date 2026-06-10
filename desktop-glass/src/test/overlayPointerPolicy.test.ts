@@ -39,12 +39,22 @@ test("feed chat stays click-through until hovered", () => {
   );
 });
 
-test("modal notices keep overlay interactive", () => {
+test("passive notices stay click-through like feed cards", () => {
   assert.equal(
     overlayRequiresAlwaysInteractive({
       updateOnly: false,
       copilotPrompt: false,
       passiveNoticeOnly: true,
+    }),
+    false,
+  );
+  assert.equal(
+    overlayShouldEnableClickThrough({
+      overlayContentVisible: false,
+      feedNotificationActive: false,
+      noticeNotificationActive: true,
+      interactiveCount: 0,
+      alwaysInteractive: false,
     }),
     true,
   );
@@ -53,4 +63,28 @@ test("modal notices keep overlay interactive", () => {
 test("nextOverlayInteractiveCount clamps at zero", () => {
   assert.equal(nextOverlayInteractiveCount(0, -1), 0);
   assert.equal(nextOverlayInteractiveCount(1, -1), 0);
+});
+
+test("live translate keeps overlay click-through until captions are hovered", () => {
+  assert.equal(
+    overlayShouldEnableClickThrough({
+      overlayContentVisible: true,
+      feedNotificationActive: true,
+      noticeNotificationActive: true,
+      interactiveCount: 0,
+      alwaysInteractive: false,
+      translateFocusActive: true,
+    }),
+    true,
+  );
+  assert.equal(
+    overlayShouldEnableClickThrough({
+      overlayContentVisible: true,
+      feedNotificationActive: false,
+      interactiveCount: 1,
+      alwaysInteractive: false,
+      translateFocusActive: true,
+    }),
+    false,
+  );
 });

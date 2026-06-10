@@ -1,7 +1,6 @@
 import { send } from "../useGlassState.ts";
 import {
   LIVE_TRANSLATE_LANGUAGE_CODES,
-  liveTranslateOverlayPairLabel,
   type LiveTranslateTargetLanguage,
 } from "../../shared/liveTranslateTypes.ts";
 import { formatCaptionForOverlay, shortLanguageCode } from "../../shared/liveTranslateCaptions.ts";
@@ -20,21 +19,17 @@ export function LiveTranslateCaptionsOverlay({
   if (!runtime.active || !runtime.config.enabled || !runtime.captionsVisible) return null;
   if (runtime.config.captionPosition === "panel") return null;
 
-  const line = runtime.captions.current;
-  const formatted = formatCaptionForOverlay(line, runtime.config.displayMode, {
+  const current = runtime.captions.current;
+
+  const langOpts = {
     originalCode: shortLanguageCode(runtime.detectedSourceLanguage, "Original"),
     translatedCode:
       LIVE_TRANSLATE_LANGUAGE_CODES[runtime.config.targetLanguage as LiveTranslateTargetLanguage] ??
       "Translation",
-  });
+  };
 
+  const formatted = formatCaptionForOverlay(current, runtime.config.displayMode, langOpts);
   if (!formatted) return null;
-
-  const pairLabel = liveTranslateOverlayPairLabel(
-    runtime.config.sourceLanguage,
-    runtime.config.targetLanguage,
-    runtime.detectedSourceLanguage,
-  );
 
   return (
     <div
@@ -48,10 +43,6 @@ export function LiveTranslateCaptionsOverlay({
           formatted.interim ? " live-translate-captions__inner--interim" : ""
         }`}
       >
-        <div className="live-translate-captions__meta" data-testid="glass-translate-language-pair">
-          {pairLabel}
-          {runtime.languageUncertain ? " · detecting…" : ""}
-        </div>
         {formatted.secondary && runtime.config.displayMode === "original_and_translation" ? (
           <p
             className={`live-translate-captions__original${

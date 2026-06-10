@@ -1,26 +1,14 @@
 /**
- * Load repo-root `.env` into Glass main process (never renderer).
- * Does not override variables already set in the shell.
+ * Load `.env` files into Glass main process (never renderer).
+ * Loads desktop-glass/.env first (highest priority), then repo-root .env as fallback.
+ * Does not override variables already set in the shell or by an earlier file.
  */
 
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-function resolveEnvFile(): string | null {
-  const candidates = [
-    path.resolve(process.cwd(), "../.env"),
-    path.resolve(process.cwd(), ".env"),
-  ];
-  for (const candidate of candidates) {
-    if (existsSync(candidate)) return candidate;
-  }
-  return null;
-}
-
-export function loadGlassEnv(): void {
-  const envPath = resolveEnvFile();
-  if (!envPath) return;
-
+function loadEnvFile(envPath: string): void {
+  if (!existsSync(envPath)) return;
   const content = readFileSync(envPath, "utf8");
   for (const line of content.split("\n")) {
     const trimmed = line.trim();
@@ -36,6 +24,15 @@ export function loadGlassEnv(): void {
     ) {
       value = value.slice(1, -1);
     }
+    // Skip empty placeholders so repo-root .env can supply the value.
+    if (!value) continue;
     process.env[key] = value;
   }
+}
+
+export function loadGlassEnv(): void {
+  // Load in priority order: desktop-glass/.env first, then repo root .env.
+  // Earlier files win (shell env always wins over both).
+  loadEnvFile(path.resolve(process.cwd(), ".env"));
+  loadEnvFile(path.resolve(process.cwd(), "../.env"));
 }

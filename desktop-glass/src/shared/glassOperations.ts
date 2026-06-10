@@ -30,7 +30,7 @@ export const CAPTURE_PERMISSION_MESSAGE =
 export const CAPTURE_SUCCESS_MESSAGE = "Screen captured.";
 export const CAPTURE_SESSION_SUCCESS_MESSAGE = "Screen captured and added to session timeline.";
 export const CAPTURE_NO_SESSION_HINT =
-  "Screen captured locally. Start a session to keep captures in the timeline, or use Send to IIVO.";
+  "Screen captured — start a session to save it, or Send to IIVO.";
 
 export const STOPPED_MESSAGE = "Stopped — listening and capture are off.";
 export const LISTENING_STOPPED_MESSAGE = "Listening stopped.";

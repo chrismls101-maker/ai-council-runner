@@ -1,7 +1,6 @@
+import type { JSX } from "react";
 import GlassDocLayout from "../components/glass-landing/GlassDocLayout";
-
-const GLASS_DMG_DOWNLOAD_URL =
-  "https://github.com/chrismls101-maker/ai-council-runner/releases/download/v0.1.8/IIVO.Glass-0.1.8-arm64.dmg";
+import { GLASS_DMG_DOWNLOAD_URL } from "../utils/glassRelease";
 
 export default function GlassInstallPage(): JSX.Element {
   return (
@@ -39,7 +38,7 @@ export default function GlassInstallPage(): JSX.Element {
           </li>
         </ol>
         <p>
-          The file is named something like <code>IIVO Glass-0.1.8-arm64.dmg</code>. It will land in
+          The file is named something like <code>IIVO Glass-0.1.9-arm64.dmg</code>. It will land in
           your <strong>Downloads</strong> folder.{" "}
           <a href={GLASS_DMG_DOWNLOAD_URL}>Direct download link</a>
         </p>

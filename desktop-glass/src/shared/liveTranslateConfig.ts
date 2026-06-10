@@ -10,6 +10,9 @@ import type {
   LiveTranslateWorkflowMode,
 } from "./liveTranslateTypes.ts";
 
+/** Shorter STT segments for system-audio Live Translate (BlackHole / loopback). */
+export const LIVE_TRANSLATE_CHUNK_MS = 1_500;
+
 export const DEFAULT_GLOSSARY_TERMS: LiveTranslateGlossaryTerm[] = [
   { source: "IIVO", preserve: true },
   { source: "IIVO Glass", preserve: true },

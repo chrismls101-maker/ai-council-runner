@@ -65,6 +65,8 @@ export interface GlassSttState {
   lastError?: string;
   transcribing?: boolean;
   listeningElapsedMs?: number;
+  /** True when a Deepgram API key is configured — renderer uses streaming path for translate. */
+  deepgramEnabled?: boolean;
 }
 
 export const STT_MISSING_KEY_MESSAGE =
@@ -132,6 +134,11 @@ const CONFIG_MISSING_PATTERNS = [
   /disabled/i,
   /IIVO_GLASS_OPENAI_API_KEY/i,
 ];
+
+/** True when STT failed only because the audio chunk was silent or too small. */
+export function isSttNoSignalFailure(detail: string | undefined): boolean {
+  return classifySttFailure(detail) === "no_signal";
+}
 
 /** Classify a raw STT error string into a coarse failure kind. */
 export function classifySttFailure(detail: string | undefined): SttFailureKind {

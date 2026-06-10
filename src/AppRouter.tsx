@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type JSX } from "react";
 import App from "./App";
 import LandingGate from "./components/glass-landing/LandingGate";
 import GlassInstallPage from "./pages/GlassInstallPage";

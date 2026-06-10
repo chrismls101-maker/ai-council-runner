@@ -1,3 +1,4 @@
+import type { JSX } from "react";
 import GlassDocLayout from "../components/glass-landing/GlassDocLayout";
 
 export default function GlassTermsPage(): JSX.Element {

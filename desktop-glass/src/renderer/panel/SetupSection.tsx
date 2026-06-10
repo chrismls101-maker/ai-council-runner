@@ -9,6 +9,10 @@ function severityClass(severity: GlassCapabilityRow["severity"]): string {
 }
 
 function sendSetupAction(action: GlassSetupActionType): void {
+  if (action === "run-setup-check") {
+    send({ type: "run-setup-check", forceCaptureProbe: true });
+    return;
+  }
   send({ type: action } as GlassCommand);
 }
 
