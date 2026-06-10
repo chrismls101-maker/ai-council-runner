@@ -4092,6 +4092,22 @@ async function handleCommand(
         push();
       }
       return;
+    case "e2e-open-onboarding":
+      if (process.env.IIVO_GLASS_E2E === "1") {
+        state.onboardingOpen = true;
+        push();
+      }
+      return;
+    case "update-glass-profile": {
+      const profile = normalizeGlassUserProfile(command.profile);
+      if (profile) {
+        state.glassUserProfile = profile;
+        const next = await completeGlassOnboardingStore(profile);
+        state.glassUserProfile = next.profile;
+        push();
+      }
+      return;
+    }
     default:
       if (await handleCopilotCommand(command)) return;
       await handleSessionCommand(command);

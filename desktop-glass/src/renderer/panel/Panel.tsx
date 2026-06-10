@@ -557,6 +557,101 @@ function Transcript({ transcript }: { transcript: string }): JSX.Element {
   );
 }
 
+
+// ---------- Profile editor ----------
+function ProfileEditor({ state }: { state: GlassState }): JSX.Element {
+  const profile = state.glassUserProfile;
+  const [draft, setDraft] = useState({
+    name: profile?.name ?? "",
+    usualWork: profile?.usualWork ?? "",
+    currentFocus: profile?.currentFocus ?? "",
+  });
+  const [saved, setSaved] = useState(false);
+
+  // Sync from state when profile changes externally
+  useEffect(() => {
+    setDraft({
+      name: profile?.name ?? "",
+      usualWork: profile?.usualWork ?? "",
+      currentFocus: profile?.currentFocus ?? "",
+    });
+  }, [profile?.name, profile?.usualWork, profile?.currentFocus]);
+
+  const handleSave = (): void => {
+    send({ type: "update-glass-profile", profile: { ...draft, updatedAt: new Date().toISOString() } });
+    setSaved(true);
+    window.setTimeout(() => setSaved(false), 2500);
+  };
+
+  const dirty =
+    draft.name !== (profile?.name ?? "") ||
+    draft.usualWork !== (profile?.usualWork ?? "") ||
+    draft.currentFocus !== (profile?.currentFocus ?? "");
+
+  return (
+    <section className="panel-profile-editor" data-testid="glass-panel-profile-section">
+      <p className="section-title">Your profile</p>
+      <p className="hint">
+        IIVO uses these to calibrate responses to your work and context.
+      </p>
+      <div className="panel-profile-fields">
+        <label className="panel-profile-field">
+          <span className="panel-profile-label">Name</span>
+          <input
+            type="text"
+            className="panel-profile-input"
+            value={draft.name}
+            onChange={(e) => { setDraft((d) => ({ ...d, name: e.target.value })); setSaved(false); }}
+            placeholder="Your name"
+            autoComplete="off"
+            data-testid="glass-panel-profile-name"
+          />
+        </label>
+        <label className="panel-profile-field">
+          <span className="panel-profile-label">Usual work</span>
+          <input
+            type="text"
+            className="panel-profile-input"
+            value={draft.usualWork}
+            onChange={(e) => { setDraft((d) => ({ ...d, usualWork: e.target.value })); setSaved(false); }}
+            placeholder="e.g. product strategy, engineering, sales"
+            autoComplete="off"
+            data-testid="glass-panel-profile-work"
+          />
+        </label>
+        <label className="panel-profile-field">
+          <span className="panel-profile-label">Current focus</span>
+          <input
+            type="text"
+            className="panel-profile-input"
+            value={draft.currentFocus}
+            onChange={(e) => { setDraft((d) => ({ ...d, currentFocus: e.target.value })); setSaved(false); }}
+            placeholder="What are you working on right now?"
+            autoComplete="off"
+            data-testid="glass-panel-profile-focus"
+          />
+        </label>
+      </div>
+      <div className="panel-profile-actions">
+        <button
+          type="button"
+          className="gbtn gbtn--primary"
+          onClick={handleSave}
+          disabled={!dirty && !saved}
+          data-testid="glass-panel-profile-save"
+        >
+          Save profile
+        </button>
+        {saved ? (
+          <span className="panel-profile-saved hint" data-testid="glass-panel-profile-saved">
+            ✓ Saved
+          </span>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 // ---------- Status / health grid (primary panel surface) ----------
 function StatusGrid({ state }: { state: GlassState }): JSX.Element {
   const sessionLive =
@@ -585,6 +680,7 @@ function StatusGrid({ state }: { state: GlassState }): JSX.Element {
   return (
     <div className="status-grid" data-testid="glass-panel-status-grid">
       <SetupSection />
+      <ProfileEditor state={state} />
       <p className="section-title">System status</p>
       {state.lastAskResponse ? (
         <div className="summary-box panel__last-ask">

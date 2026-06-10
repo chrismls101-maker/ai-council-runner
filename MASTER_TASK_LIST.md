@@ -1,6 +1,6 @@
 # IIVO Master Task List
 **All three builds — smallest to biggest. Tick off as shipped.**
-Last updated: 2026-06-10
+Last updated: 2026-06-10 (Tasks #59 #60 #61 completed — Glass onboarding, overlay interaction, profile editor E2E)
 
 Legend: `[ ]` todo · `[x]` done · `[-]` deferred (P3)
 
@@ -20,7 +20,7 @@ Legend: `[ ]` todo · `[x]` done · `[-]` deferred (P3)
 - [x] Audit `manifest.json` — host_permissions correct for production; removed unused `downloads` permission
 - [x] Add `background.js` unit tests — `lib/backgroundLogic.js` + `tests/background.test.js` (9 tests)
 - [x] Add `contentScript.js` unit tests — `lib/contentScriptLogic.js` + `tests/contentScript.test.js` (25 tests)
-- [ ] Review extension version (`1.1.8`) — bump to match Glass release cadence
+- [x] Review extension version (`1.1.8`) — bumped to `1.1.16` to match Glass patch cadence
 
 ### Glass
 - [x] Centralize dock button label strings into `dockLabels.ts`
@@ -40,9 +40,9 @@ Legend: `[ ]` todo · `[x]` done · `[-]` deferred (P3)
 - [x] E2E test: memory vault — `memory-vault.spec.ts` (empty state, create, delete); added testids to `MemoryVault.tsx` + `SaveMemoryModal.tsx`
 
 ### Browser Extension
-- [ ] E2E test: popup opens on a page, captures context, send button active
-- [ ] E2E test: "Send to IIVO" opens iivo.ai with context payload attached
-- [ ] Test: popup shows correct state when Glass is not running (graceful degradation)
+- [x] E2E test: popup opens on a page, captures context, send button active (`extension-popup.spec.ts`)
+- [x] E2E test: "Send to IIVO" opens iivo.ai with context payload attached (`extension-popup.spec.ts`)
+- [x] Test: popup shows correct state when Glass is not running (graceful degradation) (`extension-popup.spec.ts`)
 
 ### Glass
 - [x] `macAudioOutput.ts` — SwitchAudioSource wrapper (read + set output device)
@@ -50,9 +50,9 @@ Legend: `[ ]` todo · `[x]` done · `[-]` deferred (P3)
 - [x] Audio restore UI in `AudioTab.tsx` (save / clear / show saved device)
 - [x] Update check E2E — stub newer semver → update overlay appears (§16)
 - [x] Passive context E2E — N asks accumulate, `userContext` payload changes (§18)
-- [ ] Glass onboarding E2E — three-question flow blocks chrome, saves profile, chrome unblocks after complete
-- [ ] Overlay interaction regression E2E — pin / copy / remember / scroll / command-bar right-click
-- [ ] In-app profile editor in Glass panel — edit name / work / focus post-onboarding
+- [x] Glass onboarding E2E — three-question flow blocks chrome, saves profile, chrome unblocks after complete
+- [x] Overlay interaction regression E2E — pin / copy / remember / scroll / command-bar right-click
+- [x] In-app profile editor in Glass panel — edit name / work / focus post-onboarding
 
 ---
 
@@ -113,9 +113,9 @@ Legend: `[ ]` todo · `[x]` done · `[-]` deferred (P3)
 
 | Category | Total | Done | Remaining |
 |----------|-------|------|-----------|
-| Tiny | 13 | 9 | 4 |
-| Small | 17 | 9 | 8 |
+| Tiny | 13 | 10 | 3 |
+| Small | 17 | 15 | 2 |
 | Medium | 16 | 0 | 16 |
 | Large | 6 | 1 | 5 |
 | Deferred | 8 | — | 8 |
-| **Total** | **60** | **19** | **33** |
+| **Total** | **60** | **25** | **27** |

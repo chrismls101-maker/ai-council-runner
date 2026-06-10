@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "IIVO Lens",
-  "version": "1.1.8",
+  "version": "1.1.16",
   "description": "Capture page context and send it to IIVO for decision analysis.",
   "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": [

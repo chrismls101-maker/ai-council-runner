@@ -66,6 +66,8 @@ export const IPC = {
   e2eSimulateSystemAudioEnumFail: "glass:e2e-simulate-system-audio-enum-fail",
   e2eSetCaptureProbes: "glass:e2e-set-capture-probes",
   e2eResetSetupState: "glass:e2e-reset-setup-state",
+  e2eOpenOnboarding: "glass:e2e-open-onboarding",
+  updateGlassProfile: "glass:update-glass-profile",
   saveGlassMemory: "glass:save-glass-memory",
   lensCapture: "glass:lens-capture",
   lensScreenshot: "glass:lens-screenshot",
@@ -189,6 +191,8 @@ export type GlassCommand =
       systemAudioDetail?: string;
     }
   | { type: "e2e-reset-setup-state" }
+  | { type: "e2e-open-onboarding" }
+  | { type: "update-glass-profile"; profile: import("./glassUserProfile.ts").GlassUserProfile }
   | { type: "complete-glass-onboarding"; profile?: import("./glassUserProfile.ts").GlassUserProfile }
   | { type: "skip-glass-onboarding" }
   | { type: "session-start"; title?: string }
