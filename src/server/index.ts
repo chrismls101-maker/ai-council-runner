@@ -217,12 +217,7 @@ app.use(
     : cors(),
 );
 
-// ─── Auth (better-auth) — must come before express.json() global middleware ───
-// toNodeHandler adapts better-auth's fetch-based handler to Node.js req/res.
-// Mount before express.json() so better-auth handles its own body parsing.
-app.all(/^\/api\/auth/, toNodeHandler(auth));
-
-// Glass connect token — issue (user must be authenticated via better-auth session cookie)
+// ─── Glass connect (before better-auth catch-all — same /api/auth prefix) ───
 app.post("/api/auth/glass-connect/issue", express.json(), async (req, res) => {
   try {
     // Build a Headers object from Express req.headers for better-auth
@@ -248,7 +243,6 @@ app.post("/api/auth/glass-connect/issue", express.json(), async (req, res) => {
   }
 });
 
-// Glass connect token — verify (called by Glass app)
 app.get("/api/auth/glass-connect/verify/:token", (req, res) => {
   const entry = verifyGlassConnectToken(req.params.token ?? "");
   if (!entry) {
@@ -262,6 +256,12 @@ app.get("/api/auth/glass-connect/verify/:token", (req, res) => {
     name: entry.name,
   });
 });
+
+// ─── Auth (better-auth) — must come before express.json() global middleware ───
+// toNodeHandler adapts better-auth's fetch-based handler to Node.js req/res.
+// Mount before express.json() so better-auth handles its own body parsing.
+// glass-connect routes above must register first (same /api/auth prefix).
+app.all(/^\/api\/auth/, toNodeHandler(auth));
 
 /** Visual ask may include optimized JPEG data URLs — parse before the global 2mb limit. */
 app.post("/api/glass/ask", glassApiAuthMiddleware, glassLimiter, express.json({ limit: "6mb" }), async (req, res) => {
