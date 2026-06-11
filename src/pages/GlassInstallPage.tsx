@@ -1,6 +1,10 @@
 import type { JSX } from "react";
 import GlassDocLayout from "../components/glass-landing/GlassDocLayout";
-import { GLASS_DMG_DOWNLOAD_URL, GLASS_LATEST_VERSION } from "../utils/glassRelease";
+import {
+  GLASS_DMG_ARM64_DOWNLOAD_URL,
+  GLASS_DMG_X64_DOWNLOAD_URL,
+  GLASS_LATEST_VERSION,
+} from "../utils/glassRelease";
 
 export default function GlassInstallPage(): JSX.Element {
   return (
@@ -17,8 +21,8 @@ export default function GlassInstallPage(): JSX.Element {
       <section className="glass-landing__doc-section">
         <h2>What you need</h2>
         <p>
-          A Mac with <strong>Apple Silicon</strong> (M1, M2, M3, or M4). Intel Macs are not
-          supported in this beta.
+          A Mac running macOS — <strong>Apple Silicon</strong> (M1, M2, M3, M4) or{" "}
+          <strong>Intel</strong>.
         </p>
         <p>
           Production server: <a href="https://iivo.ai">iivo.ai</a> — the app is already set up to
@@ -34,13 +38,23 @@ export default function GlassInstallPage(): JSX.Element {
           </li>
           <li>If you see a password screen, enter the preview password your invite included.</li>
           <li>
-            Click <strong>Download for Mac — Apple Silicon</strong>.
+            Click <strong>Download for Mac — Apple Silicon (2020 and later)</strong> or{" "}
+            <strong>Download for Mac — Intel (2019 and earlier)</strong> depending on your Mac.
           </li>
         </ol>
         <p>
-          The file is named something like <code>IIVO.Glass-{GLASS_LATEST_VERSION}-arm64.dmg</code>. It will land in
-          your <strong>Downloads</strong> folder.{" "}
-          <a href={GLASS_DMG_DOWNLOAD_URL}>Direct download link</a>
+          Not sure which you have? Apple menu → About This Mac. If it says "Apple M…" you have
+          Apple Silicon. If it says "Intel Core" you have Intel.
+        </p>
+        <p>
+          The file is named{" "}
+          <code>IIVO-Glass-{GLASS_LATEST_VERSION}-arm64.dmg</code> (Apple Silicon) or{" "}
+          <code>IIVO-Glass-{GLASS_LATEST_VERSION}-x64.dmg</code> (Intel). It will land in your{" "}
+          <strong>Downloads</strong> folder.{" "}
+          Direct links:{" "}
+          <a href={GLASS_DMG_ARM64_DOWNLOAD_URL}>Apple Silicon</a>
+          {" · "}
+          <a href={GLASS_DMG_X64_DOWNLOAD_URL}>Intel</a>
         </p>
       </section>
 

@@ -34,6 +34,7 @@ import { ListeningControls, OperationDiagnosticsFooter } from "../components/Lis
 import { SetupSection } from "./SetupSection.tsx";
 import { CopilotPanel } from "./CopilotPanel.tsx";
 import { AudioTab } from "./AudioTab.tsx";
+import AccountTab from "./AccountTab.tsx";
 
 const TABS: { id: PanelTab; label: string }[] = [
   { id: "setup", label: "Setup" },
@@ -46,6 +47,7 @@ const TABS: { id: PanelTab; label: string }[] = [
   { id: "hypotheses", label: "Hypotheses" },
   { id: "actions", label: "Actions" },
   { id: "diagnostics", label: "Diagnostics" },
+  { id: "account", label: "Account" },
 ];
 
 async function copyText(text: string): Promise<void> {
@@ -1008,6 +1010,12 @@ export function Panel(): JSX.Element {
           {tab === "insights" ? (
             <div className="panel__body">
               <InsightsView session={state.session} />
+            </div>
+          ) : null}
+
+          {tab === "account" ? (
+            <div className="panel__body">
+              <AccountTab state={state} />
             </div>
           ) : null}
 

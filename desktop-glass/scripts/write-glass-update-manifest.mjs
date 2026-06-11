@@ -34,10 +34,20 @@ function publicDownloadUrl(version, filename) {
   return `${base}/api/glass/update/download/${encodeURIComponent(filename)}`;
 }
 
+// electron-builder names: "IIVO Glass-{v}-{arch}.dmg"
+// release script copies to hyphenated: "IIVO-Glass-{v}-{arch}.dmg"
 const arm64Dmg = dmgPath(`IIVO Glass-${version}-arm64.dmg`);
+const x64Dmg = dmgPath(`IIVO Glass-${version}-x64.dmg`);
 const universalDmg = dmgPath(`IIVO Glass-${version}-universal.dmg`);
+
+// Hyphenated copies (what GitHub release assets are named)
+const hyphenArm64Dmg = dmgPath(`IIVO-Glass-${version}-arm64.dmg`);
+const hyphenX64Dmg = dmgPath(`IIVO-Glass-${version}-x64.dmg`);
+
 const arm64DmgName = `IIVO-Glass-${version}-arm64.dmg`;
+const x64DmgName = `IIVO-Glass-${version}-x64.dmg`;
 const publicArm64Dmg = publicDownloadUrl(version, arm64DmgName);
+const publicX64Dmg = publicDownloadUrl(version, x64DmgName);
 
 const RELEASE_NOTES = {
   "0.1.11": [
@@ -79,8 +89,10 @@ const manifest = {
   releasedAt: new Date().toISOString(),
   title: "NEW SYSTEM UPDATE",
   notes: releaseNotesFor(version),
-  downloadUrl: publicArm64Dmg || fileUrlFor(arm64Dmg) || fileUrlFor(universalDmg),
-  darwinArm64Dmg: publicArm64Dmg || arm64Dmg,
+  // arm64 is the default download URL (most users are on Apple Silicon)
+  downloadUrl: publicArm64Dmg || fileUrlFor(hyphenArm64Dmg) || fileUrlFor(arm64Dmg) || fileUrlFor(universalDmg),
+  darwinArm64Dmg: publicArm64Dmg || hyphenArm64Dmg || arm64Dmg,
+  darwinX64Dmg: publicX64Dmg || hyphenX64Dmg || x64Dmg,
   darwinUniversalDmg: universalDmg,
 };
 
@@ -99,10 +111,17 @@ console.log(JSON.stringify(manifest, null, 2));
 
 const arm64Zip = dmgPath(`IIVO-Glass-${version}-arm64-mac.zip`)
   || dmgPath(`IIVO Glass-${version}-arm64-mac.zip`);
+const x64Zip = dmgPath(`IIVO-Glass-${version}-x64-mac.zip`)
+  || dmgPath(`IIVO Glass-${version}-x64-mac.zip`);
 const latestMacYml = path.join(releaseDir, "latest-mac.yml");
-if (arm64Zip || fs.existsSync(latestMacYml)) {
+const latestMacArm64Yml = path.join(releaseDir, "latest-mac-arm64.yml");
+const latestMacX64Yml = path.join(releaseDir, "latest-mac-x64.yml");
+if (arm64Zip || x64Zip || fs.existsSync(latestMacYml)) {
   console.log("\n[glass:release] Squirrel auto-update assets (upload to GitHub release v" + version + "):");
-  if (arm64Zip) console.log(`  - ${arm64Zip}`);
-  if (fs.existsSync(latestMacYml)) console.log(`  - ${latestMacYml}`);
+  if (arm64Zip) console.log(`  - ${arm64Zip}  (arm64)`);
+  if (x64Zip) console.log(`  - ${x64Zip}  (x64)`);
+  if (fs.existsSync(latestMacYml)) console.log(`  - ${latestMacYml}  (fallback/arm64 backward compat)`);
+  if (fs.existsSync(latestMacArm64Yml)) console.log(`  - ${latestMacArm64Yml}`);
+  if (fs.existsSync(latestMacX64Yml)) console.log(`  - ${latestMacX64Yml}`);
   console.log("  Packaged Glass checks GitHub Releases via electron-updater (no DMG reinstall).");
 }

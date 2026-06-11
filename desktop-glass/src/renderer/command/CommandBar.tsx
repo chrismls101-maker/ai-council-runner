@@ -82,7 +82,7 @@ export function CommandBar(): JSX.Element {
   const buildingContext = state.copilot?.listenBuildingContext === true;
   const micListening = listening && tx.isMicrophoneCapture;
   const systemListening = listening && tx.isSystemAudioCapture;
-  const askPending = state.askStatus === "pending";
+  const askPending = state.askStatus === "pending" || state.askStatus === "streaming";
   const screenLooking = state.screenContextStatus?.kind === "looking";
   const micDenied = shouldShowMicPermissionDenied({
     micPermission: state.micPermission,

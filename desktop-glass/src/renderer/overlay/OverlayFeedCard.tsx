@@ -54,6 +54,11 @@ export function FeedCard({
 
   if (showMergedChat) {
     const isPending = isThinking || isLooking;
+    // During streaming, show the growing partial answer in place of the
+    // generic "IIVO is thinking…" placeholder so tokens appear live.
+    const streamingBody =
+      isThinking && state.partialAnswer ? state.partialAnswer : null;
+    const chatDisplayBody = streamingBody ?? displayBody;
     return (
       <article
         data-testid={
@@ -77,9 +82,9 @@ export function FeedCard({
           <p className="glass-chat-reply__prompt glass-selectable-text">{prompt}</p>
           <div className="glass-chat-reply__scroll">
             <p
-              className={`glass-chat-reply__answer glass-selectable-text${isPending ? " glass-chat-reply__answer--pending" : ""}${isError ? " glass-chat-reply__answer--error" : ""}`}
+              className={`glass-chat-reply__answer glass-selectable-text${isPending && !streamingBody ? " glass-chat-reply__answer--pending" : ""}${isError ? " glass-chat-reply__answer--error" : ""}`}
             >
-              {displayBody}
+              {chatDisplayBody}
             </p>
           </div>
           {!isPending ? (

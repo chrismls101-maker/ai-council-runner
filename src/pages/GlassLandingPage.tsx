@@ -8,7 +8,7 @@ import {
 } from "../components/glass-landing/index.ts";
 import GlassLandingFooter from "../components/glass-landing/GlassLandingFooter";
 import "../components/glass-landing/glass-landing.css";
-import { GLASS_DMG_DOWNLOAD_URL } from "../utils/glassRelease";
+import { GLASS_DMG_ARM64_DOWNLOAD_URL, GLASS_DMG_X64_DOWNLOAD_URL } from "../utils/glassRelease";
 
 const FEATURES = [
   <>It listens to <span className="glass-landing__your">YOUR</span> meetings and captures what matters.</>,
@@ -52,8 +52,15 @@ function DownloadCta({
 }) {
   return (
     <div className="glass-landing__download-stack">
-      <GlassButton href={GLASS_DMG_DOWNLOAD_URL} data-testid={downloadTestId}>
-        Download for Mac — Apple Silicon
+      <GlassButton href={GLASS_DMG_ARM64_DOWNLOAD_URL} data-testid={downloadTestId}>
+        Download for Mac — Apple Silicon (2020 and later)
+      </GlassButton>
+      <GlassButton
+        href={GLASS_DMG_X64_DOWNLOAD_URL}
+        data-testid={downloadTestId ? `${downloadTestId}-x64` : undefined}
+        className="glass-button--secondary"
+      >
+        Download for Mac — Intel (2019 and earlier)
       </GlassButton>
       <a
         href="/install"
@@ -153,7 +160,7 @@ export default function GlassLandingPage() {
         <div className="glass-landing__hero-cta">
           <DownloadCta />
         </div>
-        <p className="glass-landing__final-note">Mac Apple Silicon · Free Beta · No account required</p>
+        <p className="glass-landing__final-note">macOS · Apple Silicon &amp; Intel · Free Beta · No account required</p>
       </motion.section>
 
       <GlassLandingFooter />

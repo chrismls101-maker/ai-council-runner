@@ -80,6 +80,7 @@ const fallbackState: GlassState = {
   onboardingOpen: false,
   glassUserProfile: null,
   commandBarOverlayClearancePx: undefined,
+  iivoAccountLink: null,
 };
 
 export function useGlassState(): GlassState {

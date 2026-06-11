@@ -23,7 +23,8 @@ export type PanelTab =
   | "context"
   | "hypotheses"
   | "actions"
-  | "diagnostics";
+  | "diagnostics"
+  | "account";
 
 /** Mirrors the server ContextItemType union (src/server/contextBridge/types.ts). */
 export type ServerContextItemType =

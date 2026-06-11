@@ -17,8 +17,8 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
 
-test("presets exist for listen, meetings, work, fix plus translate quick tool", () => {
-  assert.deepEqual(GLASS_MODE_ORDER, ["listen", "meetings", "work", "fix"]);
+test("presets exist for listen, meetings, work, wingman plus translate quick tool", () => {
+  assert.deepEqual(GLASS_MODE_ORDER, ["listen", "meetings", "work", "wingman"]);
   assert.ok(GLASS_MODE_PRESETS.translate, "translate preset retained for setup flow");
   assert.deepEqual(GLASS_QUICK_TOOLS, ["voice", "translate"]);
   for (const id of GLASS_MODE_ORDER) {

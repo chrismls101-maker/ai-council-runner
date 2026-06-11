@@ -256,7 +256,10 @@ export type GlassCommand =
   | { type: "translate-stop" }
   | { type: "translate-set-captions-visible"; visible: boolean }
   | { type: "translate-enable-microphone"; enabled: boolean }
-  | { type: "open-translate-setup" };
+  | { type: "open-translate-setup" }
+  | { type: "install-system-audio" }
+  | { type: "connect-iivo-account"; connectToken: string }
+  | { type: "disconnect-iivo-account" };
 
 export interface GlassState {
   privacy: PrivacyState;
@@ -286,6 +289,8 @@ export interface GlassState {
   /** Distance from overlay work-area bottom to top of command bar stack (for response card clearance). */
   commandBarOverlayClearancePx?: number;
   askStatus: GlassAskStatus;
+  /** Accumulated partial answer while streaming (cleared when done/error). */
+  partialAnswer?: string;
   lastAskResponse?: GlassLastAskResponse;
   latestScreenshot?: GlassLatestScreenshotState | null;
   screenContextStatus?: GlassScreenContextStatus;
@@ -321,6 +326,12 @@ export interface GlassState {
   /** First-run calibration modal blocks chrome until complete or skipped. */
   onboardingOpen: boolean;
   glassUserProfile: import("./glassUserProfile.ts").GlassUserProfile | null;
+  /** Progress of the one-click BlackHole + Multi-Output Device install flow. */
+  blackHoleInstallStatus?: "idle" | "downloading" | "installing" | "configuring" | "done" | "error";
+  /** Human-readable progress label for the install flow. */
+  blackHoleInstallProgress?: string;
+  /** Linked IIVO account (set after user pastes a connect token). */
+  iivoAccountLink: import("./iivoAccountLink.ts").IivoAccountLink | null;
 }
 
 export interface SttProcessChunkRequest {

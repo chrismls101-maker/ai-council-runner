@@ -34,6 +34,15 @@ export function SystemAudioConfigure({ className }: { className?: string }): JSX
   const [liveTesting, setLiveTesting] = useState(false);
   const [connecting, setConnecting] = useState(false);
 
+  const installStatus = state.blackHoleInstallStatus ?? "idle";
+  const installProgress = state.blackHoleInstallProgress ?? "";
+  const isInstalling =
+    installStatus === "downloading" ||
+    installStatus === "installing" ||
+    installStatus === "configuring";
+  const installDone = installStatus === "done";
+  const installError = installStatus === "error";
+
   const virtualDevices = state.virtualAudioDevices ?? [];
   const connected = isSystemAudioConnected(state.systemAudioStatus);
   const statusLabel = resolveSystemAudioRowStatus({
@@ -155,6 +164,36 @@ export function SystemAudioConfigure({ className }: { className?: string }): JSX
         >
           {expanded ? "Hide options" : "More options"}
         </button>
+      </div>
+
+      {/* One-click BlackHole installer */}
+      <div className="system-audio-config__install-row" data-testid="glass-system-audio-install-row">
+        <button
+          type="button"
+          className={`gbtn gbtn--primary system-audio-config__install-btn${installDone ? " system-audio-config__install-btn--done" : ""}`}
+          data-testid="glass-install-system-audio"
+          disabled={isInstalling || installDone}
+          onClick={() => { send({ type: "install-system-audio" }); }}
+        >
+          {isInstalling
+            ? "Setting up…"
+            : installDone
+              ? "✓ System Audio Ready"
+              : "Set up System Audio"}
+        </button>
+        {isInstalling || installDone || installError ? (
+          <p
+            className={`hint system-audio-config__install-progress${installError ? " system-audio-config__install-progress--error" : ""}`}
+            data-testid="glass-system-audio-install-progress"
+          >
+            {installProgress}
+          </p>
+        ) : (
+          <p className="hint system-audio-config__install-hint">
+            Automatically installs BlackHole 2ch and routes your Mac audio through IIVO Glass.
+            macOS will ask for your password once.
+          </p>
+        )}
       </div>
 
       {hint ? <p className="hint system-audio-config__hint">{hint}</p> : null}

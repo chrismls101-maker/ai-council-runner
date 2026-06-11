@@ -1,6 +1,6 @@
 # IIVO Master Task List
 **All three builds — smallest to biggest. Tick off as shipped.**
-Last updated: 2026-06-10 (Tasks #59–#65 + #66–#72 + #77 + Docker health check completed)
+Last updated: 2026-06-10 (Tasks #59–#65 + #66–#72 + #73 + #74 + #76 + #77 + Docker health check + streaming answers + Intel/x64 builds + one-click BlackHole installer completed)
 
 Legend: `[ ]` todo · `[x]` done · `[-]` deferred (P3)
 
@@ -84,7 +84,7 @@ Legend: `[ ]` todo · `[x]` done · `[-]` deferred (P3)
 ## 🔴 LARGE — 4+ hours each
 
 ### Website
-- [ ] Streaming answers — Glass currently uses single-shot ask + latency bridge; wire real token streaming end to end
+- [x] Streaming answers — Glass currently uses single-shot ask + latency bridge; wire real token streaming end to end
 - [ ] Account auth scaffold — even a simple magic-link or passkey gate before widening beyond friends-and-family beta
 
 ### Glass
@@ -96,10 +96,11 @@ Legend: `[ ]` todo · `[x]` done · `[-]` deferred (P3)
   - **Phase 4 — Domain breadth**: Wingman should recognize context beyond coding — designer stuck on Figma export issue, founder in a spreadsheet with broken formulas, someone using Claude Computer Use and it's going off track. `copilotSessionType.ts` already classifies session type; Wingman uses that to tune what counts as a "problem worth surfacing."
   - **Phase 5 — "Watching over your AI" angle**: when Wingman detects you're inside Claude Computer Use, Cursor, or ChatGPT, it shifts to a supervisor posture — watching what the AI does on screen and flagging if it looks wrong, unexpected, or misaligned with what you were working on. This is the category-defining differentiator. No other tool does this.
   - **Privacy constraint**: all screen analysis stays local or goes through the same IIVO server path the user already trusts. Capture cadence is user-visible. User can pause Wingman instantly.
-- [ ] Crash telemetry — integrate Sentry into packaged Glass builds; structured crash logs from production DMG
-- [ ] Intel / universal builds — produce x64 + arm64 DMGs; update landing page download to universal or offer both
+- [x] Crash telemetry — integrate Sentry into packaged Glass builds; structured crash logs from production DMG
+- [x] Intel / universal builds — produce x64 + arm64 DMGs; update landing page download to universal or offer both
+- [x] One-click BlackHole installer — "Set up System Audio" button in AudioTab downloads BlackHole 2ch, installs via osascript (one password prompt), creates IIVO Glass Audio Multi-Output Device
 - [ ] Re-enable `electron-builder` notarize — root-cause the hang; currently using manual `notarytool` workaround
-- [ ] Glass onboarding multi-monitor regression — primary display / click-through / quit cleanup on HDMI multi-monitor setup (reported in wild)
+- [x] Glass onboarding multi-monitor regression — primary display / click-through / quit cleanup on HDMI multi-monitor setup (reported in wild)
 
 ---
 
@@ -123,6 +124,6 @@ Legend: `[ ]` todo · `[x]` done · `[-]` deferred (P3)
 | Tiny | 13 | 13 | 0 |
 | Small | 17 | 17 | 0 |
 | Medium | 16 | 14 | 2 |
-| Large | 6 | 1 | 5 |
+| Large | 6 | 5 | 1 |
 | Deferred | 8 | — | 8 |
-| **Total** | **60** | **39** | **13** |
+| **Total** | **60** | **41** | **11** |

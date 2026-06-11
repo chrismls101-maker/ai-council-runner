@@ -161,6 +161,146 @@ async function postChatCompletion(
   };
 }
 
+/**
+ * Streaming variant: calls OpenAI with stream:true, emits each content token
+ * via `onToken`, and resolves with the fully accumulated content + usage.
+ * Does NOT use fetchWithTimeout so the stream can last as long as needed.
+ */
+async function postChatCompletionStream(
+  body: Record<string, unknown>,
+  onToken: (token: string) => void,
+  signal?: AbortSignal,
+  label = "OpenAI",
+): Promise<{ content: string; model: string; usage: ProviderUsage }> {
+  const apiKey = getOpenAiKey();
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ ...body, stream: true, stream_options: { include_usage: true } }),
+    signal,
+  });
+
+  if (!response.ok) {
+    const errBody = await response.text();
+    throw new ProviderError(
+      `${label} API error (${response.status}): ${sanitizeError(errBody)}`,
+      "openai",
+    );
+  }
+
+  if (!response.body) {
+    throw new ProviderError(`${label} returned no response body.`, "openai");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let accumulated = "";
+  let resolvedModel = String(body.model);
+  let usage: ProviderUsage = { inputTokens: null, outputTokens: null, totalTokens: null, usageAvailable: false };
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const data = line.slice(6).trim();
+        if (data === "[DONE]") break;
+        let parsed: {
+          model?: string;
+          choices?: Array<{ delta?: { content?: string }; finish_reason?: string }>;
+          usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+        };
+        try {
+          parsed = JSON.parse(data) as typeof parsed;
+        } catch {
+          continue;
+        }
+        if (parsed.model) resolvedModel = parsed.model;
+        if (parsed.usage) {
+          usage = parseOpenAiUsage(parsed);
+        }
+        const token = parsed.choices?.[0]?.delta?.content;
+        if (token) {
+          accumulated += token;
+          onToken(token);
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  if (!accumulated.trim()) {
+    throw new ProviderError(`${label} stream returned empty content.`, "openai");
+  }
+
+  return { content: accumulated.trim(), model: resolvedModel, usage };
+}
+
+/**
+ * Streaming version of callOpenAIWithModelChain. Falls back to later models in
+ * the chain on unavailable errors (same semantics as the non-streaming variant).
+ * onToken is called with each raw delta token as it arrives.
+ */
+export async function callOpenAIStreamingWithModelChain(
+  systemPrompt: string,
+  userPrompt: string,
+  models: string[],
+  onToken: (token: string) => void,
+  signal?: AbortSignal,
+  maxOutputTokens?: number,
+): Promise<OpenAICallWithFallbackResult> {
+  if (models.length === 0) {
+    throw new ProviderError("No models provided for OpenAI streaming call.", "openai");
+  }
+  const requestedModel = models[0];
+  let lastErr: unknown;
+  for (let i = 0; i < models.length; i++) {
+    const model = models[i];
+    const messages = [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ];
+    try {
+      const result = await postChatCompletionStream(
+        buildChatCompletionBody(model, messages, maxOutputTokens, 0.7),
+        onToken,
+        signal,
+        "OpenAI",
+      );
+      return {
+        content: result.content,
+        provider: "openai",
+        model: result.model,
+        usage: result.usage,
+        requestedModel,
+        selectedModel: requestedModel,
+        modelUsed: result.model,
+        fallbackUsed: i > 0,
+        fallbackReason:
+          i > 0 && lastErr ? fallbackReasonFromError(lastErr, models[i - 1]) : undefined,
+      };
+    } catch (err) {
+      lastErr = err;
+      if (!isOpenAiModelUnavailableError(err) || i === models.length - 1) {
+        throw err;
+      }
+      console.warn(
+        `[glass-models] OpenAI streaming model "${model}" unavailable — trying "${models[i + 1]}"`,
+      );
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new ProviderError(String(lastErr), "openai");
+}
+
 export async function callOpenAI(
   systemPrompt: string,
   userPrompt: string,

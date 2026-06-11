@@ -19,6 +19,10 @@ asar: true
 extraResources:
   - from: glass-update-manifest.json
     to: glass-update-manifest.json
+  # Pre-compiled universal binary for one-click BlackHole + Multi-Output Device setup.
+  # Built by: npm run build:audio-helper
+  - from: resources/bin/iivo-audio-setup
+    to: bin/iivo-audio-setup
 
 mac:
   category: public.app-category.productivity

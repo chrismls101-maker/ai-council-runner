@@ -82,6 +82,8 @@ import {
   GlassAskValidationError,
   handleGlassAsk,
   insufficientCreditsPayload as glassAskInsufficientCreditsPayload,
+  runGlassDirectAskStream,
+  validateGlassDirectApiKey,
 } from "./glass/glassAskHandler.js";
 import type { GlassAskRequestBody } from "./glass/glassAskTypes.js";
 import {
@@ -122,6 +124,9 @@ import {
   verifyLandingPassword,
 } from "./landingGate.js";
 import rateLimit from "express-rate-limit";
+import { auth } from "./auth/auth.js";
+import { toNodeHandler } from "better-auth/node";
+import { issueGlassConnectToken, verifyGlassConnectToken } from "./auth/glassConnect.js";
 
 // ─── Rate limiters ───────────────────────────────────────────────────────────
 // Council runs are expensive (multi-agent AI). 5 runs / 15 min per IP for open beta.
@@ -212,6 +217,52 @@ app.use(
     : cors(),
 );
 
+// ─── Auth (better-auth) — must come before express.json() global middleware ───
+// toNodeHandler adapts better-auth's fetch-based handler to Node.js req/res.
+// Mount before express.json() so better-auth handles its own body parsing.
+app.all("/api/auth/**", toNodeHandler(auth));
+
+// Glass connect token — issue (user must be authenticated via better-auth session cookie)
+app.post("/api/auth/glass-connect/issue", express.json(), async (req, res) => {
+  try {
+    // Build a Headers object from Express req.headers for better-auth
+    const headers = new Headers();
+    for (const [key, value] of Object.entries(req.headers)) {
+      if (value) headers.set(key, Array.isArray(value) ? value.join(", ") : value);
+    }
+    const session = await auth.api.getSession({ headers });
+    if (!session?.user) {
+      res.status(401).json({ error: "Not authenticated" });
+      return;
+    }
+    const token = issueGlassConnectToken({
+      userId: session.user.id,
+      email: session.user.email,
+      name: session.user.name ?? null,
+      sessionToken: session.session.token,
+    });
+    res.json({ connectToken: token, expiresIn: 300 });
+  } catch (err) {
+    console.error("[auth] glass-connect/issue error", err);
+    res.status(500).json({ error: "Failed to issue connect token" });
+  }
+});
+
+// Glass connect token — verify (called by Glass app)
+app.get("/api/auth/glass-connect/verify/:token", (req, res) => {
+  const entry = verifyGlassConnectToken(req.params.token ?? "");
+  if (!entry) {
+    res.status(404).json({ error: "Invalid or expired connect token" });
+    return;
+  }
+  res.json({
+    sessionToken: entry.sessionToken,
+    userId: entry.userId,
+    email: entry.email,
+    name: entry.name,
+  });
+});
+
 /** Visual ask may include optimized JPEG data URLs — parse before the global 2mb limit. */
 app.post("/api/glass/ask", glassApiAuthMiddleware, glassLimiter, express.json({ limit: "6mb" }), async (req, res) => {
   const body = req.body as GlassAskRequestBody;
@@ -238,6 +289,74 @@ app.post("/api/glass/ask", glassApiAuthMiddleware, glassLimiter, express.json({ 
     }
     const message = err instanceof Error ? err.message : "Glass ask failed";
     res.status(500).json({ error: message });
+  }
+});
+
+/**
+ * SSE streaming variant of /api/glass/ask.
+ * Emits `data: {"token":"..."}` lines as tokens arrive, then a final
+ * `data: {"done":true, ...GlassAskResponseBody}` line, then closes.
+ * Visual asks and any request with latestScreenshot fall back to the
+ * non-streaming route (full JSON response wrapped in a done event).
+ */
+app.post("/api/glass/ask/stream", glassApiAuthMiddleware, glassLimiter, express.json({ limit: "6mb" }), async (req, res) => {
+  const body = req.body as GlassAskRequestBody;
+
+  // Set SSE headers immediately so the client can start reading.
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  // Helper: write a typed SSE event and flush.
+  const send = (payload: Record<string, unknown>) => {
+    res.write(`data: ${JSON.stringify(payload)}\n\n`);
+  };
+
+  // Wire up client-disconnect abort.
+  const ac = new AbortController();
+  req.on("close", () => ac.abort());
+
+  try {
+    const missing = validateGlassDirectApiKey();
+    if (missing.length > 0) {
+      send({ error: `Missing API keys: ${missing.join(", ")}. Add them to your .env file.`, status: 503 });
+      res.end();
+      return;
+    }
+
+    const hasScreenshot = Boolean(
+      body.latestScreenshot?.imageDataUrl ||
+        body.latestScreenshot?.imageBase64 ||
+        body.latestScreenshot?.contextId ||
+        body.lensContext?.screenshot,
+    );
+
+    if (hasScreenshot || body.visualIntent) {
+      // Visual asks don't stream — run non-streaming and wrap as a single done event.
+      const result = await handleGlassAsk(body, ac.signal);
+      send({ done: true, ...result });
+      res.end();
+      return;
+    }
+
+    const result = await runGlassDirectAskStream(
+      body,
+      (token) => send({ token }),
+      ac.signal,
+    );
+    send({ done: true, ...result });
+    res.end();
+  } catch (err) {
+    if (ac.signal.aborted) {
+      res.end();
+      return;
+    }
+    const message = err instanceof Error ? err.message : "Glass ask stream failed";
+    const status = err instanceof GlassAskServiceError ? err.status : 500;
+    send({ error: message, status });
+    res.end();
   }
 });
 

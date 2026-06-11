@@ -8,7 +8,7 @@ import {
   resolveGlassModelPrimary,
   type GlassModelPurpose,
 } from "../config/glassModels.js";
-import { callOpenAIWithModelChain, ProviderError } from "../providers/openai.js";
+import { callOpenAIWithModelChain, callOpenAIStreamingWithModelChain, ProviderError } from "../providers/openai.js";
 import type { GlassAskRequestBody, GlassAskResponseBody, GlassAskSessionPayload } from "./glassAskTypes.js";
 import { buildActiveListeningPromptBlock } from "./activeListeningPrompt.js";
 import { buildGlassLensContextBlock, type GlassAskLensContext } from "./glassLensContext.js";
@@ -569,6 +569,80 @@ export async function runGlassDirectAsk(
       overlayCap: body.responseStyle !== "full",
     });
   }
+
+  const title = prompt.length > 60 ? `${prompt.slice(0, 59)}…` : prompt;
+
+  return {
+    answer: formatted.answer,
+    shortAnswer: formatted.shortAnswer,
+    model: result.modelUsed,
+    modelRequested: result.requestedModel,
+    modelUsed: result.modelUsed,
+    fallbackUsed: result.fallbackUsed,
+    routeUsed: "glass_direct",
+    title,
+    warnings: formatted.warnings,
+    usage: result.usage,
+  };
+}
+
+/**
+ * Streaming variant of runGlassDirectAsk.
+ *
+ * Calls the OpenAI streaming API and emits each raw token delta via `onToken`.
+ * Resolves with the same GlassAskResponseBody shape as the non-streaming path.
+ *
+ * NOTE: The similar-answer retry is intentionally skipped on the streaming path
+ * because the tokens have already been emitted to the client by the time we
+ * could check similarity. Quality guards remain in effect server-side on
+ * the non-streaming fallback (visual asks, error paths).
+ */
+export async function runGlassDirectAskStream(
+  body: GlassAskRequestBody,
+  onToken: (token: string) => void,
+  signal?: AbortSignal,
+): Promise<GlassAskResponseBody> {
+  const prompt = body.prompt?.trim();
+  if (!prompt) {
+    throw new Error("prompt is required");
+  }
+
+  const purpose = body.modelPurpose ?? "default";
+  const storedProfile = await getGlassUserProfile();
+  const userProfile =
+    normalizeGlassUserProfile(body.userProfile) ?? storedProfile ?? undefined;
+  const userContext = body.userContext?.trim() || undefined;
+  const userPrompt = buildGlassDirectUserPrompt(
+    prompt,
+    body.session,
+    userProfile,
+    userContext,
+    body.lensContext,
+  );
+
+  const selected = resolveGlassModelPrimary("text", purpose);
+  const chain = buildGlassModelTryChain(selected);
+
+  const result = await callOpenAIStreamingWithModelChain(
+    GLASS_DIRECT_SYSTEM_PROMPT,
+    userPrompt,
+    chain,
+    onToken,
+    signal,
+    900,
+  );
+
+  recordGlassModelRuntime("text", purpose, {
+    requestedModel: result.requestedModel,
+    selectedModel: result.selectedModel,
+    modelUsed: result.modelUsed,
+    fallbackUsed: result.fallbackUsed,
+    fallbackReason: result.fallbackReason ?? null,
+  });
+
+  const formatted = formatGlassDirectAnswer(result.content, {
+    overlayCap: body.responseStyle !== "full",
+  });
 
   const title = prompt.length > 60 ? `${prompt.slice(0, 59)}…` : prompt;
 

@@ -702,6 +702,13 @@ function relayoutAllWindows(options?: { resetDock?: boolean }): void {
 
   if (!windows.overlay.isDestroyed()) {
     windows.overlay.setBounds(layoutManager.getOverlayLayout());
+    // macOS resets setIgnoreMouseEvents as a side effect of repositioning.
+    // Re-apply click-through immediately — stackGlassWindows below will also
+    // do this via showInactive(), but the setBounds() path needs its own guard
+    // so the primary display isn't left click-blocking during HDMI plug/unplug.
+    if (!onboardingPending) {
+      configureOverlayClickThrough(windows.overlay);
+    }
   }
 
   if (!windows.panel.isDestroyed()) {
@@ -1424,14 +1431,18 @@ export function broadcast(channel: string, payload: unknown): void {
 
 export function disposeWindows(): void {
   stopFollowMouseTracking();
+  // Dispose layout manager FIRST — removes screen display-added/removed/metrics-changed
+  // listeners before any window is destroyed. On macOS, quitting with an HDMI display
+  // connected can fire display-removed mid-teardown; without this guard the callback
+  // tries to operate on null/destroyed windows.
+  layoutManager?.dispose();
+  layoutManager = null;
   const splash = splashWindow;
   splashWindow = null;
   if (splash && !splash.isDestroyed()) {
     splash.destroy();
   }
   destroyGlassWindows();
-  layoutManager?.dispose();
-  layoutManager = null;
 }
 
 let commandBarHotkeyStatus = "Hotkey unavailable — command bar still clickable";

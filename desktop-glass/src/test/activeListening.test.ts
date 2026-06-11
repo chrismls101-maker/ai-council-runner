@@ -216,6 +216,6 @@ test("deriveActiveListeningMode maps session focus to simple modes", () => {
   );
   assert.equal(
     deriveActiveListeningMode({ ...DEFAULT_COPILOT_CONFIG, mode: "diagnostic" }, true),
-    "fix",
+    "wingman",
   );
 });

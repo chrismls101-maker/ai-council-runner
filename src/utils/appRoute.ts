@@ -2,11 +2,13 @@ import { hasLensHandoffQueryParam } from "./lensHandoff";
 
 export const DASHBOARD_PATH = "/dashboard";
 
-export type AppRoute = "landing" | "dashboard" | "install" | "privacy" | "terms" | "not-found";
+export type AppRoute = "landing" | "dashboard" | "install" | "privacy" | "terms" | "login" | "account" | "not-found";
 
 export const INSTALL_PATH = "/install";
 export const PRIVACY_PATH = "/privacy";
 export const TERMS_PATH = "/terms";
+export const LOGIN_PATH = "/login";
+export const ACCOUNT_PATH = "/account";
 
 export function isDashboardPath(pathname = typeof window !== "undefined" ? window.location.pathname : ""): boolean {
   return pathname === DASHBOARD_PATH || pathname.startsWith(`${DASHBOARD_PATH}/`);
@@ -47,6 +49,8 @@ export function resolveAppRoute(): AppRoute {
   if (pathname === INSTALL_PATH) return "install";
   if (pathname === PRIVACY_PATH) return "privacy";
   if (pathname === TERMS_PATH) return "terms";
+  if (pathname === LOGIN_PATH) return "login";
+  if (pathname === ACCOUNT_PATH) return "account";
   if (pathname === "/" || pathname === "") return "landing";
   return "not-found";
 }

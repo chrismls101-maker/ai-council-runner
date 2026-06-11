@@ -89,7 +89,7 @@ export interface GlassLastAskResponse {
   model?: string;
 }
 
-export type GlassAskStatus = "idle" | "pending" | "done" | "error";
+export type GlassAskStatus = "idle" | "pending" | "streaming" | "done" | "error";
 
 /** Strip markdown headers for overlay display. */
 export function formatOverlayAnswerText(raw: string): string {

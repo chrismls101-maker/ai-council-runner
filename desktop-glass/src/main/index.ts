@@ -131,6 +131,11 @@ import {
 } from "../shared/glassContextEngine.ts";
 import { normalizeGlassUserProfile, type GlassUserProfile } from "../shared/glassUserProfile.ts";
 import { loadMoments, persistMoments } from "./store.ts";
+import {
+  loadIivoAccountLink,
+  persistIivoAccountLink,
+  clearIivoAccountLink,
+} from "./iivoAccountStore.ts";
 import { loadSessions, persistSessions } from "./sessionPersistence.ts";
 import {
   clearSessionScreenshotFolder,
@@ -329,12 +334,13 @@ import {
   broadcastStartupAudioRestore,
 } from "./startupAudioRestore.ts";
 import { getCurrentMacOutputDeviceName } from "./macAudioOutput.ts";
+import { installBlackHoleAndSetupAudio } from "./blackHoleInstaller.ts";
 import {
   appendCommandFeedItem,
   createCommandFeedItem,
   type GlassCommandFeedItem,
 } from "../shared/commandFeed.ts";
-import { askIivoGlass, GlassAskCancelledError, isGlassAskPayloadTooLargeError } from "./glassAskClient.ts";
+import { askIivoGlass, askIivoGlassStream, GlassAskCancelledError, isGlassAskPayloadTooLargeError } from "./glassAskClient.ts";
 import { optimizeVisualAskImage } from "./visualImageOptimizer.ts";
 import { applyOptimizedToPayload } from "./glassVisualAskCapture.ts";
 import {
@@ -411,6 +417,63 @@ import type { VirtualAudioDeviceMatch } from "../shared/virtualAudioDevices.ts";
 import { lookupGlassErrorAnswer } from "../shared/glassErrorFAQ.ts";
 
 loadGlassEnv();
+
+/**
+ * Scrub known secrets and token-shaped strings from Sentry event payloads
+ * before they leave the device. Runs on every event in beforeSend.
+ *
+ * We redact:
+ *   1. Any baked-in env var value that is non-empty (API keys, secrets, DSN)
+ *   2. OpenAI sk- bearer tokens
+ *   3. Any run of 40+ hex chars (catches Deepgram-style keys)
+ */
+function scrubSentryString(s: string): string {
+  const secrets: string[] = [
+    process.env.IIVO_GLASS_API_SECRET,
+    process.env.DEEPGRAM_API_KEY,
+    process.env.IIVO_GLASS_OPENAI_API_KEY,
+    process.env.OPENAI_API_KEY,
+    process.env.SENTRY_DSN,
+  ].filter((v): v is string => typeof v === "string" && v.length > 8);
+
+  let out = s;
+  for (const secret of secrets) {
+    // Escape for regex in case value contains special chars.
+    const escaped = secret.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    out = out.replace(new RegExp(escaped, "g"), "[REDACTED]");
+  }
+  // Generic: OpenAI-style bearer tokens and long hex keys.
+  out = out.replace(/sk-[A-Za-z0-9]{20,}/g, "[REDACTED]");
+  out = out.replace(/\b[0-9a-f]{40,}\b/g, "[REDACTED]");
+  return out;
+}
+
+function scrubSentryEvent(event: Parameters<NonNullable<Parameters<typeof Sentry.init>[0]["beforeSend"]>>[0]): typeof event {
+  // Scrub exception messages.
+  if (event.exception?.values) {
+    for (const ex of event.exception.values) {
+      if (ex.value) ex.value = scrubSentryString(ex.value);
+    }
+  }
+  // Scrub top-level message.
+  if (event.message) {
+    event.message = scrubSentryString(event.message);
+  }
+  // Scrub breadcrumb messages + data strings.
+  if (event.breadcrumbs?.length) {
+    for (const crumb of event.breadcrumbs) {
+      if (crumb.message) crumb.message = scrubSentryString(crumb.message);
+      if (crumb.data && typeof crumb.data === "object") {
+        const data = crumb.data as Record<string, unknown>;
+        for (const k of Object.keys(data)) {
+          if (typeof data[k] === "string") data[k] = scrubSentryString(data[k] as string);
+        }
+      }
+    }
+  }
+  return event;
+}
+
 Sentry.init({
   dsn: process.env.SENTRY_DSN,
   release: app.getVersion(),
@@ -419,6 +482,11 @@ Sentry.init({
   // Dev builds throw various expected errors (auth mismatches, missing env vars,
   // audio probe failures) that are noise in the Sentry dashboard.
   enabled: app.isPackaged,
+  attachStacktrace: true,
+  maxBreadcrumbs: 40,
+  beforeSend(event) {
+    return scrubSentryEvent(event);
+  },
 });
 app.setName(glassMenuAppName(app.isPackaged));
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
@@ -470,6 +538,7 @@ interface AppState {
   operationDiagnostics: GlassOperationDiagnostics;
   commandFeed: GlassCommandFeedItem[];
   askStatus: GlassAskStatus;
+  partialAnswer?: string;
   lastAskResponse?: GlassLastAskResponse;
   askInFlight: boolean;
   glassSettings: GlassUserSettings;
@@ -498,6 +567,9 @@ interface AppState {
   commandBarStackHeightPx?: number;
   commandBarOverlayClearancePx?: number;
   listenLiveNotes?: ListenLiveNotesState;
+  blackHoleInstallStatus?: import("../shared/ipc.ts").GlassState["blackHoleInstallStatus"];
+  blackHoleInstallProgress?: string;
+  iivoAccountLink: import("../shared/iivoAccountLink.ts").IivoAccountLink | null;
 }
 
 let askAbortController: AbortController | null = null;
@@ -548,6 +620,7 @@ const state: AppState = {
   appUpdate: emptyGlassAppUpdateState(app.getVersion()),
   onboardingOpen: false,
   glassUserProfile: null,
+  iivoAccountLink: null,
 };
 
 let moments = new SavedMomentsStore();
@@ -1362,7 +1435,7 @@ async function processListenModeChunk(
     lastChunkMs: listenLastChunkMs,
     recentTranscriptChars: recentTranscript.length,
     recentSurfacedTexts: listenMomentRuntime.recentSurfacedTexts,
-    userReceivingAnswer: state.askStatus === "pending",
+    userReceivingAnswer: state.askStatus === "pending" || state.askStatus === "streaming",
     muteSuggestions: config.muteSuggestions,
     surfacesInLast10Min: countSurfacesInLast10Min(listenMomentRuntime.surfaceTimestamps, nowMs),
     listenStartedMs: listenMomentRuntime.listenStartedMs,
@@ -1648,7 +1721,9 @@ function startCopilotLoop(): void {
   if (!sessionIsLive() || !copilotModeIsActive(copilot.getConfig().mode)) return;
   const intervalMs = copilot.getConfig().intervalSec * 1000;
   copilotTimer = setInterval(() => {
-    void runCopilotTick();
+    void runCopilotTick().catch((err) => {
+      Sentry.captureException(err, { tags: { source: "copilot-tick" } });
+    });
   }, intervalMs);
 }
 
@@ -1911,6 +1986,7 @@ function snapshot(): GlassState {
     commandBarStackHeightPx: state.commandBarStackHeightPx,
     commandBarOverlayClearancePx: state.commandBarOverlayClearancePx,
     askStatus: state.askStatus,
+    partialAnswer: state.partialAnswer,
     lastAskResponse: state.lastAskResponse,
     latestScreenshot: state.latestScreenshot ?? null,
     screenContextStatus: buildGlassScreenContextStatus(state.latestScreenshot, {
@@ -1941,6 +2017,9 @@ function snapshot(): GlassState {
     liveTranslate: isTranslateActive() ? liveTranslateRuntime : undefined,
     onboardingOpen: state.onboardingOpen,
     glassUserProfile: state.glassUserProfile,
+    blackHoleInstallStatus: state.blackHoleInstallStatus,
+    blackHoleInstallProgress: state.blackHoleInstallProgress,
+    iivoAccountLink: state.iivoAccountLink,
   };
 }
 
@@ -1962,6 +2041,17 @@ async function finishGlassOnboarding(profile: GlassUserProfile | null): Promise<
   const manager = getLayoutManager();
   manager?.setDisplayTarget("primary");
   setOnboardingPending(false);
+
+  // After first-run onboarding, Glass anchors to the primary display.
+  // If the user has an external monitor connected, surface a one-time notice
+  // so they know they can move Glass to it via Settings → Display.
+  // This avoids silently leaving Glass on the built-in screen when the user's
+  // real working display is HDMI/external.
+  const externalDisplay = getConnectedDisplays().find((d) => !d.isPrimary);
+  if (externalDisplay) {
+    state.lastNotice = `External display detected (${externalDisplay.label}). Move Glass there in Settings → Display.`;
+  }
+
   push();
 }
 
@@ -2560,6 +2650,7 @@ function cancelGlassAsk(): void {
   lookingStartedAtMs = null;
   state.askInFlight = false;
   state.askStatus = "idle";
+  state.partialAnswer = undefined;
   state.visualAskPhase = "idle";
   removePendingAskFeedItems();
   pushFeed(createCommandFeedItem("error", "Request cancelled."));
@@ -2942,20 +3033,34 @@ async function submitCommand(
   push();
 
   const userContext = resolveGlassAskUserContext();
-  const runGlassAsk = async (): Promise<import("../shared/glassAskTypes.ts").GlassAskResponse> =>
-    askIivoGlass(
+  const askRequest = {
+    prompt: text,
+    session: buildGlassAskSessionPayload(text),
+    latestScreenshot: latestScreenshot ?? lensScreenshotPayload,
+    lensContext: lensAttached ?? undefined,
+    visualIntent: visualIntent || Boolean(lensScreenshotPayload) || undefined,
+    responseStyle: "overlay" as const,
+    ...(userContext ? { userContext } : {}),
+  };
+
+  // Use streaming for pure-text asks (no screenshot/vision); fall back to
+  // single-shot for visual asks (image already captured, no benefit to stream).
+  const runGlassAsk = async (): Promise<import("../shared/glassAskTypes.ts").GlassAskResponse> => {
+    if (visualIntent || Boolean(lensScreenshotPayload)) {
+      return askIivoGlass(config, askRequest, signal);
+    }
+    return askIivoGlassStream(
       config,
-      {
-        prompt: text,
-        session: buildGlassAskSessionPayload(text),
-        latestScreenshot: latestScreenshot ?? lensScreenshotPayload,
-        lensContext: lensAttached ?? undefined,
-        visualIntent: visualIntent || Boolean(lensScreenshotPayload) || undefined,
-        responseStyle: "overlay",
-        ...(userContext ? { userContext } : {}),
+      askRequest,
+      (partial) => {
+        if (requestGeneration !== askRequestGeneration) return;
+        state.partialAnswer = partial;
+        state.askStatus = "streaming";
+        push();
       },
       signal,
     );
+  };
 
   const withAskTimeout = <T>(promise: Promise<T>): Promise<T> =>
     Promise.race([
@@ -2978,6 +3083,7 @@ async function submitCommand(
 
     removeThinkingFeedItems();
     state.askStatus = "done";
+    state.partialAnswer = undefined;
     const overlayAnswer = result.shortAnswer ?? result.answer;
     const fullAnswer = result.answer;
     trackCopilotResponse(fullAnswer);
@@ -3197,6 +3303,7 @@ async function submitCommand(
     });
     state.visualAskPhase = "idle";
     state.askStatus = "error";
+    state.partialAnswer = undefined;
     pushFeed(
       createCommandFeedItem("error", `${message} Use Open in IIVO to continue in the browser.`, {
         prompt: text,
@@ -3219,6 +3326,13 @@ async function handleCommand(
   command: GlassCommand,
   sender?: WebContents,
 ): Promise<void> {
+  // Leave a breadcrumb so any crash arriving at Sentry shows the last command dispatched.
+  // Only record the command type — never the full payload (could contain user text or paths).
+  Sentry.addBreadcrumb({
+    category: "ipc",
+    message: `command: ${(command as { type?: string }).type ?? "unknown"}`,
+    level: "info",
+  });
   switch (command.type) {
     case "capture-screen":
     case "capture-screen-only":
@@ -3951,6 +4065,74 @@ async function handleCommand(
       state.lastNotice = BLACKHOLE_SETUP_INSTRUCTIONS;
       push();
       return;
+    case "install-system-audio": {
+      // Guard: already in progress
+      if (
+        state.blackHoleInstallStatus === "downloading" ||
+        state.blackHoleInstallStatus === "installing" ||
+        state.blackHoleInstallStatus === "configuring"
+      ) {
+        return;
+      }
+      // Kick off async, push progress updates via state
+      installBlackHoleAndSetupAudio((p) => {
+        state.blackHoleInstallStatus = p.status;
+        state.blackHoleInstallProgress = p.progress;
+        push();
+      }).catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        state.blackHoleInstallStatus = "error";
+        state.blackHoleInstallProgress = msg;
+        state.lastError = msg;
+        push();
+      });
+      return;
+    }
+    case "connect-iivo-account": {
+      const { connectToken } = command;
+      (async () => {
+        try {
+          const res = await fetch(
+            `${config.iivoApiUrl}/api/auth/glass-connect/verify/${encodeURIComponent(connectToken)}`,
+          );
+          if (!res.ok) {
+            const body = (await res.json().catch(() => ({}))) as { error?: string };
+            state.lastError = body.error ?? `Connect failed (${res.status})`;
+            push();
+            return;
+          }
+          const data = (await res.json()) as {
+            sessionToken: string;
+            userId: string;
+            email: string;
+            name: string | null;
+          };
+          const link = {
+            sessionToken: data.sessionToken,
+            userId: data.userId,
+            email: data.email,
+            name: data.name ?? null,
+            linkedAt: new Date().toISOString(),
+          };
+          await persistIivoAccountLink(link);
+          state.iivoAccountLink = link;
+          push();
+        } catch (err) {
+          state.lastError =
+            err instanceof Error ? err.message : "Could not reach iivo.ai — check your connection";
+          push();
+        }
+      })();
+      return;
+    }
+    case "disconnect-iivo-account": {
+      (async () => {
+        await clearIivoAccountLink();
+        state.iivoAccountLink = null;
+        push();
+      })();
+      return;
+    }
     case "detect-audio-devices":
       broadcastTranscriptionControl({ type: "probe-virtual-audio-devices" });
       state.lastNotice = "Scanning for virtual audio devices (BlackHole, Loopback, etc.)…";
@@ -5012,6 +5194,11 @@ function registerIpc(): void {
 
   ipcMain.on(IPC.command, (event, command: GlassCommand) => {
     void handleCommand(command, event.sender).catch((err) => {
+      // Report unexpected IPC handler crashes to Sentry (production only).
+      // Expected user-facing errors are set on state.lastError via handleCommand directly.
+      Sentry.captureException(err, {
+        extra: { commandType: (command as { type?: string }).type ?? "unknown" },
+      });
       state.lastError = err instanceof Error ? err.message : String(err);
       push();
     });
@@ -5116,6 +5303,7 @@ app.whenReady().then(async () => {
   }
   const needsGlassOnboarding = !glassOnboardingState.completed;
   state.glassUserProfile = glassOnboardingState.profile;
+  state.iivoAccountLink = await loadIivoAccountLink();
   if (needsGlassOnboarding) {
     setOnboardingPending(true);
   }

@@ -18,6 +18,7 @@ export {
   formatGlassDirectAnswer,
   GLASS_DIRECT_SYSTEM_PROMPT,
   runGlassDirectAsk,
+  runGlassDirectAskStream,
   validateGlassDirectApiKey,
 } from "./glassDirectAsk.js";
 

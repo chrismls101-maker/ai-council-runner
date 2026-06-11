@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# IIVO Glass — signed build, notarize, staple, latest-mac.yml, GitHub release upload.
+# IIVO Glass — signed build, notarize, staple, latest-mac-{arch}.yml, GitHub release upload.
 #
 # Usage (from desktop-glass/):
-#   ./scripts/notarize-and-release.sh 0.1.12
+#   ./scripts/notarize-and-release.sh 0.1.12           # arm64 + x64 (default)
+#   ./scripts/notarize-and-release.sh 0.1.12 arm64     # arm64 only
+#   ./scripts/notarize-and-release.sh 0.1.12 x64       # x64 only
+#   ./scripts/notarize-and-release.sh 0.1.12 arm64 x64 # explicit both
 #
 # Prerequisites:
 #   - macOS with Xcode CLT (codesign, notarytool, stapler)
@@ -14,6 +17,14 @@
 set -euo pipefail
 
 VERSION="${1:-}"
+shift || true
+
+# Remaining args are the arches to build. Default: arm64 x64.
+ARCHES=("$@")
+if [[ ${#ARCHES[@]} -eq 0 ]]; then
+  ARCHES=("arm64" "x64")
+fi
+
 NOTARY_PROFILE="${IIVO_NOTARY_PROFILE:-iivo-notary}"
 GH_OWNER="${IIVO_GITHUB_OWNER:-chrismls101-maker}"
 GH_REPO="${IIVO_GITHUB_REPO:-ai-council-runner}"
@@ -21,9 +32,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GLASS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 RELEASE_DIR="$GLASS_ROOT/release"
 BUILD_CONFIG="$GLASS_ROOT/electron-builder.release.tmp.yml"
+ASSETS_TMP="$GLASS_ROOT/.release-assets.tmp"
 
 die() {
   echo "ERROR: $*" >&2
+  rm -f "$BUILD_CONFIG" "$ASSETS_TMP"
   exit 1
 }
 
@@ -39,48 +52,17 @@ file_size() {
   stat -f%z "$1"
 }
 
-verify_latest_mac_yml() {
-  local version="$1"
-  local zip_name="IIVO-Glass-${version}-arm64-mac.zip"
-  local zip_path="$RELEASE_DIR/$zip_name"
-  local yml_path="$RELEASE_DIR/latest-mac.yml"
-  local zip_sha zip_size yml_sha yml_size yml_path_field
-
-  [[ -f "$zip_path" ]] || die "Missing Squirrel zip for verification: $zip_path"
-  [[ -f "$yml_path" ]] || die "Missing latest-mac.yml for verification: $yml_path"
-
-  zip_sha="$(sha512_base64 "$zip_path")"
-  zip_size="$(file_size "$zip_path")"
-  yml_path_field="$(awk '/^path: / { print $2; exit }' "$yml_path")"
-  yml_sha="$(awk '/^sha512: / { print $2; exit }' "$yml_path")"
-  yml_size="$(awk '/^  - url: '"${zip_name}"'$/{found=1} found && /^    size: / { print $2; exit }' "$yml_path")"
-
-  [[ "$yml_path_field" == "$zip_name" ]] \
-    || die "latest-mac.yml path must be ${zip_name} (got: ${yml_path_field:-<missing>})"
-  [[ "$yml_sha" == "$zip_sha" ]] \
-    || die "latest-mac.yml sha512 mismatch for ${zip_name}"
-  [[ "$yml_size" == "$zip_size" ]] \
-    || die "latest-mac.yml size mismatch for ${zip_name} (yml=${yml_size:-<missing>} zip=${zip_size})"
-
-  echo "==> Verified latest-mac.yml matches ${zip_name} (sha512 + size)"
-}
-
-assert_squirrel_zip_is_ditto_build() {
-  local version="$1"
-  local squirrel_zip="$RELEASE_DIR/IIVO-Glass-${version}-arm64-mac.zip"
-  local space_zip="$RELEASE_DIR/IIVO Glass-${version}-arm64-mac.zip"
-
-  [[ -f "$squirrel_zip" ]] || die "Missing ditto Squirrel zip: $squirrel_zip"
-
-  if [[ -f "$space_zip" ]]; then
-    local squirrel_sha space_sha
-    squirrel_sha="$(sha512_base64 "$squirrel_zip")"
-    space_sha="$(sha512_base64 "$space_zip")"
-    if [[ "$squirrel_sha" == "$space_sha" ]]; then
-      die "Squirrel zip bytes match electron-builder space zip — expected ditto-built zip at $squirrel_zip"
-    fi
-    echo "==> Confirmed Squirrel zip differs from electron-builder space zip (ditto build OK)"
-  fi
+notarize_and_staple() {
+  local artifact="$1"
+  local label="$2"
+  echo "==> Notarizing $label: $artifact"
+  xcrun notarytool submit "$artifact" --keychain-profile "$NOTARY_PROFILE" --wait \
+    || die "notarytool submit failed for $label ($artifact)"
+  echo "==> Stapling $label"
+  xcrun stapler staple "$artifact" \
+    || die "stapler staple failed for $label ($artifact)"
+  xcrun stapler validate "$artifact" \
+    || die "stapler validate failed for $label ($artifact)"
 }
 
 generate_squirrel_blockmap() {
@@ -96,32 +78,20 @@ generate_squirrel_blockmap() {
     || die "blockmap generation failed for $zip_path"
 }
 
-notarize_and_staple() {
-  local artifact="$1"
-  local label="$2"
-  echo "==> Notarizing $label: $artifact"
-  xcrun notarytool submit "$artifact" --keychain-profile "$NOTARY_PROFILE" --wait \
-    || die "notarytool submit failed for $label ($artifact)"
-  echo "==> Stapling $label"
-  if xcrun stapler staple "$artifact"; then
-    xcrun stapler validate "$artifact" \
-      || die "stapler validate failed for $label ($artifact)"
-  else
-    die "stapler staple failed for $label ($artifact)"
-  fi
-}
-
-write_latest_mac_yml() {
+# Write latest-mac-{arch}.yml for a single arch.
+# $1 = version, $2 = arch (arm64 | x64 | universal)
+write_latest_mac_yml_arch() {
   local version="$1"
-  local zip_name="IIVO-Glass-${version}-arm64-mac.zip"
-  local dmg_name="IIVO-Glass-${version}-arm64.dmg"
+  local arch="$2"
+  local zip_name="IIVO-Glass-${version}-${arch}-mac.zip"
+  local dmg_name="IIVO-Glass-${version}-${arch}.dmg"
   local zip_path="$RELEASE_DIR/$zip_name"
   local dmg_path="$RELEASE_DIR/$dmg_name"
-  local yml_path="$RELEASE_DIR/latest-mac.yml"
+  local yml_path="$RELEASE_DIR/latest-mac-${arch}.yml"
   local zip_sha zip_size dmg_sha dmg_size release_date
 
-  [[ -f "$zip_path" ]] || die "Missing zip for latest-mac.yml: $zip_path"
-  [[ -f "$dmg_path" ]] || die "Missing dmg for latest-mac.yml: $dmg_path"
+  [[ -f "$zip_path" ]] || die "Missing zip for latest-mac-${arch}.yml: $zip_path"
+  [[ -f "$dmg_path" ]] || die "Missing dmg for latest-mac-${arch}.yml: $dmg_path"
 
   zip_sha="$(sha512_base64 "$zip_path")"
   zip_size="$(file_size "$zip_path")"
@@ -146,9 +116,115 @@ EOF
   echo "==> Wrote $yml_path"
 }
 
-[[ -n "$VERSION" ]] || die "Usage: $0 <version>   e.g. $0 0.1.12"
+verify_latest_mac_yml_arch() {
+  local version="$1"
+  local arch="$2"
+  local zip_name="IIVO-Glass-${version}-${arch}-mac.zip"
+  local zip_path="$RELEASE_DIR/$zip_name"
+  local yml_path="$RELEASE_DIR/latest-mac-${arch}.yml"
+  local zip_sha zip_size yml_sha yml_size yml_path_field
+
+  [[ -f "$zip_path" ]] || die "Missing zip for verification: $zip_path"
+  [[ -f "$yml_path" ]] || die "Missing latest-mac-${arch}.yml for verification: $yml_path"
+
+  zip_sha="$(sha512_base64 "$zip_path")"
+  zip_size="$(file_size "$zip_path")"
+  yml_path_field="$(awk '/^path: / { print $2; exit }' "$yml_path")"
+  yml_sha="$(awk '/^sha512: / { print $2; exit }' "$yml_path")"
+  yml_size="$(awk '/^  - url: '"${zip_name}"'$/{found=1} found && /^    size: / { print $2; exit }' "$yml_path")"
+
+  [[ "$yml_path_field" == "$zip_name" ]] \
+    || die "latest-mac-${arch}.yml path must be ${zip_name} (got: ${yml_path_field:-<missing>})"
+  [[ "$yml_sha" == "$zip_sha" ]] \
+    || die "latest-mac-${arch}.yml sha512 mismatch for ${zip_name}"
+  [[ "$yml_size" == "$zip_size" ]] \
+    || die "latest-mac-${arch}.yml size mismatch for ${zip_name} (yml=${yml_size:-<missing>} zip=${zip_size})"
+
+  echo "==> Verified latest-mac-${arch}.yml matches ${zip_name} (sha512 + size)"
+}
+
+assert_squirrel_zip_is_ditto_build() {
+  local version="$1"
+  local arch="$2"
+  local squirrel_zip="$RELEASE_DIR/IIVO-Glass-${version}-${arch}-mac.zip"
+  local space_zip="$RELEASE_DIR/IIVO Glass-${version}-${arch}-mac.zip"
+
+  [[ -f "$squirrel_zip" ]] || die "Missing ditto Squirrel zip: $squirrel_zip"
+
+  if [[ -f "$space_zip" ]]; then
+    local squirrel_sha space_sha
+    squirrel_sha="$(sha512_base64 "$squirrel_zip")"
+    space_sha="$(sha512_base64 "$space_zip")"
+    if [[ "$squirrel_sha" == "$space_sha" ]]; then
+      die "Squirrel ${arch} zip bytes match electron-builder space zip — expected ditto-built zip at $squirrel_zip"
+    fi
+    echo "==> Confirmed Squirrel ${arch} zip differs from electron-builder space zip (ditto build OK)"
+  fi
+}
+
+# Build, notarize, and produce all release artifacts for one arch.
+# Appends asset paths to $ASSETS_TMP.
+build_arch() {
+  local arch="$1"
+  echo ""
+  echo "======================================================="
+  echo "  Building IIVO Glass ${VERSION} — ${arch}"
+  echo "======================================================="
+
+  local SPACE_DMG="$RELEASE_DIR/IIVO Glass-${VERSION}-${arch}.dmg"
+  local APP="$RELEASE_DIR/mac-${arch}/IIVO Glass.app"
+  local HYPHEN_DMG="$RELEASE_DIR/IIVO-Glass-${VERSION}-${arch}.dmg"
+  # Squirrel auto-update must use the notarized ditto zip (hyphenated) — never
+  # the electron-builder space-named zip.
+  local SQUIRREL_ZIP="$RELEASE_DIR/IIVO-Glass-${VERSION}-${arch}-mac.zip"
+  local SQUIRREL_BLOCKMAP="${SQUIRREL_ZIP}.blockmap"
+  local YML="$RELEASE_DIR/latest-mac-${arch}.yml"
+
+  echo "==> electron-builder --${arch} (sign only; notarize via notarytool)"
+  npx electron-builder --mac "--${arch}" --config "$BUILD_CONFIG" --publish never \
+    || die "electron-builder failed for ${arch}"
+
+  [[ -f "$SPACE_DMG" ]] || die "Expected DMG not found after build: $SPACE_DMG"
+  [[ -d "$APP" ]] || die "Expected app bundle not found: $APP"
+
+  echo "==> Copying DMG to hyphenated GitHub asset name"
+  cp "$SPACE_DMG" "$HYPHEN_DMG"
+
+  echo "==> Building Squirrel zip with ditto (hyphenated: $(basename "$SQUIRREL_ZIP"))"
+  ditto -c -k --keepParent "$APP" "$SQUIRREL_ZIP" \
+    || die "ditto failed to create $SQUIRREL_ZIP"
+
+  notarize_and_staple "$HYPHEN_DMG" "DMG (${arch})"
+
+  echo "==> Notarizing Squirrel zip (${arch})"
+  xcrun notarytool submit "$SQUIRREL_ZIP" --keychain-profile "$NOTARY_PROFILE" --wait \
+    || die "notarytool submit failed for zip (${arch})"
+
+  generate_squirrel_blockmap "$SQUIRREL_ZIP" "$SQUIRREL_BLOCKMAP"
+
+  write_latest_mac_yml_arch "$VERSION" "$arch"
+  verify_latest_mac_yml_arch "$VERSION" "$arch"
+  assert_squirrel_zip_is_ditto_build "$VERSION" "$arch"
+
+  # Accumulate release assets.
+  printf '%s\n' "$SQUIRREL_ZIP" "$SQUIRREL_BLOCKMAP" "$HYPHEN_DMG" "$YML" >> "$ASSETS_TMP"
+  echo "==> ${arch} complete"
+}
+
+# ── Validation ───────────────────────────────────────────────────────────────
+
+[[ -n "$VERSION" ]] || die "Usage: $0 <version> [arch...]
+  e.g. $0 0.1.12
+       $0 0.1.12 arm64
+       $0 0.1.12 arm64 x64"
+
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$ ]] \
   || die "Invalid version: $VERSION (expected semver like 0.1.12)"
+
+for arch in "${ARCHES[@]}"; do
+  [[ "$arch" == "arm64" || "$arch" == "x64" || "$arch" == "universal" ]] \
+    || die "Unknown arch '$arch' — supported values: arm64  x64  universal"
+done
 
 need_cmd npm
 need_cmd npx
@@ -161,9 +237,13 @@ need_cmd stat
 echo "==> Checking gh auth"
 gh auth status >/dev/null 2>&1 || die "gh is not authenticated. Run: gh auth login"
 
+echo "==> Building arches: ${ARCHES[*]}"
+
 cd "$GLASS_ROOT"
 
-export SENTRY_DSN=$(grep SENTRY_DSN "$(dirname "$0")/../../.env" | cut -d '=' -f2-)
+# Pull SENTRY_DSN from root .env if present (don't fail if missing).
+SENTRY_DSN_VAL="$(grep SENTRY_DSN "$(dirname "$0")/../../.env" 2>/dev/null | cut -d '=' -f2- || true)"
+export SENTRY_DSN="$SENTRY_DSN_VAL"
 
 echo "==> Setting package.json version to $VERSION"
 node -e "
@@ -177,78 +257,59 @@ fs.writeFileSync(p, JSON.stringify(j, null, 2) + '\n');
 echo "==> Building renderer + main (electron-vite)"
 npm run build || die "npm run build failed"
 
-echo "==> Preparing electron-builder config (sign only; notarize via notarytool)"
+echo "==> Preparing electron-builder config (code-sign only; notarize via notarytool below)"
 cp "$GLASS_ROOT/electron-builder.signed.yml" "$BUILD_CONFIG"
 if grep -q 'notarize: true' "$BUILD_CONFIG"; then
   sed -i '' 's/notarize: true/notarize: false/' "$BUILD_CONFIG"
 fi
 
-echo "==> Packaging signed macOS dmg + zip (no auto-publish — upload is explicit below)"
-npx electron-builder --mac --config "$BUILD_CONFIG" --publish never \
-  || die "electron-builder failed"
+# Reset accumulator.
+rm -f "$ASSETS_TMP"
+touch "$ASSETS_TMP"
+
+# ── Per-arch build + notarize loop ────────────────────────────────────────────
+for ARCH in "${ARCHES[@]}"; do
+  build_arch "$ARCH"
+done
 
 rm -f "$BUILD_CONFIG"
 
-SPACE_DMG="$RELEASE_DIR/IIVO Glass-${VERSION}-arm64.dmg"
-SPACE_ZIP="$RELEASE_DIR/IIVO Glass-${VERSION}-arm64-mac.zip"
-APP="$RELEASE_DIR/mac-arm64/IIVO Glass.app"
-HYPHEN_DMG="$RELEASE_DIR/IIVO-Glass-${VERSION}-arm64.dmg"
-# Squirrel auto-update must use the notarized ditto zip (hyphenated) — never the
-# electron-builder space-named zip (IIVO Glass-…-arm64-mac.zip).
-SQUIRREL_ZIP="$RELEASE_DIR/IIVO-Glass-${VERSION}-arm64-mac.zip"
-SQUIRREL_BLOCKMAP="$RELEASE_DIR/IIVO-Glass-${VERSION}-arm64-mac.zip.blockmap"
-
-[[ -f "$SPACE_DMG" ]] || die "Expected dmg not found: $SPACE_DMG"
-[[ -d "$APP" ]] || die "Expected app bundle not found: $APP"
-
-echo "==> Copying release artifacts to GitHub asset names (hyphenated)"
-cp "$SPACE_DMG" "$HYPHEN_DMG"
-
-echo "==> Building Squirrel zip with ditto (hyphenated: $(basename "$SQUIRREL_ZIP"))"
-ditto -c -k --keepParent "$APP" "$SQUIRREL_ZIP" \
-  || die "ditto failed to create $SQUIRREL_ZIP"
-
-if [[ -f "$SPACE_ZIP" ]]; then
-  echo "    (electron-builder zip $(basename "$SPACE_ZIP") is not uploaded — Squirrel uses ditto zip only)"
+# ── Backward-compat latest-mac.yml ───────────────────────────────────────────
+# electron-updater on arm64 Macs prefers latest-mac-arm64.yml but falls back to
+# latest-mac.yml. Keep latest-mac.yml = arm64 so existing auto-update clients
+# (all currently arm64) are not disrupted by this release.
+# If this is an x64-only release, skip the backward-compat copy.
+if printf '%s\n' "${ARCHES[@]}" | grep -qx 'arm64'; then
+  echo ""
+  echo "==> Copying latest-mac-arm64.yml → latest-mac.yml (backward-compat)"
+  cp "$RELEASE_DIR/latest-mac-arm64.yml" "$RELEASE_DIR/latest-mac.yml"
+  echo "$RELEASE_DIR/latest-mac.yml" >> "$ASSETS_TMP"
 fi
 
-notarize_and_staple "$HYPHEN_DMG" "DMG"
-
-echo "==> Notarizing ZIP: $SQUIRREL_ZIP"
-xcrun notarytool submit "$SQUIRREL_ZIP" --keychain-profile "$NOTARY_PROFILE" --wait \
-  || die "notarytool submit failed for ZIP ($SQUIRREL_ZIP)"
-
-generate_squirrel_blockmap "$SQUIRREL_ZIP" "$SQUIRREL_BLOCKMAP"
-
-echo "==> Writing latest-mac.yml (SHA512 of notarized ditto zip: $(basename "$SQUIRREL_ZIP"))"
-write_latest_mac_yml "$VERSION"
-verify_latest_mac_yml "$VERSION"
-assert_squirrel_zip_is_ditto_build "$VERSION"
-
+# ── Update manifests ──────────────────────────────────────────────────────────
+echo ""
 echo "==> Writing glass-update-manifest.json"
 node scripts/write-glass-update-manifest.mjs || die "write-glass-update-manifest.mjs failed"
 
+# ── GitHub release ────────────────────────────────────────────────────────────
 TAG="v${VERSION}"
-RELEASE_TITLE="IIVO Glass ${VERSION} — Apple Silicon Beta"
-RELEASE_NOTES="IIVO Glass v${VERSION} signed, notarized, and stapled for macOS auto-update."
+ARCH_LABEL="$(IFS=+; echo "${ARCHES[*]}")"
+RELEASE_TITLE="IIVO Glass ${VERSION} — ${ARCH_LABEL}"
+RELEASE_NOTES="IIVO Glass v${VERSION} signed, notarized, and stapled for macOS (${ARCH_LABEL})."
 
-# GitHub upload: hyphenated ditto zip only — never "IIVO Glass-…-arm64-mac.zip" (electron-builder).
-RELEASE_ASSETS=(
-  "$SQUIRREL_ZIP"
-  "$SQUIRREL_BLOCKMAP"
-  "$HYPHEN_DMG"
-  "$RELEASE_DIR/latest-mac.yml"
-)
+# Read accumulated asset paths.
+mapfile -t RELEASE_ASSETS < "$ASSETS_TMP"
+rm -f "$ASSETS_TMP"
 
-echo "==> Publishing GitHub release ${TAG}"
-echo "    Squirrel zip: $(basename "$SQUIRREL_ZIP") (ditto + notarized)"
+echo ""
+echo "==> Publishing GitHub release ${TAG} (arches: ${ARCH_LABEL})"
 for asset in "${RELEASE_ASSETS[@]}"; do
-  [[ -f "$asset" ]] || die "Missing release asset: $asset"
+  [[ -f "$asset" ]] || die "Missing release asset before upload: $asset"
   echo "    - $(basename "$asset")"
 done
 
 if gh release view "$TAG" --repo "${GH_OWNER}/${GH_REPO}" >/dev/null 2>&1; then
-  echo "    Release $TAG exists — uploading assets (--clobber)"
+  echo "    Release $TAG exists — uploading (--clobber)"
   gh release upload "$TAG" \
     --repo "${GH_OWNER}/${GH_REPO}" \
     --clobber \
@@ -265,8 +326,8 @@ fi
 
 RELEASE_URL="https://github.com/${GH_OWNER}/${GH_REPO}/releases/tag/${TAG}"
 echo ""
-echo "SUCCESS: IIVO Glass v${VERSION} released"
+echo "SUCCESS: IIVO Glass v${VERSION} released (${ARCH_LABEL})"
 echo "  ${RELEASE_URL}"
-echo "  DMG:  ${HYPHEN_DMG}"
-echo "  ZIP:  ${SQUIRREL_ZIP}"
-echo "  YML:  ${RELEASE_DIR}/latest-mac.yml"
+for asset in "${RELEASE_ASSETS[@]}"; do
+  echo "  $(basename "$asset")"
+done

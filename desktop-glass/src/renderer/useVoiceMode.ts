@@ -102,15 +102,16 @@ export function useVoiceMode(): VoiceModeController {
     }
   }, [glass.screenContextStatus?.kind, state.active]);
 
-  // Drive thinking → done off the ask lifecycle (direct / visual routes).
+  // Drive thinking → done off the ask lifecycle (direct / visual / streaming routes).
   useEffect(() => {
     const now = glass.askStatus;
-    const wasPending = prevAskStatusRef.current === "pending";
+    const prev = prevAskStatusRef.current;
+    const wasInFlight = prev === "pending" || prev === "streaming";
     prevAskStatusRef.current = now;
     if (!state.active) return;
-    if (now === "pending") {
+    if (now === "pending" || now === "streaming") {
       dispatch({ type: "THINKING" });
-    } else if (wasPending) {
+    } else if (wasInFlight) {
       if (now === "error") {
         dispatch({ type: "ERROR", message: glass.lastError ?? "Something went wrong." });
       } else {
