@@ -220,7 +220,7 @@ app.use(
 // ─── Auth (better-auth) — must come before express.json() global middleware ───
 // toNodeHandler adapts better-auth's fetch-based handler to Node.js req/res.
 // Mount before express.json() so better-auth handles its own body parsing.
-app.all("/api/auth/**", toNodeHandler(auth));
+app.all(/^\/api\/auth/, toNodeHandler(auth));
 
 // Glass connect token — issue (user must be authenticated via better-auth session cookie)
 app.post("/api/auth/glass-connect/issue", express.json(), async (req, res) => {

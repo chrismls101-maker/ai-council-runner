@@ -39,6 +39,7 @@ async function sendMagicLinkEmail(to: string, url: string) {
   }
 
   // Lazy-import Resend so it's not required when RESEND_API_KEY is absent
+  // @ts-ignore — resend not in devDeps; runtime-only when RESEND_API_KEY is set
   const { Resend } = await import("resend");
   const resend = new Resend(apiKey);
   await resend.emails.send({
