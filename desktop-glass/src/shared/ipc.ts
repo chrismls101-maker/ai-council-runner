@@ -274,7 +274,13 @@ export type GlassCommand =
   | { type: "wingman-inspect"; prompt?: string }
   | { type: "wingman-add-note"; content: string }
   | { type: "wingman-search-sessions"; query: string }
-  | { type: "wingman-terminal-toggle" };
+  | { type: "wingman-terminal-toggle" }
+  | { type: "wingman-agent-proxy-enable" }
+  | { type: "wingman-agent-proxy-disable" }
+  | { type: "wingman-agent-proxy-consent-grant" }
+  | { type: "wingman-github-pat-save"; token: string }
+  | { type: "wingman-github-pat-clear" }
+  | { type: "wingman-github-pat-status" };
 
 export interface GlassState {
   privacy: PrivacyState;
@@ -363,6 +369,23 @@ export interface GlassState {
   wingman: WingmanState;
   /** Wingman cross-session memory — search results + library stats. */
   wingmanMemory: WingmanMemoryState;
+  /** Agent proxy — local HTTP proxy for AI agent API interception. */
+  agentProxy: AgentProxyState;
+  /** GitHub integration — whether a valid PAT is stored. */
+  githubPATConfigured: boolean;
+  /** Set true if the last GitHub API call rejected the stored PAT. */
+  githubTokenInvalid: boolean;
+}
+
+export interface AgentProxyState {
+  /** Whether the user has granted consent for agent interception. */
+  consented: boolean;
+  /** Whether the proxy server is currently running. */
+  running: boolean;
+  /** The port the proxy is listening on (when running). */
+  port: number;
+  /** Whether the consent modal should be shown. */
+  showConsentModal: boolean;
 }
 
 export interface SttProcessChunkRequest {

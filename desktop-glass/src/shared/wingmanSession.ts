@@ -10,9 +10,15 @@
  */
 
 import type { TerminalEvent } from "./terminalEvents.ts";
+import type { GitDiffSummary } from "./gitDiff.ts";
+import { formatDiffForPrompt } from "./gitDiff.ts";
+import type { AgentCallSummary } from "./agentProxy.ts";
+import { formatCallsForPrompt, analyzeAgentScope } from "./agentProxy.ts";
 
 // Re-export for convenience so consumers only need to import from wingmanSession
 export type { TerminalEvent } from "./terminalEvents.ts";
+export type { GitDiffSummary } from "./gitDiff.ts";
+export type { AgentCallSummary } from "./agentProxy.ts";
 
 // ---------------------------------------------------------------------------
 // Core types
@@ -72,6 +78,18 @@ export interface WingmanReport {
   nextSteps: string[];
   /** Terminal events captured during the session (errors, failures, successes). */
   terminalEvents?: TerminalEvent[];
+  /** Git diff summary captured at session end vs session-start commit. */
+  gitDiff?: GitDiffSummary;
+  /** AI agent API calls intercepted via the local proxy during the session. */
+  agentCalls?: AgentCallSummary[];
+  /** Whether agent interception was active during this session. */
+  agentInterceptionWasActive?: boolean;
+  /** Programmatic verification results — set async after report generation. */
+  verificationResults?: import("./verificationEngine.ts").VerificationReport;
+  /** GitHub PR context — fetched async after report generation. */
+  githubPR?: import("./githubTypes.ts").GitHubPRContext;
+  /** Set to true if the PAT was rejected during the fetch — prompt re-entry. */
+  githubTokenInvalid?: boolean;
   savedAt?: number;
 }
 
@@ -91,6 +109,12 @@ export interface WingmanSession {
   terminalEvents: TerminalEvent[];
   /** Whether terminal watching is enabled for this session (opt-in). */
   terminalWatching: boolean;
+  /** The HEAD commit SHA captured at session start — used for git diff at end. */
+  gitBaseRef?: string;
+  /** Absolute path to the detected git repo root. */
+  gitRepoPath?: string;
+  /** AI agent API calls captured via the local proxy during this session. */
+  agentCalls: AgentCallSummary[];
   report?: WingmanReport;
 }
 
@@ -128,6 +152,7 @@ export function initialWingmanSession(goal: string): WingmanSession {
     loopWarning: false,
     terminalEvents: [],
     terminalWatching: false,
+    agentCalls: [],
   };
 }
 
@@ -332,7 +357,7 @@ export function buildVerificationChecklist(session: WingmanSession): string[] {
  *
  * IMPORTANT: The model must use observed/appears-to language — never verified/confirmed.
  */
-export function buildWingmanReportPrompt(session: WingmanSession): string {
+export function buildWingmanReportPrompt(session: WingmanSession, gitDiff?: GitDiffSummary, agentCalls?: AgentCallSummary[]): string {
   const duration = session.endedAt
     ? Math.round((session.endedAt - session.startedAt) / 60_000)
     : 0;
@@ -357,6 +382,16 @@ export function buildWingmanReportPrompt(session: WingmanSession): string {
           .join("\n")
       : "No terminal events captured.";
 
+  const diffSection = gitDiff
+    ? formatDiffForPrompt(gitDiff)
+    : "GIT DIFF\nNot available (no git repo detected or no changes since session start).";
+
+  const calls = agentCalls ?? session.agentCalls;
+  const agentSection = formatCallsForPrompt(calls);
+  const agentScope = calls.length > 0
+    ? analyzeAgentScope(session.goal, calls)
+    : null;
+
   return `You are summarising a Wingman work session for the user.
 
 SESSION DETAILS
@@ -364,6 +399,10 @@ Goal: ${session.goal}
 Duration: ${duration} minutes
 Apps used: ${appsUsed.join(", ") || "not recorded"}
 Loop warning triggered: ${session.loopWarning ? "yes — same error observed more than once" : "no"}
+
+${diffSection}
+
+${agentSection}${agentScope ? `\nAgent scope: ${agentScope.scopeNote}` : ""}
 
 TERMINAL EVENTS (auto-captured)
 ${terminalSummary}
@@ -378,25 +417,26 @@ YOUR TASK
 Write a structured session summary with these exact sections:
 
 SUMMARY
-Write 3–5 sentences describing what happened in this session. Use past tense. Be specific about what was observed.
+Write 3–5 sentences describing what happened in this session. Use past tense. Be specific about what was observed. If a git diff is available, reference the actual files changed. If agent calls are available, mention what the agent appeared to be working on.
 
 KEY FINDINGS
-List up to 4 specific things observed during inspections. Start each with "•". Use "observed", "appeared to", "based on what was visible" — NEVER "verified", "confirmed", "tested", or "proven". Glass can see the screen; it cannot execute code.
+List up to 4 specific things observed during inspections, visible in the git diff, or apparent from agent calls. Start each with "•". Use "observed", "appeared to", "based on what was visible", "the diff shows", "the agent appeared to" — NEVER "verified", "confirmed", "tested", or "proven". Glass can see the screen and read snippets; it cannot execute code.
 
 OBSERVED ONLY (could not verify)
-List up to 3 things that were seen on screen but cannot be confirmed without manual testing. Example: "Tests appeared to pass based on terminal output — not independently verified." This section must exist even if the session was short.
+List up to 3 things that were seen on screen, in the diff, or in agent snippets but cannot be confirmed without manual testing. This section must exist even if the session was short.
 
 WHAT STILL NEEDS CHECKING
-List up to 3 concrete actions the user should take before considering this task done.
+List up to 3 concrete actions the user should take before considering this task done. If there is scope drift in the diff or agent calls, include a check for that.
 
 NEXT STEP
 Write exactly one sentence: the single most important next action.
 
 RULES
 - Never use the words "verified", "confirmed", "proven", "tested" in a way that implies Glass ran code or checked execution
-- Always use "observed", "appears to", "based on what is visible", "I cannot confirm"
-- Be specific — reference the actual goal and what was seen, not generic advice
-- If no inspections ran, say so honestly and recommend the user inspect before trusting any results`;
+- Always use "observed", "appears to", "based on what is visible", "I cannot confirm", "the diff shows", "the agent appeared to"
+- Be specific — reference the actual goal, file paths from the diff, and what was seen
+- If no inspections ran, say so honestly and recommend the user inspect before trusting any results
+- If git diff or agent activity shows scope drift, mention it explicitly`;
 }
 
 // ---------------------------------------------------------------------------
@@ -409,6 +449,8 @@ RULES
 export function buildWingmanReport(
   session: WingmanSession,
   aiSummary: string,
+  gitDiff?: GitDiffSummary,
+  agentCalls?: AgentCallSummary[],
 ): WingmanReport {
   const appsUsed = deriveAppsUsed(session.appSnapshots);
   const duration = session.endedAt
@@ -460,5 +502,7 @@ export function buildWingmanReport(
     notVerified,
     nextSteps,
     terminalEvents: session.terminalEvents.slice(),
+    gitDiff,
+    agentCalls: agentCalls ?? session.agentCalls.slice(),
   };
 }

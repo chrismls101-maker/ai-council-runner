@@ -87,6 +87,14 @@ const fallbackState: GlassState = {
   iivoWebUrl: DEFAULT_CONFIG.iivoWebUrl,
   wingman: DEFAULT_WINGMAN_STATE,
   wingmanMemory: DEFAULT_WINGMAN_MEMORY_STATE,
+  agentProxy: {
+    consented: false,
+    running: false,
+    port: 7421,
+    showConsentModal: false,
+  },
+  githubPATConfigured: false,
+  githubTokenInvalid: false,
 };
 
 export function useGlassState(): GlassState {

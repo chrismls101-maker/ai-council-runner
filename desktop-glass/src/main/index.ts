@@ -761,6 +761,21 @@ let wingmanMemoryState: import("../shared/wingmanMemory.ts").WingmanMemoryState 
   loading: false,
 };
 
+// Agent proxy — local HTTP proxy for AI agent API interception
+let agentProxyState: import("../shared/ipc.ts").AgentProxyState = {
+  consented: false,
+  running: false,
+  port: 7421,
+  showConsentModal: false,
+};
+let agentProxyServer: import("./agentProxyServer.ts").AgentProxyServer | null = null;
+
+// GitHub integration — PAT configuration state
+let githubPATState: import("../shared/githubTypes.ts").GitHubPATState = {
+  configured: false,
+  tokenInvalid: false,
+};
+
 // Meeting Intelligence runtime — persists for the duration of a meetings-mode session
 let meetingIntelState: MeetingIntelligenceState = { ...MEETING_INTELLIGENCE_INITIAL_STATE };
 let meetingIntelTimer: ReturnType<typeof setInterval> | null = null;
@@ -828,17 +843,17 @@ function seedSpeakerNamesFromBrowserTitle(): void {
     end if
   `.trim();
 
-  import("child_process").then(({ exec }) => {
-    exec(`osascript -e '${script.replace(/'/g, "'\\''")}'`, (err, stdout) => {
-      const title = stdout?.trim();
-      if (err || !title) return;
-      const fromTitle = extractNamesFromTitle(title);
-      if (Object.keys(fromTitle).length === 0) return;
-      // Merge — don't overwrite names already resolved from earlier transcript.
-      listenSpeakerNames = { ...fromTitle, ...listenSpeakerNames };
-      console.log("[listenNames] seeded from title:", fromTitle, "| title:", title.slice(0, 80));
-    });
-  }).catch(() => {/* child_process unavailable — skip */});
+  // Use execFile (not exec) — avoids shell spawning, consistent with all other
+  // osascript calls in this file.
+  execFileAsync("osascript", ["-e", script]).then(({ stdout }) => {
+    const title = stdout.trim();
+    if (!title) return;
+    const fromTitle = extractNamesFromTitle(title);
+    if (Object.keys(fromTitle).length === 0) return;
+    // Merge — don't overwrite names already resolved from earlier transcript.
+    listenSpeakerNames = { ...fromTitle, ...listenSpeakerNames };
+    console.log("[listenNames] seeded from title:", fromTitle, "| title:", title.slice(0, 80));
+  }).catch(() => {/* osascript unavailable or no browser open — skip */});
 }
 
 /** Start a diarization-enabled Deepgram session for listen mode (Live Notes). */
@@ -2064,6 +2079,137 @@ function stopTerminalWatching(): void {
   }
 }
 
+// ─── Git repo discovery + diff capture ───────────────────────────────────────
+
+/**
+ * Try to discover the git repo root for the user's current project.
+ *
+ * Strategy (in order):
+ *   1. CWD from iTerm2 (has a .path AppleScript property)
+ *   2. CWD inferred from Terminal.app window title (often shows path)
+ *   3. Candidate paths derived from VS Code / Cursor window titles in app snapshots
+ *
+ * For each candidate path, runs `git -C <path> rev-parse --show-toplevel`.
+ * Returns the repo root and base ref on success, or null if none found.
+ */
+async function discoverGitRepo(
+  appSnapshots: Array<{ app: string; title: string }>,
+): Promise<{ repoPath: string; baseRef: string } | null> {
+  const { buildRepoCandidatePaths, extractProjectNameFromTitle } = await import(
+    "../shared/gitDiff.ts"
+  );
+  const os = await import("node:os");
+  const homeDir = os.homedir();
+
+  // Collect candidate paths to try
+  const candidates: string[] = [];
+
+  // Strategy 1: iTerm2 — ask for the current session path
+  try {
+    const script = `tell application "iTerm2"
+  tell current window
+    tell current session
+      get path
+    end tell
+  end tell
+end tell`;
+    const { stdout } = await execFileAsync("osascript", ["-e", script]);
+    const iTermPath = stdout.trim();
+    if (iTermPath && iTermPath.startsWith("/")) {
+      candidates.push(iTermPath);
+    }
+  } catch {
+    /* iTerm2 not running or no scripting access — skip silently */
+  }
+
+  // Strategy 2: Terminal.app — parse window title (often shows cwd after "zsh" or "bash")
+  try {
+    const script = `tell application "Terminal"
+  if (count of windows) > 0 then
+    get custom title of selected tab of front window
+  end if
+end tell`;
+    const { stdout } = await execFileAsync("osascript", ["-e", script]);
+    const termTitle = stdout.trim();
+    if (termTitle && termTitle.startsWith("/")) {
+      candidates.push(termTitle);
+    }
+  } catch {
+    /* Terminal not running — skip silently */
+  }
+
+  // Strategy 3: VS Code / Cursor window titles in app snapshots
+  const editorApps = new Set(["code", "cursor", "visual studio code", "vscodium"]);
+  const seenProjectNames = new Set<string>();
+  for (const snap of [...appSnapshots].reverse()) {
+    const appLower = snap.app.toLowerCase();
+    if (!editorApps.has(appLower) && !appLower.includes("code") && !appLower.includes("cursor")) {
+      continue;
+    }
+    const projectName = extractProjectNameFromTitle(snap.title);
+    if (!projectName || seenProjectNames.has(projectName)) continue;
+    seenProjectNames.add(projectName);
+    for (const candidate of buildRepoCandidatePaths(projectName, homeDir)) {
+      candidates.push(candidate);
+    }
+  }
+
+  // Try each candidate — first valid git repo wins
+  for (const candidatePath of candidates) {
+    try {
+      const { stdout: repoRoot } = await execFileAsync("git", [
+        "-C", candidatePath,
+        "rev-parse", "--show-toplevel",
+      ]);
+      const repoPath = repoRoot.trim();
+      if (!repoPath) continue;
+
+      // Got a valid repo — capture the current HEAD ref
+      const { stdout: headRef } = await execFileAsync("git", [
+        "-C", repoPath,
+        "rev-parse", "HEAD",
+      ]);
+      const baseRef = headRef.trim();
+      if (baseRef && baseRef.length === 40) {
+        return { repoPath, baseRef };
+      }
+    } catch {
+      /* Not a git repo or git not available at this path — continue */
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Run `git diff --numstat` and `git diff --name-status` from baseRef to
+ * the current working tree, then build a GitDiffSummary.
+ * Returns null if git is unavailable, the repo has moved, or diff fails.
+ */
+async function captureSessionGitDiff(
+  repoPath: string,
+  baseRef: string,
+  goal: string,
+): Promise<import("../shared/gitDiff.ts").GitDiffSummary | null> {
+  try {
+    const [numstatResult, nameStatusResult] = await Promise.all([
+      execFileAsync("git", ["-C", repoPath, "diff", "--numstat", baseRef]),
+      execFileAsync("git", ["-C", repoPath, "diff", "--name-status", baseRef]),
+    ]);
+
+    const { buildGitDiffSummary } = await import("../shared/gitDiff.ts");
+    return buildGitDiffSummary(
+      numstatResult.stdout,
+      nameStatusResult.stdout,
+      repoPath,
+      baseRef,
+      goal,
+    );
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Append a completed Wingman session record to wingman-sessions.jsonl in userData.
  * Fire-and-forget — errors are silently swallowed so they never interrupt the report flow.
@@ -2468,6 +2614,9 @@ function snapshot(): GlassState {
     iivoWebUrl: config.iivoWebUrl,
     wingman: wingmanState,
     wingmanMemory: wingmanMemoryState,
+    agentProxy: agentProxyState,
+    githubPATConfigured: githubPATState.configured,
+    githubTokenInvalid: githubPATState.tokenInvalid,
   };
 }
 
@@ -4645,6 +4794,19 @@ async function handleCommand(
       stopTerminalWatching();
       const session = initialWingmanSession(command.goal);
       wingmanState = { active: true, session, inspecting: false, report: null };
+      // Discover git repo asynchronously — doesn't block the session starting
+      discoverGitRepo(session.appSnapshots).then((repoInfo) => {
+        if (!repoInfo || !wingmanState.session) return;
+        wingmanState = {
+          ...wingmanState,
+          session: {
+            ...wingmanState.session,
+            gitBaseRef: repoInfo.baseRef,
+            gitRepoPath: repoInfo.repoPath,
+          },
+        };
+        // Don't push() — this is background work, no UI change needed
+      }).catch(() => { /* no git repo detected — silent */ });
       // Passive app snapshot accumulator — title + app only, no screenshots
       wingmanSnapshotInterval = setInterval(() => {
         if (!wingmanState.session) return;
@@ -4801,29 +4963,98 @@ async function handleCommand(
         wingmanSnapshotInterval = null;
       }
       stopTerminalWatching();
+      // Stop agent proxy and collect captured calls
+      const sessionAgentCalls = wingmanState.session.agentCalls.slice();
+      if (agentProxyServer) {
+        await agentProxyServer.stop();
+        agentProxyServer = null;
+        agentProxyState = { ...agentProxyState, running: false };
+      }
       const endedSession = {
         ...wingmanState.session,
         endedAt: Date.now(),
+        agentCalls: sessionAgentCalls,
       };
       wingmanState = { ...wingmanState, active: false, session: endedSession };
       push();
+      // Capture git diff before generating the report
+      const gitDiff =
+        endedSession.gitRepoPath && endedSession.gitBaseRef
+          ? await captureSessionGitDiff(
+              endedSession.gitRepoPath,
+              endedSession.gitBaseRef,
+              endedSession.goal,
+            )
+          : null;
+
       // Generate report asynchronously — push state again when ready
       try {
         const { buildWingmanReportPrompt, buildWingmanReport } = await import("../shared/wingmanSession.ts");
-        const prompt = buildWingmanReportPrompt(endedSession);
+        const prompt = buildWingmanReportPrompt(endedSession, gitDiff ?? undefined, sessionAgentCalls);
         const response = await askIivoGlass(config, { prompt, visualIntent: false });
         const aiSummary = response.answer?.trim() ?? "Session complete.";
-        const report = buildWingmanReport(endedSession, aiSummary);
+        const report = buildWingmanReport(endedSession, aiSummary, gitDiff ?? undefined, sessionAgentCalls);
         wingmanState = { ...wingmanState, report };
         state.lastNotice = "Wingman session report ready.";
+        push();
         saveWingmanSessionRecord(endedSession, report);
+
+        // ── Verification pass (async, non-blocking) ─────────────────────────
+        // Kick off after the report is already visible. Results are merged in
+        // when ready and pushed to state again. Never blocks report display.
+        void (async () => {
+          try {
+            const { extractClaims } = await import("../shared/verificationEngine.ts");
+            const { runVerification } = await import("./verificationRunner.ts");
+            const claims = extractClaims(endedSession, report);
+            if (claims.length === 0) return;
+            const verificationResults = await runVerification(claims);
+            if (wingmanState.report) {
+              wingmanState = {
+                ...wingmanState,
+                report: { ...wingmanState.report, verificationResults },
+              };
+              push();
+            }
+          } catch {
+            // Verification failure is silent — never crashes the report
+          }
+        })();
+
+        // ── GitHub PR context (async, non-blocking) ─────────────────────────
+        // Only runs if the session had a detected git repo and a PAT is saved.
+        if (endedSession.gitRepoPath) {
+          void (async () => {
+            try {
+              const { fetchSessionPRContext } = await import("./githubService.ts");
+              const result = await fetchSessionPRContext(endedSession.gitRepoPath!);
+              if (result.tokenInvalid) {
+                githubPATState = { ...githubPATState, tokenInvalid: true };
+                push();
+              }
+              if (result.context && wingmanState.report) {
+                wingmanState = {
+                  ...wingmanState,
+                  report: {
+                    ...wingmanState.report,
+                    githubPR: result.context,
+                    githubTokenInvalid: result.tokenInvalid,
+                  },
+                };
+                push();
+              }
+            } catch {
+              // GitHub fetch failure is silent — never crashes the report
+            }
+          })();
+        }
       } catch {
         const { buildWingmanReport } = await import("../shared/wingmanSession.ts");
-        const report = buildWingmanReport(endedSession, "Session complete. Review the inspections above for details.");
+        const report = buildWingmanReport(endedSession, "Session complete. Review the inspections above for details.", gitDiff ?? undefined, sessionAgentCalls);
         wingmanState = { ...wingmanState, report };
         saveWingmanSessionRecord(endedSession, report);
+        push();
       }
-      push();
       return;
     }
 
@@ -4846,6 +5077,109 @@ async function handleCommand(
         };
       } catch {
         wingmanMemoryState = { ...wingmanMemoryState, loading: false, searchResults: [] };
+      }
+      push();
+      return;
+    }
+
+    case "wingman-agent-proxy-consent-grant": {
+      // User clicked "Enable" in the consent modal — mark consented, clear modal
+      agentProxyState = { ...agentProxyState, consented: true, showConsentModal: false };
+      push();
+      return;
+    }
+
+    case "wingman-agent-proxy-enable": {
+      if (!wingmanState.session) return;
+      // First time: show consent modal instead of starting immediately
+      if (!agentProxyState.consented) {
+        agentProxyState = { ...agentProxyState, showConsentModal: true };
+        push();
+        return;
+      }
+      // Already consented — start the proxy
+      if (agentProxyServer) return; // already running
+      try {
+        const { AgentProxyServer, findAvailablePort } = await import("./agentProxyServer.ts");
+        const port = (await findAvailablePort(agentProxyState.port)) ?? agentProxyState.port;
+        agentProxyServer = new AgentProxyServer({
+          port,
+          onCall: (summary) => {
+            if (!wingmanState.session) return;
+            wingmanState = {
+              ...wingmanState,
+              session: {
+                ...wingmanState.session,
+                agentCalls: [...wingmanState.session.agentCalls, summary],
+              },
+            };
+            push();
+          },
+          onError: (err) => {
+            console.error("[AgentProxy]", err.message);
+          },
+        });
+        await agentProxyServer.start();
+        agentProxyState = { ...agentProxyState, running: true, port };
+        state.lastNotice = `Agent interception active on port ${port}`;
+      } catch (err) {
+        state.lastError = `Agent proxy failed to start: ${(err as Error).message}`;
+        agentProxyServer = null;
+        agentProxyState = { ...agentProxyState, running: false };
+      }
+      push();
+      return;
+    }
+
+    case "wingman-agent-proxy-disable": {
+      if (agentProxyServer) {
+        await agentProxyServer.stop();
+        agentProxyServer = null;
+      }
+      agentProxyState = { ...agentProxyState, running: false };
+      state.lastNotice = "Agent interception disabled";
+      push();
+      return;
+    }
+
+    case "wingman-github-pat-save": {
+      const { token } = command;
+      try {
+        const { savePAT, isPATConfigured } = await import("./githubService.ts");
+        await savePAT(token);
+        githubPATState = await isPATConfigured();
+        state.lastNotice = "GitHub PAT saved — PR context will appear in future session reports.";
+      } catch (err) {
+        state.lastError = `Failed to save GitHub PAT: ${(err as Error).message}`;
+        githubPATState = { configured: false, tokenInvalid: false };
+      }
+      push();
+      return;
+    }
+
+    case "wingman-github-pat-clear": {
+      try {
+        const { clearPAT } = await import("./githubService.ts");
+        await clearPAT();
+        githubPATState = { configured: false, tokenInvalid: false };
+        state.lastNotice = "GitHub PAT removed.";
+      } catch {
+        githubPATState = { configured: false, tokenInvalid: false };
+      }
+      push();
+      return;
+    }
+
+    case "wingman-github-pat-status": {
+      try {
+        const { isPATConfigured } = await import("./githubService.ts");
+        githubPATState = await isPATConfigured();
+        // If the token was previously invalid but user re-checked, clear the flag
+        if (githubPATState.configured) {
+          githubPATState = { ...githubPATState, tokenInvalid: false };
+        }
+      } catch {
+        githubPATState = { configured: false, tokenInvalid: false };
       }
       push();
       return;
@@ -6048,6 +6382,14 @@ app.whenReady().then(async () => {
   moments = await loadMoments();
   sessions = await loadSessions();
   glassUserSettings = await loadGlassUserSettings();
+
+  // Check GitHub PAT at startup (silent — never throws)
+  try {
+    const { isPATConfigured } = await import("./githubService.ts");
+    githubPATState = await isPATConfigured();
+  } catch {
+    // safeStorage unavailable or file unreadable — stay at defaults
+  }
   if (!app.isPackaged && process.env.IIVO_GLASS_E2E !== "1") {
     glassUserSettings = { ...glassUserSettings, displayTarget: "primary" };
   }

@@ -40,7 +40,7 @@ This document is the **source of truth** for what IIVO Glass promises users. Eve
 | 17 | Quit cleanly | ✅ E2E | — |
 | 18 | Passive Context Engine | ✅ Unit | No E2E |
 | 19 | Meeting Intelligence | ✅ Unit (45 tests) + QA script | — |
-| 20 | Wingman Mode | ✅ Unit (41 tests) + E2E spec + QA script | Inspect requires live screen |
+| 20 | Wingman Mode | ✅ Unit (353 tests across 9 suites) + E2E spec + QA script | Inspect requires live screen; GitHub PAT requires real PAT |
 
 ---
 
@@ -714,10 +714,26 @@ Four rule-pairs: UI task → payment/auth config, test task → production deplo
 - AI inspect fails → `inspecting` reset to false, `lastError` set. Session continues.
 - AI report generation fails → fallback report generated with generic summary; `notVerified` still populated from checklist.
 
+**v0.5.0 feature additions**
+- **Cross-session memory** — `wingmanMemory.ts`: JSONL session store at `~/.iivo-glass/wingman-sessions.jsonl`; auto-saved on `wingman-end`; `wingman-search-sessions` IPC; past sessions surfaced in report view
+- **Terminal awareness** — `terminalEvents.ts`: Accessibility API polls frontmost terminal (500ms); error/command events auto-appended as `WingmanNote`; hybrid panel with terminal events feed
+- **Git diff** — `gitDiff.ts`: `git diff HEAD` at session end; file list, patch summary, scope indicator surfaced in report
+- **Agent proxy** — `agentProxy.ts` + `agentProxyServer.ts`: local HTTP proxy intercepts agent API calls; consent modal on first enable; `wingman-agent-proxy-enable/disable` IPC; `agentCalls` in report
+- **Claim verification** — `verificationEngine.ts` + `verificationRunner.ts`: extracts testable claims from AI narrative; runs shell/URL/file probes; verification badges in report
+- **GitHub integration** — `githubTypes.ts` + `githubClient.ts` + `githubService.ts`: PAT encrypted via `safeStorage`; PR + CI check rollup fetched at session end; PR context section in report
+- **GitHub PAT settings UI** — `GitHubPATSection` component in `WingmanPanel.tsx`: 5 states (nudge → editing → saving → connected → token-invalid); `dismissedInvalid` bug fix; CSS-drawn padlock; inline "Update token" link
+
 **Tests**
-- `src/test/wingmanSession.test.ts` — 41 unit tests: factory, snapshot dedup, deriveAppsUsed, detectLoop, detectScopeDrift, buildVerificationChecklist, buildWingmanReport structure, buildWingmanReportPrompt language contract, confidence type contract
+- `src/test/wingmanSession.test.ts` — 41 unit tests: session factory, snapshot dedup, deriveAppsUsed, detectLoop, detectScopeDrift, buildVerificationChecklist, buildWingmanReport structure, buildWingmanReportPrompt language contract, confidence type contract
+- `src/test/wingmanMemory.test.ts` — 24 unit tests: JSONL round-trip, append, list, search, prune
+- `src/test/terminalEvents.test.ts` — 37 unit tests: terminal output parser, event builders, dedup, severity classification
+- `src/test/gitDiff.test.ts` — 45 unit tests: patch parser, scope analysis, file type classification, prompt formatter
+- `src/test/agentProxy.test.ts` — 51 unit tests: request/response minimization, scope analysis, call builder, prompt formatter
+- `src/test/verificationEngine.test.ts` — 63 unit tests: claim extractors, verdict types, result aggregation, confidence model
+- `src/test/githubTypes.test.ts` — 46 unit tests: parseGitHubRemote (HTTPS/SSH/GHE), reviewDecision helpers, checkRollup helpers, parseReviewDecision, deriveCheckRollupStatus, truncatePRBody
+- `src/test/githubClient.test.ts` — 6 unit tests: HTTP client contract
 - `tests/e2e/glass-wingman.spec.ts` — 14 E2E tests: mode card visibility, default state, wingman-start/end, active/inactive/report panel states, add note via UI and IPC, no audio during session, report generation
-- `scripts/glass-qa-wingman.mjs` — QA script: server reachability, pre/post conditions, start/note/end lifecycle, report structure, "never verified" language contract
+- `scripts/glass-qa-wingman.mjs` — QA script (§1–§14): server reachability, pre/post conditions, start/note/end lifecycle, v0.5.0 session fields, report structure, "never verified" language contract, cross-session memory, post-condition cleanup, GitHub PAT management, verification results shape
 
 ---
 
@@ -768,6 +784,7 @@ These are the highest-value **UNCOVERED** items to close next:
 
 | Date | Change |
 |------|--------|
+| 2026-06-12 | **v0.5.0** — §20 Wingman v0.5.0 (Tasks #61–#116): Cross-session memory (`wingmanMemory.ts`, JSONL store, `wingman-search-sessions` IPC, past sessions in report); terminal awareness (`terminalEvents.ts`, Accessibility API 500ms poll, error auto-note, hybrid panel design); git diff (`gitDiff.ts`, `git diff HEAD` at session end, file list + scope indicator in report); agent proxy (`agentProxy.ts` + `agentProxyServer.ts`, local HTTP proxy, consent modal, `wingman-agent-proxy-enable/disable`, `agentCalls` in report); claim verification (`verificationEngine.ts` + `verificationRunner.ts`, shell/URL/file probes, verification badges in report); GitHub integration (`githubTypes.ts` + `githubClient.ts` + `githubService.ts`, PAT via `safeStorage`, PR + CI check rollup at session end, PR context section in report); GitHub PAT settings UI (`GitHubPATSection`, 5 states, `dismissedInvalid` bug fix, CSS-drawn padlock, inline "Update token" link); QA script updated §1–§14; 353 unit tests across 9 new suites. Total: 1,394 tests / 0 failures. |
 | 2026-06-11 | **v0.4.0** — §20 Wingman Mode (Tasks #43–#60): Full Wingman build — `WingmanSession` type system + business logic (`wingmanSession.ts`); 4 IPC commands (`wingman-start`, `wingman-inspect`, `wingman-add-note`, `wingman-end`); passive app snapshot accumulator (30s interval, 60s dedup); task-aware visual ask with session context; loop detection (2+ shared error keywords within 20 min); scope drift detection (4 rule-pairs); verification checklist generator; AI session report with `notVerified` section; `WingmanPanel.tsx` (3 states: inactive/active/report); wired into `CopilotPanel`; Work mode removed from `GlassModeId`, `GLASS_MODE_PRESETS`, `GLASS_MODE_ORDER`, `GLASS_MODE_ICONS`, `deriveActiveMode()`, and all tests; Dock color map updated; CSS for all 3 panel states; 41 unit tests; 14 E2E tests (`glass-wingman.spec.ts`); QA script (`glass-qa-wingman.mjs`); §20 contract section. Total: 1,089 tests / 0 failures. |
 | 2026-06-11 | **v0.3.0** — §15 Settings UI (Task #42): `GlassUserSettings` extended with `iivoApiUrl?`/`iivoWebUrl?`; `parseGlassServerUrl()` validates and normalises http(s) URLs; `set-glass-server-urls` IPC command mutates `config` at runtime and persists to `glass-settings.json`; URL fields added to `GlassState` and state push snapshot; saved overrides applied at boot after `loadGlassUserSettings()`; `ServerUrlEditor` React component added to panel `StatusGrid` with `data-testid` attributes for E2E; `fallbackState` in `useGlassState.ts` filled from `DEFAULT_CONFIG`. §15 coverage now ✅. |
 | 2026-06-11 | **v0.2.9** — §10 Live Notes Playwright E2E suite (Task #40): `tests/e2e/glass-live-notes.spec.ts` — 10 tests covering listen mode setup, listenLiveNotes state appearance, listeningStatus transitions, transcriptChunkCount increments, rollingPreview accumulation, idle-after-stop, persistence after stop-listening, NotesPad window visibility, tab controls, and debrief trigger with listen context. §10 coverage now ✅. |

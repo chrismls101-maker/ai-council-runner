@@ -24,15 +24,33 @@ import type {
   WingmanReport,
   WingmanSession,
   TerminalEvent,
+  GitDiffSummary,
+  AgentCallSummary,
 } from "../../shared/wingmanSession.ts";
+import { shortRef } from "../../shared/gitDiff.ts";
+import { shortModelName, formatCallTime } from "../../shared/agentProxy.ts";
+import { statusLabel, statusToken, verificationSummaryLine } from "../../shared/verificationEngine.ts";
+import type { VerificationReport } from "../../shared/verificationEngine.ts";
 import type { WingmanMemoryState, WingmanSessionRecord } from "../../shared/wingmanMemory.ts";
 import { formatSessionAge, formatSessionDuration } from "../../shared/wingmanMemory.ts";
+import type { AgentProxyState } from "../../shared/ipc.ts";
+import { AgentProxyConsentModal } from "./AgentProxyConsentModal.tsx";
+import {
+  reviewDecisionLabel,
+  reviewDecisionToken,
+  checkRollupLabel,
+  checkRollupToken,
+} from "../../shared/githubTypes.ts";
+import type { GitHubPRContext } from "../../shared/githubTypes.ts";
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface WingmanPanelProps {
   wingman: WingmanState;
   wingmanMemory: WingmanMemoryState;
+  agentProxy: AgentProxyState;
+  githubPATConfigured: boolean;
+  githubTokenInvalid: boolean;
   detectedApp?: string;
 }
 
@@ -369,17 +387,381 @@ function SpotlightCard({
   return null;
 }
 
+// ─── GitHub PAT section ───────────────────────────────────────────────────────
+
+function GitHubPATSection({
+  configured,
+  tokenInvalid,
+}: {
+  configured: boolean;
+  tokenInvalid: boolean;
+}): JSX.Element {
+  const [isEditing, setIsEditing] = useState(tokenInvalid);
+  const [token, setToken] = useState("");
+  const [showToken, setShowToken] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [savedFeedback, setSavedFeedback] = useState(false);
+  const [validationError, setValidationError] = useState("");
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  // Tracks whether the user dismissed the invalid-token form manually.
+  // Allows them to close the form without being forced to update immediately.
+  const [dismissedInvalid, setDismissedInvalid] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const prevConfigured = useRef(configured);
+
+  // Pre-open form when token becomes invalid; reset dismissal if it becomes invalid again
+  useEffect(() => {
+    if (tokenInvalid) {
+      setIsEditing(true);
+      setDismissedInvalid(false);
+    }
+  }, [tokenInvalid]);
+
+  // Detect successful save: configured flipped true while we were saving
+  useEffect(() => {
+    const prev = prevConfigured.current;
+    prevConfigured.current = configured;
+    if (!prev && configured && saving) {
+      setSaving(false);
+      setSavedFeedback(true);
+      setIsEditing(false);
+      setToken("");
+      setShowToken(false);
+      setValidationError("");
+      const t = setTimeout(() => setSavedFeedback(false), 2500);
+      return () => clearTimeout(t);
+    }
+  }, [configured]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-focus input when form opens
+  useEffect(() => {
+    if (isEditing) {
+      const t = setTimeout(() => inputRef.current?.focus(), 60);
+      return () => clearTimeout(t);
+    }
+  }, [isEditing]);
+
+  function handleSave(): void {
+    const trimmed = token.trim();
+    if (trimmed.length < 10) {
+      setValidationError("Token is too short — paste the full PAT from GitHub");
+      return;
+    }
+    if (
+      !trimmed.startsWith("github_pat_") &&
+      !trimmed.startsWith("ghp_") &&
+      !trimmed.startsWith("gho_")
+    ) {
+      setValidationError("Expected github_pat_…, ghp_…, or gho_… format");
+      return;
+    }
+    setValidationError("");
+    setSaving(true);
+    send({ type: "wingman-github-pat-save", token: trimmed });
+  }
+
+  function handleCancel(): void {
+    setIsEditing(false);
+    setToken("");
+    setValidationError("");
+    setShowToken(false);
+    setSaving(false);
+    setConfirmRemove(false);
+    // If dismissing while token is still invalid, track that so the warn
+    // banner renders a re-open affordance rather than "re-enter below".
+    if (tokenInvalid) setDismissedInvalid(true);
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>): void {
+    if (e.key === "Enter") handleSave();
+    if (e.key === "Escape") handleCancel();
+  }
+
+  const showConnected = configured && !tokenInvalid && !isEditing;
+  const showNudge = !configured && !tokenInvalid && !isEditing;
+  const showForm = isEditing;
+
+  return (
+    <div className="wm-hb-rsec wm-hb-gh" data-testid="wingman-github-pat-section">
+
+      {/* Header row — label + live status pill */}
+      <div className="wm-hb-gh-header">
+        <div className="wm-hb-gh-label">GitHub</div>
+        {(showConnected || savedFeedback) && (
+          <div className={`wm-hb-gh-status ${savedFeedback ? "wm-hb-gh-status--saved" : "wm-hb-gh-status--ok"}`}>
+            <span className="wm-hb-gh-status-dot" />
+            {savedFeedback ? "Saved" : "Connected"}
+          </div>
+        )}
+        {tokenInvalid && (
+          <div className="wm-hb-gh-status wm-hb-gh-status--warn">
+            <span className="wm-hb-gh-status-dot" />
+            Token rejected
+          </div>
+        )}
+      </div>
+
+      {/* Connected state */}
+      {showConnected && (
+        <div className="wm-hb-gh-connected-body">
+          <span className="wm-hb-gh-meta-hint">
+            Encrypted · macOS Keychain · No open PR on this branch
+          </span>
+          <div className="wm-hb-gh-connected-actions">
+            <button
+              type="button"
+              className="wm-hb-gh-btn-secondary"
+              onClick={() => { setIsEditing(true); setConfirmRemove(false); }}
+            >
+              Update token
+            </button>
+            {confirmRemove ? (
+              <>
+                <span className="wm-hb-gh-confirm-text">Remove PAT?</span>
+                <button
+                  type="button"
+                  className="wm-hb-gh-btn-danger"
+                  onClick={() => {
+                    send({ type: "wingman-github-pat-clear" });
+                    setConfirmRemove(false);
+                  }}
+                >
+                  Yes, remove
+                </button>
+                <button
+                  type="button"
+                  className="wm-hb-gh-btn-ghost"
+                  onClick={() => setConfirmRemove(false)}
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="wm-hb-gh-btn-remove"
+                onClick={() => setConfirmRemove(true)}
+              >
+                Remove
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Nudge state — not yet configured */}
+      {showNudge && (
+        <div className="wm-hb-gh-nudge-body">
+          <p className="wm-hb-gh-desc">
+            Connect a GitHub PAT to see PR status and CI results in session reports.
+          </p>
+          <button
+            type="button"
+            className="wm-hb-gh-btn-connect"
+            onClick={() => setIsEditing(true)}
+          >
+            Connect GitHub
+          </button>
+        </div>
+      )}
+
+      {/* Token-invalid warning banner */}
+      {tokenInvalid && (
+        <div className="wm-hb-gh-warn-banner" role="alert">
+          {dismissedInvalid ? (
+            <>
+              Token was rejected (401).{" "}
+              <button
+                type="button"
+                className="wm-hb-gh-inline-reopen"
+                onClick={() => { setDismissedInvalid(false); setIsEditing(true); }}
+              >
+                Update token
+              </button>
+            </>
+          ) : (
+            "Token rejected (401) — please re-enter your PAT below."
+          )}
+        </div>
+      )}
+
+      {/* Edit form */}
+      {showForm && (
+        <div className="wm-hb-gh-form">
+          {!tokenInvalid && (
+            <p className="wm-hb-gh-desc">
+              Fine-grained PAT with read-only access to Pull requests and Checks.{" "}
+              <span className="wm-hb-gh-url-hint">github.com/settings/tokens</span>
+            </p>
+          )}
+
+          {/* Password input + show/hide toggle */}
+          <div className="wm-hb-gh-input-row">
+            <input
+              ref={inputRef}
+              type={showToken ? "text" : "password"}
+              className="wingman-input wm-hb-gh-input"
+              placeholder="github_pat_… or ghp_…"
+              value={token}
+              onChange={(e) => {
+                setToken(e.currentTarget.value);
+                if (validationError) setValidationError("");
+              }}
+              onKeyDown={handleKeyDown}
+              disabled={saving}
+              autoComplete="off"
+              spellCheck={false}
+              data-testid="wingman-github-pat-input"
+            />
+            <button
+              type="button"
+              className="wm-hb-gh-showhide"
+              onClick={() => setShowToken((s) => !s)}
+              disabled={saving}
+              aria-label={showToken ? "Hide token" : "Show token"}
+            >
+              {showToken ? "Hide" : "Show"}
+            </button>
+          </div>
+
+          {/* Validation error */}
+          {validationError && (
+            <div className="wm-hb-gh-error" role="alert">
+              {validationError}
+            </div>
+          )}
+
+          {/* Security assurance */}
+          <div className="wm-hb-gh-security-hint">
+            <span className="wm-hb-gh-lock-icon" aria-hidden="true" />
+            Encrypted on this device · Never leaves your machine
+          </div>
+
+          {/* Action buttons */}
+          <div className="wm-hb-gh-actions">
+            <button
+              type="button"
+              className="wm-hb-gh-btn-ghost"
+              onClick={handleCancel}
+              disabled={saving}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="wm-hb-gh-btn-save"
+              onClick={handleSave}
+              disabled={saving || token.trim().length === 0}
+              data-testid="wingman-github-pat-save-btn"
+            >
+              {saving ? "Saving…" : "Save token"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── GitHub PR section ────────────────────────────────────────────────────────
+
+function PRSection({ ctx }: { ctx: GitHubPRContext }): JSX.Element {
+  const { pr, checks } = ctx;
+  const reviewToken = reviewDecisionToken(pr.reviewDecision);
+  const checkToken = checkRollupToken(checks.status);
+
+  return (
+    <div className="wm-hb-rsec" data-testid="wingman-report-github-pr">
+      <div className="wm-hb-rslbl">
+        Pull Request
+        {pr.isDraft && <span className="wm-hb-pr-draft-badge">Draft</span>}
+      </div>
+      <div className="wm-hb-pr-title">
+        <span className="wm-hb-pr-num">#{pr.number}</span>
+        {pr.title}
+      </div>
+      <div className="wm-hb-pr-badges">
+        <span
+          className={`wm-hb-pr-badge wm-hb-pr-badge--review wm-hb-pr-badge--${reviewToken}`}
+          data-testid="wingman-pr-review-badge"
+        >
+          {reviewDecisionLabel(pr.reviewDecision)}
+        </span>
+        <span
+          className={`wm-hb-pr-badge wm-hb-pr-badge--ci wm-hb-pr-badge--${checkToken}`}
+          data-testid="wingman-pr-ci-badge"
+        >
+          {checkRollupLabel(checks)}
+        </span>
+      </div>
+      {pr.bodySnippet && (
+        <div className="wm-hb-pr-body">{pr.bodySnippet}</div>
+      )}
+      {checks.failingNames.length > 0 && (
+        <div className="wm-hb-pr-failing-checks">
+          Failing: {checks.failingNames.join(", ")}
+        </div>
+      )}
+      <div className="wm-hb-pr-meta">
+        {pr.headBranch} → {pr.baseBranch} · by {pr.author}
+      </div>
+    </div>
+  );
+}
+
+// ─── Verification section ─────────────────────────────────────────────────────
+
+function VerificationSection({ vr }: { vr: VerificationReport }): JSX.Element {
+  const summaryLine = verificationSummaryLine(vr);
+  const shown = vr.results.filter((r) => r.status !== "skipped");
+
+  return (
+    <div className="wm-hb-rsec" data-testid="wingman-report-verification">
+      <div className="wm-hb-rslbl">
+        Verification
+        {vr.contradictedCount > 0 && (
+          <span className="wm-hb-verify-alert" aria-label="contradictions found">!</span>
+        )}
+      </div>
+      <div className="wm-hb-verify-summary">{summaryLine}</div>
+      <div className="wm-hb-verify-list">
+        {shown.map((result) => (
+          <div
+            key={result.id}
+            className={`wm-hb-verify-row wm-hb-verify-row--${statusToken(result.status)}`}
+            data-testid={`wingman-verify-${result.claimType}`}
+          >
+            <span className="wm-hb-verify-badge">
+              {statusLabel(result.status)}
+            </span>
+            <div className="wm-hb-verify-body">
+              <div className="wm-hb-verify-claim">{result.claim}</div>
+              {result.evidence && result.status !== "skipped" && (
+                <div className="wm-hb-verify-evidence">{result.evidence}</div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Report view ──────────────────────────────────────────────────────────────
 
 function ReportView({
   report,
   session,
   memory,
+  githubPATConfigured,
+  githubTokenInvalid,
   onNewSession,
 }: {
   report: WingmanReport;
   session: WingmanSession | null;
   memory: WingmanMemoryState;
+  githubPATConfigured: boolean;
+  githubTokenInvalid: boolean;
   onNewSession: () => void;
 }): JSX.Element {
   const durationLabel = formatDurationMs(report.duration);
@@ -423,6 +805,7 @@ function ReportView({
     notes: [],
     loopWarning: false,
     terminalWatching: false,
+    agentCalls: [],
   };
 
   return (
@@ -471,6 +854,129 @@ function ReportView({
           </div>
         )}
 
+        {/* Code changes from git diff */}
+        {report.gitDiff && (
+          <div className="wm-hb-rsec" data-testid="wingman-report-git-diff">
+            <div className="wm-hb-rslbl">Code changes</div>
+
+            {report.gitDiff.filesChanged.length === 0 ? (
+              <div className="wm-hb-diff-empty">No code changes detected during this session.</div>
+            ) : (
+              <>
+                {/* Scope badge */}
+                <div
+                  className={`wm-hb-diff-scope wm-hb-diff-scope--${report.gitDiff.scopeHint}`}
+                  data-testid="wingman-report-diff-scope"
+                >
+                  <span className="wm-hb-diff-scope-dot" aria-hidden="true" />
+                  <span className="wm-hb-diff-scope-label">
+                    {report.gitDiff.scopeHint === "on-track"
+                      ? "On track"
+                      : report.gitDiff.scopeHint === "possible-drift"
+                        ? "Possible drift"
+                        : report.gitDiff.scopeHint === "significant-drift"
+                          ? "Scope drift"
+                          : "Unknown"}
+                  </span>
+                  <span className="wm-hb-diff-scope-note">{report.gitDiff.scopeNote}</span>
+                </div>
+
+                {/* Stat line */}
+                <div className="wm-hb-diff-stats" data-testid="wingman-report-diff-stats">
+                  <span className="wm-hb-diff-stat-files">
+                    {report.gitDiff.filesChanged.length}{" "}
+                    {report.gitDiff.filesChanged.length === 1 ? "file" : "files"}
+                  </span>
+                  <span className="wm-hb-diff-stat-ins">
+                    +{report.gitDiff.totalInsertions}
+                  </span>
+                  <span className="wm-hb-diff-stat-del">
+                    −{report.gitDiff.totalDeletions}
+                  </span>
+                  <span className="wm-hb-diff-stat-ref">
+                    from {shortRef(report.gitDiff.baseRef)}
+                  </span>
+                </div>
+
+                {/* Top directories */}
+                {report.gitDiff.topDirectories.length > 0 && (
+                  <div className="wm-hb-diff-dirs" data-testid="wingman-report-diff-dirs">
+                    {report.gitDiff.topDirectories.map((dir) => (
+                      <span key={dir} className="wm-hb-diff-dir-chip">{dir}</span>
+                    ))}
+                  </div>
+                )}
+
+                {/* File list */}
+                <div className="wm-hb-diff-files" data-testid="wingman-report-diff-files">
+                  {report.gitDiff.filesChanged.slice(0, 20).map((f) => (
+                    <div
+                      key={f.path}
+                      className={`wm-hb-diff-file wm-hb-diff-file--${f.status}`}
+                    >
+                      <span className="wm-hb-diff-file-status" aria-hidden="true">
+                        {f.status === "added"
+                          ? "A"
+                          : f.status === "deleted"
+                            ? "D"
+                            : f.status === "renamed"
+                              ? "R"
+                              : "M"}
+                      </span>
+                      <span className="wm-hb-diff-file-path">{f.path}</span>
+                      {f.isBinary ? (
+                        <span className="wm-hb-diff-binary">binary</span>
+                      ) : (
+                        <span className="wm-hb-diff-file-counts">
+                          <span className="wm-hb-diff-ins">+{f.insertions}</span>
+                          <span className="wm-hb-diff-del">−{f.deletions}</span>
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                  {report.gitDiff.filesChanged.length > 20 && (
+                    <div className="wm-hb-diff-more">
+                      … and {report.gitDiff.filesChanged.length - 20} more files
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Agent activity */}
+        {report.agentCalls && report.agentCalls.length > 0 && (
+          <div className="wm-hb-rsec" data-testid="wingman-report-agent-calls">
+            <div className="wm-hb-rslbl">Agent activity</div>
+            <div className="wm-hb-agent-list">
+              {report.agentCalls.slice(0, 10).map((call) => (
+                <div key={call.id} className="wm-hb-agent-call">
+                  <div className="wm-hb-agent-call-header">
+                    <span className="wm-hb-agent-model">{shortModelName(call.model)}</span>
+                    {call.hasToolUse && call.toolNames.length > 0 && (
+                      <span className="wm-hb-agent-tools">
+                        {call.toolNames.slice(0, 3).join(", ")}
+                        {call.toolNames.length > 3 ? `… +${call.toolNames.length - 3}` : ""}
+                      </span>
+                    )}
+                    <span className="wm-hb-agent-time">{formatCallTime(call.timestamp)}</span>
+                  </div>
+                  <div className="wm-hb-agent-asked">{call.userMessageSnippet}</div>
+                  {call.responseSnippet && call.responseSnippet !== call.userMessageSnippet && (
+                    <div className="wm-hb-agent-response">{call.responseSnippet}</div>
+                  )}
+                </div>
+              ))}
+              {report.agentCalls.length > 10 && (
+                <div className="wm-hb-agent-more">
+                  … and {report.agentCalls.length - 10} more calls
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Terminal events */}
         {terminalEvents.length > 0 && (
           <div className="wm-hb-rsec" data-testid="wingman-report-terminal-events">
@@ -513,6 +1019,23 @@ function ReportView({
               ))}
             </div>
           </div>
+        )}
+
+        {/* GitHub PR context — shown when a PR was found */}
+        {report.githubPR && !githubTokenInvalid && (
+          <PRSection ctx={report.githubPR} />
+        )}
+        {/* GitHub PAT management — shown when no PR found (covers nudge, connected/no-PR, invalid) */}
+        {(!report.githubPR || githubTokenInvalid) && (
+          <GitHubPATSection
+            configured={githubPATConfigured}
+            tokenInvalid={githubTokenInvalid}
+          />
+        )}
+
+        {/* Verification results */}
+        {report.verificationResults && report.verificationResults.results.length > 0 && (
+          <VerificationSection vr={report.verificationResults} />
         )}
 
         {/* Could not verify */}
@@ -601,6 +1124,9 @@ function ReportView({
 export function WingmanPanel({
   wingman,
   wingmanMemory,
+  agentProxy,
+  githubPATConfigured,
+  githubTokenInvalid,
   detectedApp,
 }: WingmanPanelProps): JSX.Element {
   const [goalInput, setGoalInput] = useState("");
@@ -619,6 +1145,21 @@ export function WingmanPanel({
     setPromptingInspect(false);
   }
 
+  // ── Consent modal (overlay — shown before proxy starts) ──────────────────────
+
+  if (agentProxy.showConsentModal) {
+    return (
+      <AgentProxyConsentModal
+        port={agentProxy.port}
+        onEnable={() => {
+          send({ type: "wingman-agent-proxy-consent-grant" });
+          send({ type: "wingman-agent-proxy-enable" });
+        }}
+        onDismiss={() => send({ type: "wingman-agent-proxy-disable" })}
+      />
+    );
+  }
+
   // ── State C: Report ──────────────────────────────────────────────────────────
 
   if (wingman.report && !wingman.active) {
@@ -627,6 +1168,8 @@ export function WingmanPanel({
         report={wingman.report}
         session={wingman.session}
         memory={wingmanMemory}
+        githubPATConfigured={githubPATConfigured}
+        githubTokenInvalid={githubTokenInvalid}
         onNewSession={resetLocalState}
       />
     );
@@ -908,6 +1451,40 @@ export function WingmanPanel({
             onClick={() => send({ type: "wingman-terminal-toggle" })}
           >
             {session.terminalWatching ? "On" : "Off"}
+          </button>
+        </div>
+
+        {/* Agent proxy toggle */}
+        <div className="wm-hb-toggle">
+          <i className="ti ti-api" aria-hidden="true" />
+          <span className="wm-hb-tlbl">Agent interception</span>
+          {agentProxy.running && (
+            <button
+              type="button"
+              className="wm-hb-proxy-copy"
+              data-testid="wingman-agent-proxy-copy-env"
+              onClick={() =>
+                navigator.clipboard.writeText(
+                  `ANTHROPIC_BASE_URL=http://localhost:${agentProxy.port}`,
+                )
+              }
+            >
+              Copy env
+            </button>
+          )}
+          <button
+            type="button"
+            className={agentProxy.running ? "wm-hb-pill-on" : "wm-hb-pill-off"}
+            data-testid="wingman-agent-proxy-toggle"
+            onClick={() =>
+              send({
+                type: agentProxy.running
+                  ? "wingman-agent-proxy-disable"
+                  : "wingman-agent-proxy-enable",
+              })
+            }
+          >
+            {agentProxy.running ? "On" : "Off"}
           </button>
         </div>
       </div>

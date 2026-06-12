@@ -7126,3 +7126,1057 @@ details[open] .mode-panel__privacy-summary::before {
   background: rgba(127,119,221,0.24);
 }
 
+
+/* ─── Git diff section (wm-hb-diff-*) ──────────────────────────────────────── */
+
+.wm-hb-diff-empty {
+  font-size: 11px;
+  color: rgba(255,255,255,0.38);
+  font-style: italic;
+  padding: 4px 0;
+}
+
+/* Scope badge row */
+.wm-hb-diff-scope {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  margin-bottom: 6px;
+}
+.wm-hb-diff-scope--on-track {
+  background: rgba(123,186,58,0.12);
+  border: 0.5px solid rgba(123,186,58,0.28);
+}
+.wm-hb-diff-scope--possible-drift {
+  background: rgba(230,160,50,0.12);
+  border: 0.5px solid rgba(230,160,50,0.30);
+}
+.wm-hb-diff-scope--significant-drift {
+  background: rgba(226,75,74,0.12);
+  border: 0.5px solid rgba(226,75,74,0.28);
+}
+.wm-hb-diff-scope--unknown {
+  background: rgba(255,255,255,0.06);
+  border: 0.5px solid rgba(255,255,255,0.12);
+}
+
+.wm-hb-diff-scope-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.wm-hb-diff-scope--on-track         .wm-hb-diff-scope-dot { background: rgba(123,186,58,0.90); }
+.wm-hb-diff-scope--possible-drift   .wm-hb-diff-scope-dot { background: rgba(230,160,50,0.90); }
+.wm-hb-diff-scope--significant-drift .wm-hb-diff-scope-dot { background: rgba(226,75,74,0.90); }
+.wm-hb-diff-scope--unknown           .wm-hb-diff-scope-dot { background: rgba(255,255,255,0.25); }
+
+.wm-hb-diff-scope-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.wm-hb-diff-scope--on-track         .wm-hb-diff-scope-label { color: rgba(155,220,80,0.95); }
+.wm-hb-diff-scope--possible-drift   .wm-hb-diff-scope-label { color: rgba(245,185,70,0.95); }
+.wm-hb-diff-scope--significant-drift .wm-hb-diff-scope-label { color: rgba(240,100,96,0.95); }
+.wm-hb-diff-scope--unknown           .wm-hb-diff-scope-label { color: rgba(255,255,255,0.50); }
+
+.wm-hb-diff-scope-note {
+  font-size: 10.5px;
+  color: rgba(255,255,255,0.52);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+/* Stat line: N files  +N  −N  from abc1234 */
+.wm-hb-diff-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0 4px;
+}
+.wm-hb-diff-stat-files {
+  font-size: 11px;
+  color: rgba(255,255,255,0.55);
+  font-variant-numeric: tabular-nums;
+}
+.wm-hb-diff-stat-ins {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(123,186,58,0.90);
+  font-variant-numeric: tabular-nums;
+}
+.wm-hb-diff-stat-del {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(226,75,74,0.85);
+  font-variant-numeric: tabular-nums;
+}
+.wm-hb-diff-stat-ref {
+  font-size: 10px;
+  color: rgba(255,255,255,0.30);
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  margin-left: auto;
+}
+
+/* Top directory chips */
+.wm-hb-diff-dirs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.wm-hb-diff-dir-chip {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: rgba(255,255,255,0.07);
+  border: 0.5px solid rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.52);
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* File list */
+.wm-hb-diff-files {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wm-hb-diff-file {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border-radius: 5px;
+  background: rgba(255,255,255,0.04);
+  min-width: 0;
+}
+.wm-hb-diff-file:hover {
+  background: rgba(255,255,255,0.07);
+}
+
+/* Status letter */
+.wm-hb-diff-file-status {
+  font-size: 10px;
+  font-weight: 700;
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  width: 12px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.wm-hb-diff-file--modified  .wm-hb-diff-file-status { color: rgba(150,160,255,0.80); }
+.wm-hb-diff-file--added     .wm-hb-diff-file-status { color: rgba(123,186,58,0.90); }
+.wm-hb-diff-file--deleted   .wm-hb-diff-file-status { color: rgba(226,75,74,0.85); }
+.wm-hb-diff-file--renamed   .wm-hb-diff-file-status { color: rgba(230,160,50,0.85); }
+
+/* File path */
+.wm-hb-diff-file-path {
+  font-size: 10.5px;
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  color: rgba(255,255,255,0.70);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wm-hb-diff-file--deleted .wm-hb-diff-file-path {
+  color: rgba(255,255,255,0.38);
+  text-decoration: line-through;
+}
+
+/* Insertion / deletion counts */
+.wm-hb-diff-file-counts {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  font-size: 10px;
+}
+.wm-hb-diff-ins {
+  color: rgba(123,186,58,0.80);
+  font-variant-numeric: tabular-nums;
+}
+.wm-hb-diff-del {
+  color: rgba(226,75,74,0.75);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Binary badge */
+.wm-hb-diff-binary {
+  font-size: 9.5px;
+  color: rgba(255,255,255,0.28);
+  font-style: italic;
+  flex-shrink: 0;
+}
+
+/* Overflow indicator */
+.wm-hb-diff-more {
+  font-size: 10.5px;
+  color: rgba(255,255,255,0.35);
+  padding: 3px 6px;
+  font-style: italic;
+}
+
+/* ─── Agent Proxy Consent Modal (ap-consent-*) ──────────────────────────────── */
+
+.ap-consent-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.ap-consent-modal {
+  background: rgba(14, 16, 26, 0.97);
+  border: 0.5px solid rgba(255, 255, 255, 0.14);
+  border-radius: 16px;
+  padding: 24px;
+  max-width: 460px;
+  width: 100%;
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.72);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* Header */
+.ap-consent-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.ap-consent-icon {
+  font-size: 22px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.ap-consent-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  letter-spacing: -0.01em;
+}
+.ap-consent-sub {
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.45);
+  margin-top: 2px;
+}
+
+/* Sections */
+.ap-consent-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ap-consent-slbl {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.38);
+}
+.ap-consent-slbl--captures {
+  color: rgba(123, 186, 58, 0.70);
+}
+.ap-consent-slbl--never {
+  color: rgba(226, 75, 74, 0.70);
+}
+.ap-consent-body {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.62);
+  line-height: 1.55;
+  margin: 0;
+}
+
+/* Lists */
+.ap-consent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ap-consent-li {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.ap-consent-li--yes { color: rgba(255, 255, 255, 0.72); }
+.ap-consent-li--no  { color: rgba(255, 255, 255, 0.55); }
+
+.ap-consent-pip {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+.ap-consent-pip--g { background: rgba(123, 186, 58, 0.85); }
+.ap-consent-pip--r { background: rgba(226, 75, 74, 0.75); }
+
+/* Env var display */
+.ap-consent-envvar {
+  margin-top: 6px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 0.5px solid rgba(255, 255, 255, 0.10);
+  border-radius: 7px;
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  font-size: 11px;
+  color: rgba(190, 220, 255, 0.85);
+  word-break: break-all;
+}
+
+/* Code inline */
+.ap-consent-code {
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  font-size: 11px;
+  color: rgba(190, 220, 255, 0.85);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+/* Footer */
+.ap-consent-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-top: 0.5px solid rgba(255, 255, 255, 0.08);
+  padding-top: 14px;
+}
+.ap-consent-note {
+  font-size: 10.5px;
+  color: rgba(255, 255, 255, 0.32);
+  line-height: 1.5;
+  margin: 0;
+}
+.ap-consent-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* Buttons */
+.ap-consent-btn {
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, opacity 0.15s ease;
+  border: none;
+}
+.ap-consent-btn--dismiss {
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.55);
+  border: 0.5px solid rgba(255, 255, 255, 0.12);
+}
+.ap-consent-btn--dismiss:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+.ap-consent-btn--enable {
+  background: rgba(127, 119, 221, 0.85);
+  color: rgba(255, 255, 255, 0.95);
+}
+.ap-consent-btn--enable:hover {
+  background: rgba(127, 119, 221, 1.0);
+}
+
+/* ─── Agent activity section (report view) ─────────────────────────────────── */
+
+.wm-hb-agent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.wm-hb-agent-call {
+  background: rgba(255, 255, 255, 0.04);
+  border: 0.5px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wm-hb-agent-call-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wm-hb-agent-model {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(167, 128, 255, 0.9);
+  background: rgba(127, 119, 221, 0.15);
+  border: 0.5px solid rgba(127, 119, 221, 0.25);
+  border-radius: 4px;
+  padding: 1px 5px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  flex-shrink: 0;
+}
+
+.wm-hb-agent-tools {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.42);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wm-hb-agent-time {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.28);
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.wm-hb-agent-asked {
+  font-size: 11px;
+  color: rgba(236, 244, 255, 0.78);
+  line-height: 1.45;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.wm-hb-agent-response {
+  font-size: 10.5px;
+  color: rgba(176, 190, 214, 0.6);
+  line-height: 1.4;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  padding-top: 2px;
+  border-top: 0.5px solid rgba(255, 255, 255, 0.06);
+}
+
+.wm-hb-agent-more {
+  font-size: 10.5px;
+  color: rgba(255, 255, 255, 0.3);
+  text-align: center;
+  padding: 4px 0 2px;
+}
+
+/* ─── Agent proxy toggle (active panel) ─────────────────────────────────────── */
+
+.wm-hb-proxy-copy {
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  background: rgba(127, 119, 221, 0.18);
+  border: 0.5px solid rgba(127, 119, 221, 0.35);
+  color: rgba(167, 128, 255, 0.9);
+  transition: background 0.12s ease;
+  margin-right: 4px;
+}
+
+.wm-hb-proxy-copy:hover {
+  background: rgba(127, 119, 221, 0.3);
+}
+
+/* ─── Verification section (report view) ────────────────────────────────────── */
+
+.wm-hb-verify-alert {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(226, 75, 74, 0.85);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  margin-left: 6px;
+  vertical-align: middle;
+  line-height: 1;
+}
+
+.wm-hb-verify-summary {
+  font-size: 10.5px;
+  color: rgba(255, 255, 255, 0.42);
+  margin-top: 4px;
+  margin-bottom: 8px;
+}
+
+.wm-hb-verify-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wm-hb-verify-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 0.5px solid rgba(255, 255, 255, 0.07);
+  border-radius: 7px;
+  padding: 7px 9px;
+}
+
+/* Status-tinted left border */
+.wm-hb-verify-row--ok {
+  border-left: 2.5px solid rgba(74, 222, 128, 0.7);
+}
+.wm-hb-verify-row--bad {
+  border-left: 2.5px solid rgba(226, 75, 74, 0.85);
+  background: rgba(226, 75, 74, 0.05);
+}
+.wm-hb-verify-row--warn {
+  border-left: 2.5px solid rgba(251, 191, 36, 0.65);
+}
+.wm-hb-verify-row--off {
+  border-left: 2.5px solid rgba(255, 255, 255, 0.12);
+  opacity: 0.55;
+}
+
+.wm-hb-verify-badge {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-radius: 4px;
+  padding: 2px 5px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  white-space: nowrap;
+}
+
+.wm-hb-verify-row--ok .wm-hb-verify-badge {
+  background: rgba(74, 222, 128, 0.15);
+  color: rgba(74, 222, 128, 0.9);
+  border: 0.5px solid rgba(74, 222, 128, 0.3);
+}
+.wm-hb-verify-row--bad .wm-hb-verify-badge {
+  background: rgba(226, 75, 74, 0.18);
+  color: rgba(226, 75, 74, 0.95);
+  border: 0.5px solid rgba(226, 75, 74, 0.35);
+}
+.wm-hb-verify-row--warn .wm-hb-verify-badge {
+  background: rgba(251, 191, 36, 0.14);
+  color: rgba(251, 191, 36, 0.85);
+  border: 0.5px solid rgba(251, 191, 36, 0.28);
+}
+.wm-hb-verify-row--off .wm-hb-verify-badge {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.35);
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+}
+
+.wm-hb-verify-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.wm-hb-verify-claim {
+  font-size: 11.5px;
+  color: rgba(236, 244, 255, 0.85);
+  line-height: 1.4;
+}
+
+.wm-hb-verify-evidence {
+  font-size: 10px;
+  color: rgba(176, 190, 214, 0.5);
+  line-height: 1.4;
+  font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+/* ─── GitHub PR section (report view) ──────────────────────────────────────── */
+
+.wm-hb-pr-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(220, 232, 255, 0.9);
+  line-height: 1.4;
+  margin-bottom: 6px;
+}
+
+.wm-hb-pr-num {
+  font-size: 11px;
+  color: rgba(140, 160, 200, 0.7);
+  margin-right: 5px;
+}
+
+.wm-hb-pr-draft-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: rgba(100, 100, 120, 0.35);
+  color: rgba(180, 180, 220, 0.7);
+  vertical-align: middle;
+}
+
+.wm-hb-pr-badges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.wm-hb-pr-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid transparent;
+}
+
+/* Review decision badge tints */
+.wm-hb-pr-badge--ok {
+  background: rgba(74, 200, 100, 0.15);
+  color: rgba(100, 230, 120, 0.9);
+  border-color: rgba(74, 200, 100, 0.3);
+}
+.wm-hb-pr-badge--bad {
+  background: rgba(226, 75, 74, 0.15);
+  color: rgba(240, 100, 95, 0.9);
+  border-color: rgba(226, 75, 74, 0.3);
+}
+.wm-hb-pr-badge--warn {
+  background: rgba(255, 186, 60, 0.15);
+  color: rgba(255, 200, 80, 0.9);
+  border-color: rgba(255, 186, 60, 0.3);
+}
+.wm-hb-pr-badge--off {
+  background: rgba(100, 110, 130, 0.12);
+  color: rgba(140, 160, 200, 0.6);
+  border-color: rgba(100, 110, 130, 0.2);
+}
+
+.wm-hb-pr-body {
+  font-size: 11px;
+  color: rgba(176, 190, 214, 0.6);
+  line-height: 1.45;
+  margin-bottom: 5px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.wm-hb-pr-failing-checks {
+  font-size: 10px;
+  color: rgba(240, 100, 95, 0.7);
+  font-family: ui-monospace, "SF Mono", monospace;
+  margin-bottom: 4px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.wm-hb-pr-meta {
+  font-size: 10px;
+  color: rgba(140, 160, 200, 0.45);
+  font-family: ui-monospace, "SF Mono", monospace;
+  margin-top: 4px;
+}
+
+/* PAT setup nudge */
+.wm-hb-pr-setup-nudge,
+.wm-hb-pr-token-invalid {
+  background: rgba(80, 90, 110, 0.08);
+}
+
+.wm-hb-pr-nudge-text {
+  font-size: 11px;
+  color: rgba(140, 160, 200, 0.55);
+  line-height: 1.4;
+}
+
+.wm-hb-pr-nudge-text--warn {
+  color: rgba(240, 100, 95, 0.75);
+}
+
+/* ─── GitHub PAT section (wm-hb-gh-*) ──────────────────────────────────────── */
+
+.wm-hb-gh-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 16px;
+}
+
+.wm-hb-gh-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: rgba(255, 255, 255, 0.28);
+}
+
+.wm-hb-gh-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.015em;
+}
+
+.wm-hb-gh-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.wm-hb-gh-status--ok {
+  color: rgba(100, 230, 120, 0.85);
+}
+.wm-hb-gh-status--ok .wm-hb-gh-status-dot {
+  background: rgba(74, 200, 100, 0.9);
+  box-shadow: 0 0 5px rgba(74, 200, 100, 0.45);
+}
+
+.wm-hb-gh-status--saved {
+  color: rgba(100, 230, 120, 0.85);
+}
+.wm-hb-gh-status--saved .wm-hb-gh-status-dot {
+  background: rgba(74, 200, 100, 0.9);
+}
+
+.wm-hb-gh-status--warn {
+  color: rgba(255, 200, 80, 0.90);
+}
+.wm-hb-gh-status--warn .wm-hb-gh-status-dot {
+  background: rgba(255, 186, 60, 0.9);
+  box-shadow: 0 0 5px rgba(255, 186, 60, 0.40);
+}
+
+.wm-hb-gh-connected-body {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.wm-hb-gh-meta-hint {
+  font-size: 10px;
+  color: rgba(140, 160, 200, 0.40);
+  font-family: ui-monospace, "SF Mono", monospace;
+  line-height: 1.4;
+}
+
+.wm-hb-gh-connected-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.wm-hb-gh-confirm-text {
+  font-size: 10.5px;
+  color: rgba(240, 100, 95, 0.72);
+}
+
+.wm-hb-gh-nudge-body {
+  margin-top: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Inline "Update token" link inside the dismissed-invalid banner */
+.wm-hb-gh-inline-reopen {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-size: inherit;
+  font-family: inherit;
+  color: rgba(255, 200, 80, 0.92);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 200, 80, 0.40);
+  -webkit-app-region: no-drag;
+}
+.wm-hb-gh-inline-reopen:hover {
+  color: rgba(255, 215, 100, 1.0);
+}
+
+.wm-hb-gh-desc {
+  font-size: 11px;
+  color: rgba(176, 190, 214, 0.56);
+  line-height: 1.45;
+  margin: 5px 0 0;
+}
+
+.wm-hb-gh-url-hint {
+  font-family: ui-monospace, "SF Mono", monospace;
+  font-size: 10px;
+  color: rgba(140, 160, 200, 0.48);
+}
+
+.wm-hb-gh-warn-banner {
+  margin-top: 7px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: rgba(255, 186, 60, 0.09);
+  border: 0.5px solid rgba(255, 186, 60, 0.24);
+  font-size: 10.5px;
+  color: rgba(255, 200, 80, 0.85);
+  line-height: 1.4;
+}
+
+.wm-hb-gh-form {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wm-hb-gh-input-row {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.wm-hb-gh-input {
+  flex: 1;
+  font-family: ui-monospace, "SF Mono", monospace !important;
+  font-size: 11.5px !important;
+  padding: 7px 10px !important;
+  letter-spacing: 0.01em;
+}
+
+.wm-hb-gh-showhide {
+  flex-shrink: 0;
+  height: 34px;
+  padding: 0 11px;
+  border-radius: 7px;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  color: rgba(255, 255, 255, 0.38);
+  transition: background 0.12s ease, color 0.12s ease;
+  -webkit-app-region: no-drag;
+}
+.wm-hb-gh-showhide:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.09);
+  color: rgba(255, 255, 255, 0.62);
+}
+.wm-hb-gh-showhide:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.wm-hb-gh-error {
+  font-size: 10.5px;
+  color: rgba(240, 100, 95, 0.85);
+  padding: 5px 8px;
+  border-radius: 5px;
+  background: rgba(226, 75, 74, 0.08);
+  border: 0.5px solid rgba(226, 75, 74, 0.20);
+  line-height: 1.4;
+}
+
+.wm-hb-gh-security-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: rgba(140, 160, 200, 0.40);
+  line-height: 1.4;
+}
+
+/* CSS-drawn padlock icon */
+.wm-hb-gh-lock-icon {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 8px;
+  height: 7px;
+  position: relative;
+  border: 1.5px solid rgba(140, 160, 200, 0.36);
+  border-radius: 1.5px;
+  margin-top: 1px;
+}
+.wm-hb-gh-lock-icon::before {
+  content: "";
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 5px;
+  height: 4px;
+  border: 1.5px solid rgba(140, 160, 200, 0.36);
+  border-bottom: none;
+  border-radius: 3px 3px 0 0;
+}
+
+.wm-hb-gh-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+/* Save — primary purple */
+.wm-hb-gh-btn-save {
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 7px;
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  background: rgba(127, 119, 221, 0.20);
+  border: 0.5px solid rgba(127, 119, 221, 0.38);
+  color: rgba(190, 184, 255, 0.92);
+  transition: background 0.12s ease, opacity 0.12s ease;
+  -webkit-app-region: no-drag;
+}
+.wm-hb-gh-btn-save:hover:not(:disabled) {
+  background: rgba(127, 119, 221, 0.32);
+}
+.wm-hb-gh-btn-save:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* Ghost — cancel */
+.wm-hb-gh-btn-ghost {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 7px;
+  font-size: 11.5px;
+  font-weight: 400;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.04);
+  border: 0.5px solid rgba(255, 255, 255, 0.09);
+  color: rgba(255, 255, 255, 0.38);
+  transition: background 0.12s ease, color 0.12s ease;
+  -webkit-app-region: no-drag;
+}
+.wm-hb-gh-btn-ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.09);
+  color: rgba(255, 255, 255, 0.60);
+}
+.wm-hb-gh-btn-ghost:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* Connect — nudge CTA */
+.wm-hb-gh-btn-connect {
+  height: 28px;
+  padding: 0 13px;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  background: rgba(127, 119, 221, 0.12);
+  border: 0.5px solid rgba(127, 119, 221, 0.26);
+  color: rgba(167, 160, 255, 0.78);
+  align-self: flex-start;
+  transition: background 0.12s ease, color 0.12s ease;
+  -webkit-app-region: no-drag;
+}
+.wm-hb-gh-btn-connect:hover {
+  background: rgba(127, 119, 221, 0.22);
+  color: rgba(190, 184, 255, 0.92);
+}
+
+/* Secondary — small update button when connected */
+.wm-hb-gh-btn-secondary {
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 500;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.04);
+  border: 0.5px solid rgba(255, 255, 255, 0.09);
+  color: rgba(255, 255, 255, 0.36);
+  transition: background 0.12s ease, color 0.12s ease;
+  -webkit-app-region: no-drag;
+}
+.wm-hb-gh-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.58);
+}
+
+/* Remove — subtle danger */
+.wm-hb-gh-btn-remove {
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 500;
+  cursor: pointer;
+  background: rgba(226, 75, 74, 0.07);
+  border: 0.5px solid rgba(226, 75, 74, 0.18);
+  color: rgba(240, 100, 95, 0.58);
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  -webkit-app-region: no-drag;
+}
+.wm-hb-gh-btn-remove:hover {
+  background: rgba(226, 75, 74, 0.14);
+  border-color: rgba(226, 75, 74, 0.32);
+  color: rgba(240, 100, 95, 0.85);
+}
+
+/* Danger confirm — shown after first Remove click */
+.wm-hb-gh-btn-danger {
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  background: rgba(226, 75, 74, 0.18);
+  border: 0.5px solid rgba(226, 75, 74, 0.38);
+  color: rgba(240, 100, 95, 0.92);
+  transition: background 0.12s ease;
+  -webkit-app-region: no-drag;
+}
+.wm-hb-gh-btn-danger:hover {
+  background: rgba(226, 75, 74, 0.28);
+}

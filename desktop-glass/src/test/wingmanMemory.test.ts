@@ -40,6 +40,7 @@ function makeSession(overrides: Partial<WingmanSession> = {}): WingmanSession {
     loopWarning: false,
     terminalEvents: [],
     terminalWatching: false,
+    agentCalls: [],
     ...overrides,
   };
 }
