@@ -4,6 +4,8 @@ import { emptyNotes } from "../shared/noteExtraction.ts";
 import { initialPrivacyState } from "../shared/privacyState.ts";
 import { DEFAULT_CONFIG } from "../shared/config.ts";
 import { DEFAULT_GLASS_USER_SETTINGS } from "../shared/glassSettings.ts";
+import { DEFAULT_WINGMAN_STATE } from "../shared/wingmanSession.ts";
+import { DEFAULT_WINGMAN_MEMORY_STATE } from "../shared/wingmanMemory.ts";
 import { DEFAULT_COPILOT_CONFIG } from "../shared/copilotTypes.ts";
 import { INITIAL_OPERATION_DIAGNOSTICS } from "../shared/glassOperations.ts";
 import { WINDOW_CONTEXT_UNAVAILABLE_MESSAGE } from "../shared/windowContextTypes.ts";
@@ -81,6 +83,10 @@ const fallbackState: GlassState = {
   glassUserProfile: null,
   commandBarOverlayClearancePx: undefined,
   iivoAccountLink: null,
+  iivoApiUrl: DEFAULT_CONFIG.iivoApiUrl,
+  iivoWebUrl: DEFAULT_CONFIG.iivoWebUrl,
+  wingman: DEFAULT_WINGMAN_STATE,
+  wingmanMemory: DEFAULT_WINGMAN_MEMORY_STATE,
 };
 
 export function useGlassState(): GlassState {

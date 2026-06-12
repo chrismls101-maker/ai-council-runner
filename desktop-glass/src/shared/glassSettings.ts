@@ -46,6 +46,16 @@ export interface GlassUserSettings {
   savedMacOutputDeviceName?: string;
   /** Session Copilot mode + behavior. Default off (no auto extraction). */
   copilot: GlassCopilotConfig;
+  /**
+   * Override for the IIVO API server URL (e.g. self-hosted instance).
+   * When set, takes precedence over IIVO_API_URL env var.
+   */
+  iivoApiUrl?: string;
+  /**
+   * Override for the IIVO web app URL (e.g. self-hosted instance).
+   * When set, takes precedence over IIVO_WEB_URL env var.
+   */
+  iivoWebUrl?: string;
 }
 
 export const DEFAULT_GLASS_USER_SETTINGS: GlassUserSettings = {
@@ -80,6 +90,18 @@ export function parseAutoUploadCapturesToContext(value: unknown): boolean {
 
 export function parseMicAutoSendAfterSilence(value: unknown): boolean {
   return value === true;
+}
+
+/**
+ * Parse a saved server URL override. Returns undefined (use env default) when
+ * the value is absent, empty, or not a plausible http(s) URL.
+ */
+export function parseGlassServerUrl(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim().replace(/\/+$/, "");
+  if (!trimmed) return undefined;
+  if (!/^https?:\/\/.+/.test(trimmed)) return undefined;
+  return trimmed;
 }
 
 export const GLASS_HOTKEY_PRESETS: Record<

@@ -35,19 +35,17 @@ import { SetupSection } from "./SetupSection.tsx";
 import { CopilotPanel } from "./CopilotPanel.tsx";
 import { AudioTab } from "./AudioTab.tsx";
 import AccountTab from "./AccountTab.tsx";
+import { LiveNotesTab } from "./LiveNotesTab.tsx";
 
 const TABS: { id: PanelTab; label: string }[] = [
   { id: "setup", label: "Setup" },
-  { id: "summary", label: "Summary" },
   { id: "copilot", label: "Copilot" },
-  { id: "audio", label: "Audio" },
+  { id: "live-notes", label: "Notes" },
   { id: "session", label: "Session" },
-  { id: "insights", label: "Insights" },
-  { id: "context", label: "Context" },
-  { id: "hypotheses", label: "Hypotheses" },
-  { id: "actions", label: "Actions" },
-  { id: "diagnostics", label: "Diagnostics" },
+  { id: "audio", label: "Audio" },
+  { id: "summary", label: "Summary" },
   { id: "account", label: "Account" },
+  { id: "diagnostics", label: "Diagnostics" },
 ];
 
 async function copyText(text: string): Promise<void> {
@@ -715,25 +713,9 @@ function StatusGrid({ state }: { state: GlassState }): JSX.Element {
         >
           {analysisRunning ? "Analyzing…" : "Analyze Now"}
         </button>
-        <button
-          type="button"
-          className="gbtn"
-          onClick={() =>
-            send(sessionLive ? { type: "session-capture" } : { type: "capture-screen-only" })
-          }
-        >
-          Capture Screen
-        </button>
-        <button
-          type="button"
-          className="gbtn gbtn--danger"
-          data-testid="glass-panel-stop-everything"
-          onClick={() => send({ type: "stop-everything" })}
-        >
-          Stop Everything
-        </button>
       </div>
       <GlassLayoutSettings state={state} />
+      <ServerUrlEditor state={state} />
     </div>
   );
 }
@@ -856,6 +838,35 @@ function GlassLayoutSettings({ state }: { state: GlassState }): JSX.Element {
       <button type="button" className="gbtn gbtn--ghost" onClick={() => send({ type: "refresh-glass-layout" })}>
         Refresh display layout
       </button>
+      <p className="section-title panel__settings-dock">Dock</p>
+      <label className="panel__settings-row panel__settings-row--check">
+        <input
+          type="checkbox"
+          data-testid="glass-dock-lock-toggle"
+          checked={settings.chromeLayoutLocked !== false}
+          onChange={(e) => send({ type: "set-chrome-layout-locked", locked: e.target.checked })}
+        />
+        <span>Lock dock position</span>
+      </label>
+      <p className="hint">
+        Uncheck to drag the dock to a new spot, then re-lock it.
+      </p>
+      <label className="panel__settings-row">
+        <span>Dock orientation</span>
+        <select
+          data-testid="glass-dock-orientation-select"
+          value={settings.dockOrientation ?? "horizontal"}
+          onChange={(e) =>
+            send({
+              type: "set-dock-orientation",
+              orientation: e.target.value as "horizontal" | "vertical",
+            })
+          }
+        >
+          <option value="horizontal">Horizontal</option>
+          <option value="vertical">Vertical</option>
+        </select>
+      </label>
       <p className="section-title panel__settings-privacy">Screen capture privacy</p>
       <label className="panel__settings-row panel__settings-row--check">
         <input
@@ -879,6 +890,71 @@ function GlassLayoutSettings({ state }: { state: GlassState }): JSX.Element {
         Visual asks always send the image to IIVO for that answer only. Context Bridge upload
         happens when you Open in IIVO, Save screen, or enable auto-upload above.
       </p>
+    </div>
+  );
+}
+
+function ServerUrlEditor({ state }: { state: GlassState }): JSX.Element {
+  const [apiUrl, setApiUrl] = useState(state.iivoApiUrl);
+  const [webUrl, setWebUrl] = useState(state.iivoWebUrl);
+  const [saved, setSaved] = useState(false);
+
+  // Sync from state on external change (e.g. another window, IPC round-trip).
+  useEffect(() => {
+    setApiUrl(state.iivoApiUrl);
+    setWebUrl(state.iivoWebUrl);
+  }, [state.iivoApiUrl, state.iivoWebUrl]);
+
+  const dirty = apiUrl !== state.iivoApiUrl || webUrl !== state.iivoWebUrl;
+
+  const handleSave = () => {
+    send({ type: "set-glass-server-urls", apiUrl, webUrl });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  };
+
+  return (
+    <div className="summary-box panel__settings panel__server-urls" data-testid="glass-panel-server-url-editor">
+      <p className="section-title">Server URLs</p>
+      <p className="hint">
+        Override the default IIVO API and web app URLs (e.g. for a self-hosted instance).
+        Leave blank to use the built-in defaults.
+      </p>
+      <label className="panel__settings-row">
+        <span>API URL</span>
+        <input
+          type="text"
+          className="panel__settings-input"
+          data-testid="glass-panel-server-url-api"
+          placeholder="https://api.iivo.ai"
+          value={apiUrl}
+          onChange={(e) => setApiUrl(e.target.value)}
+          spellCheck={false}
+          autoComplete="off"
+        />
+      </label>
+      <label className="panel__settings-row">
+        <span>Web URL</span>
+        <input
+          type="text"
+          className="panel__settings-input"
+          data-testid="glass-panel-server-url-web"
+          placeholder="https://app.iivo.ai"
+          value={webUrl}
+          onChange={(e) => setWebUrl(e.target.value)}
+          spellCheck={false}
+          autoComplete="off"
+        />
+      </label>
+      <button
+        type="button"
+        className="gbtn gbtn--ghost"
+        data-testid="glass-panel-server-url-save"
+        disabled={!dirty}
+        onClick={handleSave}
+      >
+        {saved ? "Saved ✓" : "Save"}
+      </button>
     </div>
   );
 }
@@ -907,7 +983,7 @@ function MomentCard({ moment }: { moment: SavedMoment }): JSX.Element {
 
 export function Panel(): JSX.Element {
   const state = useGlassState();
-  const [tab, setTab] = useState<PanelTab>(state.panelTab);
+  const [tab, setTab] = useState<PanelTab>("setup");
 
   useEffect(() => {
     setTab(state.panelTab);
@@ -1016,6 +1092,12 @@ export function Panel(): JSX.Element {
           {tab === "account" ? (
             <div className="panel__body">
               <AccountTab state={state} />
+            </div>
+          ) : null}
+
+          {tab === "live-notes" ? (
+            <div className="panel__body panel__body--live-notes" data-testid="glass-panel-notes-tab">
+              <LiveNotesTab state={state} />
             </div>
           ) : null}
 

@@ -79,7 +79,13 @@ function overlayCardFromInsight(insight: GlassSessionInsight): FloatingCard {
   };
 }
 
-function OverlayPassiveLayer({ overlayMode }: { overlayMode: OverlayMode }): JSX.Element {
+function OverlayPassiveLayer({
+  overlayMode,
+  meetingsActive,
+}: {
+  overlayMode: OverlayMode;
+  meetingsActive: boolean;
+}): JSX.Element {
   return (
     <>
       <div className="overlay-glass-sheet" aria-hidden="true" />
@@ -95,7 +101,9 @@ function OverlayPassiveLayer({ overlayMode }: { overlayMode: OverlayMode }): JSX
       <div className="overlay-badge">
         <span className="overlay-badge__dot" aria-hidden="true" />
         IIVO Glass active
-        {overlayMode === "insights" ? (
+        {meetingsActive ? (
+          <span className="overlay-badge__mode"> · meetings</span>
+        ) : overlayMode === "insights" ? (
           <span className="overlay-badge__mode"> · insights</span>
         ) : null}
       </div>
@@ -338,7 +346,7 @@ export function Overlay(): JSX.Element {
       data-testid="glass-overlay-root"
       style={overlayLayoutStyle(state)}
     >
-      <OverlayPassiveLayer overlayMode={overlayMode} />
+      <OverlayPassiveLayer overlayMode={overlayMode} meetingsActive={state.meetingIntelligence != null} />
       <OverlayStatus state={state} />
 
       <GlassNotificationHost

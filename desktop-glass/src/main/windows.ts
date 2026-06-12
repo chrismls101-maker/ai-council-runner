@@ -1334,19 +1334,21 @@ export function resizeDockWindow(
   if (!windows?.dock || windows.dock.isDestroyed() || !layoutManager) return;
   const clamped = layoutManager.clampDockSize(width, height, options);
   const current = windows.dock.getBounds();
+  const anchor = layoutManager.getDockLayout(clamped.width, clamped.height, options);
   let next: Electron.Rectangle = {
-    x: current.x,
-    y: current.y,
+    x: anchor.x,
+    y: anchor.y,
     width: clamped.width,
     height: clamped.height,
   };
   if (chromeLayoutLocked && dockCustomOrigin) {
-    const anchor = layoutManager.getDockLayout(clamped.width, clamped.height, options);
     next = resolveChromeWindowBounds(
       { ...anchor, width: clamped.width, height: clamped.height },
       dockCustomOrigin,
       layoutManager.getDisplay().workArea,
     );
+  } else if (!chromeLayoutLocked) {
+    next = { ...next, x: current.x, y: current.y };
   }
   if (
     current.width === next.width &&

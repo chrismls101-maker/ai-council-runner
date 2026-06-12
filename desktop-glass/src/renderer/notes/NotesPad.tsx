@@ -57,7 +57,7 @@ export function NotesPad(): JSX.Element {
         </div>
       </header>
       <div className="notes-pad__body">
-        <LiveNotesTab state={state} />
+        <LiveNotesTab state={state} showTranslate={false} />
       </div>
       <ListenInsightStrip insight={state.listenLiveNotes?.latestInsight} />
       <span className="notes-pad__led ui-led-line" aria-hidden="true" />

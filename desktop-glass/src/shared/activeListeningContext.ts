@@ -91,7 +91,7 @@ export function deriveActiveListeningMode(
   if (config.mode === "diagnostic") return "wingman";
   if (config.sessionType === "meeting_call") return "meetings";
   if (config.sessionType === "video_learning") return "listen";
-  return "work";
+  return "wingman";
 }
 
 export function activeListeningEnabledForMode(mode: ActiveListeningMode): boolean {

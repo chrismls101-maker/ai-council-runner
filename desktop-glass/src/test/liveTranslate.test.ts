@@ -66,7 +66,7 @@ test("command bar quick translate defaults to English target", () => {
 test("Translate preset exists but is not in main mode card order", () => {
   assert.ok(GLASS_MODE_PRESETS.translate);
   assert.equal(GLASS_MODE_PRESETS.translate.label, "Translate");
-  assert.deepEqual(GLASS_MODE_ORDER, ["listen", "meetings", "work", "wingman"]);
+  assert.deepEqual(GLASS_MODE_ORDER, ["listen", "meetings", "wingman"]);
   assert.deepEqual(GLASS_QUICK_TOOLS, ["voice", "translate"]);
 });
 

@@ -72,6 +72,55 @@ function AudioCapabilityRows({ ids }: { ids: Array<"microphone" | "stt"> }): JSX
   );
 }
 
+function BlackHoleInstallerSection({ state }: { state: GlassState }): JSX.Element | null {
+  const status = state.blackHoleInstallStatus ?? "idle";
+  const progress = state.blackHoleInstallProgress ?? "";
+
+  // Hide once fully installed and configured
+  if (status === "done") return null;
+
+  const isRunning = status === "downloading" || status === "installing" || status === "configuring";
+
+  const statusMessages: Partial<Record<string, string>> = {
+    downloading: "Downloading BlackHole…",
+    installing: "Installing — enter your Mac password when prompted…",
+    configuring: "Configuring audio routing…",
+  };
+
+  return (
+    <PanelSection
+      title="System audio capture"
+      description="Glass needs BlackHole 2ch to capture system audio. One click installs and configures everything."
+    >
+      {isRunning ? (
+        <p className="hint" data-testid="blackhole-install-progress">
+          {statusMessages[status]}
+          {progress && progress !== statusMessages[status] ? ` ${progress}` : ""}
+        </p>
+      ) : status === "error" ? (
+        <p className="hint hint--error" data-testid="blackhole-install-error">
+          {progress || "Installation failed — try again."}
+        </p>
+      ) : null}
+      <div className="audio-tab__mic-actions">
+        <button
+          type="button"
+          className="gbtn gbtn--primary"
+          data-testid="glass-setup-blackhole"
+          disabled={isRunning}
+          onClick={() => send({ type: "show-blackhole-setup" })}
+        >
+          {isRunning ? "Installing…" : status === "error" ? "Retry Setup" : "Set Up System Audio"}
+        </button>
+      </div>
+      <p className="hint">
+        Downloads BlackHole 2ch from GitHub, installs it, and wires up your audio routing. You'll
+        see one macOS password prompt.
+      </p>
+    </PanelSection>
+  );
+}
+
 export function AudioTab({ state }: { state: GlassState }): JSX.Element {
   const settings = state.glassSettings;
   const tx = useTranscriptionContext();
@@ -88,6 +137,7 @@ export function AudioTab({ state }: { state: GlassState }): JSX.Element {
 
   return (
     <div className="panel-tab-view panel-audio-tab" data-testid="glass-panel-audio-tab">
+      <BlackHoleInstallerSection state={state} />
       <SystemAudioConfigure />
 
       <PanelSection

@@ -6,7 +6,7 @@
 .glass-boot {
   --boot-glass-inset-top: 12px;
   --boot-glass-inset-side: 12px;
-  --boot-glass-inset-bottom: clamp(48px, 8vh, 88px);
+  --boot-glass-inset-bottom: 28px;
 
   position: fixed;
   inset: 0;

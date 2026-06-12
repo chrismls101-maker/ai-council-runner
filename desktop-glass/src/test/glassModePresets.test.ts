@@ -17,8 +17,8 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
 
-test("presets exist for listen, meetings, work, wingman plus translate quick tool", () => {
-  assert.deepEqual(GLASS_MODE_ORDER, ["listen", "meetings", "work", "wingman"]);
+test("presets exist for listen, meetings, wingman plus translate quick tool", () => {
+  assert.deepEqual(GLASS_MODE_ORDER, ["listen", "meetings", "wingman"]);
   assert.ok(GLASS_MODE_PRESETS.translate, "translate preset retained for setup flow");
   assert.deepEqual(GLASS_QUICK_TOOLS, ["voice", "translate"]);
   for (const id of GLASS_MODE_ORDER) {
@@ -29,7 +29,6 @@ test("presets exist for listen, meetings, work, wingman plus translate quick too
 test("mode labels are simple single words", () => {
   assert.equal(GLASS_MODE_PRESETS.listen.label, "Listen");
   assert.equal(GLASS_MODE_PRESETS.meetings.label, "Meetings");
-  assert.equal(GLASS_MODE_PRESETS.work.label, "Work");
   assert.equal(GLASS_MODE_PRESETS.wingman.label, "Wingman");
   for (const id of GLASS_MODE_ORDER) {
     assert.ok(!/\b(Copilot|Session|Diagnostic|Passive|Coaching)\b/.test(GLASS_MODE_PRESETS[id].label));
@@ -46,17 +45,13 @@ test("internal mappings are correct", () => {
   assert.equal(GLASS_MODE_PRESETS.meetings.meetingIntelligence, true);
   assert.equal(GLASS_MODE_PRESETS.meetings.preferredInputSource, "ask");
 
-  assert.equal(GLASS_MODE_PRESETS.work.copilotMode, "coaching");
-  assert.equal(GLASS_MODE_PRESETS.work.sessionFocus, "auto");
-
   assert.equal(GLASS_MODE_PRESETS.wingman.copilotMode, "diagnostic");
   assert.equal(GLASS_MODE_PRESETS.wingman.sessionFocus, "auto");
 });
 
-test("Listen requires system audio; Work and Wingman require no audio", () => {
+test("Listen requires system audio; Wingman requires no audio", () => {
   assert.equal(GLASS_MODE_PRESETS.listen.requiresSystemAudio, true);
   assert.equal(GLASS_MODE_PRESETS.listen.requiresAudio, true);
-  assert.equal(GLASS_MODE_PRESETS.work.requiresAudio, false);
   assert.equal(GLASS_MODE_PRESETS.wingman.requiresAudio, false);
 });
 
@@ -79,14 +74,12 @@ test("Meetings prompts for source when none chosen, never auto-starts", () => {
   assert.equal(plan.startListening, false);
 });
 
-test("Work and Wingman activate immediately without source choice or audio", () => {
-  for (const id of ["work", "wingman"] as const) {
-    const plan = planModeActivation(getModePreset(id), { systemAudioReady: false });
-    assert.equal(plan.startSession, true);
-    assert.equal(plan.needsSourceChoice, false);
-    assert.equal(plan.needsSystemAudioSetup, false);
-    assert.equal(plan.startListening, false);
-  }
+test("Wingman activates immediately without source choice or audio", () => {
+  const plan = planModeActivation(getModePreset("wingman"), { systemAudioReady: false });
+  assert.equal(plan.startSession, true);
+  assert.equal(plan.needsSourceChoice, false);
+  assert.equal(plan.needsSystemAudioSetup, false);
+  assert.equal(plan.startListening, false);
 });
 
 test("resolveModeStatus reflects active/listening/needs-setup", () => {
@@ -100,8 +93,8 @@ test("resolveModeStatus reflects active/listening/needs-setup", () => {
     "listening",
   );
   assert.equal(
-    resolveModeStatus(getModePreset("work"), {
-      activeMode: "work",
+    resolveModeStatus(getModePreset("wingman"), {
+      activeMode: "wingman",
       systemAudioReady: false,
       listening: false,
       hasError: false,
@@ -109,7 +102,7 @@ test("resolveModeStatus reflects active/listening/needs-setup", () => {
     "active",
   );
   assert.equal(
-    resolveModeStatus(getModePreset("work"), {
+    resolveModeStatus(getModePreset("wingman"), {
       activeMode: null,
       systemAudioReady: false,
       listening: false,
@@ -121,7 +114,7 @@ test("resolveModeStatus reflects active/listening/needs-setup", () => {
 
 test("primary action label switches to Configure Audio when setup needed", () => {
   assert.equal(modePrimaryActionLabel(getModePreset("listen"), "needs_setup"), "Configure Audio");
-  assert.equal(modePrimaryActionLabel(getModePreset("work"), "ready"), "Start Work");
+  assert.equal(modePrimaryActionLabel(getModePreset("wingman"), "ready"), "Start Wingman");
   assert.equal(modePrimaryActionLabel(getModePreset("listen"), "active"), "Active");
 });
 
@@ -133,11 +126,11 @@ test("privacy notes cover audio/storage/screen/stop guarantees", () => {
   assert.ok(joined.includes("stop everything"));
 });
 
-test("panel renders four mode cards, Quick Tools, hidden Advanced by default", () => {
+test("panel renders mode cards, Quick Tools, hidden Advanced by default", () => {
   const panel = readFileSync(join(ROOT, "renderer", "panel", "CopilotPanel.tsx"), "utf8");
   assert.ok(panel.includes("What do you want IIVO to do?"), "simple title present");
   assert.ok(panel.includes("glass-mode-card-${id}"), "renders a card per mode id");
-  assert.ok(panel.includes("GLASS_MODE_ORDER"), "iterates the four-mode order");
+  assert.ok(panel.includes("GLASS_MODE_ORDER"), "iterates the mode order");
   assert.ok(panel.includes("glass-mode-cards"), "mode card grid present");
   assert.ok(panel.includes("glass-quick-tools"), "Quick Tools section present");
   assert.ok(panel.includes("glass-quick-tool-translate"), "Translate in Quick Tools");

@@ -1,300 +1,279 @@
-import { useRef, useState } from "react";
-import type { OverlayMode } from "../../shared/glassWindowTypes.ts";
-import { OVERLAY_MODES } from "../../shared/glassWindowTypes.ts";
+import { useMemo, useRef } from "react";
 import { ChromeRepositionOverlay } from "../ChromeRepositionOverlay.tsx";
 import { send, useGlassState } from "../useGlassState.ts";
 import { useChromeLockToggle } from "../useChromeLockToggle.ts";
 import { useChromeWindowDrag } from "../useChromeWindowDrag.ts";
 import { useDockResize } from "./useDockResize.ts";
+import { useTranscriptionContext } from "../TranscriptionProvider.tsx";
 import {
-  resolvePanelLabel,
-  resolveOverlayLabel,
-  resolveChromeLockLabel,
-  resolveDockOrientationLabel,
-  resolveSendLabel,
-  DOCK_LABELS,
-} from "./dockLabels.ts";
+  GLASS_MODE_ICONS,
+  GLASS_MODE_PRESETS,
+  deriveActiveMode,
+  type GlassModeId,
+} from "../../shared/glassModePresets.ts";
+import { MEETING_SUB_TYPE_LABELS } from "../../shared/meetingIntelligenceTypes.ts";
+import type { PanelTab } from "../../shared/types.ts";
 
-const OVERLAY_MODE_LABELS: Record<OverlayMode, string> = {
-  passive: "Passive overlay",
-  insights: "Insights overlay",
-  hidden: "Overlay hidden",
+// ─── Mode colour tokens ───────────────────────────────────────────────────────
+const MODE_COLORS: Record<
+  GlassModeId,
+  { led: string; ring: string; pill: string; text: string }
+> = {
+  listen:    { led: "rgba(65,224,163,0.85)",  ring: "rgba(65,224,163,0.7)",   pill: "rgba(65,224,163,0.10)",  text: "#41e0a3" },
+  meetings:  { led: "rgba(177,143,255,0.85)", ring: "rgba(177,143,255,0.7)",  pill: "rgba(177,143,255,0.12)", text: "#b18fff" },
+  wingman:   { led: "rgba(240,123,202,0.85)", ring: "rgba(240,123,202,0.7)",  pill: "rgba(240,123,202,0.10)", text: "#f07bca" },
+  translate: { led: "rgba(56,225,255,0.85)",  ring: "rgba(56,225,255,0.7)",   pill: "rgba(56,225,255,0.10)",  text: "#38e1ff" },
 };
-
-function nextOverlayMode(current: OverlayMode): OverlayMode {
-  const idx = OVERLAY_MODES.indexOf(current);
-  return OVERLAY_MODES[(idx + 1) % OVERLAY_MODES.length] ?? "passive";
-}
 
 export function Dock(): JSX.Element {
   const state = useGlassState();
+  const tx = useTranscriptionContext();
   const dockRef = useRef<HTMLDivElement>(null);
-  const stackRef = useRef<HTMLDivElement>(null);
   const actionsRef = useRef<HTMLDivElement>(null);
-  const dragHandleRef = useRef<HTMLDivElement>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const stackRef = useRef<HTMLDivElement>(null);
+
+  const chromeLocked = state.glassSettings.chromeLayoutLocked !== false;
+  const toggleChromeLock = useChromeLockToggle(chromeLocked);
+  const vertical = state.glassSettings.dockOrientation === "vertical";
+  useChromeWindowDrag(!chromeLocked, stackRef);
+
   const sessionStatus = state.session?.status ?? null;
   const sessionLive = sessionStatus === "active" || sessionStatus === "paused";
   const hasSession = !!state.session;
-  const listening = state.privacy.listening;
-  const overlayMode = state.windows?.overlayMode ?? state.config.overlayMode ?? "passive";
-  const overlayVisible = state.windows?.overlayVisible ?? state.config.overlayEnabled;
-  const chromeLocked = state.glassSettings.chromeLayoutLocked !== false;
-  const toggleChromeLock = useChromeLockToggle(chromeLocked);
-  useChromeWindowDrag(!chromeLocked, stackRef);
-  const vertical = state.glassSettings.dockOrientation === "vertical";
+  const listening = state.privacy.listening || tx.status === "listening";
+  const anythingActive = sessionLive || listening;
+
+  const copilot = state.copilot;
+  const activeMode = useMemo<GlassModeId | null>(
+    () => deriveActiveMode(copilot.active, copilot.mode, copilot.config.sessionType),
+    [copilot.active, copilot.mode, copilot.config.sessionType],
+  );
+
+  const colors = activeMode ? MODE_COLORS[activeMode] : null;
+
+  // Audio modes (listen / meetings) have a live/paused audio distinction.
+  const isAudioMode = activeMode === "listen" || activeMode === "meetings";
+  const audioLive = isAudioMode && listening;
+  const audioPaused = isAudioMode && !listening && sessionLive;
+
+  const meetingIntel = activeMode === "meetings" ? state.meetingIntelligence : undefined;
 
   useDockResize(dockRef, actionsRef, [
     sessionStatus,
     state.panelVisible,
     sessionLive,
-    menuOpen,
-    overlayVisible,
-    overlayMode,
+    anythingActive,
+    activeMode,
     listening,
     chromeLocked,
     vertical,
+    !!meetingIntel,
+    meetingIntel?.classification?.subType,
   ]);
 
-  const openPanelTab = (
-    tab: "summary" | "copilot" | "setup" | "audio" | "session" | "context" | "insights" | "diagnostics",
-  ): void => {
+  const openPanel = (tab: PanelTab = "copilot"): void => {
     send({ type: "set-tab", tab });
     if (!state.panelVisible) send({ type: "toggle-panel" });
   };
 
+  const handleModePillClick = (): void => {
+    if (audioLive) {
+      send({ type: "pause" });
+    } else if (audioPaused) {
+      tx.startListening();
+    }
+  };
+
+  const handleEndSession = (): void => {
+    send({ type: "session-end" });
+    send({ type: "copilot-set-mode", mode: "off" });
+  };
+
+  const dockStyle = {
+    "--dock-ring": colors?.ring ?? "rgba(255,255,255,0.18)",
+  } as React.CSSProperties;
+
   return (
     <div
-      className={`dock dock--minimal${vertical ? " dock--vertical" : ""}`}
+      className={`dock dock--v3 dock--minimal${vertical ? " dock--vertical" : ""}${audioLive ? " dock--listening" : ""}${!chromeLocked ? " dock--unlocked" : ""}`}
       ref={dockRef}
+      style={dockStyle}
       data-testid="glass-dock"
     >
       <div
         className={`dock-stack${!chromeLocked ? " dock-stack--unlocked" : ""}`}
         ref={stackRef}
-        title={chromeLocked ? undefined : "Layout unlocked — hold and drag to move, then lock when done"}
+        title={chromeLocked ? undefined : "Layout unlocked — drag to move, then lock in Panel › Setup"}
       >
         {!chromeLocked ? <ChromeRepositionOverlay /> : null}
 
         <div className="dock__actions" ref={actionsRef}>
-        {/* 1 — Identity + session transport (most used) */}
-        <div className="dock__head">
-          <div
-            className="dock__drag"
-            ref={dragHandleRef}
-            title={chromeLocked ? "Drag to reposition" : "Hold & drag to move dock"}
-          >
-            <span className="dock__logo" aria-hidden="true" />
-            <span className="dock__title">Glass</span>
+
+          {/* ── Zone 1: Identity ── */}
+          <div className="dock__logo-zone" data-testid="glass-dock-logo" title="IIVO Glass">
+            <span
+              className={`dock__ring${audioLive ? " dock__ring--audio" : sessionLive ? " dock__ring--session" : ""}`}
+              aria-hidden="true"
+            >
+              <span className="dock__ring-inner">G</span>
+              {(audioLive || sessionLive) && (
+                <span
+                  className={`dock__ring-dot${audioLive ? " dock__ring-dot--audio" : " dock__ring-dot--session"}`}
+                />
+              )}
+            </span>
             {state.appIdentityReport?.runningMode === "dev" ? (
-              <span className="dock__dev-badge" data-testid="glass-dock-dev-badge" title="Dev build — hot reload active">
+              <span className="dock__dev-badge" data-testid="glass-dock-dev-badge" title="Dev build">
                 DEV
               </span>
             ) : null}
           </div>
 
-          {!sessionLive ? (
+          <span className="dock__sep" aria-hidden="true" />
+
+          {/* ── Zone 2: Session transport ── */}
+          {!sessionLive && !activeMode ? (
+            /* IDLE — one CTA, opens mode picker */
             <button
               type="button"
-              className="gbtn gbtn--primary"
-              data-testid="glass-dock-start-session"
-              onClick={() => send({ type: "session-start" })}
-              title="Start a work session"
+              className="gbtn dock__cta"
+              data-testid="glass-dock-open-panel"
+              onClick={() => openPanel("copilot")}
             >
-              {DOCK_LABELS["start-session"]}
+              Open Panel
             </button>
           ) : (
             <>
-              {sessionStatus === "active" ? (
+              {activeMode && (
                 <button
                   type="button"
-                  className="gbtn"
-                  data-testid="glass-dock-pause"
-                  title="Pause session"
-                  onClick={() => send({ type: "session-pause" })}
+                  className={`dock__mode-pill dock__mode-pill--${activeMode}${audioPaused ? " dock__mode-pill--paused" : ""}`}
+                  data-testid={`glass-dock-mode-pill-${activeMode}`}
+                  style={
+                    {
+                      "--pill-bg": colors?.pill,
+                      "--pill-border": colors?.ring,
+                      "--pill-text": colors?.text,
+                    } as React.CSSProperties
+                  }
+                  title={
+                    audioLive ? "Tap to pause audio"
+                    : audioPaused ? "Tap to resume audio"
+                    : undefined
+                  }
+                  onClick={isAudioMode ? handleModePillClick : undefined}
                 >
-                  {DOCK_LABELS["pause-session"]}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="gbtn"
-                  data-testid="glass-dock-resume"
-                  title="Resume session"
-                  onClick={() => send({ type: "session-resume" })}
-                >
-                  {DOCK_LABELS["resume-session"]}
+                  <span aria-hidden="true">{GLASS_MODE_ICONS[activeMode]}</span>
+                  <span>{audioPaused ? "Paused" : GLASS_MODE_PRESETS[activeMode].label}</span>
+                  {audioLive && (
+                    <span
+                      className="dock__live-dot"
+                      aria-hidden="true"
+                      style={{ background: colors?.text }}
+                    />
+                  )}
                 </button>
               )}
+
+              {audioPaused && (
+                <button
+                  type="button"
+                  className="gbtn dock__btn-resume"
+                  data-testid="glass-dock-resume-audio"
+                  onClick={tx.startListening}
+                >
+                  ▷ Resume
+                </button>
+              )}
+
               <button
                 type="button"
-                className="gbtn"
+                className="gbtn dock__btn-end"
                 data-testid="glass-dock-end-session"
-                title="End session"
-                onClick={() => send({ type: "session-end" })}
+                onClick={handleEndSession}
               >
-                {DOCK_LABELS["end-session"]}
+                ■ End Session
               </button>
             </>
           )}
-        </div>
 
-        {/* 2 — Panel (modes, translate setup, settings) */}
-        <button
-          type="button"
-          data-testid="glass-dock-open-panel"
-          className="gbtn gbtn--panel"
-          title="Open Glass panel"
-          onClick={() => send({ type: "toggle-panel" })}
-        >
-          {resolvePanelLabel(state.panelVisible)}
-        </button>
+          <span className="dock__sep" aria-hidden="true" />
 
-        {/* 3 — Emergency stop */}
-        <button
-          type="button"
-          data-testid="glass-dock-stop-everything"
-          className="gbtn gbtn--danger"
-          onClick={() => send({ type: "stop-everything" })}
-          title="Stop listening, capture, and translation"
-        >
-          {DOCK_LABELS["stop-everything"]}
-        </button>
+          {/* ── Zone 3: Tools ── */}
 
-        {/* 4 — Active listening control */}
-        {listening ? (
-          <button
-            type="button"
-            className="gbtn gbtn--danger"
-            data-testid="glass-dock-stop-listening"
-            title="Stop listening"
-            onClick={() => send({ type: "pause" })}
-          >
-            {DOCK_LABELS["stop-listening"]}
-          </button>
-        ) : null}
-
-        {/* 5 — Capture */}
-        <button
-          type="button"
-          data-testid="glass-dock-capture"
-          className="gbtn"
-          title="Capture screen"
-          onClick={() =>
-            send(sessionLive ? { type: "session-capture" } : { type: "capture-screen-only" })
-          }
-        >
-          {DOCK_LABELS["capture"]}
-        </button>
-
-        {/* 6 — Overlay visibility */}
-        <button
-          type="button"
-          className="gbtn"
-          data-testid={overlayVisible ? "glass-dock-hide-overlay" : "glass-dock-show-overlay"}
-          onClick={() => send({ type: "toggle-overlay" })}
-          title="Toggle the full-screen glass overlay"
-        >
-          {resolveOverlayLabel(overlayVisible)}
-        </button>
-
-        {/* 7 — Layout chrome */}
-        <div className="dock__chrome">
-          <button
-            type="button"
-            data-testid="glass-dock-chrome-lock"
-            className={`gbtn gbtn--ghost gbtn--icon chrome-lock${chromeLocked ? " chrome-lock--locked" : " chrome-lock--unlocked"}`}
-            title={resolveChromeLockLabel(chromeLocked)}
-            aria-label={resolveChromeLockLabel(chromeLocked)}
-            data-chrome-no-drag=""
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={(event) => {
-              event.stopPropagation();
-              toggleChromeLock();
-            }}
-          >
-            {chromeLocked ? "🔒" : "🔓"}
-          </button>
-          <button
-            type="button"
-            data-testid="glass-dock-orientation"
-            className="gbtn gbtn--ghost gbtn--icon chrome-rotate"
-            title={resolveDockOrientationLabel(vertical)}
-            aria-label={resolveDockOrientationLabel(vertical)}
-            data-chrome-no-drag=""
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={(event) => {
-              event.stopPropagation();
-              send({
-                type: "set-dock-orientation",
-                orientation: vertical ? "horizontal" : "vertical",
-              });
-            }}
-          >
-            ↻
-          </button>
-        </div>
-
-        {/* 8 — Overflow */}
-        <button
-          type="button"
-          className={`gbtn gbtn--ghost gbtn--icon dock-menu__trigger${menuOpen ? " dock-menu__trigger--open" : ""}`}
-          aria-expanded={menuOpen}
-          title={DOCK_LABELS["more-actions"]}
-          onClick={() => setMenuOpen((open) => !open)}
-        >
-          ⋯
-        </button>
-      </div>
-
-      {menuOpen ? (
-        <div className="dock__row dock__row--menu" role="menu">
-          <button
-            type="button"
-            className="gbtn dock-menu__item"
-            onClick={() => {
-              send({ type: "set-overlay-mode", mode: nextOverlayMode(overlayMode) });
-              setMenuOpen(false);
-            }}
-          >
-            Overlay mode: {OVERLAY_MODE_LABELS[overlayMode]}
-          </button>
-          {hasSession ? (
+          {sessionLive && (
             <button
               type="button"
-              className="gbtn dock-menu__item"
+              className="gbtn dock__btn-tool"
+              data-testid="glass-dock-capture"
+              title="Save screen to session"
+              onClick={() => send({ type: "session-capture" })}
+            >
+              📸
+            </button>
+          )}
+
+          {/* Notes — quick-jump to live notes during a session; opens panel otherwise */}
+          <button
+            type="button"
+            className="gbtn dock__btn-tool"
+            data-testid="glass-dock-notes"
+            title="Live notes"
+            onClick={() => openPanel("live-notes")}
+          >
+            📝
+          </button>
+
+          {/* Emergency stop — only visible when something is running */}
+          {anythingActive && (
+            <button
+              type="button"
+              className="gbtn dock__btn-stop"
+              data-testid="glass-dock-stop-everything"
+              title="Stop everything"
               onClick={() => {
-                send({ type: "session-analyze-now" });
-                openPanelTab("summary");
-                setMenuOpen(false);
+                send({ type: "stop-everything" });
+                send({ type: "copilot-set-mode", mode: "off" });
               }}
             >
-              Analyze Now
+              ✕
             </button>
-          ) : null}
-          <button
-            type="button"
-            className="gbtn dock-menu__item"
-            onClick={() => {
-              send(hasSession ? { type: "session-send" } : { type: "send-transcript" });
-              setMenuOpen(false);
-            }}
-          >
-            {resolveSendLabel(hasSession)}
-          </button>
-          <button
-            type="button"
-            className="gbtn dock-menu__item"
-            onClick={() => {
-              send({ type: "open-chat" });
-              setMenuOpen(false);
-            }}
-          >
-            {DOCK_LABELS["open-in-iivo"]}
-          </button>
+          )}
+
         </div>
-      ) : null}
       </div>
+
+      {/* ── Meeting intel strip — second row, meetings mode only ── */}
+      {meetingIntel && (
+        <button
+          type="button"
+          className="dock__meeting-strip"
+          onClick={() => openPanel("copilot")}
+          title="Open Meeting Intelligence"
+        >
+          {meetingIntel.classification ? (
+            <>
+              <span className="dock__meeting-strip__type">
+                {MEETING_SUB_TYPE_LABELS[meetingIntel.classification.subType]}
+              </span>
+              <span className="dock__meeting-strip__sep" aria-hidden="true">·</span>
+              <span className="dock__meeting-strip__count">
+                {meetingIntel.moments.length === 0
+                  ? "Tracking…"
+                  : `${meetingIntel.moments.length} moment${meetingIntel.moments.length !== 1 ? "s" : ""}`}
+              </span>
+            </>
+          ) : (
+            <span className="dock__meeting-strip__building">
+              <span className="dock__meeting-strip__dot" aria-hidden="true" />
+              Building context…
+            </span>
+          )}
+          <span className="dock__meeting-strip__open" aria-hidden="true">›</span>
+        </button>
+      )}
+
+      <span className="dock-led-rim ui-led-line" aria-hidden="true" />
     </div>
   );
 }

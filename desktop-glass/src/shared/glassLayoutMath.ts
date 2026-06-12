@@ -69,7 +69,7 @@ export const COMMAND_BAR_ROOT_BOTTOM_PADDING_PX = 4;
 export const COMMAND_BAR_STACK_TOP_PADDING_PX = 8;
 const COMMAND_BAR_SIDE_MARGIN = 48;
 const DOCK_ABOVE_COMMAND_BAR_GAP = 0;
-/** Top inset for dock — mirrors command bar bottom margin. */
+/** Top margin between dock and screen/work-area top edge. */
 export const DOCK_TOP_MARGIN = 12;
 
 /** Gap between measured command bar stack and overlay chat cards. */
@@ -263,13 +263,18 @@ function dockAnchorX(ctx: DisplayLayoutContext, _preset: GlassLayoutPreset, widt
   return ctx.workArea.x + Math.round((ctx.workArea.width - width) / 2);
 }
 
+/** Vertical center of the command bar window (dock aligns to this Y). */
+export function commandBarVerticalCenterY(ctx: DisplayLayoutContext): number {
+  const bar = commandBarLayoutFromDisplay(ctx);
+  return bar.y + bar.height / 2;
+}
+
 function dockAnchorY(
   ctx: DisplayLayoutContext,
-  preset: GlassLayoutPreset,
-  height: number,
+  _preset: GlassLayoutPreset,
+  _height: number,
 ): number {
-  void preset;
-  void height;
+  // Dock sits at the top of the work area with a small margin.
   return ctx.workArea.y + DOCK_TOP_MARGIN;
 }
 

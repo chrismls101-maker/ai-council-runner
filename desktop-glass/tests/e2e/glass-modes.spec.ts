@@ -55,22 +55,23 @@ test("no audio/capture starts on initial launch", async () => {
   expect(state.privacy.capturing).toBe(false);
 });
 
-test("panel shows four mode cards and Quick Tools Voice + Translate", async () => {
+test("panel shows three mode cards and Quick Tools Voice + Translate", async () => {
   await expect(panelPage.locator('[data-testid="glass-mode-panel"]')).toBeVisible();
-  for (const id of ["listen", "meetings", "work", "wingman"]) {
+  for (const id of ["listen", "meetings", "wingman"]) {
     await expect(panelPage.locator(`[data-testid="glass-mode-card-${id}"]`)).toBeVisible();
   }
+  await expect(panelPage.locator('[data-testid="glass-mode-card-work"]')).toHaveCount(0);
   await expect(panelPage.locator('[data-testid="glass-mode-card-translate"]')).toHaveCount(0);
   await expect(panelPage.locator('[data-testid="glass-quick-tools"]')).toBeVisible();
   await expect(panelPage.locator('[data-testid="glass-mode-voice"]')).toBeVisible();
   await expect(panelPage.locator('[data-testid="glass-quick-tool-translate"]')).toBeVisible();
 });
 
-test("Work activates immediately without audio", async () => {
-  await panelPage.locator('[data-testid="glass-mode-card-work"]').click();
+test("Wingman activates immediately without audio", async () => {
+  await panelPage.locator('[data-testid="glass-mode-card-wingman"]').click();
   await expect
     .poll(async () => (await readGlassState(commandPage)).copilot.mode)
-    .toBe("coaching");
+    .toBe("diagnostic");
   const state = await readGlassState(commandPage);
   expect(state.copilot.active).toBe(true);
   expect(state.privacy.listening).toBe(false);

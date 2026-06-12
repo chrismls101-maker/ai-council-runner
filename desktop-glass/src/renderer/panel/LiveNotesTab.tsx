@@ -278,7 +278,7 @@ function LiveTranscriptContent({ state }: { state: GlassState }): JSX.Element {
 
 // ─── Main tab ─────────────────────────────────────────────────────────────────
 
-export function LiveNotesTab({ state }: { state: GlassState }): JSX.Element {
+export function LiveNotesTab({ state, showTranslate = true }: { state: GlassState; showTranslate?: boolean }): JSX.Element {
   const notes = state.listenLiveNotes;
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const userScrolledUpRef = useRef(false);
@@ -348,7 +348,7 @@ export function LiveNotesTab({ state }: { state: GlassState }): JSX.Element {
   return (
     <div className="live-notes live-notes--tabbed" data-testid="glass-live-notes">
       <ListenStatusBar state={state} />
-      <ListenTranslateToggle state={state} />
+      {showTranslate ? <ListenTranslateToggle state={state} /> : null}
 
       <div
         className="live-notes__tabs"

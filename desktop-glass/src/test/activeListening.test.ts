@@ -160,9 +160,9 @@ test("Listen and Meetings presets enable active listening", () => {
   assert.equal(GLASS_MODE_PRESETS.meetings.activeListeningEnabled, true);
 });
 
-test("Work preset enables active listening without requiring audio", () => {
-  assert.equal(GLASS_MODE_PRESETS.work.activeListeningEnabled, true);
-  assert.equal(GLASS_MODE_PRESETS.work.requiresAudio, false);
+test("Wingman preset enables active listening without requiring audio", () => {
+  assert.equal(GLASS_MODE_PRESETS.wingman.activeListeningEnabled, true);
+  assert.equal(GLASS_MODE_PRESETS.wingman.requiresAudio, false);
 });
 
 test("guidance includes recent transcript for explain intent", () => {
