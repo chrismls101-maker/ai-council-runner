@@ -18,6 +18,7 @@ import {
   inputSourceToTranscriptionMode,
 } from "../../shared/copilotPanelModel.ts";
 import {
+  GLASS_MODE_ICONS,
   GLASS_MODE_ORDER,
   GLASS_MODE_PRESETS,
   GLASS_QUICK_TOOLS,
@@ -43,6 +44,8 @@ import {
   TranslateModeSetup,
   MeetingsTranslateToggle,
 } from "./TranslateModeSetup.tsx";
+import { MeetingIntelPanel } from "./MeetingIntelPanel.tsx";
+import { WingmanPanel } from "./WingmanPanel.tsx";
 
 const COPILOT_MODES: GlassCopilotMode[] = ["off", "passive", "coaching", "diagnostic"];
 
@@ -86,7 +89,7 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
     if (copilot.mode === "diagnostic") return "wingman";
     if (config.sessionType === "meeting_call") return "meetings";
     if (config.sessionType === "video_learning") return "listen";
-    return "work";
+    return "wingman";
   }, [copilot.active, copilot.mode, config.sessionType]);
 
   const activeSourceLabel = activeMode === "listen"
@@ -195,12 +198,22 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
               aria-pressed={isActive}
               onClick={() => onModeClick(preset)}
             >
+              <span className="mode-card__icon" aria-hidden="true">{GLASS_MODE_ICONS[id]}</span>
               <div className="mode-card__top">
-                <strong className="mode-card__label">{preset.label}</strong>
+                <strong className="mode-card__label">[ {preset.label} Mode ]</strong>
                 <span className={`mode-card__status mode-card__status--${status}`}>
                   {MODE_STATUS_LABELS[status]}
                 </span>
               </div>
+              <p className="mode-card__for">
+                <span className="mode-card__for-prefix">For </span>
+                {preset.forItems.map((item, i) => (
+                  <span key={item}>
+                    <strong className="mode-card__for-item">{item}</strong>
+                    {i < preset.forItems.length - 1 ? ", " : ""}
+                  </span>
+                ))}
+              </p>
               <p className="mode-card__desc">{preset.description}</p>
               <span className="mode-card__action">{modePrimaryActionLabel(preset, status)}</span>
             </button>
@@ -291,10 +304,10 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
         </div>
       ) : null}
 
+      {(activeMode || sessionLive) ? (
       <div className="mode-panel__status-row" data-testid="glass-mode-status-row">
         <span>
-          Active: {activeMode ? GLASS_MODE_PRESETS[activeMode].label : "None"} · Source: {activeSourceLabel} ·
-          Session: {sessionLive ? "Running" : "Off"}
+          {activeMode ? `${GLASS_MODE_ICONS[activeMode]} ${GLASS_MODE_PRESETS[activeMode].label}` : "None"} · {activeSourceLabel}{sessionLive ? " · Session running" : ""}
         </span>
         <button
           type="button"
@@ -311,6 +324,7 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
           Stop Everything
         </button>
       </div>
+      ) : null}
 
       {activeMode === "listen" ? (
         <div className="mode-panel__listen-privacy" data-testid="glass-listen-privacy">
@@ -337,13 +351,31 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
         </div>
       ) : null}
 
+      {activeMode === "meetings" && sessionLive && state.meetingIntelligence ? (
+        <MeetingIntelPanel intel={state.meetingIntelligence} />
+      ) : null}
+
+      {activeMode === "wingman" ? (
+        <WingmanPanel
+          wingman={state.wingman}
+          wingmanMemory={state.wingmanMemory}
+          detectedApp={
+            state.wingman.session?.appSnapshots.at(-1)?.app ??
+            state.windowContext.status === "available" ? (state.windowContext as { status: "available"; app: string }).app : undefined
+          }
+        />
+      ) : null}
+
       <TranslateActiveStatus state={state} />
 
-      <ul className="mode-panel__privacy" data-testid="glass-mode-privacy">
-        {MODE_PRIVACY_NOTES.map((note) => (
-          <li key={note}>{note}</li>
-        ))}
-      </ul>
+      <details className="mode-panel__privacy-disclosure" data-testid="glass-mode-privacy">
+        <summary className="mode-panel__privacy-summary">Privacy &amp; data notes</summary>
+        <ul className="mode-panel__privacy">
+          {MODE_PRIVACY_NOTES.map((note) => (
+            <li key={note}>{note}</li>
+          ))}
+        </ul>
+      </details>
 
       <div className="mode-panel__advanced">
         <button

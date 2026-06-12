@@ -84,6 +84,13 @@ export class DeepgramStreamingSession {
   private sentenceSeq: number = Date.now();
   /** Dominant speaker index for the current sentence being buffered. undefined = single-speaker or not yet seen. */
   private lastSpeakerId: number | undefined = undefined;
+  /**
+   * Timestamp of the last audio chunk sent (ms). Used to decide when to send
+   * KeepAlive pings — Deepgram closes idle connections after ~10 s.
+   */
+  private lastAudioMs = 0;
+  /** KeepAlive interval handle. Cleared on close. */
+  private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private readonly apiKey: string,
@@ -91,6 +98,11 @@ export class DeepgramStreamingSession {
     private readonly callbacks: {
       onTranscript: (t: DeepgramTranscript) => void;
       onError: (err: Error) => void;
+      /**
+       * Called when the WebSocket closes unexpectedly (not when `close()` is
+       * called explicitly). Callers should use this to trigger a reconnect.
+       */
+      onClose?: () => void;
     },
   ) {}
 
@@ -189,8 +201,38 @@ export class DeepgramStreamingSession {
       this.callbacks.onError(error);
     });
 
+    conn.on("close", () => {
+      // Clear the keepAlive timer — connection is gone.
+      if (this.keepAliveTimer) {
+        clearInterval(this.keepAliveTimer);
+        this.keepAliveTimer = null;
+      }
+      // If this wasn't an intentional close(), let the caller know so they can reconnect.
+      if (!this.closed) {
+        console.warn("[deepgram] WebSocket closed unexpectedly — notifying caller");
+        this.callbacks.onClose?.();
+      }
+    });
+
     conn.connect();
     await conn.waitForOpen();
+
+    // KeepAlive timer — Deepgram drops idle connections after ~10 s.
+    // Send a KeepAlive ping every 8 s whenever no audio has flowed in the last 5 s.
+    this.lastAudioMs = Date.now();
+    this.keepAliveTimer = setInterval(() => {
+      if (this.closed || !this.conn) return;
+      const idleMs = Date.now() - this.lastAudioMs;
+      if (idleMs >= 5_000) {
+        try {
+          // Deepgram SDK v5 LiveClient.keepAlive() sends { type: "KeepAlive" }.
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+          this.conn.keepAlive();
+        } catch {
+          // Swallow — if the method is absent or conn is gone, the close event will fire.
+        }
+      }
+    }, 8_000);
 
     // Flush any audio that was queued while we were connecting.
     if (!this.closed && this.pendingQueue.length > 0) {
@@ -221,6 +263,7 @@ export class DeepgramStreamingSession {
       }
       return;
     }
+    this.lastAudioMs = Date.now();
     try {
       this.conn.sendMedia(buffer);
     } catch {
@@ -231,6 +274,11 @@ export class DeepgramStreamingSession {
   /** Cleanly close the Deepgram WebSocket. */
   close(): void {
     this.closed = true;
+    // Stop the keepAlive timer before closing.
+    if (this.keepAliveTimer) {
+      clearInterval(this.keepAliveTimer);
+      this.keepAliveTimer = null;
+    }
     // Flush any buffered text before closing.
     this.flushBuffer(true);
     this.pendingQueue = [];

@@ -286,7 +286,12 @@ export class GlassSessionStore {
       const cur = parsed.currentId
         ? store.sessions.find((s) => s.id === parsed.currentId)
         : null;
-      store.currentId = cur && cur.status !== "ended" ? cur.id : null;
+      if (cur && cur.status !== "ended") {
+        // Session was interrupted (Glass quit mid-session). Mark it ended so it
+        // doesn't show as "active" on the next launch, but keep it in history.
+        cur.status = "ended";
+      }
+      store.currentId = null;
       return store;
     } catch {
       return new GlassSessionStore(deps);

@@ -68,13 +68,17 @@ test("clearSession empties events/insights but keeps the session", () => {
   assert.ok(store.current());
 });
 
-test("serialize / hydrate round-trips and restores active current session", () => {
+test("serialize / hydrate marks interrupted active session as ended (no phantom session on relaunch)", () => {
   const store = new GlassSessionStore(deps());
   store.startSession("Persisted");
   store.addEvent({ kind: "manual_note", title: "keep" });
   const restored = GlassSessionStore.hydrate(store.serialize(), deps());
-  assert.equal(restored.current()?.title, "Persisted");
-  assert.equal(restored.current()?.events.length, 2);
+  // Session should be preserved in history but NOT active on relaunch.
+  assert.equal(restored.current(), null);
+  const inHistory = restored.list().find((s) => s.title === "Persisted");
+  assert.ok(inHistory, "session kept in history");
+  assert.equal(inHistory?.status, "ended");
+  assert.equal(inHistory?.events.length, 2);
 });
 
 test("hydrate does not resume an ended session as current", () => {

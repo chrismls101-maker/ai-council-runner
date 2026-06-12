@@ -4,6 +4,7 @@ import {
   clampDockSize,
   dockSizeLimits,
   commandBarLayoutFromDisplay,
+  DOCK_TOP_MARGIN,
   dockLayoutFromDisplay,
   overlayLayoutFromDisplay,
   panelLayoutFromDisplay,
@@ -54,19 +55,22 @@ test("panel width scales down on narrow display", () => {
   assert.equal(layout.width, 720);
 });
 
-test("dock compact preset is top-centered like the command bar", () => {
+test("dock compact preset is horizontally centered and top-anchored", () => {
   const bar = commandBarLayoutFromDisplay(macBook13);
   const layout = dockLayoutFromDisplay(macBook13, "compact_dock");
-  const dockCenter = layout.x + layout.width / 2;
-  const barCenter = bar.x + bar.width / 2;
-  assert.equal(dockCenter, barCenter);
-  assert.equal(layout.y, macBook13.workArea.y + 12);
+  const dockCenterX = layout.x + layout.width / 2;
+  const barCenterX = bar.x + bar.width / 2;
+  // Dock and command bar share the same horizontal center.
+  assert.equal(dockCenterX, barCenterX);
+  // Dock sits at the top of the work area.
+  assert.equal(layout.y, macBook13.workArea.y + DOCK_TOP_MARGIN);
   assert.ok(layout.width <= 720);
 });
 
-test("dock floating preset anchors to top workArea center", () => {
+test("dock floating preset is horizontally centered and top-anchored", () => {
   const layout = dockLayoutFromDisplay(macBook13, "floating_dock", 400, 72);
-  assert.equal(layout.y, macBook13.workArea.y + 12);
+  // Dock sits at top of work area regardless of content height.
+  assert.equal(layout.y, macBook13.workArea.y + DOCK_TOP_MARGIN);
   const center = layout.x + layout.width / 2;
   assert.equal(center, macBook13.workArea.x + macBook13.workArea.width / 2);
 });

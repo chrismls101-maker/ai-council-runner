@@ -90,10 +90,20 @@ export function buildListenReportSections(input: ListenReportInput): GlassCopilo
     input.checkpoints ?? listenCheckpointsFromSessionEvents(input.session.events);
   const liveNotes = buildListenLiveNotes({ moments: contentMoments, checkpoints });
 
+  const SOURCE_TYPE_LABELS: Record<string, string> = {
+    youtube: "YouTube",
+    podcast: "Podcast",
+    webinar: "Webinar",
+    course: "Online Course",
+    browser_audio: "Web Video",
+  };
+
   const sourceLines: string[] = [];
   if (media?.title) sourceLines.push(`Title: ${media.title}`);
   if (media?.channelOrSource) sourceLines.push(`Channel/source: ${media.channelOrSource}`);
-  if (media?.sourceType) sourceLines.push(`Platform: ${media.sourceType}`);
+  if (media?.sourceType && media.sourceType !== "unknown") {
+    sourceLines.push(`Platform: ${SOURCE_TYPE_LABELS[media.sourceType] ?? media.sourceType}`);
+  }
   if (media?.url) sourceLines.push(`URL: ${media.url}`);
   if (media?.durationLabel) sourceLines.push(`Duration: ${media.durationLabel}`);
   if (!sourceLines.length) sourceLines.push("Screen context unavailable — report based on audio transcript.");

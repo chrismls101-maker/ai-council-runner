@@ -34,6 +34,8 @@ import { buildListenReportPersonaGuidance } from "./listenModePersona.ts";
 import { listenCheckpointsFromSessionEvents } from "./listenCheckpoint.ts";
 import type { ListenMoment } from "./listenMomentTypes.ts";
 import type { MediaContext } from "./mediaContextTypes.ts";
+import { buildMeetingReport, buildMeetingReportSections } from "./meetingReport.ts";
+import type { MeetingIntelligenceState } from "./meetingIntelligenceTypes.ts";
 
 export interface DebriefOptions {
   sessionType?: GlassCopilotSessionType;
@@ -41,6 +43,12 @@ export interface DebriefOptions {
   reportStyle?: GlassCopilotReportStyle;
   listenMoments?: ListenMoment[];
   mediaContext?: MediaContext | null;
+  /**
+   * Live meeting intelligence state from the Stage 2 engine.
+   * When present and has moments, replaces the generic `extractMeetingIntelligence`
+   * extraction in the meeting_call debrief path with schema-typed moments.
+   */
+  meetingIntelligence?: MeetingIntelligenceState;
 }
 
 const DEBRIEF_TRIGGER_PHRASES = [
@@ -176,6 +184,7 @@ function sectionsForType(
   session: GlassSession,
   insights: GlassCopilotInsight[],
   cap: number,
+  options?: DebriefOptions,
 ): GlassCopilotDebriefSection[] {
   const keyIdeas = dedupeStrings(byType(insights, "key_idea"), cap);
   const actions = dedupeStrings(byType(insights, "action"), cap);
@@ -198,6 +207,27 @@ function sectionsForType(
         { heading: "Save to memory", items: memory },
       ];
     case "meeting_call": {
+      // Prefer schema-typed moments from the Stage 2 engine when available —
+      // they are archetype-aware (sales vs team vs product etc.) and more precise.
+      // Fall back to the generic extractMeetingIntelligence pass when the engine
+      // didn't run (e.g. session ended before 300-char classification threshold).
+      const hasMeetingIntel =
+        options?.meetingIntelligence != null &&
+        options.meetingIntelligence.moments.length > 0;
+
+      if (hasMeetingIntel) {
+        const intelSections = buildMeetingReportSections(options!.meetingIntelligence!);
+        return [
+          { heading: "Meeting notes", items: keyIdeas.length ? keyIdeas : whatHappened(session) },
+          ...intelSections,
+          // Append copilot-insight follow-ups that aren't already in the schema
+          ...(recommendedNextSteps(insights).length > 0
+            ? [{ heading: "Recommended next steps", items: recommendedNextSteps(insights) }]
+            : []),
+        ];
+      }
+
+      // Generic fallback path (short sessions / no audio)
       const intel = meetingIntelligenceForSession(session);
       const decisions = dedupeStrings(intel.decisions.concat(byType(insights, "hypothesis")), cap);
       const actionItems = dedupeStrings(intel.actionItems.concat(actions), cap);
@@ -363,7 +393,7 @@ export function buildSessionDebrief(
             mediaContext: options.mediaContext,
             checkpoints: listenCheckpointsFromSessionEvents(session.events),
           })
-        : sectionsForType(sessionType, session, insights, cap);
+        : sectionsForType(sessionType, session, insights, cap, options);
   // Concise reports drop empty sections (except the lead "what happened").
   if (reportStyle === "concise") {
     sections = sections.filter((section, index) => index === 0 || section.items.length > 0);
@@ -371,14 +401,24 @@ export function buildSessionDebrief(
 
   const isMeeting = sessionType === "meeting_call" && !(detection?.mixed && detection.secondaryType);
   const isListenReport = sessionType === "video_learning" && listenMoments.length > 0;
-  const markdown = isMeeting
-    ? buildBusinessMeetingDebrief(meetingIntelligenceForSession(session), {
-        title: session.title,
-        summary: whatHappened(session)[0],
-      })
-    : isListenReport
-      ? buildListenReportMarkdown(sections)
-      : debriefToMarkdown(session.title, sections);
+  const hasMeetingIntel =
+    isMeeting &&
+    options.meetingIntelligence != null &&
+    options.meetingIntelligence.moments.length > 0;
+
+  const markdown = hasMeetingIntel
+    ? buildMeetingReport(options.meetingIntelligence!, {
+        sessionTitle: session.title,
+        sessionDate: new Date().toLocaleDateString(),
+      }).markdown
+    : isMeeting
+      ? buildBusinessMeetingDebrief(meetingIntelligenceForSession(session), {
+          title: session.title,
+          summary: whatHappened(session)[0],
+        })
+      : isListenReport
+        ? buildListenReportMarkdown(sections)
+        : debriefToMarkdown(session.title, sections);
   return {
     id: deps.idFactory(),
     sessionId: session.id,
@@ -407,6 +447,50 @@ export function debriefToMarkdown(
 }
 
 /** Prompt for an optional direct-AI enrichment pass (no Council). */
+// ─── Meeting-intel-aware missing fields ──────────────────────────────────────
+
+/**
+ * Derive missing meeting fields from the new MeetingIntelligenceState rather
+ * than the old generic session-event extraction. Checks for absent moment
+ * types and absent owner/deadline metadata across action items.
+ */
+function detectMissingMeetingFieldsFromIntel(
+  intel: MeetingIntelligenceState,
+): import("./meetingIntelligence.ts").MeetingMissingField[] {
+  const missing: import("./meetingIntelligence.ts").MeetingMissingField[] = [];
+  const { moments } = intel;
+  if (!moments.some((m) => m.type === "decision")) missing.push("decision");
+  if (!moments.some((m) => m.type === "action_item")) missing.push("action_item");
+  if (!moments.some((m) => m.type === "blocker")) missing.push("blocker");
+  if (!moments.some((m) => m.owner)) missing.push("owner");
+  if (!moments.some((m) => m.deadline)) missing.push("deadline");
+  return missing;
+}
+
+// ─── Archetype-specific AI prompt guidance ───────────────────────────────────
+
+const MEETING_ARCHETYPE_PROMPT: Record<string, string> = {
+  sales_external:
+    "This is a Sales Call. Focus on: deal signals (budget confirmed, timeline, decision authority)," +
+    " customer pain points and stated problems, objections raised and how they were handled," +
+    " competitor mentions, commitments made by either party, and agreed next steps.",
+  team_internal:
+    "This is a Team Meeting. Focus on: decisions made (with rationale where given)," +
+    " action items with clear owners and deadlines, blockers that need resolution," +
+    " open questions that remain unanswered, and any scope or priority changes.",
+  product_review:
+    "This is a Product Review. Focus on: product feedback (bugs, UX issues, feature gaps, p-levels)," +
+    " decisions on what ships vs. cuts, scope changes, open design questions," +
+    " and any customer-reported signals mentioned.",
+  client_account:
+    "This is a Client / Account call. Focus on: commitments made to the client (with deadlines)," +
+    " escalations or urgent issues raised, churn or dissatisfaction risk signals," +
+    " client asks that are still unresolved, and required follow-up items.",
+  general:
+    "This is a General Meeting. Extract decisions, action items, owners, deadlines," +
+    " blockers, risks, and open questions. Surface any named attendees, customers, or metrics mentioned.",
+};
+
 export function buildDebriefAiPrompt(
   session: GlassSession,
   insights: GlassCopilotInsight[],
@@ -438,14 +522,25 @@ export function buildDebriefAiPrompt(
     );
   }
   if (options.sessionType === "meeting_call") {
-    const missing = detectMissingMeetingFields(meetingIntelligenceForSession(session));
+    // Derive missing fields from the new structured intel when available,
+    // falling back to the generic session-event extraction.
+    const intelState = options.meetingIntelligence;
+    const missing = intelState
+      ? detectMissingMeetingFieldsFromIntel(intelState)
+      : detectMissingMeetingFields(meetingIntelligenceForSession(session));
+
+    // Archetype-aware extraction guidance
+    const subType = intelState?.classification?.subType ?? null;
+    const archetypeGuidance = subType ? MEETING_ARCHETYPE_PROMPT[subType] : null;
+
     lines.push(
       "",
-      "This is a meeting/call. Extract decisions, action items, owners, deadlines,",
-      "blockers, risks, open questions, attendee/customer names, and metrics. For any",
-      "missing field write the explicit call-out (e.g. \"No owner given\"). Never invent",
-      "owners, deadlines, names, or decisions. Include a ready-to-send follow-up draft",
-      "and a short next-meeting agenda.",
+      archetypeGuidance ??
+        "This is a meeting/call. Extract decisions, action items, owners, deadlines," +
+        " blockers, risks, open questions, attendee/customer names, and metrics.",
+      "For any missing field write the explicit call-out (e.g. \"No owner given\").",
+      "Never invent owners, deadlines, names, or decisions.",
+      "Include a ready-to-send follow-up draft and a short next-meeting agenda.",
     );
     if (missing.length > 0) {
       lines.push(
