@@ -12,6 +12,10 @@ import { installGlassE2eHooks, getE2eExternalUrls, resetE2eExternalUrls } from "
 import { installDefaultGlassHandoffOpener, openGlassHandoffUrl } from "./glassBrowserHandoff.ts";
 import { getGlassE2eWindowMetadata } from "./e2eWindowMetadata.ts";
 import { join } from "node:path";
+import { appendFile, readFile } from "node:fs";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+const execFileAsync = promisify(execFile);
 import { app, BrowserWindow, ipcMain, protocol, shell, type WebContents } from "electron";
 import { GLASS_BOOT_DURATION_MS } from "../shared/bootTiming.ts";
 import { isBootSplashBundlePresent } from "../shared/bootSplash.ts";
@@ -291,6 +295,30 @@ import {
   STREAMING_LISTEN_CHECKPOINT_MINUTES,
   listenCheckpointsFromSessionEvents,
 } from "../shared/listenCheckpoint.ts";
+import {
+  applyMeetingTypeOverrideInEngine,
+  deleteMeetingMoment,
+  addMeetingMoment,
+  resetMeetingIntelligenceState,
+  runMeetingIntelligencePass,
+  shouldRunExtractionPass,
+} from "../shared/meetingIntelligenceEngine.ts";
+import {
+  getMeetingSchema,
+  type ExtractedMomentRaw,
+} from "../shared/meetingExtractionSchemas.ts";
+import {
+  buildMeetingExtractionPrompt,
+  parseExtractionResponse,
+} from "../shared/meetingExtractionPrompts.ts";
+import { buildMeetingReport } from "../shared/meetingReport.ts";
+import {
+  MEETING_EXTRACTION_INTERVAL_MS,
+  MEETING_INTELLIGENCE_INITIAL_STATE,
+  MEETING_SUB_TYPE_LABELS,
+  type MeetingIntelligenceState,
+  type MeetingMoment,
+} from "../shared/meetingIntelligenceTypes.ts";
 import {
   pruneRunningTranscript,
   pruneTranscriptSessionEvents,
@@ -628,6 +656,11 @@ let sessions = new GlassSessionStore();
 let glassContextProfile: GlassContextProfile;
 
 let listenCountdownTimer: ReturnType<typeof setInterval> | null = null;
+/**
+ * Timestamp of the last proactive (background) media context capture attempt.
+ * Reset to 0 each time a fresh listen session boots so the first check fires immediately.
+ */
+let lastProactiveMediaCaptureMs = 0;
 let visualAskRetentionDismissTimer: ReturnType<typeof setTimeout> | null = null;
 
 function clearVisualAskRetentionDismissTimer(): void {
@@ -710,6 +743,31 @@ let lastAiNotesRefreshMs: number | undefined;
 /** Rolling transcript length at the last AI notes trigger — used to gate on delta. */
 let lastAiTranscriptLen = 0;
 let liveTranslateRuntime: LiveTranslateRuntimeState = initialLiveTranslateRuntime();
+
+// Wingman Mode runtime — active work companion session
+let wingmanState: import("../shared/wingmanSession.ts").WingmanState = {
+  active: false,
+  session: null,
+  inspecting: false,
+  report: null,
+};
+let wingmanSnapshotInterval: ReturnType<typeof setInterval> | null = null;
+let wingmanTerminalInterval: ReturnType<typeof setInterval> | null = null;
+
+// Wingman cross-session memory — in-memory search results (library lives in wingman-sessions.jsonl)
+let wingmanMemoryState: import("../shared/wingmanMemory.ts").WingmanMemoryState = {
+  searchResults: [],
+  totalSessions: 0,
+  loading: false,
+};
+
+// Meeting Intelligence runtime — persists for the duration of a meetings-mode session
+let meetingIntelState: MeetingIntelligenceState = { ...MEETING_INTELLIGENCE_INITIAL_STATE };
+let meetingIntelTimer: ReturnType<typeof setInterval> | null = null;
+/** Moment IDs that have already fired a proactive notice — cleared on session reset. */
+const meetingIntelNoticedIds = new Set<string>();
+/** Prevents concurrent AI extraction calls when the tick fires faster than the AI responds. */
+let meetingExtractionInFlight = false;
 let deepgramSession: DeepgramStreamingSession | null = null;
 /**
  * Separate Deepgram session dedicated to listen mode (Live Notes).
@@ -788,21 +846,47 @@ function startListenDeepgramSession(): void {
   const dgKey = process.env.DEEPGRAM_API_KEY?.trim();
   if (!dgKey) return; // no key → fall back to OpenAI STT chunks (no diarization)
   stopListenDeepgramSession();
-  listenDeepgramSession = new DeepgramStreamingSession(dgKey, "auto", {
-    onTranscript: ({ text, isFinal, speakerId }) => {
+
+  const makeListenCallbacks = () => ({
+    onTranscript: ({ text, isFinal, speakerId }: { text: string; isFinal: boolean; speakerId?: number }) => {
       if (!isFinal) return; // interim not needed for listen-mode notes
       // Prefix with speaker tag so the AI pass and classifier can attribute notes.
       const speakerPrefix = speakerId != null ? `[S${speakerId}] ` : "";
       void processListenModeChunk(`${speakerPrefix}${text}`, ["system_audio"]);
     },
-    onError: (err) => {
+    onError: (err: Error) => {
       console.error("[deepgram:listen] error:", err.message);
     },
+    onClose: () => {
+      if (!shouldRunListenNotesPipeline()) return;
+      console.warn("[deepgram:listen] WS closed unexpectedly — reconnecting in 1s…");
+      setTimeout(() => {
+        if (!shouldRunListenNotesPipeline()) return;
+        startListenDeepgramSession();
+      }, 1_000);
+    },
   });
-  listenDeepgramSession.connect().catch((err: unknown) => {
-    console.error("[deepgram:listen] connect failed:", (err as Error).message ?? err);
-    listenDeepgramSession = null;
-  });
+
+  listenDeepgramSession = new DeepgramStreamingSession(dgKey, "auto", makeListenCallbacks());
+
+  const attemptListenDeepgramConnect = (attemptsLeft: number) => {
+    listenDeepgramSession?.connect().catch((err: unknown) => {
+      const msg = (err as Error).message ?? String(err);
+      console.error(`[deepgram:listen] connect failed (${attemptsLeft} retries left):`, msg);
+      if (attemptsLeft > 0 && shouldRunListenNotesPipeline()) {
+        console.log("[deepgram:listen] retrying in 1.5s…");
+        setTimeout(() => {
+          if (!shouldRunListenNotesPipeline()) return;
+          listenDeepgramSession = new DeepgramStreamingSession(dgKey, "auto", makeListenCallbacks());
+          attemptListenDeepgramConnect(attemptsLeft - 1);
+        }, 1_500);
+      } else {
+        listenDeepgramSession = null;
+      }
+    });
+  };
+
+  attemptListenDeepgramConnect(2);
   console.log("[deepgram:listen] session started (diarization enabled)");
 }
 
@@ -870,6 +954,16 @@ function buildCurrentListenLiveNotes() {
 
 async function refreshStreamingListenNotes(nowMs: number, force = false): Promise<void> {
   if (!isListenModeActive()) return;
+
+  // ── Proactive media context re-capture ──────────────────────────────────────
+  // If the live session still has no media title, retry every 30 s.
+  // Handles the common case: user starts listen mode before switching to the browser tab.
+  if (!state.mediaContext?.title && nowMs - lastProactiveMediaCaptureMs > 30_000) {
+    lastProactiveMediaCaptureMs = nowMs;
+    void proactivelyCaptureMediaContext().catch(() => {});
+  }
+  // ────────────────────────────────────────────────────────────────────────────
+
   const last = listenMomentRuntime.lastLiveNotesRefreshMs;
   const rolling = rollingTranscriptWindow(listenRollingTranscript);
   const prevLen = listenMomentRuntime.lastEvalTranscriptLen ?? 0;
@@ -1040,6 +1134,37 @@ async function captureMediaContext(): Promise<void> {
   push();
 }
 
+/**
+ * Lightweight background media context capture for proactive retries — title/URL only, no vision AI.
+ * Only updates state when a title is successfully found so it never clobbers an existing context.
+ * Silently no-ops if the frontmost window isn't a recognisable media source.
+ */
+async function proactivelyCaptureMediaContext(): Promise<void> {
+  if (!sessionIsLive()) return;
+  await refreshWindowContext();
+  const ctx = getCachedWindowContext();
+  const browserUrl = await getActiveBrowserUrl(ctx.appName);
+  const media =
+    extractMediaContext({ appName: ctx.appName, windowTitle: ctx.windowTitle, browserUrl }) ?? null;
+  if (!media?.title) return; // nothing useful — leave existing context untouched
+  state.mediaContext = media;
+  if (sessions.current()?.status === "active") {
+    sessions.addEvent({
+      kind: "app_context",
+      title: media.title,
+      text: [media.sourceType, media.channelOrSource, media.url, media.durationLabel]
+        .filter(Boolean)
+        .join(" · "),
+      ...eventContextFields(),
+      metadata: { mediaContext: media },
+    });
+    await persistSessions(sessions);
+  }
+  const displayTitle = media.title.slice(0, 80) + (media.title.length > 80 ? "…" : "");
+  state.lastNotice = `Media context: ${displayTitle}`;
+  push();
+}
+
 function maybeShowActiveListeningProactive(newText: string, tags?: string[]): void {
   const config = copilot.getConfig();
   const activeMode = deriveActiveListeningMode(config, sessionIsLive() && copilotModeIsActive(config.mode));
@@ -1048,6 +1173,9 @@ function maybeShowActiveListeningProactive(newText: string, tags?: string[]): vo
     return;
   }
   if (activeMode !== "meetings") return;
+  // Lazily start the Meeting Intelligence extraction loop the first time a
+  // meetings-mode transcript chunk arrives.
+  if (!meetingIntelTimer) startMeetingIntelLoop();
   const moment = pickActiveListeningProactiveMoment({
     newTranscript: newText,
     recentCommands: copilotRecentCommands,
@@ -1110,6 +1238,11 @@ function ensureListenNotesLoopRunning(): void {
   setListenNotesPadVisible(true);
   startListenDeepgramSession();
   seedSpeakerNamesFromBrowserTitle();
+  // Proactive media context capture for this (re)started pipeline slice.
+  if (!state.mediaContext?.title) {
+    lastProactiveMediaCaptureMs = 0;
+    setTimeout(() => { void proactivelyCaptureMediaContext().catch(() => {}); }, 2_000);
+  }
 }
 
 /** Fresh listen capture — reset runtime and start the notes loop. */
@@ -1126,6 +1259,10 @@ function bootstrapListenNotesPipeline(): void {
   setListenNotesPadVisible(true);
   startListenDeepgramSession();
   seedSpeakerNamesFromBrowserTitle();
+  // Auto-capture media context shortly after session boot so the debrief has title/platform
+  // even when the user didn't manually trigger it. Retry cadence is handled in the notes loop.
+  lastProactiveMediaCaptureMs = 0;
+  setTimeout(() => { void proactivelyCaptureMediaContext().catch(() => {}); }, 2_000);
 }
 
 function isTranslateActive(): boolean {
@@ -1160,6 +1297,9 @@ function clearTranslateStartupErrors(): void {
 /** Stop translate capture: renderer STT, HUD timer, and in-flight chunk reporting. */
 function stopTranslateListening(): void {
   cancelListenCountdown();
+  // Keep system audio alive if the listen notes pipeline is running — it still needs
+  // audio for diarization and note extraction. Only stop audio for pure translate sessions.
+  if (shouldRunListenNotesPipeline()) return;
   broadcastTranscriptionControl({ type: "stop" });
   if (!state.privacy.listening) {
     state.stt = { ...state.stt, transcribing: false, lastError: undefined };
@@ -1710,6 +1850,7 @@ function bindCopilotToSession(): void {
   listenSpeakerNames = {};
   lastAiTranscriptLen = 0;
   stopListenNotesLoop();
+  resetMeetingIntelRuntime();
   copilot.bindSession(id);
   if (session?.copilot) {
     copilot.hydrate(session.id, session.copilot);
@@ -1747,6 +1888,308 @@ function stopListenNotesLoop(): void {
   if (listenNotesTimer) {
     clearInterval(listenNotesTimer);
     listenNotesTimer = null;
+  }
+}
+
+// --- Meeting Intelligence loop -----------------------------------------------
+
+function isMeetingsModeActive(): boolean {
+  const config = copilot.getConfig();
+  return (
+    deriveActiveListeningMode(config, sessionIsLive() && copilotModeIsActive(config.mode)) ===
+    "meetings"
+  );
+}
+
+function startMeetingIntelLoop(): void {
+  if (meetingIntelTimer) return;
+  meetingIntelTimer = setInterval(() => {
+    runMeetingIntelTick();
+  }, MEETING_EXTRACTION_INTERVAL_MS);
+}
+
+function stopMeetingIntelLoop(): void {
+  if (meetingIntelTimer) {
+    clearInterval(meetingIntelTimer);
+    meetingIntelTimer = null;
+  }
+}
+
+function resetMeetingIntelRuntime(): void {
+  stopMeetingIntelLoop();
+  meetingIntelState = resetMeetingIntelligenceState();
+  meetingIntelNoticedIds.clear();
+  meetingExtractionInFlight = false;
+}
+
+/**
+ * Append a correction entry to meeting-corrections.jsonl in userData.
+ * Fire-and-forget — errors are silently swallowed so they never impact the UI.
+ * Each line is a self-contained JSON record for offline analysis / future training.
+ */
+function logMeetingCorrection(
+  action: "delete" | "add",
+  moment: MeetingMoment,
+): void {
+  try {
+    const entry = JSON.stringify({
+      ts:           Date.now(),
+      sessionId:    sessions.current()?.id ?? "unknown",
+      action,
+      momentType:   moment.type,
+      content:      moment.content,
+      owner:        moment.owner,
+      deadline:     moment.deadline,
+      manualOverride: moment.manualOverride ?? false,
+    });
+    const logPath = join(app.getPath("userData"), "meeting-corrections.jsonl");
+    appendFile(logPath, entry + "\n", () => { /* fire-and-forget */ });
+  } catch {
+    /* never block */
+  }
+}
+
+/**
+ * Read recent output from the frontmost terminal window (read-only, no control).
+ *
+ * Strategy:
+ *   - Terminal.app: uses its AppleScript dictionary
+ *   - iTerm2: uses iTerm2's AppleScript dictionary
+ *   - Others (Ghostty, Warp, Kitty, etc.): returns null — no dict support;
+ *     future: extend with AX text area reading if needed
+ *
+ * Returns the last ~120 lines of output, or null if unavailable / not a terminal.
+ * Errors are swallowed silently — terminal reading is best-effort.
+ */
+async function readFrontTerminalOutput(appName: string): Promise<string | null> {
+  try {
+    const lower = appName.toLowerCase().trim();
+    let script: string;
+
+    if (lower === "terminal") {
+      script = `tell application "Terminal"
+  if (count of windows) > 0 then
+    get contents of selected tab of front window
+  end if
+end tell`;
+    } else if (lower.startsWith("iterm")) {
+      script = `tell application "iTerm2"
+  tell current window
+    tell current tab
+      tell current session
+        get text
+      end tell
+    end tell
+  end tell
+end tell`;
+    } else {
+      // App has no known scripting dictionary for content — skip silently
+      return null;
+    }
+
+    const { stdout } = await execFileAsync("osascript", ["-e", script]);
+    const raw = stdout.trim();
+    if (!raw) return null;
+    // Return only the last 120 lines to stay focused on recent output
+    const lines = raw.split(/\r?\n/);
+    return lines.slice(-120).join("\n");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Start the terminal watching interval for an active Wingman session.
+ * Polls every 10 seconds, reads frontmost terminal output if it's a terminal app,
+ * parses for errors/failures/successes, and auto-adds events + session notes.
+ */
+function startTerminalWatching(): void {
+  if (wingmanTerminalInterval !== null) return; // already running
+  wingmanTerminalInterval = setInterval(() => {
+    void (async () => {
+      if (!wingmanState.session?.terminalWatching) return;
+      const ctx = getCachedWindowContext();
+      const appName = ctx.appName ?? "";
+      const { isTerminalApp, parseTerminalOutput, detectTerminalLoop } =
+        await import("../shared/terminalEvents.ts");
+      if (!isTerminalApp(appName)) return;
+      const output = await readFrontTerminalOutput(appName);
+      if (!output) return;
+      const session = wingmanState.session;
+      if (!session) return;
+      const newEvents = parseTerminalOutput(output, {
+        source: appName,
+        existingEvents: session.terminalEvents,
+        dedupeWindowMs: 60_000,
+      });
+      if (newEvents.length === 0) return;
+      // Auto-create a wingman note for each new event
+      const autoNotes = newEvents.map((e) => ({
+        id: `note-terminal-${e.id}`,
+        timestamp: e.timestamp,
+        content: e.label,
+        source: "wingman" as const,
+      }));
+      const updatedEvents = [...session.terminalEvents, ...newEvents];
+      const loopWarning = detectTerminalLoop(updatedEvents) || session.loopWarning;
+      wingmanState = {
+        ...wingmanState,
+        session: {
+          ...session,
+          terminalEvents: updatedEvents,
+          notes: [...session.notes, ...autoNotes],
+          loopWarning,
+        },
+      };
+      // Surface first new event as a notice — pick the most severe
+      const errorEvent = newEvents.find(
+        (e) => e.type === "build_error" || e.type === "test_failure" || e.type === "runtime_error",
+      );
+      const noticedEvent = errorEvent ?? newEvents[0];
+      if (noticedEvent) {
+        state.lastNotice = `Wingman: ${noticedEvent.label}`;
+      }
+      if (loopWarning && !session.loopWarning) {
+        state.lastNotice = "⚠ Wingman: same error 3× — loop detected in terminal";
+      }
+      push();
+    })();
+  }, 10_000);
+}
+
+function stopTerminalWatching(): void {
+  if (wingmanTerminalInterval !== null) {
+    clearInterval(wingmanTerminalInterval);
+    wingmanTerminalInterval = null;
+  }
+}
+
+/**
+ * Append a completed Wingman session record to wingman-sessions.jsonl in userData.
+ * Fire-and-forget — errors are silently swallowed so they never interrupt the report flow.
+ * Also refreshes wingmanMemoryState.totalSessions after a successful write.
+ */
+function saveWingmanSessionRecord(
+  session: import("../shared/wingmanSession.ts").WingmanSession,
+  report: import("../shared/wingmanSession.ts").WingmanReport,
+): void {
+  void (async () => {
+    try {
+      const { buildSessionRecord, serializeSessionRecord, parseSessionLibrary } = await import("../shared/wingmanMemory.ts");
+      const record = buildSessionRecord(session, report);
+      const line = serializeSessionRecord(record) + "\n";
+      const libraryPath = join(app.getPath("userData"), "wingman-sessions.jsonl");
+      appendFile(libraryPath, line, (err) => {
+        if (!err) {
+          // Re-read to get accurate total count
+          readFile(libraryPath, "utf-8", (_e, data) => {
+            if (!data) return;
+            const lib = parseSessionLibrary(data);
+            wingmanMemoryState = { ...wingmanMemoryState, totalSessions: lib.length };
+          });
+        }
+      });
+    } catch {
+      /* never block the report push */
+    }
+  })();
+}
+
+/** High-signal moment types that warrant a brief notice. */
+const MEETING_NOTICE_TYPES = new Set(["decision", "blocker", "risk", "action_item"]);
+
+/** Short notice label per moment type (kept to ≤ 40 chars). */
+function meetingMomentNoticeText(moment: MeetingMoment): string | null {
+  switch (moment.type) {
+    case "decision":    return `Decision captured`;
+    case "blocker":     return `Blocker noted`;
+    case "risk":        return `Risk flagged`;
+    case "action_item": return moment.owner ? `Action → ${moment.owner}` : null; // only when owner known
+    default:            return null;
+  }
+}
+
+async function runMeetingIntelTick(): Promise<void> {
+  if (!isMeetingsModeActive()) return;
+
+  const transcript = state.transcript;
+  const nowMs = Date.now();
+
+  // ── AI extraction ─────────────────────────────────────────────────────────
+  // Attempt AI-backed extraction before running the engine pass. If the AI
+  // call fails or times out the engine falls back to regex automatically.
+  let extractionOverride: ExtractedMomentRaw[] | undefined;
+
+  if (
+    !meetingExtractionInFlight &&
+    shouldRunExtractionPass(meetingIntelState, transcript.length, nowMs)
+  ) {
+    meetingExtractionInFlight = true;
+    try {
+      const subType = meetingIntelState.classification!.subType;
+      const schema  = getMeetingSchema(subType);
+      const lastLen = meetingIntelState.lastExtractionTranscriptLen ?? 0;
+      const delta   = transcript.slice(lastLen);
+
+      const prompt     = buildMeetingExtractionPrompt(delta, schema);
+      const controller = new AbortController();
+      const timeoutId  = setTimeout(() => controller.abort(), 9_000); // 9s hard cap
+
+      try {
+        const response = await askIivoGlass(
+          config,
+          { prompt, responseStyle: "full", modelPurpose: "semantic" },
+          controller.signal,
+        );
+        clearTimeout(timeoutId);
+        extractionOverride = parseExtractionResponse(response.answer, schema);
+      } catch {
+        clearTimeout(timeoutId);
+        // AI call failed / timed out — engine will use regex fallback
+      }
+    } finally {
+      meetingExtractionInFlight = false;
+    }
+  }
+
+  // Re-check after the await — mode might have been deactivated during AI call
+  if (!isMeetingsModeActive()) return;
+
+  // ── Engine pass ───────────────────────────────────────────────────────────
+  const prev = meetingIntelState;
+  const ctx  = getCachedWindowContext();
+  const next = runMeetingIntelligencePass({
+    transcript,
+    state: meetingIntelState,
+    appName: ctx.appName,
+    windowTitle: ctx.windowTitle,
+    nowMs,
+    extractionOverride,
+  });
+
+  if (next !== meetingIntelState) {
+    // Fire a notice when meeting type is first classified
+    if (!prev.classification && next.classification) {
+      const label = MEETING_SUB_TYPE_LABELS[next.classification.subType];
+      state.lastNotice = `Meeting detected: ${label}`;
+    }
+
+    // Fire a single brief notice for the first new high-signal moment this tick
+    if (next.moments.length > prev.moments.length) {
+      const newMoments = next.moments.filter((m) => !meetingIntelNoticedIds.has(m.id));
+      for (const moment of newMoments) {
+        meetingIntelNoticedIds.add(moment.id);
+        if (!MEETING_NOTICE_TYPES.has(moment.type)) continue;
+        const notice = meetingMomentNoticeText(moment);
+        if (notice) {
+          state.lastNotice = notice;
+          break; // one notice per tick
+        }
+      }
+    }
+
+    meetingIntelState = next;
+    push();
   }
 }
 
@@ -2020,6 +2463,11 @@ function snapshot(): GlassState {
     blackHoleInstallStatus: state.blackHoleInstallStatus,
     blackHoleInstallProgress: state.blackHoleInstallProgress,
     iivoAccountLink: state.iivoAccountLink,
+    meetingIntelligence: isMeetingsModeActive() ? meetingIntelState : undefined,
+    iivoApiUrl: config.iivoApiUrl,
+    iivoWebUrl: config.iivoWebUrl,
+    wingman: wingmanState,
+    wingmanMemory: wingmanMemoryState,
   };
 }
 
@@ -3404,6 +3852,7 @@ async function handleCommand(
       state.lastError = stopped.lastError;
       stopCopilotLoop();
       stopListenNotesLoop();
+      stopMeetingIntelLoop();
       resetListeningLimitTracking();
       systemAudioLastSignalMs = undefined;
       activeListeningRuntime = clearActiveListeningRuntime();
@@ -3473,26 +3922,41 @@ async function handleCommand(
       {
         stopDeepgramSession();
         const srcLang = liveTranslateRuntime.config.sourceLanguage ?? "auto";
-        deepgramSession = new DeepgramStreamingSession(dgKey, srcLang, {
-          onTranscript: ({ text, isFinal, sentenceId }) => {
+        // Factory so every retry and every reconnect gets a fresh closure sharing
+        // the same dgKey / srcLang, and `onClose` can reference `makeTranslateCallbacks`.
+        const makeTranslateCallbacks = () => ({
+          onTranscript: ({ text, isFinal, sentenceId }: { text: string; isFinal: boolean; sentenceId?: string }) => {
             if (!isFinal) {
-              // Show interim as live preview only when source == target (no translation flip).
-              if (liveTranslateRuntime.config.sourceLanguage === liveTranslateRuntime.config.targetLanguage) {
-                pushInterimCaptionPreview(text);
-              }
+              // Always show interim as a live caption preview. For translation mode this
+              // shows the speaker's original words in near-real-time, keeping the display
+              // responsive. The translated final will overwrite when speech_final fires.
+              pushInterimCaptionPreview(text);
               return;
             }
             // Final: translate and append to the current sentence line in the display.
             void ingestTranslateChunk(text, { tags: ["system_audio"], sentenceId });
           },
-          onError: (err) => {
+          onError: (err: Error) => {
             console.error("[deepgram] error:", err.message);
             if (isTranslateActive()) {
               state.lastError = `Translate audio error: ${err.message}`;
               push();
             }
           },
+          onClose: () => {
+            if (!isTranslateActive()) return;
+            console.warn("[deepgram] translate WS closed unexpectedly — reconnecting in 1s…");
+            setTimeout(() => {
+              if (!isTranslateActive()) return;
+              deepgramSession = new DeepgramStreamingSession(dgKey, srcLang, makeTranslateCallbacks());
+              deepgramSession.connect().catch((reconnErr: unknown) => {
+                console.error("[deepgram] post-drop reconnect failed:", (reconnErr as Error).message);
+                deepgramSession = null;
+              });
+            }, 1_000);
+          },
         });
+        deepgramSession = new DeepgramStreamingSession(dgKey, srcLang, makeTranslateCallbacks());
         const attemptDeepgramConnect = (attemptsLeft: number) => {
           deepgramSession?.connect().catch((err: unknown) => {
             const msg = (err as Error).message ?? String(err);
@@ -3501,16 +3965,7 @@ async function handleCommand(
               console.log("[deepgram] retrying in 1.5s…");
               setTimeout(() => {
                 if (!isTranslateActive()) return;
-                deepgramSession = new DeepgramStreamingSession(dgKey, srcLang, {
-                  onTranscript: ({ text, isFinal, sentenceId }) => {
-                    if (!isFinal) { pushInterimCaptionPreview(text); return; }
-                    void ingestTranslateChunk(text, { tags: ["system_audio"], sentenceId });
-                  },
-                  onError: (err) => {
-                    console.error("[deepgram] error:", err.message);
-                    if (isTranslateActive()) { state.lastError = `Translate audio error: ${err.message}`; push(); }
-                  },
-                });
+                deepgramSession = new DeepgramStreamingSession(dgKey, srcLang, makeTranslateCallbacks());
                 attemptDeepgramConnect(attemptsLeft - 1);
               }, 1500);
             } else {
@@ -3759,6 +4214,20 @@ async function handleCommand(
     case "cancel-glass-ask":
       cancelGlassAsk();
       return;
+    case "set-glass-server-urls": {
+      const { parseGlassServerUrl } = await import("../shared/glassSettings.ts");
+      const apiUrl = parseGlassServerUrl(command.apiUrl) ?? config.iivoApiUrl;
+      const webUrl = parseGlassServerUrl(command.webUrl) ?? config.iivoWebUrl;
+      // Mutate the module-level config so all downstream callers pick up the new URLs immediately
+      config.iivoApiUrl = apiUrl;
+      config.iivoWebUrl = webUrl;
+      state.glassSettings = { ...state.glassSettings, iivoApiUrl: parseGlassServerUrl(command.apiUrl), iivoWebUrl: parseGlassServerUrl(command.webUrl) };
+      glassUserSettings = state.glassSettings;
+      await persistGlassUserSettings(glassUserSettings);
+      state.lastNotice = `Server URL updated: ${apiUrl}`;
+      push();
+      return;
+    }
     case "set-glass-hotkey":
       state.glassSettings = { ...state.glassSettings, hotkeyPreset: command.preset };
       glassUserSettings = state.glassSettings;
@@ -4133,6 +4602,255 @@ async function handleCommand(
       })();
       return;
     }
+    // --- Meeting Intelligence -------------------------------------------------
+    case "meeting-set-type": {
+      meetingIntelState = applyMeetingTypeOverrideInEngine(meetingIntelState, command.subType);
+      state.lastNotice = `Re-scanning as ${MEETING_SUB_TYPE_LABELS[command.subType]}…`;
+      push();
+      return;
+    }
+    case "meeting-delete-moment": {
+      const deleted = meetingIntelState.moments.find((m) => m.id === command.id);
+      const next = deleteMeetingMoment(meetingIntelState, command.id);
+      if (next !== meetingIntelState) {
+        meetingIntelNoticedIds.delete(command.id);
+        meetingIntelState = next;
+        push();
+        if (deleted) logMeetingCorrection("delete", deleted);
+      }
+      return;
+    }
+    case "meeting-add-moment": {
+      const prev = meetingIntelState;
+      meetingIntelState = addMeetingMoment(meetingIntelState, command.momentType, command.content);
+      push();
+      // Log the newly added moment (last item — addMeetingMoment appends)
+      const added = meetingIntelState.moments.at(-1);
+      if (added && added !== prev.moments.at(-1)) logMeetingCorrection("add", added);
+      return;
+    }
+    // -------------------------------------------------------------------------
+    // Wingman Mode
+    // -------------------------------------------------------------------------
+    case "wingman-start": {
+      const {
+        initialWingmanSession,
+        shouldAddAppSnapshot,
+      } = await import("../shared/wingmanSession.ts");
+      // Stop any previous session cleanly
+      if (wingmanSnapshotInterval !== null) {
+        clearInterval(wingmanSnapshotInterval);
+        wingmanSnapshotInterval = null;
+      }
+      stopTerminalWatching();
+      const session = initialWingmanSession(command.goal);
+      wingmanState = { active: true, session, inspecting: false, report: null };
+      // Passive app snapshot accumulator — title + app only, no screenshots
+      wingmanSnapshotInterval = setInterval(() => {
+        if (!wingmanState.session) return;
+        const ctx = getCachedWindowContext();
+        const snap = {
+          app: ctx.appName ?? "Unknown",
+          title: ctx.windowTitle ?? "",
+          timestamp: Date.now(),
+        };
+        if (shouldAddAppSnapshot(wingmanState.session.appSnapshots, snap)) {
+          wingmanState = {
+            ...wingmanState,
+            session: {
+              ...wingmanState.session,
+              appSnapshots: [...wingmanState.session.appSnapshots, snap],
+            },
+          };
+        }
+      }, 30_000);
+      state.lastNotice = `Wingman active — watching: ${command.goal}`;
+      push();
+      return;
+    }
+
+    case "wingman-inspect": {
+      if (!wingmanState.session) return;
+      const { detectLoop, detectScopeDrift } = await import("../shared/wingmanSession.ts");
+      wingmanState = { ...wingmanState, inspecting: true };
+      push();
+      try {
+        const captureTarget = resolveCaptureDisplay(state.glassSettings.displayTarget);
+        const shot = await captureDisplayById(captureTarget.id, captureTarget.label);
+        const optimized = optimizeVisualAskImage(
+          shot.imageDataUrl,
+          { width: shot.width, height: shot.height },
+          { prompt: "Wingman work session inspection", preset: "general" },
+        );
+        // Non-null assertion safe: guarded above; no code path nulls session in this handler.
+        const session = wingmanState.session!;
+        const lastInspection = session.inspections.at(-1);
+        const recentSnapshots = session.appSnapshots.slice(-3);
+        const systemPrompt = [
+          `You are Wingman, an active work companion.`,
+          `Task goal: "${session.goal}"`,
+          `Current app context: ${recentSnapshots.map((s) => `${s.app} (${s.title})`).join(" → ") || "unknown"}`,
+          lastInspection ? `Previous finding: ${lastInspection.response.slice(0, 200)}` : "",
+          ``,
+          `Analyse the current screen and respond with:`,
+          `1. What you observe (use "appears to", "I observe" — NEVER "verified" or "confirmed")`,
+          `2. One concrete next step`,
+          `3. Any risk or warning you see`,
+          ``,
+          `Keep your response under 150 words. Be specific to the task and what is visible.`,
+          `Never claim to have verified, confirmed, tested, or proven anything.`,
+        ]
+          .filter(Boolean)
+          .join("\n");
+        const userPrompt = command.prompt
+          ? command.prompt
+          : `What do you observe on this screen relevant to: "${session.goal}"?`;
+        const response = await askIivoGlass(config, {
+          prompt: `${systemPrompt}\n\nUser question: ${userPrompt}`,
+          visualIntent: true,
+          latestScreenshot: {
+            imageDataUrl: optimized.imageDataUrl,
+            label: captureTarget.label,
+            capturedAt: new Date().toISOString(),
+          },
+        });
+        const answer = response.answer?.trim() ?? "No response from Wingman.";
+        // Save screenshot ref (path-style key from timestamp)
+        const screenshotRef = `wingman-${session.id}-${Date.now()}`;
+        const scopeDriftWarning = detectScopeDrift(session.goal, answer) ?? undefined;
+        const inspection = {
+          id: `insp-${Date.now()}`,
+          triggeredBy: "user" as const,
+          timestamp: Date.now(),
+          screenshotRef,
+          prompt: command.prompt,
+          response: answer,
+          type: (command.prompt ? "question" : "next-step") as "question" | "next-step" | "warning" | "debug",
+          confidence: "inferred" as const,
+          scopeDriftWarning,
+        };
+        const newInspections = [...session.inspections, inspection];
+        const loopWarning = detectLoop(newInspections);
+        wingmanState = {
+          ...wingmanState,
+          inspecting: false,
+          session: {
+            ...session,
+            inspections: newInspections,
+            loopWarning,
+          },
+        };
+        if (scopeDriftWarning) {
+          state.lastNotice = `⚠ Wingman: ${scopeDriftWarning.slice(0, 100)}`;
+        } else if (loopWarning && !session.loopWarning) {
+          state.lastNotice = "⚠ Wingman: same issue observed twice — root cause may not be resolved";
+        }
+      } catch (err) {
+        wingmanState = { ...wingmanState, inspecting: false };
+        state.lastError = `Wingman inspect failed: ${err instanceof Error ? err.message : String(err)}`;
+      }
+      push();
+      return;
+    }
+
+    case "wingman-add-note": {
+      if (!wingmanState.session) return;
+      const note = {
+        id: `note-${Date.now()}`,
+        timestamp: Date.now(),
+        content: command.content,
+        source: "user" as const,
+      };
+      wingmanState = {
+        ...wingmanState,
+        session: {
+          ...wingmanState.session,
+          notes: [...wingmanState.session.notes, note],
+        },
+      };
+      push();
+      return;
+    }
+
+    case "wingman-terminal-toggle": {
+      if (!wingmanState.session) return;
+      const wasWatching = wingmanState.session.terminalWatching;
+      wingmanState = {
+        ...wingmanState,
+        session: {
+          ...wingmanState.session,
+          terminalWatching: !wasWatching,
+        },
+      };
+      if (!wasWatching) {
+        startTerminalWatching();
+        state.lastNotice = "Wingman: terminal watching on";
+      } else {
+        stopTerminalWatching();
+        state.lastNotice = "Wingman: terminal watching off";
+      }
+      push();
+      return;
+    }
+
+    case "wingman-end": {
+      if (!wingmanState.session) return;
+      // Stop snapshot accumulator and terminal watcher
+      if (wingmanSnapshotInterval !== null) {
+        clearInterval(wingmanSnapshotInterval);
+        wingmanSnapshotInterval = null;
+      }
+      stopTerminalWatching();
+      const endedSession = {
+        ...wingmanState.session,
+        endedAt: Date.now(),
+      };
+      wingmanState = { ...wingmanState, active: false, session: endedSession };
+      push();
+      // Generate report asynchronously — push state again when ready
+      try {
+        const { buildWingmanReportPrompt, buildWingmanReport } = await import("../shared/wingmanSession.ts");
+        const prompt = buildWingmanReportPrompt(endedSession);
+        const response = await askIivoGlass(config, { prompt, visualIntent: false });
+        const aiSummary = response.answer?.trim() ?? "Session complete.";
+        const report = buildWingmanReport(endedSession, aiSummary);
+        wingmanState = { ...wingmanState, report };
+        state.lastNotice = "Wingman session report ready.";
+        saveWingmanSessionRecord(endedSession, report);
+      } catch {
+        const { buildWingmanReport } = await import("../shared/wingmanSession.ts");
+        const report = buildWingmanReport(endedSession, "Session complete. Review the inspections above for details.");
+        wingmanState = { ...wingmanState, report };
+        saveWingmanSessionRecord(endedSession, report);
+      }
+      push();
+      return;
+    }
+
+    case "wingman-search-sessions": {
+      const { query } = command;
+      wingmanMemoryState = { ...wingmanMemoryState, loading: true, searchResults: [] };
+      push();
+      try {
+        const { parseSessionLibrary, searchWingmanSessions } = await import("../shared/wingmanMemory.ts");
+        const libraryPath = join(app.getPath("userData"), "wingman-sessions.jsonl");
+        const content = await new Promise<string>((resolve) => {
+          readFile(libraryPath, "utf-8", (err, data) => resolve(err ? "" : data));
+        });
+        const library = parseSessionLibrary(content);
+        const results = searchWingmanSessions(query, library);
+        wingmanMemoryState = {
+          searchResults: results,
+          totalSessions: library.length,
+          loading: false,
+        };
+      } catch {
+        wingmanMemoryState = { ...wingmanMemoryState, loading: false, searchResults: [] };
+      }
+      push();
+      return;
+    }
+
     case "detect-audio-devices":
       broadcastTranscriptionControl({ type: "probe-virtual-audio-devices" });
       state.lastNotice = "Scanning for virtual audio devices (BlackHole, Loopback, etc.)…";
@@ -4483,6 +5201,10 @@ async function runCopilotDiagnosis(resolution: CopilotResolution): Promise<void>
 
 /** Build a deterministic debrief, optionally enriched by a direct (non-Council) AI pass. */
 async function generateCopilotDebrief(): Promise<void> {
+  // Show loading state immediately so the overlay appears right away while the AI runs.
+  state.lastNotice = "Generating debrief…";
+  push();
+
   await maybeSemanticRefineForDebrief();
   const session = sessions.current();
   if (!session) {
@@ -4503,6 +5225,10 @@ async function generateCopilotDebrief(): Promise<void> {
     reportStyle: copilot.getConfig().reportStyle,
     listenMoments: listenMomentRuntime.moments,
     mediaContext: state.mediaContext,
+    // Include meeting intel when this was a meeting session.
+    // isMeetingsModeActive() returns false after session-end (sessionIsLive() is false
+    // by the time auto-debrief runs), so check sessionType directly instead.
+    meetingIntelligence: copilot.getSessionType() === "meeting_call" ? meetingIntelState : undefined,
   };
   const debrief = buildSessionDebrief(
     session,
@@ -4532,6 +5258,26 @@ async function generateCopilotDebrief(): Promise<void> {
 
   copilot.setDebrief(debrief);
   syncCopilotToSession();
+
+  // Send meeting report to IIVO as a standalone context item (best-effort, fire-and-forget).
+  const meetingIntel = debriefOptions.meetingIntelligence;
+  if (meetingIntel && meetingIntel.moments.length > 0) {
+    try {
+      const report = buildMeetingReport(meetingIntel, {
+        sessionTitle: session.title ?? undefined,
+        sessionDate: session.startedAt,
+      });
+      const payload = buildTextContextPayload({
+        title: `Meeting Report — ${MEETING_SUB_TYPE_LABELS[report.subType]} — ${new Date(session.startedAt).toLocaleString()}`,
+        text: report.markdown,
+        kind: "note",
+        capturedAt: session.startedAt,
+      });
+      createContextItem(config, payload).catch(() => {/* best-effort */});
+    } catch {
+      // never block the debrief
+    }
+  }
 }
 
 async function maybeAutoDebriefOnEnd(): Promise<void> {
@@ -4767,10 +5513,18 @@ async function handleSessionCommand(command: GlassCommand): Promise<void> {
       break;
     case "session-resume":
       sessions.resumeSession();
+      // Restart audio capture if listen notes pipeline is active and audio was stopped
+      // (e.g. after translate-stop paused it in a non-listen-notes session that then
+      // switched, or after an explicit session-pause). Without this the Resume button
+      // leaves the user in a silent state with the session technically active.
+      if (shouldRunListenNotesPipeline() && !state.privacy.listening) {
+        broadcastTranscriptionControl({ type: "start" });
+      }
       break;
     case "session-end":
       sessions.endSession();
       stopCopilotLoop();
+      stopMeetingIntelLoop();
       await maybeAutoDebriefOnEnd();
       break;
     case "session-clear": {
@@ -5327,6 +6081,9 @@ app.whenReady().then(async () => {
     glassUserSettings = { ...glassUserSettings, hotkeyPreset: "disabled" };
   }
   state.glassSettings = glassUserSettings;
+  // Apply any persisted server URL overrides to config at boot.
+  if (glassUserSettings.iivoApiUrl) config.iivoApiUrl = glassUserSettings.iivoApiUrl;
+  if (glassUserSettings.iivoWebUrl) config.iivoWebUrl = glassUserSettings.iivoWebUrl;
   state.selectedVirtualAudioDeviceId = glassUserSettings.selectedVirtualAudioDeviceId;
   copilot.setConfig(glassUserSettings.copilot);
   bindCopilotToSession();

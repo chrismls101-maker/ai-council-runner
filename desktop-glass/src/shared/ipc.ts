@@ -23,6 +23,9 @@ import type { GlassLatestScreenshotState, GlassScreenContextStatus } from "./gla
 import type { GlassVisualAskRetention } from "./glassScreenshotRetention.ts";
 import type { GlassUserSettings } from "./glassSettings.ts";
 import type { ConnectedDisplaySnapshot } from "./displayInfo.ts";
+import type { MeetingIntelligenceState, MeetingSubType } from "./meetingIntelligenceTypes.ts";
+import type { WingmanState } from "./wingmanSession.ts";
+import type { WingmanMemoryState } from "./wingmanMemory.ts";
 
 export type { GlassSttState } from "./sttTypes.ts";
 
@@ -200,6 +203,7 @@ export type GlassCommand =
     }
   | { type: "update-glass-profile"; profile: import("./glassUserProfile.ts").GlassUserProfile }
   | { type: "complete-glass-onboarding"; profile?: import("./glassUserProfile.ts").GlassUserProfile }
+  | { type: "set-glass-server-urls"; apiUrl: string; webUrl: string }
   | { type: "skip-glass-onboarding" }
   | { type: "session-start"; title?: string }
   | { type: "session-pause" }
@@ -259,7 +263,18 @@ export type GlassCommand =
   | { type: "open-translate-setup" }
   | { type: "install-system-audio" }
   | { type: "connect-iivo-account"; connectToken: string }
-  | { type: "disconnect-iivo-account" };
+  | { type: "disconnect-iivo-account" }
+  // --- Meeting Intelligence ---
+  | { type: "meeting-set-type"; subType: MeetingSubType }
+  | { type: "meeting-delete-moment"; id: string }
+  | { type: "meeting-add-moment"; momentType: import("./meetingIntelligenceTypes.ts").MeetingMomentType; content: string }
+  // --- Wingman ---
+  | { type: "wingman-start"; goal: string }
+  | { type: "wingman-end" }
+  | { type: "wingman-inspect"; prompt?: string }
+  | { type: "wingman-add-note"; content: string }
+  | { type: "wingman-search-sessions"; query: string }
+  | { type: "wingman-terminal-toggle" };
 
 export interface GlassState {
   privacy: PrivacyState;
@@ -332,6 +347,22 @@ export interface GlassState {
   blackHoleInstallProgress?: string;
   /** Linked IIVO account (set after user pastes a connect token). */
   iivoAccountLink: import("./iivoAccountLink.ts").IivoAccountLink | null;
+  /** Live Meeting Intelligence runtime (populated only when meetings mode is active). */
+  meetingIntelligence?: MeetingIntelligenceState;
+  /**
+   * Active IIVO API server URL (resolved from saved settings or env var).
+   * Exposed so the Settings UI can display and edit the current value.
+   */
+  iivoApiUrl: string;
+  /**
+   * Active IIVO web app URL (resolved from saved settings or env var).
+   * Exposed so the Settings UI can display and edit the current value.
+   */
+  iivoWebUrl: string;
+  /** Wingman Mode — active work companion session state. */
+  wingman: WingmanState;
+  /** Wingman cross-session memory — search results + library stats. */
+  wingmanMemory: WingmanMemoryState;
 }
 
 export interface SttProcessChunkRequest {

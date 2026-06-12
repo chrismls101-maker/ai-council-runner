@@ -30,7 +30,7 @@ This document is the **source of truth** for what IIVO Glass promises users. Eve
 | 7 | Remember this | ✅ Unit + E2E | — |
 | 8 | Council handoff | ✅ Unit + E2E | — |
 | 9 | Listen Mode | ✅ Unit + E2E + scripts | — |
-| 10 | Live Notes | ⚠️ Unit + scripts | No E2E |
+| 10 | Live Notes | ✅ Unit + scripts + E2E | — |
 | 11 | Live Translate | ✅ Unit + E2E | — |
 | 12 | Visual Ask | ✅ Unit + E2E | — |
 | 13 | Screen context | ✅ Unit + E2E (partial) | — |
@@ -39,6 +39,8 @@ This document is the **source of truth** for what IIVO Glass promises users. Eve
 | 16 | Update check | ⚠️ Unit only | Skipped in E2E |
 | 17 | Quit cleanly | ✅ E2E | — |
 | 18 | Passive Context Engine | ✅ Unit | No E2E |
+| 19 | Meeting Intelligence | ✅ Unit (45 tests) + QA script | — |
+| 20 | Wingman Mode | ✅ Unit (41 tests) + E2E spec + QA script | Inspect requires live screen |
 
 ---
 
@@ -596,6 +598,129 @@ This document is the **source of truth** for what IIVO Glass promises users. Eve
 
 ---
 
+## 19. Meeting Intelligence
+
+**Trigger**
+- User starts a session with Copilot mode set to **Meetings**. The meeting intelligence engine starts on the first transcript chunk that arrives.
+
+**User sees**
+- **Dock strip** — a second row beneath the main controls showing meeting status: `⬡ Building context…` pre-classification; `Sales Call · 4 moments ›` post-classification. Clicking opens the Copilot panel.
+- **Overlay badge** — `IIVO Glass active · meetings` while the session is live.
+- **Copilot panel** — `MeetingIntelPanel` with a detected-type badge, a "Change" button, a live moment feed grouped by schema section (with owner `→` and deadline labels), a "＋ Add moment" form, and `×` delete per moment.
+- **Proactive notices** — `lastNotice` fires once when the type is first classified ("Meeting detected: Sales Call"); brief notices for new high-signal moments ("Decision captured", "Blocker noted", "Risk flagged", "Action → owner").
+- **Debrief** — at session end, the structured moment feed replaces generic extraction. Sections follow the archetype schema order. AI enrichment prompt uses archetype-specific guidance and derives missing fields from the structured state.
+- **IIVO send** — meeting report markdown is sent to IIVO as a `pasted_text` context item on debrief (best-effort, fire-and-forget).
+
+**Meeting archetypes**
+
+| Subtype | Label | Lead sections |
+|---------|-------|---------------|
+| `sales_external` | Sales Call | Deal Signals, Customer Pain, Action Items, Risks, Decisions |
+| `team_internal` | Team Meeting | Decisions, Action Items, Blockers, Open Questions |
+| `product_review` | Product Review | Decisions, Product Feedback, Action Items, Risks |
+| `client_account` | Client Call | Commitments, Risks, Escalations, Action Items |
+| `general` | General Meeting | Decisions, Action Items, Blockers, Risks, Open Questions |
+
+**Classification**
+- Fires once the transcript reaches `MEETING_CLASSIFY_MIN_CHARS` (~300 chars).
+- One reclassification attempt allowed if the initial result is low-confidence and not yet manually overridden.
+- User can override type via "Change" in the panel; moments are cleared and re-extracted under the new schema.
+
+**Extraction**
+- Runs every `MEETING_EXTRACTION_INTERVAL_MS` (15 s) on the transcript *delta* since the last pass.
+- Minimum delta: `MEETING_EXTRACTION_MIN_DELTA_CHARS` (120 chars) — no-ops on thin deltas.
+- Moments are deduped by `type:content` key (first 80 chars, lowercased).
+- Returns the same object reference when nothing changed (reference-equality push gate).
+
+**Manual editing**
+- `×` button removes any moment immediately; `meeting-delete-moment` IPC command.
+- "＋ Add moment" form: type selector (schema-ordered) + text input + Enter/Escape shortcuts; `meeting-add-moment` IPC command. Manually added moments are tagged `manualOverride: true`.
+
+**Success**
+- Classification fires within 2 ticks of threshold being crossed.
+- Moments accumulate live; panel refreshes on each IPC push.
+- Type change clears moments and restarts extraction cleanly.
+- Debrief markdown leads with schema-ordered sections for the detected type.
+- Meeting report appears in IIVO context library after session ends.
+
+**Failure**
+- Session ends before classification threshold → debrief falls back to generic `extractMeetingIntelligence` extraction. No crash.
+- IIVO send fails → error swallowed; debrief unaffected.
+- Engine returns same reference → no push, no UI flicker.
+
+**Tests**
+- `src/test/meetingClassifier.test.ts` — classification + reclassification paths
+- `src/test/meetingIntelligenceEngine.test.ts` — 20 engine tests (delta gating, dedup, override, add/delete)
+- `src/test/meetingReport.test.ts` — 25 report builder tests (section order, labels, icons, markdown, moment formatting)
+- **E2E: UNCOVERED**
+
+---
+
+## 20. Wingman Mode
+
+**Trigger**
+- User activates Wingman from the mode card (or IPC `copilot-set-mode: diagnostic`), then starts a session via `wingman-start` with a stated task goal. Work mode has been removed — Wingman covers all general work use cases.
+
+**User sees**
+- **Inactive state** — a goal input ("What are we working on?"), auto-detected current app, and a "Start Wingman" button (disabled until a goal is entered). Privacy footer: "App titles tracked · Screenshots only when you inspect".
+- **Active state** — pulsing active indicator, task goal display, duration counter, last inspection card ("What I see"), a prominent "Inspect Screen" button, "+ Add Note", and "End Session". Loop and scope drift warnings surface inline.
+- **Report state** — structured session report: goal, duration, apps used, AI narrative summary, key findings, "Could not verify" section (always non-empty), warnings issued, and next steps. "New Session" button returns to inactive.
+
+**Session lifecycle**
+
+| IPC command | Effect |
+|-------------|--------|
+| `wingman-start { goal }` | Creates `WingmanSession`, starts 30s passive app snapshot interval |
+| `wingman-inspect { prompt? }` | Captures screenshot, builds session-context-aware prompt, calls `askIivoGlass`, stores `WingmanInspection`, runs loop + scope drift detection |
+| `wingman-add-note { content }` | Appends `WingmanNote` (source: "user") to session |
+| `wingman-end` | Stops snapshot interval, sets `endedAt`, generates `WingmanReport` via AI |
+
+**The "never verified" rule**
+Glass can observe the screen; it cannot execute code or confirm claims. All Wingman AI output must use "observed"/"appears to" language. `WingmanInspection.confidence` is `"observed" | "inferred"` — never `"verified"`. The `buildWingmanReportPrompt` explicitly forbids "verified", "confirmed", "tested", or "proven" as positive assertions. The report always includes a "Could not verify" section even if no inspections ran.
+
+**Passive app timeline**
+Window title + app name polled every 30 seconds. Same app+title deduplicated within a 60-second window. No screenshots taken passively — only on user-triggered inspect. Privacy contract: app titles only.
+
+**Loop detection**
+Compares the last 2 inspections (within a 20-minute window) for 2+ shared error keywords. If triggered, `session.loopWarning` is set and a panel warning is shown. The report's `warningsIssued` includes the loop notice.
+
+**Scope drift detection**
+Four rule-pairs: UI task → payment/auth config, test task → production deploy, fix task → schema migration, deploy task → non-production environment. Fires on keyword matching between `goal` and `inspectionResponse`. Drift warning stored on the `WingmanInspection` and surfaced in the panel.
+
+**Report structure**
+
+| Field | Description |
+|-------|-------------|
+| `goal` | The user's original task goal |
+| `duration` | Session duration in ms |
+| `appsUsed` | Unique app names from passive snapshots |
+| `summary` | AI-generated 3–5 sentence narrative (observed language) |
+| `keyFindings` | Up to 4 items from inspections, observed language |
+| `warningsIssued` | Loop + scope drift warnings from the session |
+| `observedOnly` | Things seen on screen that cannot be confirmed without code execution |
+| `notVerified` | Concrete verification actions the user must complete — never empty |
+| `nextSteps` | Up to 3 concrete next steps |
+
+**Success**
+- Session activates immediately — no audio, no capture.
+- App timeline accumulates passively at 30s intervals.
+- Inspect returns a task-contextualised response referencing the goal and prior inspections.
+- Loop detection fires and surfaces a warning on second occurrence of the same error.
+- Session ends with a structured report that always includes a non-empty `notVerified` section.
+- Work mode is absent from the user-facing mode grid.
+
+**Failure**
+- `wingman-end` with no active session → no-op.
+- AI inspect fails → `inspecting` reset to false, `lastError` set. Session continues.
+- AI report generation fails → fallback report generated with generic summary; `notVerified` still populated from checklist.
+
+**Tests**
+- `src/test/wingmanSession.test.ts` — 41 unit tests: factory, snapshot dedup, deriveAppsUsed, detectLoop, detectScopeDrift, buildVerificationChecklist, buildWingmanReport structure, buildWingmanReportPrompt language contract, confidence type contract
+- `tests/e2e/glass-wingman.spec.ts` — 14 E2E tests: mode card visibility, default state, wingman-start/end, active/inactive/report panel states, add note via UI and IPC, no audio during session, report generation
+- `scripts/glass-qa-wingman.mjs` — QA script: server reachability, pre/post conditions, start/note/end lifecycle, report structure, "never verified" language contract
+
+---
+
 ## Test map (quick reference)
 
 | Layer | Location |
@@ -619,6 +744,7 @@ This document is the **source of truth** for what IIVO Glass promises users. Eve
 | `glass-translate.spec.ts` | 11 |
 | `glass-multidisplay.spec.ts` | 15 (display) |
 | `glass-contract.spec.ts` | 5, 6, 7, 17 (overlay behaviors — **not** `glass-critical` tests 5–6) |
+| `glass-wingman.spec.ts` | 20 |
 
 **Common mistake:** `glass-critical` test **4** opens the panel Setup grid (§14). Tests **5** and **6** are Listen + Handoff (§9, §8) — **not** contract §5 Pin or §6 Auto-dismiss.
 
@@ -628,11 +754,13 @@ This document is the **source of truth** for what IIVO Glass promises users. Eve
 
 These are the highest-value **UNCOVERED** items to close next:
 
-1. **Live Notes E2E** — listen fixture → notes sections populate (§10)
-2. **Update check E2E** — stub manifest newer semver → overlay appears (§16)
-3. **Glass onboarding E2E** — full three-question flow in Electron (§2; skipped in `IIVO_GLASS_E2E=1` today)
-4. **In-app settings** — API URL / profile editor inside Glass panel (§15)
-5. **Glass → server context sync** — ✅ `userContext` on `/api/glass/ask` via passive context engine (§18); raw `userProfile` body still optional fallback on server
+1. **Meeting Intelligence E2E** — simulate transcript chunks → assert dock strip, panel badge, moment feed, debrief sections (§19)
+2. **Live Notes E2E** — listen fixture → notes sections populate (§10)
+3. **Update check E2E** — stub manifest newer semver → overlay appears (§16)
+4. **Glass onboarding E2E** — full three-question flow in Electron (§2; skipped in `IIVO_GLASS_E2E=1` today)
+5. ~~**In-app settings** — API URL / profile editor inside Glass panel (§15)~~ ✅ Done (v0.3.0)
+6. **Glass → server context sync** — ✅ `userContext` on `/api/glass/ask` via passive context engine (§18); raw `userProfile` body still optional fallback on server
+7. ~~**Wingman Mode** — full Wingman session lifecycle, panel 3 states, language contract~~ ✅ Done (v0.4.0)
 
 ---
 
@@ -640,6 +768,18 @@ These are the highest-value **UNCOVERED** items to close next:
 
 | Date | Change |
 |------|--------|
+| 2026-06-11 | **v0.4.0** — §20 Wingman Mode (Tasks #43–#60): Full Wingman build — `WingmanSession` type system + business logic (`wingmanSession.ts`); 4 IPC commands (`wingman-start`, `wingman-inspect`, `wingman-add-note`, `wingman-end`); passive app snapshot accumulator (30s interval, 60s dedup); task-aware visual ask with session context; loop detection (2+ shared error keywords within 20 min); scope drift detection (4 rule-pairs); verification checklist generator; AI session report with `notVerified` section; `WingmanPanel.tsx` (3 states: inactive/active/report); wired into `CopilotPanel`; Work mode removed from `GlassModeId`, `GLASS_MODE_PRESETS`, `GLASS_MODE_ORDER`, `GLASS_MODE_ICONS`, `deriveActiveMode()`, and all tests; Dock color map updated; CSS for all 3 panel states; 41 unit tests; 14 E2E tests (`glass-wingman.spec.ts`); QA script (`glass-qa-wingman.mjs`); §20 contract section. Total: 1,089 tests / 0 failures. |
+| 2026-06-11 | **v0.3.0** — §15 Settings UI (Task #42): `GlassUserSettings` extended with `iivoApiUrl?`/`iivoWebUrl?`; `parseGlassServerUrl()` validates and normalises http(s) URLs; `set-glass-server-urls` IPC command mutates `config` at runtime and persists to `glass-settings.json`; URL fields added to `GlassState` and state push snapshot; saved overrides applied at boot after `loadGlassUserSettings()`; `ServerUrlEditor` React component added to panel `StatusGrid` with `data-testid` attributes for E2E; `fallbackState` in `useGlassState.ts` filled from `DEFAULT_CONFIG`. §15 coverage now ✅. |
+| 2026-06-11 | **v0.2.9** — §10 Live Notes Playwright E2E suite (Task #40): `tests/e2e/glass-live-notes.spec.ts` — 10 tests covering listen mode setup, listenLiveNotes state appearance, listeningStatus transitions, transcriptChunkCount increments, rollingPreview accumulation, idle-after-stop, persistence after stop-listening, NotesPad window visibility, tab controls, and debrief trigger with listen context. §10 coverage now ✅. |
+| 2026-06-11 | **v0.2.8** — Meeting Intelligence real-audio QA script (Task #41): `scripts/glass-qa-meeting-live.mjs` — exercises full pipeline via inject→tick→classify→extract→debrief with 3 canned scenarios (sync, sales, product); asserts classification subType, required moment types (decision + action_item), debrief section presence; 4 npm scripts added (qa:meeting:live, :attach, :sales, :product). §19 coverage upgraded from unit-only to unit + QA script. |
+| 2026-06-11 | **v0.2.7** — Notes+translate simultaneous coexistence stress test (Task #39): `notesTranslateConcurrent.test.ts` — 14 tests across 6 suites verifying state isolation, concurrent chunk delivery, translate-stop invariance, active-flag independence, interim fragment handling, and 100-round high-volume stress run. `liveTranslateGrace.test.ts` also added to test runner. Total test count: 1048 |
+| 2026-06-11 | **v0.2.6** — §16 Update check E2E coverage (Task #38): 14 new tests in `glassUpdateCheck.e2e.test.ts` covering checking→available phase transition, manifest parsing, dismiss flow (available→dismissed), install-on-quit phase (available→installing→available on error), DMG fallback notice, downloading phase, and in-flight check guard |
+| 2026-06-11 | **v0.2.5** — Proactive media context re-capture (Task #37): `proactivelyCaptureMediaContext()` lightweight helper (title/URL only, no vision AI); auto-triggered 2s after `bootstrapListenNotesPipeline` / `ensureListenNotesLoopRunning`; retries every 30s from the listen notes loop until a title is found; never clobbers existing context on failure |
+| 2026-06-11 | **v0.2.4** — Deepgram WS keepalive/reconnect (Task #36): `DeepgramStreamingSession` now sends KeepAlive pings every 8s when audio goes idle (prevents ~10s Deepgram idle timeout); listens to `close` event and fires new `onClose` callback on unexpected disconnect; both translate and listen sessions wire `onClose` to restart the session automatically; translate-start refactored to use `makeTranslateCallbacks` factory so all retry/reconnect paths share identical callbacks |
+| 2026-06-11 | **v0.2.3** — Live session bug fixes: (1) translate-stop no longer kills listen mode audio when Live Notes pipeline is active; session-resume restarts audio if listen mode is active; (2) `startListenDeepgramSession` now retries on connect failure (2 attempts, 1.5s delay) matching translate retry pattern; (3) translation lag fixed — non-final Deepgram chunks always show as interim caption preview regardless of source/target language; (4) debrief loading notice shown immediately before AI call; debrief scrollbar styled dark to match command bar; platform shown as human-readable label (YouTube/Podcast/etc.) |
+| 2026-06-11 | **v0.2.2** — §19 corrections logging (`meeting-corrections.jsonl`), type-override notice (`Re-scanning as …`), `meetingIntelligenceFlow.test.ts` E2E suite (25 tests: all 5 archetypes, AI override, regex fallback, parseExtractionResponse robustness, shouldRunExtractionPass, dedup, manual add/delete, type override) |
+| 2026-06-11 | **v0.2.1** — §19 AI extraction upgrade: `meetingExtractionPrompts.ts` prompt builder + response parser; `runMeetingIntelTick` async with `askIivoGlass` call (9s timeout, in-flight guard, regex fallback on failure); engine `extractionOverride` param; `shouldRunExtractionPass` export; `owner`/`deadline` threaded into `MeetingMoment` |
+| 2026-06-11 | **v0.2.0** — §19 Meeting Intelligence added: classifier, engine, panel, debrief wiring, IIVO send, manual moment editing, archetype-aware AI prompt, proactive notices |
 | 2026-06-08 | Initial A–Z contract (17 features, test map, gap backlog) |
 | 2026-06-07 | Onboarding moved to Electron (§2); closed Pin/Remember/Auto-dismiss/Quit E2E gaps (`glass-contract.spec.ts`) |
 | 2026-06-07 | Disambiguated contract § numbers vs `glass-critical` test numbers; §5–§7 explicitly overlay-only (not panel) |
