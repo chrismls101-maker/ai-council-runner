@@ -16,11 +16,11 @@ const RELEASES_BASE =
 
 /** Apple Silicon (arm64) DMG — default for most current Mac users. */
 export const GLASS_DMG_ARM64_DOWNLOAD_URL =
-  `${RELEASES_BASE}/IIVO-Glass-${GLASS_LATEST_VERSION}-arm64.dmg`;
+  `${RELEASES_BASE}/IIVO.Glass-${GLASS_LATEST_VERSION}-arm64.dmg`;
 
 /** Intel (x64) DMG — for older Mac hardware. */
 export const GLASS_DMG_X64_DOWNLOAD_URL =
-  `${RELEASES_BASE}/IIVO-Glass-${GLASS_LATEST_VERSION}-x64.dmg`;
+  `${RELEASES_BASE}/IIVO.Glass-${GLASS_LATEST_VERSION}-x64.dmg`;
 
 /**
  * Default download URL — Apple Silicon.
