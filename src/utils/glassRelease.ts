@@ -9,18 +9,18 @@
  *   IIVO-Glass-{version}-x64.dmg     — Intel
  */
 
-export const GLASS_LATEST_VERSION = "0.3.0";
+export const GLASS_LATEST_VERSION = "0.5.0";
 
 const RELEASES_BASE =
   `https://github.com/chrismls101-maker/ai-council-runner/releases/download/v${GLASS_LATEST_VERSION}`;
 
 /** Apple Silicon (arm64) DMG — default for most current Mac users. */
 export const GLASS_DMG_ARM64_DOWNLOAD_URL =
-  `${RELEASES_BASE}/IIVO.Glass-${GLASS_LATEST_VERSION}-arm64.dmg`;
+  `${RELEASES_BASE}/IIVO-Glass-${GLASS_LATEST_VERSION}-arm64.dmg`;
 
 /** Intel (x64) DMG — for older Mac hardware. */
 export const GLASS_DMG_X64_DOWNLOAD_URL =
-  `${RELEASES_BASE}/IIVO.Glass-${GLASS_LATEST_VERSION}-x64.dmg`;
+  `${RELEASES_BASE}/IIVO-Glass-${GLASS_LATEST_VERSION}-x64.dmg`;
 
 /**
  * Default download URL — Apple Silicon.
