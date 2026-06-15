@@ -9,7 +9,7 @@
  *   IIVO-Glass-{version}-x64.dmg     — Intel
  */
 
-export const GLASS_LATEST_VERSION = "0.1.16";
+export const GLASS_LATEST_VERSION = "0.3.0";
 
 const RELEASES_BASE =
   `https://github.com/chrismls101-maker/ai-council-runner/releases/download/v${GLASS_LATEST_VERSION}`;
