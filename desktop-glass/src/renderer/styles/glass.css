@@ -3368,6 +3368,61 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
   letter-spacing: 0.04em;
 }
 
+/* Custom commands config warnings notice */
+.glass-powers-palette__warnings {
+  border-bottom: 1px solid rgba(255, 200, 80, 0.12);
+  background: rgba(255, 180, 30, 0.05);
+}
+
+.glass-powers-palette__warnings-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 14px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: rgba(255, 200, 80, 0.80);
+}
+
+.glass-powers-palette__warnings-header:hover {
+  background: rgba(255, 200, 80, 0.06);
+}
+
+.glass-powers-palette__warnings-icon {
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.glass-powers-palette__warnings-label {
+  flex: 1;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.glass-powers-palette__warnings-chevron {
+  font-size: 9px;
+  color: rgba(255, 200, 80, 0.50);
+  flex-shrink: 0;
+}
+
+.glass-powers-palette__warnings-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 14px 8px 30px;
+}
+
+.glass-powers-palette__warnings-item {
+  font-size: 10px;
+  color: rgba(255, 200, 80, 0.60);
+  line-height: 1.5;
+  padding: 1px 0;
+  font-family: "SF Mono", ui-monospace, monospace;
+}
+
 /* Custom command badge (replaces hint kbd for user-defined powers) */
 .glass-powers-palette__item-badge {
   font-family: "SF Mono", ui-monospace, monospace;

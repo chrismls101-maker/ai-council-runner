@@ -11,7 +11,7 @@
  *    bar with a template for powers that need additional input from the user.
  */
 
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo, useId } from "react";
 import { send, useGlassState } from "../useGlassState.ts";
 import { ensureCommandBarClickable } from "../useChromeLockToggle.ts";
 import { DEFAULT_CUSTOM_ICON } from "../../shared/customCommands.ts";
@@ -238,6 +238,10 @@ export function GlassPowersPalette(): JSX.Element | null {
   const allPowers = useMemo(() => [...customPowers, ...POWERS], [customPowers]);
   const filtered = filterPowers(allPowers, query);
 
+  const warnings = state.customCommandsWarnings ?? [];
+  const [warningsExpanded, setWarningsExpanded] = useState(false);
+  const warningsId = useId();
+
   // Reset query + selection when palette opens
   useEffect(() => {
     if (visible) {
@@ -333,6 +337,33 @@ export function GlassPowersPalette(): JSX.Element | null {
 
         {/* Divider */}
         <div className="glass-powers-palette__divider" aria-hidden="true" />
+
+        {/* Custom commands config warnings */}
+        {warnings.length > 0 && (
+          <div className="glass-powers-palette__warnings" role="status">
+            <button
+              className="glass-powers-palette__warnings-header"
+              onClick={() => setWarningsExpanded((v) => !v)}
+              aria-expanded={warningsExpanded}
+              aria-controls={warningsId}
+            >
+              <span className="glass-powers-palette__warnings-icon" aria-hidden="true">⚠</span>
+              <span className="glass-powers-palette__warnings-label">
+                glass-commands.json — {warnings.length} issue{warnings.length !== 1 ? "s" : ""}
+              </span>
+              <span className="glass-powers-palette__warnings-chevron" aria-hidden="true">
+                {warningsExpanded ? "▴" : "▾"}
+              </span>
+            </button>
+            {warningsExpanded && (
+              <ul id={warningsId} className="glass-powers-palette__warnings-list">
+                {warnings.map((w, i) => (
+                  <li key={i} className="glass-powers-palette__warnings-item">{w}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
 
         {/* Power list */}
         {filtered.length === 0 ? (
