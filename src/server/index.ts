@@ -124,6 +124,7 @@ import {
   verifyLandingPassword,
 } from "./landingGate.js";
 import rateLimit from "express-rate-limit";
+import { ttsHandler } from "./voice/ttsRoute.js";
 import { auth } from "./auth/auth.js";
 import { toNodeHandler } from "better-auth/node";
 import { issueGlassConnectToken, verifyGlassConnectToken } from "./auth/glassConnect.js";
@@ -390,6 +391,9 @@ app.post("/api/landing-gate/unlock", (req, res) => {
   }
   res.json({ ok: true });
 });
+
+// IIVO voice — text -> speech (key stays server-side)
+app.post("/api/tts", express.json({ limit: "64kb" }), ttsHandler);
 
 app.get("/api/health", (_req, res) => {
   const missing = validateApiKeys();

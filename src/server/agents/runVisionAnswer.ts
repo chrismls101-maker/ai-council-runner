@@ -15,7 +15,7 @@ import { sourceConfidenceLabel, sourceConfidenceFromType } from "../contextBridg
 import { getMaxOutputTokens } from "../config/tokenModes.js";
 import { normalizeTokenMode } from "../config/tokenModes.js";
 import { buildAgentCost } from "../pricing/calculateCost.js";
-import { callOpenAIVisionWithModelChain } from "../providers/openai.js";
+import { callAnthropicVisionWithModelChain } from "../providers/anthropic.js";
 import type { AgentCost, AgentMeta } from "../types/index.js";
 
 const VISION_ANSWER_SYSTEM = `You are IIVO — a sharp founder/operator assistant analyzing a screenshot the user explicitly captured and attached.
@@ -150,7 +150,7 @@ export async function runVisionAnswer(input: {
     const purpose = input.modelPurpose ?? "default";
     const selected = resolveGlassModelPrimary("vision", purpose);
     const chain = buildGlassModelTryChain(selected);
-    const result = await callOpenAIVisionWithModelChain(
+    const result = await callAnthropicVisionWithModelChain(
       VISION_ANSWER_SYSTEM,
       userText,
       screenshot.imageDataUrl,

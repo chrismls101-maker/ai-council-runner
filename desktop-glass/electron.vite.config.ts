@@ -71,6 +71,7 @@ export default defineConfig({
           command: resolve(__dirname, "command.html"),
           splash: resolve(__dirname, "splash.html"),
           notes: resolve(__dirname, "notes.html"),
+          terminal: resolve(__dirname, "terminal.html"),
         },
       },
     },

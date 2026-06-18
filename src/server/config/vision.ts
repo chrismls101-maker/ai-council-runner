@@ -6,7 +6,7 @@ import {
 
 export const VISION_IMAGE_ADDON_CREDITS = 2;
 
-const DEFAULT_VISION_PROVIDER = "openai";
+const DEFAULT_VISION_PROVIDER = "anthropic";
 
 export interface ImageVisionConfig {
   enabled: boolean;
@@ -51,7 +51,7 @@ export function getImageVisionConfig(): ImageVisionConfig {
     };
   }
 
-  if (provider !== "openai") {
+  if (provider !== "anthropic" && provider !== "openai") {
     return {
       enabled: true,
       provider,
@@ -61,13 +61,25 @@ export function getImageVisionConfig(): ImageVisionConfig {
     };
   }
 
-  if (!process.env.OPENAI_API_KEY?.trim()) {
+  // Anthropic is the primary vision provider — requires ANTHROPIC_API_KEY.
+  if (provider === "anthropic" && !process.env.ANTHROPIC_API_KEY?.trim()) {
     return {
       enabled: true,
       provider,
       model,
       configured: false,
-      reason: "OPENAI_API_KEY is required for image vision analysis.",
+      reason: "ANTHROPIC_API_KEY is required for image vision analysis.",
+    };
+  }
+
+  // Legacy OpenAI vision path still supported if explicitly selected.
+  if (provider === "openai" && !process.env.OPENAI_API_KEY?.trim()) {
+    return {
+      enabled: true,
+      provider,
+      model,
+      configured: false,
+      reason: "OPENAI_API_KEY is required for OpenAI image vision analysis.",
     };
   }
 

@@ -16,7 +16,7 @@ import { appendFile, readFile } from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
-import { app, BrowserWindow, ipcMain, protocol, shell, type WebContents } from "electron";
+import { app, BrowserWindow, clipboard, ipcMain, protocol, shell, type WebContents } from "electron";
 import { GLASS_BOOT_DURATION_MS } from "../shared/bootTiming.ts";
 import { isBootSplashBundlePresent } from "../shared/bootSplash.ts";
 import { DOCK_MIN_WIDTH_VERTICAL } from "../shared/glassLayoutMath.ts";
@@ -96,7 +96,13 @@ import {
   resetChromeLayoutOrigins,
   nudgeChromeWindowFromWebContents,
   registerCommandBarHotkeys,
+  registerContextAskHotkey,
+  registerPowersPaletteHotkey,
   resizeDockWindow,
+  showGlassTerminalWindow,
+  dismissGlassTerminalWindow,
+  scheduleDismissGlassTerminalWindow,
+  resizeGlassTerminalWindow,
   setChromeLayoutPersistHandler,
   syncChromeLayoutFromSettings,
   setOverlayPinnedForTranslate,
@@ -117,8 +123,9 @@ import {
   restoreGlassWindowsAfterCapture,
   syncCommandBarWindowToStackHeight,
   setIgnoreMouseFromWindow,
+  setOverlayPointerOverNotification,
 } from "./windows.ts";
-import { computeCommandBarOverlayClearancePx } from "../shared/glassLayoutMath.ts";
+import { computeCommandBarOverlayClearancePx, glassLayoutContentBottomY } from "../shared/glassLayoutMath.ts";
 import { logGlassClickDebug } from "./glassClickDebug.ts";
 import {
   completeGlassOnboardingStore,
@@ -425,6 +432,8 @@ import {
 import { shouldRaiseOverlayForNotifications } from "../shared/glassNotifications.ts";
 import type { CaptureDiagnosticsReport } from "../shared/captureDiagnostics.ts";
 import { runCaptureDiagnosticsReport } from "./captureDiagnostics.ts";
+import { startScreenDigestLoop, isDigestFresh } from "./glassScreenDigest.ts";
+import type { ScreenDigestResult } from "./glassScreenDigest.ts";
 import {
   collectGlassAppIdentityReport,
   findDuplicateGlassAppBundles,
@@ -443,6 +452,48 @@ import { detectVirtualAudioDevices } from "../shared/virtualAudioDevices.ts";
 import { BLACKHOLE_SETUP_INSTRUCTIONS } from "../shared/virtualAudioCapture.ts";
 import type { VirtualAudioDeviceMatch } from "../shared/virtualAudioDevices.ts";
 import { lookupGlassErrorAnswer } from "../shared/glassErrorFAQ.ts";
+import {
+  saveMemoryEntry,
+  searchMemory,
+  getRecentMemory,
+} from "./glassMemory.ts";
+import {
+  writeFile as glassWriteFile,
+  applyCodeToFile,
+  readFileForDiff,
+  restoreBackup,
+  injectKeystrokes,
+  runShellCommand,
+} from "./glassActions.ts";
+import {
+  buildDesignToCodePrompt,
+  isEditorAppName,
+  type DesignToCodeAction,
+} from "../shared/designToCode.ts";
+import { computeUnifiedDiff, collapseUnchanged } from "../shared/diff.ts";
+import {
+  createPtySession,
+  writePtyInput,
+  resizePty,
+  killPtySession,
+  killAllPtySessions,
+  getPtyReplayBuffer,
+} from "./glassTerminal.ts";
+import {
+  readCodeContext,
+  formatCodeContext,
+  parseFileNameFromTitle,
+  detectLanguage,
+} from "./codeContextReader.ts";
+import { readImportGraph } from "./importGraphReader.ts";
+import { watchCustomCommands } from "./customCommandsLoader.ts";
+import { buildShellThenPromptText } from "../shared/customCommands.ts";
+import {
+  classifyClipboard,
+  ClipboardIntelligenceGate,
+  buildErrorPrompt,
+  buildCodePrompt,
+} from "./clipboardIntelligence.ts";
 
 loadGlassEnv();
 
@@ -598,7 +649,61 @@ interface AppState {
   blackHoleInstallStatus?: import("../shared/ipc.ts").GlassState["blackHoleInstallStatus"];
   blackHoleInstallProgress?: string;
   iivoAccountLink: import("../shared/iivoAccountLink.ts").IivoAccountLink | null;
+  /** Last known clipboard text content (polled every 2 s, silent). */
+  clipboardText?: string;
+  /** Name of the frontmost app, updated on each app switch. */
+  activeApp?: string;
+  /** Name of the app that was frontmost before Glass itself took focus. */
+  previousApp?: string;
+  /** One-sentence ambient digest of what the user is working on right now. */
+  workingContext?: string;
+  /** Unix ms timestamp of the last workingContext update. */
+  workingContextAge?: number;
+  /** Running shell commands and their streaming output (action execution engine). */
+  shellOutputs?: Record<string, {
+    id: string;
+    command: string;
+    output: string;
+    status: "running" | "done" | "error";
+    exitCode?: number;
+  }>;
+  /** Result of the most recent write-file, inject-keystrokes, apply-fix, or restore-backup action. */
+  actionResult?: {
+    id: string;
+    type: "write-file" | "inject-keystrokes" | "apply-fix" | "restore-backup";
+    status: "ok" | "error";
+    message: string;
+  };
+  /** Whether the dock terminal panel is open. */
+  glassDockTerminalOpen?: boolean;
+  /** Active PTY session id. */
+  glassDockTerminalId?: string;
+  /** Whether the ⌘⇧P powers quick-launcher palette is visible. */
+  powersPaletteOpen?: boolean;
+  /** Pending diff previews keyed by feed item id. */
+  pendingDiffs?: import("../shared/ipc.ts").GlassState["pendingDiffs"];
+  /** Active design-to-code capture cards keyed by feed item id (#163). */
+  designCaptures?: import("../shared/ipc.ts").GlassState["designCaptures"];
+  /** Build verification status keyed by feed item id (#163). */
+  buildVerifications?: import("../shared/ipc.ts").GlassState["buildVerifications"];
+  /** User-defined slash commands from ~/.iivo/glass-commands.json (#165). */
+  customCommands?: import("../shared/ipc.ts").GlassState["customCommands"];
+  /** Validation warnings from last custom commands load (#165). */
+  customCommandsWarnings?: string[];
 }
+
+/** Set true in will-quit — prevents PTY onExit callbacks from calling push() on destroyed windows. */
+let appIsQuitting = false;
+
+// ── Build monitor state (#162) ────────────────────────────────────────────────
+/** Debounce timers for in-stream build error detection, keyed by PTY session id. */
+const buildMonitorDebounce = new Map<string, ReturnType<typeof setTimeout>>();
+/** Rolling output buffers for build error detection (last 60 stripped lines), keyed by PTY id. */
+const buildMonitorBuffers = new Map<string, string[]>();
+/** Fingerprint of the last build-error card surfaced per PTY id — prevents duplicate cards. */
+const buildMonitorLastFingerprint = new Map<string, string>();
+const BUILD_MONITOR_BUFFER_LINES = 60;
+const BUILD_MONITOR_DEBOUNCE_MS = 600;
 
 let askAbortController: AbortController | null = null;
 let askRequestGeneration = 0;
@@ -754,6 +859,20 @@ let wingmanState: import("../shared/wingmanSession.ts").WingmanState = {
 let wingmanSnapshotInterval: ReturnType<typeof setInterval> | null = null;
 let wingmanTerminalInterval: ReturnType<typeof setInterval> | null = null;
 
+// ── Context assembler snapshot ────────────────────────────────────────────────
+// Captured on ⌘⇧G hotkey press; consumed by the next submitCommand() call.
+// Expires after 30 s so a forgotten hotkey press doesn't pollute a later ask.
+interface GlassContextSnapshot {
+  appName: string | null;
+  windowTitle: string | null;
+  terminalErrors: string[];
+  lastCommand: string | null;
+  capturedAt: number; // Date.now()
+  // ── Code-aware injection (populated when frontmost app is a known editor) ──
+  codeContext: import("./codeContextReader.ts").CodeContext | null;
+}
+let pendingContextSnapshot: GlassContextSnapshot | null = null;
+
 // Live terminal widget — always-on overlay feed (independent of Wingman)
 let liveTerminalState: import("../shared/ipc.ts").LiveTerminalFeed | null = null;
 let liveTerminalWidgetVisible = false;
@@ -768,6 +887,10 @@ let wingmanMemoryState: import("../shared/wingmanMemory.ts").WingmanMemoryState 
   loading: false,
 };
 
+// Glass Q&A memory — persisted answers across sessions
+/** In-memory results from the last search-memory / get-recent-memory command. */
+let glassMemoryResults: import("../shared/ipc.ts").GlassMemoryEntry[] | undefined = undefined;
+
 // Agent proxy — local HTTP proxy for AI agent API interception
 let agentProxyState: import("../shared/ipc.ts").AgentProxyState = {
   consented: false,
@@ -777,6 +900,15 @@ let agentProxyState: import("../shared/ipc.ts").AgentProxyState = {
   capturedCallCount: 0,
 };
 let agentProxyServer: import("./agentProxyServer.ts").AgentProxyServer | null = null;
+
+// Action Execution Engine — cancel handles for running shell commands
+const shellCancels = new Map<string, () => void>();
+
+// Clipboard Intelligence gate — singleton so cooldown persists across polls
+const clipboardIntelGate = new ClipboardIntelligenceGate();
+
+// Ambient Screen Intelligence — most recent passive screen digest
+let latestDigest: ScreenDigestResult | undefined = undefined;
 
 // GitHub integration — PAT configuration state
 let githubPATState: import("../shared/githubTypes.ts").GitHubPATState = {
@@ -2176,6 +2308,64 @@ function stopLiveTerminalPolling(): void {
   }
 }
 
+// ─── Perception loop — clipboard + app-switch ────────────────────────────────
+
+/**
+ * Start always-on background perception:
+ *   - Clipboard polling every 2000 ms (silent — no push, just state update)
+ *   - App-switch polling every 1500 ms (push on change so overlay can react)
+ */
+function startPerceptionLoop(): void {
+  // Clipboard polling — silent updates only
+  const { clipboard } = require("electron") as typeof import("electron");
+  let lastClip = "";
+  setInterval(() => {
+    const clip = clipboard.readText();
+    if (clip !== lastClip && clip.length > 0 && clip.length < 10000) {
+      lastClip = clip;
+      state.clipboardText = clip;
+      // do NOT call push() here — too noisy; only update state silently
+      // ── Clipboard Intelligence — proactive diagnosis (opt-in) ────────────
+      if (state.glassSettings.clipboardIntelligenceEnabled) {
+        const cls = classifyClipboard(clip);
+        const decision = clipboardIntelGate.decide(clip, cls);
+        if (decision.shouldFire) {
+          void handleClipboardIntelligence(clip, cls);
+        }
+      }
+    }
+  }, 2000);
+
+  // App-switch polling
+  let lastApp = "";
+  setInterval(() => {
+    void (async () => {
+      try {
+        const result = await execFileAsync("osascript", [
+          "-e",
+          "tell application \"System Events\" to get name of first application process whose frontmost is true",
+        ]);
+        const appName = result.stdout.trim();
+        if (appName && appName !== lastApp) {
+          // Save the old app as previousApp, but skip Glass itself
+          const oldApp = state.activeApp;
+          const isGlassItself =
+            oldApp &&
+            /(electron|iivo|glass)/i.test(oldApp);
+          if (oldApp && !isGlassItself) {
+            state.previousApp = oldApp;
+          }
+          lastApp = appName;
+          state.activeApp = appName;
+          push(); // push on app switch so overlay can react
+        }
+      } catch {
+        // ignore — accessibility permissions may not be granted
+      }
+    })();
+  }, 1500);
+}
+
 // ─── Git repo discovery + diff capture ───────────────────────────────────────
 
 /**
@@ -2619,7 +2809,7 @@ function refreshCommandBarOverlayClearance(): boolean {
   const display = layout.getDisplay();
   const bounds = bar.getBounds();
   const clearance = computeCommandBarOverlayClearancePx({
-    workAreaBottomY: display.workArea.y + display.workArea.height,
+    workAreaBottomY: glassLayoutContentBottomY(display),
     commandBarY: bounds.y,
     commandBarHeight: bounds.height,
     stackHeightPx,
@@ -2719,6 +2909,16 @@ function snapshot(): GlassState {
     liveTerminal: liveTerminalState,
     terminalWidgetVisible: liveTerminalWidgetVisible,
     terminalWidgetPos: liveTerminalWidgetPos,
+    clipboardText: state.clipboardText,
+    activeApp: state.activeApp,
+    previousApp: state.previousApp,
+    workingContext: isDigestFresh(latestDigest) ? latestDigest.text : undefined,
+    workingContextAge: latestDigest?.capturedAt,
+    memoryResults: glassMemoryResults,
+    shellOutputs: state.shellOutputs,
+    actionResult: state.actionResult,
+    glassDockTerminalOpen: state.glassDockTerminalOpen,
+    glassDockTerminalId: state.glassDockTerminalId,
   };
 }
 
@@ -2775,12 +2975,15 @@ function eventContextFields(opts?: { sourceTitle?: string; captureSource?: strin
 
 function push(): void {
   refreshSetupCapabilities();
+  const updatePhase = state.appUpdate.phase;
+  const appUpdateVisible =
+    updatePhase === "available" || updatePhase === "downloading" || updatePhase === "installing";
   syncOverlayPresentationRaised(
     shouldRaiseOverlayForNotifications({
       lastError: state.lastError,
       lastNotice: state.lastNotice,
-      commandFeedLength: state.commandFeed.length,
       rendererNotificationActive: overlayRendererNotificationActive,
+      appUpdateVisible,
     }),
   );
   broadcast(IPC.state, snapshot());
@@ -3397,7 +3600,17 @@ function glassContextOnboardingSeed(): GlassUserProfile | null {
 }
 
 function resolveGlassAskUserContext(): string | undefined {
-  return resolveGlassUserContext(glassContextProfile, glassContextOnboardingSeed());
+  const base = resolveGlassUserContext(glassContextProfile, glassContextOnboardingSeed());
+  const clipboardSnippet =
+    state.clipboardText && state.clipboardText.length > 0
+      ? `[Clipboard: "${state.clipboardText.slice(0, 500)}"]`
+      : undefined;
+  const screenDigest =
+    isDigestFresh(latestDigest)
+      ? `[Screen: ${latestDigest.text}]`
+      : undefined;
+  const parts = [base, clipboardSnippet, screenDigest].filter(Boolean);
+  return parts.length > 0 ? parts.join("\n") : undefined;
 }
 
 async function recordGlassContextAfterResponse(prompt: string): Promise<void> {
@@ -3412,8 +3625,98 @@ async function recordGlassContextAfterResponse(prompt: string): Promise<void> {
 async function submitCommand(
   rawText: string,
   lensContext?: import("../shared/glassLensContext.ts").GlassLensContext | null,
+  opts?: {
+    /** Force visual capture using live screen (triggers resolveScreenshotForVisualAsk). */
+    forceVisual?: boolean;
+    /**
+     * Inject a pre-captured screenshot data URL directly as the visual payload.
+     * When provided, bypasses resolveScreenshotForVisualAsk entirely — no fresh
+     * capture is taken. Used by design-to-code so the captured design image is
+     * sent, not a screenshot taken after the user clicks an action button.
+     */
+    presetImageDataUrl?: string;
+    /** Thread a file path onto the response card for Apply-to-file wiring. */
+    codeFilePath?: string;
+  },
 ): Promise<void> {
-  const text = rawText.trim();
+  // Consume any pending context snapshot (set by glass-context-ask hotkey).
+  // Expires after 30 s so a stale snapshot never pollutes a later unrelated ask.
+  let contextPrefix = "";
+  // Captures the editor file path from the snapshot for "Apply to file" threading.
+  let askFilePath: string | null = null;
+  if (pendingContextSnapshot && Date.now() - pendingContextSnapshot.capturedAt < 30_000) {
+    const parts: string[] = [];
+    if (pendingContextSnapshot.appName) {
+      parts.push(`Active app: ${pendingContextSnapshot.appName}`);
+    }
+    if (pendingContextSnapshot.windowTitle) {
+      parts.push(`Window: ${pendingContextSnapshot.windowTitle}`);
+    }
+    if (pendingContextSnapshot.lastCommand) {
+      parts.push(`Last command: ${pendingContextSnapshot.lastCommand}`);
+    }
+    if (pendingContextSnapshot.terminalErrors.length > 0) {
+      parts.push(`Terminal errors:\n${pendingContextSnapshot.terminalErrors.join("\n")}`);
+    }
+    if (pendingContextSnapshot.codeContext) {
+      parts.push(formatCodeContext(pendingContextSnapshot.codeContext));
+    }
+    if (parts.length > 0) {
+      contextPrefix = `[Glass context — ${new Date(pendingContextSnapshot.capturedAt).toLocaleTimeString()}]\n${parts.join("\n")}\n\n`;
+    }
+    // Capture the file path BEFORE nulling — used later to wire "Apply to file".
+    askFilePath = pendingContextSnapshot.codeContext?.filePath ?? null;
+    pendingContextSnapshot = null; // consume — one-shot
+  }
+
+  const text = (contextPrefix + rawText).trim();
+
+  // ── /run — execute shell command from command bar ─────────────────────────
+  // Detected BEFORE askInFlight guard so it works even during a streaming ask.
+  if (text.startsWith("/run ") || text === "/run") {
+    const shellCmd = text.slice(5).trim();
+    if (shellCmd) {
+      const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      // Open Glass terminal panel alongside the output card
+      await handleCommand({ type: "glass-terminal-open" });
+      // Register shell output entry
+      if (!state.shellOutputs) state.shellOutputs = {};
+      state.shellOutputs[runId] = {
+        id: runId,
+        command: shellCmd,
+        output: "",
+        status: "running",
+      };
+      // Push a feed handle so Overlay.tsx can render ShellOutputCard
+      pushFeed(
+        createCommandFeedItem("shell", shellCmd, {
+          title: shellCmd,
+          shellOutputId: runId,
+        }),
+      );
+      push();
+      // Execute via exec (clean bounded stream, not PTY)
+      const cancel = runShellCommand(
+        shellCmd,
+        (chunk) => {
+          if (!state.shellOutputs?.[runId]) return;
+          state.shellOutputs[runId].output += chunk;
+          push();
+        },
+        (exitCode) => {
+          if (!state.shellOutputs?.[runId]) return;
+          state.shellOutputs[runId].status = exitCode === 0 ? "done" : "error";
+          state.shellOutputs[runId].exitCode = exitCode ?? undefined;
+          shellCancels.delete(runId);
+          push();
+        },
+      );
+      shellCancels.set(runId, cancel);
+    }
+    return;
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   if (!text || state.askInFlight) return;
 
   // "I'm done" / debrief intents generate a Session Debrief instead of a direct ask.
@@ -3431,6 +3734,7 @@ async function submitCommand(
   const errorFaqAnswer = lookupGlassErrorAnswer(text);
   if (errorFaqAnswer) {
     trackCopilotCommand(text);
+    state.lastError = undefined;
     pushFeed(createCommandFeedItem("command", text, { prompt: text }));
     const answer = `**${errorFaqAnswer.title}**\n\n${errorFaqAnswer.body}`;
     state.lastAskResponse = {
@@ -3450,7 +3754,11 @@ async function submitCommand(
   askAbortController = new AbortController();
   const signal = askAbortController.signal;
 
-  const visualIntent = shouldCaptureScreenForGlassAsk(text);
+  const visualIntent = opts?.forceVisual || shouldCaptureScreenForGlassAsk(text);
+  // Allow callers to thread a file path directly without a pendingContextSnapshot.
+  if (opts?.codeFilePath && !askFilePath) {
+    askFilePath = opts.codeFilePath;
+  }
   const lensAttached =
     lensContext && (lensContext.url || lensContext.text || lensContext.screenshot)
       ? lensContext
@@ -3461,6 +3769,14 @@ async function submitCommand(
       imageDataUrl: lensAttached.screenshot,
       sourceTitle: lensAttached.title,
       label: lensAttached.url,
+    };
+  }
+  // Design-to-code: inject a pre-captured image without re-capturing the screen.
+  if (opts?.presetImageDataUrl && !lensScreenshotPayload) {
+    lensScreenshotPayload = {
+      imageDataUrl: opts.presetImageDataUrl,
+      sourceTitle: "Design capture",
+      label: undefined,
     };
   }
   const wantsVisualCapture = visualIntent && !lensScreenshotPayload;
@@ -3808,8 +4124,19 @@ async function submitCommand(
         fullBody: fullAnswer,
         runId: result.runId,
         contextId: result.contextId,
+        codeFilePath: askFilePath ?? undefined,
       }),
     );
+    // Persist Q&A pair to durable cross-session memory (fire-and-forget)
+    void saveMemoryEntry({
+      prompt: text,
+      answer: fullAnswer,
+      app: getCachedWindowContext().appName ?? undefined,
+      url: state.mediaContext?.url ?? undefined,
+      runId: result.runId,
+    }).catch(() => {
+      /* never interrupt the UI flow */
+    });
     if (visualIntent && usedVision) {
       state.visualAskRetention = buildVisualAskRetentionStatus({
         usedForAnswer: true,
@@ -3959,6 +4286,16 @@ async function submitCommand(
             contextId: retryResult.contextId,
           }),
         );
+        // Persist retry Q&A pair to durable cross-session memory (fire-and-forget)
+        void saveMemoryEntry({
+          prompt: text,
+          answer: retryResult.answer,
+          app: getCachedWindowContext().appName ?? undefined,
+          url: state.mediaContext?.url ?? undefined,
+          runId: retryResult.runId,
+        }).catch(() => {
+          /* never interrupt the UI flow */
+        });
         if (usedVision) {
           state.visualAskRetention = buildVisualAskRetentionStatus({
             usedForAnswer: true,
@@ -4522,6 +4859,21 @@ async function handleCommand(
       await persistGlassUserSettings(glassUserSettings);
       push();
       return;
+    case "set-clipboard-intelligence-enabled":
+      state.glassSettings = {
+        ...state.glassSettings,
+        clipboardIntelligenceEnabled: command.enabled,
+      };
+      glassUserSettings = state.glassSettings;
+      await persistGlassUserSettings(glassUserSettings);
+      push();
+      return;
+    case "clipboard-intel-debug-inject": {
+      if (process.env.IIVO_GLASS_E2E !== "1" && process.env.NODE_ENV !== "development") return;
+      const cls = classifyClipboard(command.text);
+      void handleClipboardIntelligence(command.text, cls);
+      return;
+    }
     case "save-mac-output-device": {
       const deviceName = await getCurrentMacOutputDeviceName();
       state.glassSettings = {
@@ -4656,6 +5008,30 @@ async function handleCommand(
       );
       push();
       return;
+    case "remove-command-feed-item": {
+      // Clean up shellOutputs entry if this was a /run shell card
+      const removing = state.commandFeed.find((item) => item.id === command.id);
+      if (removing?.shellOutputId && state.shellOutputs?.[removing.shellOutputId]) {
+        // Cancel any in-flight exec first
+        const cancelFn = shellCancels.get(removing.shellOutputId);
+        if (cancelFn) { cancelFn(); shellCancels.delete(removing.shellOutputId); }
+        delete state.shellOutputs[removing.shellOutputId];
+      }
+      // Clean up any pending diff preview keyed by this feed item id (#161)
+      if (state.pendingDiffs?.[command.id]) {
+        delete state.pendingDiffs[command.id];
+      }
+      // Clean up design capture + build verification state (#163)
+      if (state.designCaptures?.[command.id]) {
+        delete state.designCaptures[command.id];
+      }
+      if (state.buildVerifications?.[command.id]) {
+        delete state.buildVerifications[command.id];
+      }
+      state.commandFeed = state.commandFeed.filter((item) => item.id !== command.id);
+      push();
+      return;
+    }
     case "open-chat":
       await shell.openExternal(buildIivoChatUrl(config));
       return;
@@ -5191,6 +5567,24 @@ async function handleCommand(
       return;
     }
 
+    // --- Glass Q&A Memory --------------------------------------------------
+
+    case "search-memory": {
+      const results = await searchMemory(command.query);
+      glassMemoryResults = results;
+      push();
+      return;
+    }
+
+    case "get-recent-memory": {
+      const results = await getRecentMemory();
+      glassMemoryResults = results;
+      push();
+      return;
+    }
+
+    // -----------------------------------------------------------------------
+
     case "wingman-agent-proxy-consent-grant": {
       // User clicked "Enable" in the consent modal — mark consented, clear modal
       agentProxyState = { ...agentProxyState, consented: true, showConsentModal: false };
@@ -5579,10 +5973,997 @@ async function handleCommand(
       return;
     }
 
+    // ── Action Execution Engine ───────────────────────────────────────────────
+    case "run-shell": {
+      const { id, command: shellCmd } = command;
+      if (!state.shellOutputs) state.shellOutputs = {};
+      state.shellOutputs[id] = { id, command: shellCmd, output: '', status: 'running' };
+      push();
+      const cancel = runShellCommand(
+        shellCmd,
+        (chunk) => {
+          if (!state.shellOutputs) return;
+          state.shellOutputs[id].output += chunk;
+          push();
+        },
+        (exitCode) => {
+          if (!state.shellOutputs) return;
+          state.shellOutputs[id].status = exitCode === 0 ? 'done' : 'error';
+          state.shellOutputs[id].exitCode = exitCode ?? undefined;
+          shellCancels.delete(id);
+          push();
+        },
+      );
+      shellCancels.set(id, cancel);
+      return;
+    }
+
+    case "cancel-shell": {
+      const cancelFn = shellCancels.get(command.id);
+      if (cancelFn) { cancelFn(); shellCancels.delete(command.id); }
+      return;
+    }
+
+    case "write-file": {
+      const result = await glassWriteFile(command.path, command.content);
+      state.actionResult = {
+        id: command.id,
+        type: 'write-file',
+        status: result.ok ? 'ok' : 'error',
+        message: result.message,
+      };
+      push();
+      return;
+    }
+
+    case "inject-keystrokes": {
+      if (command.targetApp) {
+        try {
+          await execFileAsync('osascript', ['-e', `tell application "${command.targetApp}" to activate`]);
+          await new Promise(resolve => setTimeout(resolve, 400));
+        } catch { /* ignore */ }
+      }
+      const result = await injectKeystrokes(command.text);
+      state.actionResult = {
+        id: command.id,
+        type: 'inject-keystrokes',
+        status: result.ok ? 'ok' : 'error',
+        message: result.message,
+      };
+      push();
+      return;
+    }
+
+    case "glass-preview-diff": {
+      // Immediately push "loading" so the renderer shows a spinner
+      if (!state.pendingDiffs) state.pendingDiffs = {};
+      state.pendingDiffs[command.feedItemId] = {
+        feedItemId: command.feedItemId,
+        filePath: command.filePath,
+        status: "loading",
+        code: command.code,
+      };
+      push();
+      // Read current file content
+      const readResult = await readFileForDiff(command.filePath);
+      if (!readResult.ok) {
+        state.pendingDiffs[command.feedItemId] = {
+          feedItemId: command.feedItemId,
+          filePath: command.filePath,
+          status: "error",
+          message: readResult.message ?? "Failed to read file",
+          code: command.code,
+        };
+        push();
+        return;
+      }
+      // Compute diff and collapse context
+      const diff = computeUnifiedDiff(readResult.content, command.code);
+      const displayLines = collapseUnchanged(diff);
+      state.pendingDiffs[command.feedItemId] = {
+        feedItemId: command.feedItemId,
+        filePath: command.filePath,
+        status: "ready",
+        diff,
+        displayLines,
+        contentHash: readResult.hash,
+        fileExisted: readResult.existed,
+        code: command.code,
+      };
+      push();
+      return;
+    }
+
+    case "glass-dismiss-diff": {
+      if (state.pendingDiffs?.[command.feedItemId]) {
+        delete state.pendingDiffs[command.feedItemId];
+        push();
+      }
+      return;
+    }
+
+    // ── Build monitor: "Fix with AI" (#162) ──────────────────────────────────
+    case "glass-build-fix-ai": {
+      const { errorText, errorFilePaths } = command;
+
+      // Read referenced source files (up to 3, max 4KB each)
+      const fileSections: string[] = [];
+      let primaryFilePath: string | null = null;
+      for (const rawPath of errorFilePaths.slice(0, 3)) {
+        const result = await readFileForDiff(rawPath);
+        if (result.ok && result.existed && result.content) {
+          const snippet = result.content.length > 4096
+            ? result.content.slice(0, 4096) + "\n…(truncated)"
+            : result.content;
+          fileSections.push(`\`\`\`\n// ${rawPath}\n${snippet}\n\`\`\``);
+          if (!primaryFilePath) {
+            // readFileForDiff resolves ~/ paths internally; store the raw path
+            // and let pendingContextSnapshot carry it for Apply-to-file wiring
+            primaryFilePath = rawPath.startsWith("~/")
+              ? join(process.env.HOME ?? "", rawPath.slice(2))
+              : rawPath;
+          }
+        }
+      }
+
+      const fileContext = fileSections.length > 0
+        ? `\nReferenced source files:\n${fileSections.join("\n\n")}`
+        : "";
+
+      const prompt = [
+        "The Glass dock terminal produced the following build error:",
+        "",
+        "```",
+        errorText.slice(0, 2000),
+        "```",
+        fileContext,
+        "",
+        "Identify the root cause and provide the corrected code for the file that needs to be changed.",
+        "Return a single fenced code block with the complete corrected file content.",
+      ].join("\n");
+
+      // Inject file path so the response card gets "Apply to file" wiring.
+      // submitCommand reads pendingContextSnapshot.codeContext?.filePath and
+      // sets it on the response feed item as codeFilePath.
+      if (primaryFilePath) {
+        pendingContextSnapshot = {
+          appName: null,
+          windowTitle: null,
+          terminalErrors: [],
+          lastCommand: null,
+          capturedAt: Date.now(),
+          codeContext: {
+            fileName: primaryFilePath.split("/").pop() ?? "",
+            language: "TypeScript",
+            filePath: primaryFilePath,
+            content: null,
+            fileSizeBytes: null,
+          },
+        };
+      }
+
+      // Remove the build-error card so it doesn't linger next to the thinking card
+      state.commandFeed = state.commandFeed.filter((f) => f.id !== command.feedItemId);
+
+      void submitCommand(prompt);
+      return;
+    }
+
+    case "glass-apply-fix-to-file": {
+      const applyResult = await applyCodeToFile(command.filePath, command.code, command.expectedHash);
+      if (!applyResult.ok && applyResult.driftDetected) {
+        // File changed on disk since the preview — re-compute diff so card shows updated state
+        if (!state.pendingDiffs) state.pendingDiffs = {};
+        state.pendingDiffs[command.feedItemId] = {
+          feedItemId: command.feedItemId,
+          filePath: command.filePath,
+          status: "loading",
+          code: command.code,
+        };
+        state.actionResult = {
+          id: command.feedItemId + "-apply",
+          type: "apply-fix",
+          status: "error",
+          message: applyResult.message,
+        };
+        push();
+        const reread = await readFileForDiff(command.filePath);
+        if (reread.ok) {
+          const diff = computeUnifiedDiff(reread.content, command.code);
+          const displayLines = collapseUnchanged(diff);
+          state.pendingDiffs[command.feedItemId] = {
+            feedItemId: command.feedItemId,
+            filePath: command.filePath,
+            status: "ready",
+            diff,
+            displayLines,
+            contentHash: reread.hash,
+            fileExisted: reread.existed,
+            code: command.code,
+          };
+        } else {
+          state.pendingDiffs[command.feedItemId] = {
+            feedItemId: command.feedItemId,
+            filePath: command.filePath,
+            status: "error",
+            message: reread.message ?? "Failed to re-read file",
+            code: command.code,
+          };
+        }
+        push();
+        return;
+      }
+      state.actionResult = {
+        id: command.feedItemId + "-apply",
+        type: "apply-fix",
+        status: applyResult.ok ? "ok" : "error",
+        message: applyResult.message,
+      };
+      if (applyResult.ok) {
+        // Clear diff preview on successful apply
+        delete state.pendingDiffs?.[command.feedItemId];
+        // Auto-verify build for TS/JS files (#163)
+        if (/\.(t|j)sx?$/.test(command.filePath)) {
+          void handleCommand({
+            type: "glass-verify-build",
+            feedItemId: command.feedItemId,
+            filePath: command.filePath,
+          });
+        }
+      }
+      push();
+      return;
+    }
+
+    // ── Design-to-Code Bridge (#163) ─────────────────────────────────────────
+
+    case "design-capture": {
+      // Capture screen (independent from the existing capture button flow)
+      const imageDataUrl = await handleCapture();
+      if (!imageDataUrl) {
+        // handleCapture already sets state.lastError; nothing more to do
+        return;
+      }
+
+      // Detect editor app and file from current window context
+      const wCtx = state.windowContext;
+      const appName = wCtx.status === "available" ? (wCtx.appName ?? null) : null;
+      const windowTitle = wCtx.status === "available" ? (wCtx.windowTitle ?? null) : null;
+
+      let detectedFile: { fileName: string; filePath: string | null; language: string } | null = null;
+      if (isEditorAppName(appName)) {
+        const fileName = parseFileNameFromTitle(windowTitle);
+        if (fileName) {
+          const language = detectLanguage(fileName);
+          detectedFile = { fileName, filePath: null, language };
+        }
+      }
+
+      const feedItem = createCommandFeedItem("design-capture", "", {
+        designImageDataUrl: imageDataUrl,
+        designDetectedFileName: detectedFile?.fileName,
+      });
+      const captureId = feedItem.id;
+      if (!state.designCaptures) state.designCaptures = {};
+      state.designCaptures[captureId] = {
+        feedItemId: captureId,
+        imageDataUrl,
+        detectedFile,
+        phase: "ready",
+      };
+      pushFeed(feedItem);
+      push();
+
+      // Asynchronously resolve the file path (best-effort) and backfill into state
+      if (detectedFile && appName && windowTitle) {
+        readCodeContext({ appName, windowTitle, hintPaths: [] })
+          .then((ctx) => {
+            if (ctx?.filePath && state.designCaptures?.[captureId]?.detectedFile) {
+              state.designCaptures[captureId].detectedFile = {
+                fileName: ctx.fileName,
+                filePath: ctx.filePath,
+                language: ctx.language,
+              };
+              push();
+            }
+          })
+          .catch(() => { /* best-effort */ });
+      }
+      return;
+    }
+
+    case "design-generate": {
+      const { feedItemId, action } = command;
+      const capture = state.designCaptures?.[feedItemId];
+      if (!capture) return;
+
+      if (action === "match-codebase" && capture.detectedFile?.filePath) {
+        // Need file content — ask permission first
+        capture.phase = "permission";
+        capture.pendingAction = action;
+        capture.statusLine = `Allow Glass to read ${capture.detectedFile.fileName}?`;
+        push();
+      } else {
+        // No file read needed — generate immediately
+        void runDesignGeneration(feedItemId, action, false);
+      }
+      return;
+    }
+
+    case "design-grant-file-read": {
+      const { feedItemId, action } = command;
+      void runDesignGeneration(feedItemId, action, true);
+      return;
+    }
+
+    case "design-skip-file-read": {
+      const { feedItemId, action } = command;
+      void runDesignGeneration(feedItemId, action, false);
+      return;
+    }
+
+    case "glass-restore-backup": {
+      const { feedItemId, filePath } = command;
+      const result = await restoreBackup(filePath);
+      state.actionResult = {
+        id: feedItemId + "-restore",
+        type: "restore-backup",
+        status: result.ok ? "ok" : "error",
+        message: result.message,
+      };
+      push();
+      return;
+    }
+
+    case "glass-verify-build": {
+      const { feedItemId, filePath } = command;
+      const buildCmd = await resolveBuildCommand(filePath);
+      if (!state.buildVerifications) state.buildVerifications = {};
+      if (!buildCmd) {
+        state.buildVerifications[feedItemId] = {
+          feedItemId,
+          status: "not-found",
+          command: "",
+        };
+        push();
+        return;
+      }
+      state.buildVerifications[feedItemId] = {
+        feedItemId,
+        status: "running",
+        command: buildCmd.cmd,
+      };
+      push();
+      // Run build in a background process and update state when done.
+      // The dock terminal is NOT used here to avoid double-execution — the build
+      // monitor on the dock PTY handles any errors from manually-run builds separately.
+      void checkBuildSuccess(feedItemId, buildCmd);
+      return;
+    }
+
+    // ── Custom slash commands (#165) ─────────────────────────────────────────
+
+    case "custom-command-run": {
+      const { name } = command;
+      const cmd = (state.customCommands ?? []).find((c) => c.name === name);
+      if (!cmd) {
+        console.warn(`[custom-command] No command found with name "${name}"`);
+        return;
+      }
+
+      switch (cmd.action.type) {
+        case "shell": {
+          // Show output in the dock terminal.
+          // Check both glassDockTerminalOpen and glassDockTerminalId — the PTY
+          // may have exited without clearing the open flag.
+          if (!state.glassDockTerminalOpen || !state.glassDockTerminalId) {
+            await handleCommand({ type: "glass-terminal-open" });
+          }
+          const shellAction = cmd.action;
+          // Small delay to let terminal render before sending input
+          setTimeout(() => {
+            const termId = state.glassDockTerminalId;
+            if (termId) writePtyInput(termId, shellAction.command + "\n");
+          }, 150);
+          return;
+        }
+
+        case "prompt": {
+          // Send the preset text directly to Glass AI
+          await submitCommand(cmd.action.text, null);
+          return;
+        }
+
+        case "shell-then-prompt": {
+          const { command: shellCmd, prompt: promptText } = cmd.action;
+          const cmdName = cmd.name;
+          // Show a "Running…" feed card while the command executes
+          const feedItem = createCommandFeedItem(
+            "shell",
+            `Running /${cmdName}…`,
+            { title: `/${cmdName}` },
+          );
+          pushFeed(feedItem);
+          // Use a ref object to avoid TS control-flow narrowing issues
+          const cancelRef = { fn: null as (() => void) | null };
+          try {
+            // runShellCommand is callback-based — wrap in a Promise.
+            // Always resolve (even on non-zero exit) so Glass AI can explain
+            // failures — that's the primary use-case for shell-then-prompt.
+            const output = await new Promise<string>((resolve) => {
+              let buf = "";
+              cancelRef.fn = runShellCommand(
+                shellCmd,
+                (chunk) => { buf += chunk; },
+                (exitCode) => {
+                  cancelRef.fn = null;
+                  if (exitCode !== null && exitCode !== 0) {
+                    buf = `[exited with code ${exitCode}]\n${buf}`;
+                  }
+                  resolve(buf);
+                },
+              );
+            });
+            const fullPrompt = buildShellThenPromptText(promptText, output);
+            await submitCommand(fullPrompt, null);
+          } catch (err) {
+            // Cancel any in-flight process on unexpected error
+            cancelRef.fn?.();
+            cancelRef.fn = null;
+            const errItem = createCommandFeedItem(
+              "error",
+              `/${cmdName} failed: ${String(err)}`,
+              { title: `/${cmdName} error` },
+            );
+            pushFeed(errItem);
+          }
+          return;
+        }
+      }
+      return;
+    }
+
+    // ── Glass built-in terminal (PTY) ────────────────────────────────────────
+
+    case "glass-terminal-open": {
+      // If already open, just toggle the panel visible via state
+      if (!state.glassDockTerminalId) {
+        try {
+          const termId = createPtySession({
+            onData: (id, data) => {
+              const terminal = getWindows()?.terminal;
+              if (terminal && !terminal.isDestroyed()) {
+                terminal.webContents.send(IPC.ptyData, id, data);
+              }
+              // Build monitor: accumulate stripped lines, debounce detection
+              {
+                const stripped = data.replace(/\x1b\[[0-9;]*[A-Za-z]|\x1b\][^\x07]*\x07/g, "").replace(/\r/g, "");
+                const buf = buildMonitorBuffers.get(id) ?? [];
+                buf.push(...stripped.split("\n"));
+                if (buf.length > BUILD_MONITOR_BUFFER_LINES) {
+                  buf.splice(0, buf.length - BUILD_MONITOR_BUFFER_LINES);
+                }
+                buildMonitorBuffers.set(id, buf);
+                // Debounce: fire detection 600ms after last chunk
+                const existing = buildMonitorDebounce.get(id);
+                if (existing) clearTimeout(existing);
+                buildMonitorDebounce.set(id, setTimeout(() => {
+                  buildMonitorDebounce.delete(id);
+                  void checkBuildMonitor(id, buf);
+                }, BUILD_MONITOR_DEBOUNCE_MS));
+              }
+            },
+            onExit: (id, exitCode, context) => {
+              // Guard: will-quit sets appIsQuitting before killAllPtySessions() —
+              // windows may already be destroyed so push() would crash.
+              if (appIsQuitting) return;
+              if (state.glassDockTerminalId === id) {
+                state.glassDockTerminalId = undefined;
+                // Keep panel open so user sees the exit; new session on next open
+              }
+              // Clean up build monitor state for this session
+              const debounce = buildMonitorDebounce.get(id);
+              if (debounce) { clearTimeout(debounce); buildMonitorDebounce.delete(id); }
+              buildMonitorBuffers.delete(id);
+              buildMonitorLastFingerprint.delete(id);
+              push();
+              // Auto-fix: only trigger when a command actually ran and failed
+              if (exitCode !== 0 && context.lastCommand) {
+                void handleTerminalAutoFix(id, exitCode, context);
+              }
+            },
+          });
+          state.glassDockTerminalId = termId;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          state.lastError = message;
+          state.glassDockTerminalOpen = false;
+          push();
+          return;
+        }
+      }
+      state.glassDockTerminalOpen = true;
+      push();
+      showGlassTerminalWindow();
+      if (process.env.ELECTRON_RENDERER_URL) {
+        console.info("[IIVO Glass] glass-terminal-open", {
+          termId: state.glassDockTerminalId,
+          bounds: getWindows()?.terminal?.getBounds(),
+        });
+      }
+      return;
+    }
+
+    case "glass-terminal-close": {
+      state.glassDockTerminalOpen = false;
+      push();
+      scheduleDismissGlassTerminalWindow();
+      return;
+    }
+
+    case "glass-terminal-kill": {
+      if (state.glassDockTerminalId) {
+        killPtySession(state.glassDockTerminalId);
+        state.glassDockTerminalId = undefined;
+      }
+      state.glassDockTerminalOpen = false;
+      push();
+      scheduleDismissGlassTerminalWindow();
+      return;
+    }
+
+    // ── Terminal auto-fix accept ───────────────────────────────────────────────
+    // User clicked "Fix it" on the overlay card — type the fix into the PTY.
+    case "glass-terminal-fix-accept": {
+      const { termId, command: fixCmd } = command;
+      if (termId && fixCmd) {
+        // Ensure terminal panel is visible so user can see the fix running
+        if (!state.glassDockTerminalOpen) {
+          state.glassDockTerminalOpen = true;
+          push();
+          showGlassTerminalWindow();
+        }
+        // Write the fix command + Enter to the PTY
+        writePtyInput(termId, `${fixCmd}\r`);
+      }
+      return;
+    }
+
+    // ── Context assembler ──────────────────────────────────────────────────────
+    // ⌘⇧G: snapshot current window + terminal context, store it, focus command
+    // bar. The user types their question; the next submitCommand() call picks up
+    // the snapshot and prepends it to the prompt automatically.
+    case "glass-context-ask": {
+      const wCtx = state.windowContext;
+      const termLines = liveTerminalState?.lines ?? [];
+      const appName = wCtx.status === "available" ? (wCtx.appName ?? null) : null;
+      const windowTitle = wCtx.status === "available" ? (wCtx.windowTitle ?? null) : null;
+
+      // Capture base snapshot immediately — code context enrichment is async
+      pendingContextSnapshot = {
+        appName,
+        windowTitle,
+        terminalErrors: termLines
+          .filter((l) => l.kind === "error")
+          .slice(-3)
+          .map((l) => l.text),
+        lastCommand:
+          liveTerminalState?.activeCommand ??
+          termLines.filter((l) => l.kind === "command").slice(-1)[0]?.text ??
+          null,
+        capturedAt: Date.now(),
+        codeContext: null,
+      };
+
+      // ── Code-aware injection: enrich snapshot if user is in an editor ─────
+      // Runs concurrently — result lands in the snapshot before the user
+      // finishes typing their question (typically 2-5s slack).
+      const wingmanRepoPath: string | undefined =
+        (state as { wingman?: { session?: { gitRepoPath?: string } } })
+          .wingman?.session?.gitRepoPath;
+      void readCodeContext({
+        appName,
+        windowTitle,
+        hintPaths: wingmanRepoPath ? [wingmanRepoPath] : [],
+      }).then((ctx) => {
+        // Only store if the snapshot hasn't been consumed yet
+        if (pendingContextSnapshot) {
+          pendingContextSnapshot.codeContext = ctx;
+        }
+      }).catch(() => {
+        /* best-effort, ignore */
+      });
+
+      // Focus the command bar so the user can type their question immediately
+      const overlayWin = getWindows()?.overlay;
+      if (overlayWin && !overlayWin.isDestroyed()) {
+        overlayWin.webContents.send(IPC.commandBarFocus);
+      }
+      return;
+    }
+
+    // ── Glass Powers palette ──────────────────────────────────────────────────
+    case "toggle-powers-palette": {
+      state.powersPaletteOpen = !state.powersPaletteOpen;
+      push();
+      // If opening, focus the command-bar window so keyboard events land
+      if (state.powersPaletteOpen) {
+        const overlayWin = getWindows()?.overlay;
+        if (overlayWin && !overlayWin.isDestroyed()) {
+          overlayWin.webContents.send(IPC.commandBarFocus);
+        }
+      }
+      return;
+    }
+
+    case "dismiss-powers-palette": {
+      if (state.powersPaletteOpen) {
+        state.powersPaletteOpen = false;
+        push();
+      }
+      return;
+    }
+
     default:
       if (await handleCopilotCommand(command)) return;
       await handleSessionCommand(command);
       return;
+  }
+}
+
+// ─── Terminal auto-fix ────────────────────────────────────────────────────────
+
+/**
+ * Called when the Glass built-in terminal exits with a non-zero code.
+ * Asks the AI what went wrong and how to fix it, then pushes a "terminal-fix"
+ * overlay card with the suggestion and a one-click "Fix it" button.
+ */
+async function handleTerminalAutoFix(
+  termId: string,
+  exitCode: number,
+  context: import("./glassTerminal.ts").GlassTerminalExitContext,
+): Promise<void> {
+  const { lastCommand, outputLines } = context;
+  if (!lastCommand) return;
+
+  // Filter noise — blank lines, pure whitespace, shell prompts
+  const meaningfulLines = outputLines
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0 && !l.match(/^[\$%>#]\s/))
+    .slice(-30); // last 30 meaningful lines
+
+  // Build the AI prompt
+  const outputText = meaningfulLines.join("\n");
+  const prompt = [
+    `The user ran this command in the Glass Terminal and it failed (exit code ${exitCode}):`,
+    ``,
+    `Command: ${lastCommand}`,
+    ``,
+    outputText ? `Terminal output:\n${outputText}` : "(no output captured)",
+    ``,
+    `In 1-2 sentences explain what went wrong. Then on a new line write exactly:`,
+    `FIX: <the corrected command>`,
+    ``,
+    `Only output one FIX line. If no single-command fix exists, write FIX: none`,
+  ].join("\n");
+
+  try {
+    const response = await askIivoGlass(config, { prompt, modelPurpose: "default" });
+    const answer = response.answer?.trim() ?? "";
+    if (!answer) return;
+
+    // Parse explanation and fix command
+    const fixMatch = answer.match(/^FIX:\s*(.+)$/im);
+    const fixCommand = fixMatch?.[1]?.trim() ?? null;
+    const explanation = answer.replace(/^FIX:.*$/im, "").trim();
+
+    // Don't surface a card if there's no actionable fix
+    if (!fixCommand || fixCommand === "none") {
+      if (explanation) {
+        pushFeed(
+          createCommandFeedItem("error", explanation, {
+            title: "Terminal error",
+            failedCommand: lastCommand,
+          }),
+        );
+        push();
+      }
+      return;
+    }
+
+    // Push the fix card — "Fix it" button will dispatch glass-terminal-fix-accept
+    pushFeed(
+      createCommandFeedItem("terminal-fix", explanation, {
+        title: "Glass Terminal",
+        termId,
+        fixCommand,
+        failedCommand: lastCommand,
+        fullBody: explanation,
+      }),
+    );
+    push();
+  } catch (err) {
+    console.warn("[terminal-auto-fix] AI call failed:", err);
+  }
+}
+
+// ── Build monitor helper (#162) ───────────────────────────────────────────────
+
+/**
+ * Called (debounced) after each PTY data chunk. Runs parseTerminalOutput on
+ * the rolling buffer and pushes a "build-error" feed card if a new build
+ * error is detected that hasn't been surfaced yet for this session.
+ */
+async function checkBuildMonitor(termId: string, bufLines: string[]): Promise<void> {
+  if (appIsQuitting) return;
+  // Only surface cards when Glass is active (listening or capturing)
+  // No additional gate — terminal auto-fix fires unconditionally too
+
+  const { parseTerminalOutput, extractErrorFileRefs } =
+    await import("../shared/terminalEvents.ts");
+
+  const text = bufLines.join("\n");
+  const events = parseTerminalOutput(text, { source: "Glass Terminal" });
+  const buildErr = events.find((e) => e.type === "build_error" || e.type === "test_failure");
+  if (!buildErr) return;
+
+  // Dedup: don't push the same error twice for this session
+  const fp = `${buildErr.type}:${buildErr.snippet.slice(0, 60)}`;
+  if (buildMonitorLastFingerprint.get(termId) === fp) return;
+  buildMonitorLastFingerprint.set(termId, fp);
+
+  // Extract file refs from the full buffer for "Fix with AI" context
+  const fileRefs = extractErrorFileRefs(text);
+
+  pushFeed(
+    createCommandFeedItem("build-error", buildErr.snippet, {
+      title: buildErr.type === "test_failure" ? "Test failure" : "Build error",
+      errorText: text.split("\n").filter((l) => l.trim()).slice(-40).join("\n"),
+      errorFilePaths: fileRefs,
+    }),
+  );
+  push();
+}
+
+// ── Design-to-Code helpers (#163) ────────────────────────────────────────────
+
+/**
+ * Core generation helper called after permission is resolved.
+ * - If readFile is true and the capture has a resolved filePath, reads the file for codebase context.
+ * - Builds the appropriate prompt via buildDesignToCodePrompt.
+ * - Fires submitCommand with presetImageDataUrl so the pre-captured design image is sent to the AI instead of a fresh screen capture.
+ */
+async function runDesignGeneration(
+  feedItemId: string,
+  action: DesignToCodeAction,
+  readFile: boolean,
+): Promise<void> {
+  const capture = state.designCaptures?.[feedItemId];
+  if (!capture) return;
+
+  // Phase: reading (if applicable)
+  const filePath = capture.detectedFile?.filePath ?? null;
+  let fileContent: string | null = null;
+  let importedFiles: import("../shared/designToCode.ts").ImportedFileContext[] = [];
+
+  if (readFile && filePath) {
+    capture.phase = "reading";
+    capture.statusLine = `Reading ${capture.detectedFile!.fileName}…`;
+    push();
+    try {
+      const result = await readFileForDiff(filePath);
+      if (result.ok && result.existed) {
+        fileContent = result.content.length > 4_000
+          ? result.content.slice(0, 4_000) + "\n…(truncated)"
+          : result.content;
+
+        // #164 — pull in imported files for richer AI context
+        capture.statusLine = `Reading imports of ${capture.detectedFile!.fileName}…`;
+        push();
+        try {
+          const graph = await readImportGraph(filePath, result.content);
+          importedFiles = graph.map((f) => ({
+            fileName: f.fileName,
+            language: f.language,
+            filePath: f.filePath,
+            content: f.content,
+          }));
+        } catch {
+          // best-effort — proceed without import graph
+        }
+      }
+    } catch {
+      // best-effort — generate without codebase context
+    }
+  }
+
+  // Phase: generating
+  capture.phase = "generating";
+  capture.pendingAction = action;
+  capture.statusLine = "Generating…";
+  push();
+
+  const ctx: import("../shared/designToCode.ts").DesignToCodeContext = {
+    fileName: capture.detectedFile?.fileName ?? null,
+    language: capture.detectedFile?.language ?? null,
+    filePath,
+    content: fileContent,
+    importedFiles: importedFiles.length > 0 ? importedFiles : undefined,
+  };
+  const prompt = buildDesignToCodePrompt(action, ctx);
+
+  // Inject the captured design image directly — bypasses resolveScreenshotForVisualAsk
+  // so the AI receives the design thumbnail rather than a fresh live capture.
+  await submitCommand(prompt, null, {
+    presetImageDataUrl: capture.imageDataUrl,
+    codeFilePath: filePath ?? undefined,
+  });
+
+  // Phase: done — mark the card so renderer can show the response link
+  if (state.designCaptures?.[feedItemId]) {
+    state.designCaptures[feedItemId].phase = "done";
+    state.designCaptures[feedItemId].statusLine = undefined;
+    push();
+  }
+}
+
+/**
+ * Walk up from the directory containing `filePath` to find the nearest project root
+ * that has a tsconfig.json or a package.json with a "build" script.
+ *
+ * Returns { cmd, cwd } or null if nothing is found.
+ */
+async function resolveBuildCommand(
+  filePath: string,
+): Promise<{ cmd: string; cwd: string } | null> {
+  const { promises: fsp, existsSync } = await import("node:fs");
+  const nodePath = await import("node:path");
+
+  const expandedPath = filePath.startsWith("~/")
+    ? nodePath.join(process.env.HOME ?? "", filePath.slice(2))
+    : filePath;
+  let dir = nodePath.dirname(nodePath.resolve(expandedPath));
+
+  const home = process.env.HOME ?? "";
+  // Walk up to home dir — don't escape it
+  for (let depth = 0; depth < 12; depth++) {
+    // Check for tsconfig.json → use tsc --noEmit
+    if (existsSync(nodePath.join(dir, "tsconfig.json"))) {
+      // Prefer "npm run build" if package.json has a build script, else tsc --noEmit
+      const pkgPath = nodePath.join(dir, "package.json");
+      if (existsSync(pkgPath)) {
+        try {
+          const pkg = JSON.parse(await fsp.readFile(pkgPath, "utf8")) as { scripts?: Record<string, string> };
+          if (pkg.scripts?.["build"]) {
+            return { cmd: "npm run build", cwd: dir };
+          }
+          if (pkg.scripts?.["typecheck"] ?? pkg.scripts?.["type-check"]) {
+            const scriptKey = pkg.scripts?.["typecheck"] !== undefined ? "typecheck" : "type-check";
+            return { cmd: `npm run ${scriptKey}`, cwd: dir };
+          }
+        } catch {
+          /* parse error — fall through to tsc */
+        }
+      }
+      return { cmd: "npx tsc --noEmit", cwd: dir };
+    }
+    // Check for package.json with a build script
+    const pkgPath = nodePath.join(dir, "package.json");
+    if (existsSync(pkgPath)) {
+      try {
+        const pkg = JSON.parse(await fsp.readFile(pkgPath, "utf8")) as { scripts?: Record<string, string> };
+        if (pkg.scripts?.["build"]) {
+          return { cmd: "npm run build", cwd: dir };
+        }
+      } catch {
+        /* parse error — continue */
+      }
+    }
+    const parent = nodePath.dirname(dir);
+    if (parent === dir || (home && !dir.startsWith(home))) break;
+    dir = parent;
+  }
+  return null;
+}
+
+/**
+ * Spawn a silent background build to detect success or failure,
+ * then update buildVerifications accordingly.
+ * The user can already watch output in the dock terminal (where the same command runs).
+ */
+async function checkBuildSuccess(
+  feedItemId: string,
+  buildCmd: { cmd: string; cwd: string },
+): Promise<void> {
+  const { parseTerminalOutput, extractErrorFileRefs } =
+    await import("../shared/terminalEvents.ts");
+
+  return new Promise<void>((resolve) => {
+    let output = "";
+    runShellCommand(
+      `cd ${JSON.stringify(buildCmd.cwd)} && ${buildCmd.cmd} 2>&1`,
+      (chunk) => { output += chunk; },
+      (exitCode) => {
+        if (appIsQuitting) { resolve(); return; }
+        if (!state.buildVerifications) state.buildVerifications = {};
+        const events = parseTerminalOutput(output, { source: "verify-build" });
+        const hasError =
+          exitCode !== 0 ||
+          events.some((e) => e.type === "build_error" || e.type === "test_failure");
+
+        state.buildVerifications[feedItemId] = {
+          feedItemId,
+          status: hasError ? "failed" : "ok",
+          command: buildCmd.cmd,
+        };
+        if (hasError) {
+          const fileRefs = extractErrorFileRefs(output);
+          const snippet = events.find((e) => e.type === "build_error" || e.type === "test_failure")?.snippet
+            ?? output.trim().split("\n").slice(-3).join("\n");
+          // Dedup: skip if the PTY build monitor already surfaced the same error
+          // (same fingerprint = same leading 80 chars of snippet)
+          const verifyFp = `verify:${snippet.slice(0, 80)}`;
+          const termId = state.glassDockTerminalId ?? "";
+          if (buildMonitorLastFingerprint.get(termId) !== verifyFp) {
+            buildMonitorLastFingerprint.set(termId, verifyFp);
+            pushFeed(
+              createCommandFeedItem("build-error", snippet, {
+                title: "Build error",
+                errorText: output.slice(-2000),
+                errorFilePaths: fileRefs,
+              }),
+            );
+          }
+        }
+        push();
+        resolve();
+      },
+    );
+  });
+}
+
+// ── Clipboard Intelligence handler ────────────────────────────────────────────
+
+async function handleClipboardIntelligence(
+  text: string,
+  cls: import("./clipboardIntelligence.ts").ClipboardClassification,
+): Promise<void> {
+  const isError = cls.kind === "error";
+
+  // Push a thinking card so the user sees Glass is responding
+  pushFeed(
+    createCommandFeedItem(
+      "thinking",
+      isError
+        ? "Glass noticed an error in your clipboard — diagnosing…"
+        : "Glass noticed code in your clipboard — reviewing…",
+    ),
+  );
+  push();
+
+  try {
+    const prompt = isError
+      ? buildErrorPrompt(text)
+      : buildCodePrompt(text, cls.language);
+
+    const response = await askIivoGlass(config, { prompt, modelPurpose: "default" });
+    const answer = response.answer?.trim() ?? "";
+    if (!answer) return;
+
+    // Mark fired BEFORE pushing card so a rapid re-copy during AI call doesn't double-fire
+    clipboardIntelGate.markFired(text);
+
+    pushFeed(
+      createCommandFeedItem("response", answer, {
+        title: isError ? "Glass · Clipboard error" : "Glass · Clipboard review",
+        fullBody: answer,
+        prompt,
+      }),
+    );
+    push();
+  } catch (err) {
+    console.warn("[clipboard-intel] AI call failed:", err);
+    // Do NOT markFired on error so the next identical copy can retry
   }
 }
 
@@ -6410,6 +7791,11 @@ function registerScreenshotProtocol(): void {
 }
 
 function registerIpc(): void {
+  ipcMain.handle(IPC.writeClipboard, (_event, text: string) => {
+    if (typeof text !== "string" || !text.trim()) return false;
+    clipboard.writeText(text);
+    return true;
+  });
   ipcMain.handle(IPC.getState, () => snapshot());
   ipcMain.handle(IPC.saveGlassMemory, async (_event, input: SaveGlassMemoryRequest) => {
     try {
@@ -6520,14 +7906,20 @@ function registerIpc(): void {
   });
   ipcMain.on(IPC.overlayNotificationActive, (_event, active: boolean) => {
     overlayRendererNotificationActive = active;
+    const updatePhase = state.appUpdate.phase;
+    const appUpdateVisible =
+      updatePhase === "available" || updatePhase === "downloading" || updatePhase === "installing";
     syncOverlayPresentationRaised(
       shouldRaiseOverlayForNotifications({
         lastError: state.lastError,
         lastNotice: state.lastNotice,
-        commandFeedLength: state.commandFeed.length,
         rendererNotificationActive: overlayRendererNotificationActive,
+        appUpdateVisible,
       }),
     );
+  });
+  ipcMain.on(IPC.overlayPointerOverNotification, (_event, over: boolean) => {
+    setOverlayPointerOverNotification(!!over);
   });
 
   ipcMain.on(IPC.resizeDock, (_event, width: number, height: number) => {
@@ -6539,6 +7931,14 @@ function registerIpc(): void {
         vertical ? { minWidth: DOCK_MIN_WIDTH_VERTICAL, vertical: true } : undefined,
       );
     }
+  });
+
+  ipcMain.on(IPC.resizeTerminal, (_event, width: number, height: number) => {
+    resizeGlassTerminalWindow(width, height);
+  });
+
+  ipcMain.on(IPC.dismissTerminalWindow, () => {
+    dismissGlassTerminalWindow();
   });
 
   if (process.env.IIVO_GLASS_E2E === "1") {
@@ -6563,6 +7963,17 @@ function registerIpc(): void {
       return { ok: true };
     });
   }
+
+  // ── Built-in terminal raw channels (high-frequency, bypasses state) ─────────
+  ipcMain.on(IPC.ptyInput, (_event, termId: string, data: string) => {
+    writePtyInput(termId, data);
+  });
+  ipcMain.on(IPC.ptyResize, (_event, termId: string, cols: number, rows: number) => {
+    resizePty(termId, cols, rows);
+  });
+  ipcMain.handle(IPC.ptyReplay, (_event, termId: string) => {
+    return typeof termId === "string" ? getPtyReplayBuffer(termId) : "";
+  });
 }
 
 function registerGlobalHotkeys(): void {
@@ -6571,6 +7982,27 @@ function registerGlobalHotkeys(): void {
     ...state.operationDiagnostics,
     hotkeyStatus: status,
   };
+  // ⌘⇧G — context assembler: snapshot window + terminal, focus command bar
+  registerContextAskHotkey(() => {
+    void handleCommand({ type: "glass-context-ask" });
+  });
+  // ⌘⇧P — Glass Powers palette
+  registerPowersPaletteHotkey(() => {
+    void handleCommand({ type: "toggle-powers-palette" });
+  });
+
+  // #165 — Custom slash commands: load + hot-reload ~/.iivo/glass-commands.json
+  watchCustomCommands(({ commands, warnings }) => {
+    state.customCommands = commands;
+    state.customCommandsWarnings = warnings.length > 0 ? warnings : undefined;
+    push();
+    if (warnings.length > 0) {
+      console.warn("[custom-commands] Warnings:", warnings.join("; "));
+    }
+    if (commands.length > 0) {
+      console.log(`[custom-commands] Loaded ${commands.length} command(s):`, commands.map((c) => c.name).join(", "));
+    }
+  });
 }
 
 app.whenReady().then(async () => {
@@ -6665,6 +8097,24 @@ app.whenReady().then(async () => {
   // Live terminal widget — always-on polling starts at app launch
   startLiveTerminalPolling();
 
+  // Perception loop — clipboard + app-switch events
+  startPerceptionLoop();
+
+  // Ambient screen intelligence — passive 60 s digest loop
+  startScreenDigestLoop({
+    resolveCaptureTarget: () => resolveCaptureDisplay(state.glassSettings.displayTarget),
+    getConfig: () => config,
+    onDigest: (result) => {
+      latestDigest = result;
+      state.workingContext = result.text;
+      state.workingContextAge = result.capturedAt;
+      push();
+    },
+    onError: () => {
+      /* silent — screen recording permission may not be granted */
+    },
+  });
+
   // QA HTTP bridge — only when IIVO_GLASS_TEST=1, never in production
   if (process.env.IIVO_GLASS_TEST === "1") {
     const { startGlassQaBridge } = await import("./glassQaBridge.ts");
@@ -6721,8 +8171,10 @@ app.whenReady().then(async () => {
 });
 
 app.on("will-quit", () => {
+  appIsQuitting = true; // guard PTY onExit callbacks from calling push() on destroyed windows
   unregisterCommandBarHotkeys();
   if (glassUpdateCheckTimer) clearInterval(glassUpdateCheckTimer);
+  killAllPtySessions();
   disposeWindows();
 });
 

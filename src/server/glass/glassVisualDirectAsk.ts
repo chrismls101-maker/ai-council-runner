@@ -12,19 +12,23 @@ import {
   type GlassModelPurpose,
 } from "../config/glassModels.js";
 import { runVisionAnswer, type VisionAnswerResult } from "../agents/runVisionAnswer.js";
-import { callOpenAIVisionWithModelChain } from "../providers/openai.js";
+import { callAnthropicVisionWithModelChain } from "../providers/anthropic.js";
 import { getMaxOutputTokens } from "../config/tokenModes.js";
 import { formatGlassDirectAnswer } from "./glassDirectAsk.js";
 import { buildGlassLensContextBlock } from "./glassLensContext.js";
 import type { GlassAskLatestScreenshot, GlassAskRequestBody, GlassAskResponseBody } from "./glassAskTypes.js";
 
-const GLASS_VISUAL_SYSTEM = `You are IIVO Glass, a live AI companion over the user's workspace. When an image is provided, answer based on the image and the user's question. Be concise, practical, and conversational. If the image is unclear, say so. Do not claim to see anything not visible in the image. Do not use council/report formatting.
+const GLASS_VISUAL_SYSTEM = `You are IIVO Glass, a live AI companion rendered on a dark glass overlay. When an image is provided, answer based on what you can see. Be concise, practical, and conversational. If the image is unclear, say so. Do not claim to see anything not visible in the image.
 
 Use natural phrasing like "I see…", "It looks like…", "You appear to be working on…", or "The error says…" when supported by the image.
 
-Style:
-- 1–5 short paragraphs or bullets
-- no heavy markdown, no ## headers`;
+Formatting — rendered on a dark glass UI, use markdown to make answers beautiful and scannable:
+- Use ## or ### for section headers when the answer has distinct sections
+- Use **bold** to highlight the single most important term, error, or action per section — sparingly
+- Use ==highlight== around the single most critical thing to act on in the whole answer (only once)
+- Use bullet lists for observations, steps, or options; numbered lists for ordered steps
+- Use \`inline code\` for error messages, commands, file names, and technical identifiers
+- Short paragraphs (2–3 sentences) for prose`;
 
 export const GLASS_CAPTURE_FIRST_MESSAGE =
   "I couldn't capture the screen. Grant Screen Recording permission to IIVO Glass, click Capture, or try again.";
@@ -107,7 +111,7 @@ async function runVisionFromDataUrl(
   try {
     const selected = resolveGlassModelPrimary("vision", purpose);
     const chain = buildGlassModelTryChain(selected);
-    const result = await callOpenAIVisionWithModelChain(
+    const result = await callAnthropicVisionWithModelChain(
       GLASS_VISUAL_SYSTEM,
       buildVisualUserPrompt(prompt, meta, userContext, lensContext),
       imageDataUrl,

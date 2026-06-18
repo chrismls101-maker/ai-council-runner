@@ -12,9 +12,13 @@ files:
   - out/**
   - package.json
 
-# No native modules in Glass, so skip the rebuild step.
-npmRebuild: false
+# node-pty is a native module — must rebuild for current Electron ABI.
+npmRebuild: true
 asar: true
+
+# node-pty ships a .node binary that cannot be inside an asar archive.
+asarUnpack:
+  - "**/node_modules/node-pty/**"
 
 extraResources:
   - from: glass-update-manifest.json

@@ -200,6 +200,20 @@ build_arch() {
   xcrun notarytool submit "$SQUIRREL_ZIP" --keychain-profile "$NOTARY_PROFILE" --wait \
     || die "notarytool submit failed for zip (${arch})"
 
+  # Staple the notarization ticket to the .app directly, then recreate the zip
+  # so Gatekeeper can verify offline (without internet). Without this step,
+  # ShipIt errors with a code-signature failure and Squirrel falls back to DMG.
+  echo "==> Stapling notarization ticket to .app (${arch})"
+  xcrun stapler staple "$APP" \
+    || die "stapler staple failed for app (${arch})"
+  xcrun stapler validate "$APP" \
+    || die "stapler validate failed for app (${arch})"
+
+  echo "==> Recreating Squirrel zip with stapled .app (${arch})"
+  rm -f "$SQUIRREL_ZIP"
+  ditto -c -k --keepParent "$APP" "$SQUIRREL_ZIP" \
+    || die "ditto failed to recreate $SQUIRREL_ZIP after stapling"
+
   generate_squirrel_blockmap "$SQUIRREL_ZIP" "$SQUIRREL_BLOCKMAP"
 
   write_latest_mac_yml_arch "$VERSION" "$arch"
@@ -297,8 +311,11 @@ ARCH_LABEL="$(IFS=+; echo "${ARCHES[*]}")"
 RELEASE_TITLE="IIVO Glass ${VERSION} — ${ARCH_LABEL}"
 RELEASE_NOTES="IIVO Glass v${VERSION} signed, notarized, and stapled for macOS (${ARCH_LABEL})."
 
-# Read accumulated asset paths.
-mapfile -t RELEASE_ASSETS < "$ASSETS_TMP"
+# Read accumulated asset paths (bash 3 compatible — no mapfile).
+RELEASE_ASSETS=()
+while IFS= read -r line; do
+  [[ -n "$line" ]] && RELEASE_ASSETS+=("$line")
+done < "$ASSETS_TMP"
 rm -f "$ASSETS_TMP"
 
 echo ""

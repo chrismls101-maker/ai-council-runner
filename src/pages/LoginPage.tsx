@@ -7,9 +7,11 @@
 
 import { useState, type FormEvent } from "react";
 import { createAuthClient } from "better-auth/client";
+import { magicLinkClient } from "better-auth/client/plugins";
 
 const authClient = createAuthClient({
   baseURL: window.location.origin,
+  plugins: [magicLinkClient()],
 });
 
 type Mode = "login" | "signup";

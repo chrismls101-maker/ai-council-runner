@@ -164,6 +164,142 @@ export function validateAnthropicKey(): string | null {
   return null;
 }
 
+/**
+ * Vision call — accepts a base64 data URL (data:image/jpeg;base64,...) or
+ * a plain base64 string. Sends image + text prompt to Claude's vision API.
+ */
+export async function callAnthropicVision(
+  systemPrompt: string,
+  userPrompt: string,
+  imageDataUrl: string,
+  signal?: AbortSignal,
+  model: string = MODELS.anthropic.claudeSonnet4,
+  maxOutputTokens?: number,
+): Promise<ProviderResult> {
+  const apiKey = getAnthropicKey();
+
+  // Strip data URL prefix to get raw base64 and media type.
+  let mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp" = "image/jpeg";
+  let base64Data = imageDataUrl;
+  const match = imageDataUrl.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/s);
+  if (match) {
+    const mt = match[1].toLowerCase();
+    if (mt === "image/png") mediaType = "image/png";
+    else if (mt === "image/gif") mediaType = "image/gif";
+    else if (mt === "image/webp") mediaType = "image/webp";
+    else mediaType = "image/jpeg";
+    base64Data = match[2];
+  }
+
+  const response = await fetchWithTimeout(
+    "https://api.anthropic.com/v1/messages",
+    {
+      method: "POST",
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: maxOutputTokens ?? 4096,
+        system: systemPrompt,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image",
+                source: { type: "base64", media_type: mediaType, data: base64Data },
+              },
+              { type: "text", text: userPrompt },
+            ],
+          },
+        ],
+      }),
+      signal,
+    },
+  );
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new ProviderError(
+      `Anthropic API error (${response.status}): ${sanitizeError(body)}`,
+      "anthropic",
+    );
+  }
+
+  const data = (await response.json()) as {
+    content?: Array<{ type: string; text?: string }>;
+    usage?: { input_tokens?: number; output_tokens?: number };
+  };
+
+  const content = data.content
+    ?.filter((block) => block.type === "text")
+    .map((block) => block.text ?? "")
+    .join("\n")
+    .trim();
+
+  if (!content) {
+    throw new ProviderError("Anthropic vision returned an empty response.", "anthropic");
+  }
+
+  return {
+    content,
+    provider: "anthropic",
+    model,
+    usage: parseAnthropicUsage(data),
+  };
+}
+
+export type AnthropicVisionWithFallbackResult = ProviderResult & {
+  requestedModel: string;
+  selectedModel: string;
+  modelUsed: string;
+  fallbackUsed: boolean;
+  fallbackReason?: string;
+};
+
+export async function callAnthropicVisionWithModelChain(
+  systemPrompt: string,
+  userPrompt: string,
+  imageDataUrl: string,
+  models: string[],
+  signal?: AbortSignal,
+  maxOutputTokens?: number,
+): Promise<AnthropicVisionWithFallbackResult> {
+  if (models.length === 0) {
+    throw new ProviderError("No models provided for Anthropic vision call.", "anthropic");
+  }
+  const requestedModel = models[0];
+  let lastErr: unknown;
+  for (let i = 0; i < models.length; i++) {
+    const model = models[i];
+    try {
+      const result = await callAnthropicVision(systemPrompt, userPrompt, imageDataUrl, signal, model, maxOutputTokens);
+      return {
+        ...result,
+        requestedModel,
+        selectedModel: requestedModel,
+        modelUsed: result.model,
+        fallbackUsed: i > 0,
+        fallbackReason:
+          i > 0 && lastErr instanceof Error
+            ? `${models[i - 1]}: ${lastErr.message.slice(0, 240)}`
+            : undefined,
+      };
+    } catch (err) {
+      lastErr = err;
+      const isUnavailable =
+        err instanceof ProviderError &&
+        /404|model_not_found|does not exist/i.test(err.message);
+      if (!isUnavailable || i === models.length - 1) throw err;
+      console.warn(`[glass-models] Anthropic vision model "${model}" unavailable — trying "${models[i + 1]}"`);
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new ProviderError(String(lastErr), "anthropic");
+}
+
 /** Same shape as OpenAICallWithFallbackResult — used by glassDirectAsk.ts. */
 export type AnthropicCallWithFallbackResult = ProviderResult & {
   requestedModel: string;

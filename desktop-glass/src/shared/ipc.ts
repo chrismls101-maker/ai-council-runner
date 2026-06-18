@@ -29,6 +29,27 @@ import type { WingmanMemoryState } from "./wingmanMemory.ts";
 
 export type { GlassSttState } from "./sttTypes.ts";
 
+// ---------------------------------------------------------------------------
+// Glass Q&A memory entry (persisted cross-session)
+// ---------------------------------------------------------------------------
+
+export interface GlassMemoryEntry {
+  /** Unique entry id. */
+  id: string;
+  /** Unix timestamp (ms) when the entry was saved. */
+  ts: number;
+  /** Name of the active app at time of ask (e.g. "Cursor"). */
+  app?: string;
+  /** Browser URL if available at time of ask. */
+  url?: string;
+  /** The user's question / prompt. */
+  prompt: string;
+  /** Claude's full response (fullBody). */
+  answer: string;
+  /** runId from the feed item, if available. */
+  runId?: string;
+}
+
 export type SessionActionStatus =
   | "idle"
   | "preparing"
@@ -54,7 +75,13 @@ export const IPC = {
   state: "glass:state",
   setIgnoreMouse: "glass:set-ignore-mouse",
   overlayNotificationActive: "glass:overlay-notification-active",
+  /** Renderer → main: pointer entered/left the notification card host. */
+  overlayPointerOverNotification: "glass:overlay-pointer-over-notification",
   resizeDock: "glass:resize-dock",
+  resizeTerminal: "glass:resize-terminal",
+  dismissTerminalWindow: "glass:dismiss-terminal-window",
+  /** Main → terminal renderer: frameless window was shown; run open reveal. */
+  terminalWindowShown: "glass:terminal-window-shown",
   windowContextGet: "glass:window-context-get-current",
   sttProcessChunk: "glass:stt-process-chunk",
   transcriptionControl: "glass:transcription-control",
@@ -77,6 +104,17 @@ export const IPC = {
   hideForCapture: "glass:hide-for-capture",
   restoreAfterCapture: "glass:restore-after-capture",
   deepgramAudioChunk: "glass:deepgram-audio-chunk",
+  // ── Built-in terminal (PTY) ────────────────────────────────────────────────
+  /** Main → renderer: PTY output data. Payload: { termId, data }. */
+  ptyData: "glass:pty-data",
+  /** Renderer → main: raw keystroke/paste data. Payload: { termId, data }. */
+  ptyInput: "glass:pty-input",
+  /** Renderer → main: terminal resize. Payload: { termId, cols, rows }. */
+  ptyResize: "glass:pty-resize",
+  /** Renderer → main: fetch buffered PTY output for replay after attach. */
+  ptyReplay: "glass:pty-replay",
+  /** Renderer → main: write plain text to the system clipboard. */
+  writeClipboard: "glass:write-clipboard",
 } as const;
 
 export interface SaveGlassMemoryRequest {
@@ -137,6 +175,9 @@ export type GlassCommand =
   | { type: "set-save-visual-asks-to-session"; enabled: boolean }
   | { type: "set-auto-upload-captures-to-context"; enabled: boolean }
   | { type: "set-mic-auto-send-after-silence"; enabled: boolean }
+  | { type: "set-clipboard-intelligence-enabled"; enabled: boolean }
+  /** Dev-only: inject text into the clipboard intelligence pipeline without polling. */
+  | { type: "clipboard-intel-debug-inject"; text: string }
   | { type: "save-last-visual-capture" }
   | { type: "reset-chrome-layout" }
   | { type: "open-feed-in-iivo"; id: string }
@@ -148,6 +189,7 @@ export type GlassCommand =
   | { type: "clear-command-feed" }
   | { type: "dismiss-overlay-chat" }
   | { type: "pin-command-feed-item"; id: string; pinned: boolean }
+  | { type: "remove-command-feed-item"; id: string }
   | { type: "open-chat" }
   | { type: "set-tab"; tab: PanelTab }
   | { type: "toggle-panel" }
@@ -289,7 +331,73 @@ export type GlassCommand =
   | { type: "wingman-debug-clear-state" }
   // ── Live Terminal Widget ──────────────────────────────────────────────────
   | { type: "terminal-widget-toggle" }
-  | { type: "terminal-widget-move"; x: number; y: number };
+  | { type: "terminal-widget-move"; x: number; y: number }
+  // --- Glass Q&A Memory ---
+  | { type: "search-memory"; query: string }
+  | { type: "get-recent-memory" }
+  // ── Action Execution Engine ───────────────────────────────────────────────
+  | { type: "run-shell"; command: string; id: string }
+  | { type: "write-file"; path: string; content: string; id: string }
+  | { type: "inject-keystrokes"; text: string; id: string; targetApp?: string }
+  | { type: "cancel-shell"; id: string }
+  // ── Glass built-in terminal (PTY) ─────────────────────────────────────────
+  | { type: "glass-terminal-open" }
+  | { type: "glass-terminal-close" }
+  | { type: "glass-terminal-kill" }
+  // ── Context assembler ─────────────────────────────────────────────────────
+  /** Hotkey-triggered: snapshot screen + window + terminal context, focus command bar */
+  | { type: "glass-context-ask" }
+  // ── Terminal auto-fix ─────────────────────────────────────────────────────
+  /** User clicked "Fix it" on a terminal-fix overlay card — types fix into PTY */
+  | { type: "glass-terminal-fix-accept"; termId: string; command: string }
+  // ── Glass Powers palette ──────────────────────────────────────────────────
+  /** ⌘⇧P — open / toggle the Glass Powers quick-launcher palette */
+  | { type: "toggle-powers-palette" }
+  /** Close the palette without invoking a power */
+  | { type: "dismiss-powers-palette" }
+  // ── Fix injection into editor (#160) ─────────────────────────────────────
+  /**
+   * User confirmed "Apply to file" on an overlay response card.
+   * `feedItemId` is used to key the actionResult so the card shows feedback.
+   * `filePath` is the absolute path captured from the code context snapshot.
+   * `code` is the extracted code block content from the AI response.
+   * `expectedHash` is the sha256 of the file content read at preview time —
+   * if the file changed on disk since the preview, the write is aborted.
+   */
+  | { type: "glass-apply-fix-to-file"; feedItemId: string; filePath: string; code: string; expectedHash?: string }
+  // ── Diff preview (#161) ───────────────────────────────────────────────────
+  /**
+   * User clicked "Apply to file" — main reads the current file, computes a
+   * unified diff against `code`, and stores the result in
+   * GlassState.pendingDiffs[feedItemId] as status "ready" or "error".
+   * `code` is frozen here so the preview and the eventual apply use the same string.
+   */
+  | { type: "glass-preview-diff"; feedItemId: string; filePath: string; code: string }
+  /** Dismiss a pending diff (Cancel button, or auto-dismissed after successful apply). */
+  | { type: "glass-dismiss-diff"; feedItemId: string }
+  // ── Build monitor (#162) ──────────────────────────────────────────────────
+  /**
+   * "Fix with AI" on a build-error card — reads the referenced source files,
+   * builds a code-fix prompt, and submits through the normal AI ask flow.
+   * The resulting response card has codeFilePath set so Apply to file works.
+   */
+  | { type: "glass-build-fix-ai"; feedItemId: string; errorText: string; errorFilePaths: string[] }
+  // ── Design-to-Code Bridge (#163) ─────────────────────────────────────────
+  /** One-click button in command bar: capture screen, detect editor, show design card. */
+  | { type: "design-capture" }
+  /** User clicked one of the 4 quick-action buttons on the design capture card. */
+  | { type: "design-generate"; feedItemId: string; action: import("./designToCode.ts").DesignToCodeAction }
+  /** Permission prompt → Allow: read editor file then generate. */
+  | { type: "design-grant-file-read"; feedItemId: string; action: import("./designToCode.ts").DesignToCodeAction }
+  /** Permission prompt → Skip: generate without codebase context. */
+  | { type: "design-skip-file-read"; feedItemId: string; action: import("./designToCode.ts").DesignToCodeAction }
+  /** Restore latest .glass-backup-*.bak over the original file (undo apply). */
+  | { type: "glass-restore-backup"; feedItemId: string; filePath: string }
+  /** Run tsc --noEmit or npm run build in the dock terminal to verify a file write compiled. */
+  | { type: "glass-verify-build"; feedItemId: string; filePath: string }
+  // ── Custom slash commands (#165) ──────────────────────────────────────────
+  /** User invoked a custom command from the powers palette. */
+  | { type: "custom-command-run"; name: string };
 
 export interface GlassState {
   privacy: PrivacyState;
@@ -390,6 +498,89 @@ export interface GlassState {
   terminalWidgetVisible: boolean;
   /** Position of the floating terminal widget (percent of screen). */
   terminalWidgetPos: { x: number; y: number };
+  /** Last known clipboard text content (polled every 2 s, silent). */
+  clipboardText?: string;
+  /** Name of the frontmost app (e.g. "Cursor", "Chrome"), updated on each app switch. */
+  activeApp?: string;
+  /** App that was frontmost before Glass itself took focus — used for keystroke injection target. */
+  previousApp?: string;
+  /** One-sentence digest of what the user is working on right now (ambient screen intelligence). */
+  workingContext?: string;
+  /** Unix ms timestamp of the last workingContext update. */
+  workingContextAge?: number;
+  /** Results from the last search-memory or get-recent-memory command. */
+  memoryResults?: GlassMemoryEntry[];
+  /**
+   * Pending diff previews keyed by feed item id (#161).
+   * Populated by glass-preview-diff; cleared by glass-dismiss-diff or on successful apply.
+   */
+  pendingDiffs?: Record<string, {
+    feedItemId: string;
+    filePath: string;
+    status: "loading" | "ready" | "error";
+    /** Unified diff (present when status === "ready"). */
+    diff?: import("./diff.ts").UnifiedDiff;
+    /** Context-collapsed display lines precomputed in main (present when status === "ready"). */
+    displayLines?: import("./diff.ts").DiffLine[];
+    /** sha256 of the file content read at preview time; checked again at apply time. */
+    contentHash?: string;
+    /** Whether the file existed on disk (false → new-file creation, all-add diff). */
+    fileExisted?: boolean;
+    /** The frozen code string to apply (extracted at preview-request time). */
+    code?: string;
+    /** Error or notice message. */
+    message?: string;
+  }>;
+  /** Running shell commands and their streaming output. */
+  shellOutputs?: Record<string, {
+    id: string;
+    command: string;
+    output: string;
+    status: "running" | "done" | "error";
+    exitCode?: number;
+  }>;
+  /** Result of the most recent write-file, inject-keystrokes, apply-fix, or restore action. */
+  actionResult?: {
+    id: string;
+    type: "write-file" | "inject-keystrokes" | "apply-fix" | "restore-backup";
+    status: "ok" | "error";
+    message: string;
+  };
+  // ── Design-to-Code Bridge (#163) ─────────────────────────────────────────
+  /** Active design capture cards keyed by feed item id. */
+  designCaptures?: Record<string, {
+    feedItemId: string;
+    /** data: URL thumbnail of the captured screen. */
+    imageDataUrl: string;
+    /** Editor file detected at capture time. Null if no editor was open. */
+    detectedFile?: { fileName: string; filePath: string | null; language: string } | null;
+    /** Current phase for transparency status display. */
+    phase: "ready" | "permission" | "reading" | "generating" | "done";
+    /** Which action is mid-flight. */
+    pendingAction?: import("./designToCode.ts").DesignToCodeAction;
+    /** Human-readable status line shown in the card, e.g. "Reading Button.tsx…" */
+    statusLine?: string;
+  }>;
+  /** Build verification status keyed by feed item id (#163). */
+  buildVerifications?: Record<string, {
+    feedItemId: string;
+    status: "running" | "ok" | "failed" | "not-found";
+    /** The command that was run (or attempted), e.g. "tsc --noEmit" */
+    command: string;
+  }>;
+  // ── Glass built-in terminal ────────────────────────────────────────────────
+  /** Whether the dock terminal panel is currently open. */
+  glassDockTerminalOpen?: boolean;
+  /** Active PTY session id (set while terminal is running). */
+  glassDockTerminalId?: string;
+  // ── Glass Powers palette ───────────────────────────────────────────────────
+  /** Whether the ⌘⇧P powers quick-launcher is currently visible. */
+  powersPaletteOpen?: boolean;
+  // ── Custom commands (#165) ─────────────────────────────────────────────────
+  /** User-defined slash commands loaded from ~/.iivo/glass-commands.json. */
+  customCommands?: import("../shared/customCommands.ts").CustomCommand[];
+  /** Validation warnings from the last custom commands config load. */
+  customCommandsWarnings?: string[];
 }
 
 export interface LiveTerminalLine {
