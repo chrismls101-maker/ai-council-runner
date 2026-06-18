@@ -237,8 +237,7 @@ export function useGlassNotification(
   useNoticeAutoDismiss(notification);
 
   useEffect(() => {
-    const rendererOnly = Boolean(notification) && notification?.source === "toast";
-    window.glass.setOverlayNotificationActive(rendererOnly);
+    window.glass.setOverlayNotificationActive(Boolean(notification));
     return () => window.glass.setOverlayNotificationActive(false);
   }, [notification]);
 

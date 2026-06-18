@@ -754,6 +754,13 @@ let wingmanState: import("../shared/wingmanSession.ts").WingmanState = {
 let wingmanSnapshotInterval: ReturnType<typeof setInterval> | null = null;
 let wingmanTerminalInterval: ReturnType<typeof setInterval> | null = null;
 
+// Live terminal widget — always-on overlay feed (independent of Wingman)
+let liveTerminalState: import("../shared/ipc.ts").LiveTerminalFeed | null = null;
+let liveTerminalWidgetVisible = false;
+let liveTerminalWidgetPos = { x: 20, y: 60 }; // percent from top-left
+let liveTerminalInterval: ReturnType<typeof setInterval> | null = null;
+const LIVE_TERMINAL_MAX_LINES = 20;
+
 // Wingman cross-session memory — in-memory search results (library lives in wingman-sessions.jsonl)
 let wingmanMemoryState: import("../shared/wingmanMemory.ts").WingmanMemoryState = {
   searchResults: [],
@@ -767,6 +774,7 @@ let agentProxyState: import("../shared/ipc.ts").AgentProxyState = {
   running: false,
   port: 7421,
   showConsentModal: false,
+  capturedCallCount: 0,
 };
 let agentProxyServer: import("./agentProxyServer.ts").AgentProxyServer | null = null;
 
@@ -2079,6 +2087,95 @@ function stopTerminalWatching(): void {
   }
 }
 
+// ─── Live terminal widget — always-on overlay feed ───────────────────────────
+
+/**
+ * Parse raw terminal text into LiveTerminalLine[].
+ * Detects shell prompts (command lines) and error indicators.
+ */
+function parseLiveTerminalLines(
+  raw: string,
+  appName: string,
+): import("../shared/ipc.ts").LiveTerminalLine[] {
+  const now = Date.now();
+  const lines = raw.split("\n").filter((l) => l.trim().length > 0).slice(-LIVE_TERMINAL_MAX_LINES);
+  return lines.map((text) => {
+    // Detect shell prompt lines: start with common prompt chars or end with $ / %
+    const isCommand =
+      /^[\w~/.@-]+[$%#>]\s/.test(text) ||
+      /^\s*(>\s|❯\s|\$\s)/.test(text) ||
+      /\s[$%#>]\s/.test(text);
+    // Detect error lines
+    const isError =
+      /\b(error|Error|ERROR|FAIL|fail|failed|exception|Exception|panic|PANIC|fatal|Fatal|FATAL|❌|✗)\b/.test(
+        text,
+      ) ||
+      /^\s*(at\s+\w|\w+Error:)/.test(text);
+    const kind = isCommand ? "command" : isError ? "error" : "output";
+    return { text: text.slice(0, 200), kind, ts: now };
+  });
+}
+
+/**
+ * Detect the active command (last command line seen) and last exit code.
+ */
+function detectLiveTerminalMeta(lines: import("../shared/ipc.ts").LiveTerminalLine[]): {
+  activeCommand: string | null;
+  lastExitCode: number | null;
+  lastExitSuccess: boolean | null;
+} {
+  let activeCommand: string | null = null;
+  let lastExitCode: number | null = null;
+  let lastExitSuccess: boolean | null = null;
+
+  for (const line of lines) {
+    if (line.kind === "command") {
+      // Strip prompt prefix to get the command text
+      const cmd = line.text.replace(/^.*[$%#>]\s+/, "").trim();
+      if (cmd.length > 0) activeCommand = cmd;
+    }
+    // Detect exit code patterns like "exit 1", "exited with code 0", "✓", "✗"
+    const exitMatch = line.text.match(/exit(?:ed)?\s+(?:with\s+(?:code\s+)?)?(\d+)/i);
+    if (exitMatch) {
+      lastExitCode = parseInt(exitMatch[1], 10);
+      lastExitSuccess = lastExitCode === 0;
+    }
+    if (/✓|✅|\bpassed\b|\bsuccess\b/i.test(line.text)) lastExitSuccess = true;
+    if (/✗|❌|\bfailed\b|\bFAIL\b/.test(line.text)) lastExitSuccess = false;
+  }
+
+  return { activeCommand, lastExitCode, lastExitSuccess };
+}
+
+function startLiveTerminalPolling(): void {
+  if (liveTerminalInterval !== null) return;
+  liveTerminalInterval = setInterval(() => {
+    void (async () => {
+      try {
+        const { isTerminalApp } = await import("../shared/terminalEvents.ts");
+        const ctx = getCachedWindowContext();
+        const appName = ctx.appName ?? "";
+        if (!isTerminalApp(appName)) return; // only update when a terminal is focused
+        const raw = await readFrontTerminalOutput(appName);
+        if (!raw) return;
+        const lines = parseLiveTerminalLines(raw, appName);
+        const { activeCommand, lastExitCode, lastExitSuccess } = detectLiveTerminalMeta(lines);
+        liveTerminalState = { lines, activeCommand, lastExitCode, lastExitSuccess, appName };
+        push();
+      } catch {
+        // terminal reading is best-effort — swallow silently
+      }
+    })();
+  }, 1_500);
+}
+
+function stopLiveTerminalPolling(): void {
+  if (liveTerminalInterval !== null) {
+    clearInterval(liveTerminalInterval);
+    liveTerminalInterval = null;
+  }
+}
+
 // ─── Git repo discovery + diff capture ───────────────────────────────────────
 
 /**
@@ -2272,26 +2369,28 @@ async function runMeetingIntelTick(): Promise<void> {
   ) {
     meetingExtractionInFlight = true;
     try {
-      const subType = meetingIntelState.classification!.subType;
-      const schema  = getMeetingSchema(subType);
-      const lastLen = meetingIntelState.lastExtractionTranscriptLen ?? 0;
-      const delta   = transcript.slice(lastLen);
+      const subType = meetingIntelState.classification?.subType;
+      const schema  = subType ? getMeetingSchema(subType) : undefined;
+      if (schema) {
+        const lastLen = meetingIntelState.lastExtractionTranscriptLen ?? 0;
+        const delta   = transcript.slice(lastLen);
 
-      const prompt     = buildMeetingExtractionPrompt(delta, schema);
-      const controller = new AbortController();
-      const timeoutId  = setTimeout(() => controller.abort(), 9_000); // 9s hard cap
+        const prompt     = buildMeetingExtractionPrompt(delta, schema);
+        const controller = new AbortController();
+        const timeoutId  = setTimeout(() => controller.abort(), 9_000); // 9s hard cap
 
-      try {
-        const response = await askIivoGlass(
-          config,
-          { prompt, responseStyle: "full", modelPurpose: "semantic" },
-          controller.signal,
-        );
-        clearTimeout(timeoutId);
-        extractionOverride = parseExtractionResponse(response.answer, schema);
-      } catch {
-        clearTimeout(timeoutId);
-        // AI call failed / timed out — engine will use regex fallback
+        try {
+          const response = await askIivoGlass(
+            config,
+            { prompt, responseStyle: "full", modelPurpose: "semantic" },
+            controller.signal,
+          );
+          clearTimeout(timeoutId);
+          extractionOverride = parseExtractionResponse(response.answer, schema);
+        } catch {
+          clearTimeout(timeoutId);
+          // AI call failed / timed out — engine will use regex fallback
+        }
       }
     } finally {
       meetingExtractionInFlight = false;
@@ -2617,6 +2716,9 @@ function snapshot(): GlassState {
     agentProxy: agentProxyState,
     githubPATConfigured: githubPATState.configured,
     githubTokenInvalid: githubPATState.tokenInvalid,
+    liveTerminal: liveTerminalState,
+    terminalWidgetVisible: liveTerminalWidgetVisible,
+    terminalWidgetPos: liveTerminalWidgetPos,
   };
 }
 
@@ -4955,6 +5057,13 @@ async function handleCommand(
       return;
     }
 
+    case "wingman-new-session": {
+      // Dismiss the current report and reset to inactive state — no IPC side effects.
+      wingmanState = { active: false, session: null, inspecting: false, report: null };
+      push();
+      return;
+    }
+
     case "wingman-end": {
       if (!wingmanState.session) return;
       // Stop snapshot accumulator and terminal watcher
@@ -5105,7 +5214,14 @@ async function handleCommand(
         agentProxyServer = new AgentProxyServer({
           port,
           onCall: (summary) => {
-            if (!wingmanState.session) return;
+            agentProxyState = {
+              ...agentProxyState,
+              capturedCallCount: agentProxyState.capturedCallCount + 1,
+            };
+            if (!wingmanState.session) {
+              push();
+              return;
+            }
             wingmanState = {
               ...wingmanState,
               session: {
@@ -5136,7 +5252,7 @@ async function handleCommand(
         await agentProxyServer.stop();
         agentProxyServer = null;
       }
-      agentProxyState = { ...agentProxyState, running: false };
+      agentProxyState = { ...agentProxyState, running: false, showConsentModal: false };
       state.lastNotice = "Agent interception disabled";
       push();
       return;
@@ -5173,11 +5289,15 @@ async function handleCommand(
     case "wingman-github-pat-status": {
       try {
         const { isPATConfigured } = await import("./githubService.ts");
-        githubPATState = await isPATConfigured();
-        // If the token was previously invalid but user re-checked, clear the flag
-        if (githubPATState.configured) {
-          githubPATState = { ...githubPATState, tokenInvalid: false };
-        }
+        const freshState = await isPATConfigured();
+        // Preserve tokenInvalid — only a real API call (401) or explicit save can clear it.
+        // isPATConfigured only checks file existence, not token validity, so merging here
+        // must not silently reset a flag that was set by a real GitHub rejection.
+        githubPATState = {
+          configured: freshState.configured,
+          // Clear tokenInvalid only if the token was removed (no longer configured)
+          tokenInvalid: freshState.configured ? githubPATState.tokenInvalid : false,
+        };
       } catch {
         githubPATState = { configured: false, tokenInvalid: false };
       }
@@ -5359,6 +5479,106 @@ async function handleCommand(
       }
       return;
     }
+    // ── TEST BACKDOORS ─────────────────────────────────────────────────────────
+    // Only active when IIVO_GLASS_TEST=1. Zero production impact.
+    // These exercise the REAL code paths — they inject controlled inputs so
+    // automated tests can trigger conditions that would otherwise require
+    // a real screenshot, real GitHub 401, etc.
+
+    case "wingman-debug-inject-inspection": {
+      if (process.env.IIVO_GLASS_TEST !== "1") return;
+      if (!wingmanState.session) return;
+      const { response = "Observed: error on line 42", prompt } = command as {
+        response?: string; prompt?: string;
+      };
+      // Same dynamic import pattern as the real wingman-inspect handler
+      const { detectLoop, detectScopeDrift } = await import("../shared/wingmanSession.ts");
+      const inspection: import("../shared/wingmanSession.ts").WingmanInspection = {
+        id: `debug-${Date.now()}`,
+        triggeredBy: "user",
+        timestamp: Date.now(),
+        screenshotRef: "debug-no-screenshot",
+        response,
+        type: "question",
+        confidence: "observed",
+        prompt,
+      };
+      const newInspections = [...wingmanState.session.inspections, inspection];
+      // Run the REAL loop detection + scope drift logic on injected data
+      const loopWarning = detectLoop(newInspections);
+      const scopeDriftWarning = detectScopeDrift(wingmanState.session.goal, response) ?? undefined;
+      wingmanState = {
+        ...wingmanState,
+        session: {
+          ...wingmanState.session,
+          inspections: newInspections,
+          loopWarning,
+        },
+      };
+      if (scopeDriftWarning) {
+        state.lastNotice = `[TEST] Scope drift: ${scopeDriftWarning}`;
+      } else if (loopWarning) {
+        state.lastNotice = "[TEST] Loop detected";
+      } else {
+        state.lastNotice = `[TEST] Inspection injected (${newInspections.length} total)`;
+      }
+      push();
+      return;
+    }
+
+    case "wingman-debug-set-token-invalid": {
+      if (process.env.IIVO_GLASS_TEST !== "1") return;
+      // Simulate a real 401 from GitHub — sets tokenInvalid in state exactly
+      // as a real failed API call would.
+      githubPATState = { ...githubPATState, tokenInvalid: true };
+      if (wingmanState.report) {
+        wingmanState = {
+          ...wingmanState,
+          report: { ...wingmanState.report, githubTokenInvalid: true },
+        };
+      }
+      state.lastNotice = "[TEST] GitHub token-invalid state set";
+      push();
+      return;
+    }
+
+    case "wingman-debug-get-session": {
+      if (process.env.IIVO_GLASS_TEST !== "1") return;
+      // Returns current wingman session + report as IPC response data for assertions.
+      // The post() handler in the QA script reads the returned JSON.
+      state.lastNotice = `[TEST] Session snapshot: ${wingmanState.session?.id ?? "none"}`;
+      push();
+      // Return via lastNotice + state push — callers read via getState()
+      return;
+    }
+
+    case "wingman-debug-clear-state": {
+      if (process.env.IIVO_GLASS_TEST !== "1") return;
+      // Stop any running intervals first
+      if (wingmanSnapshotInterval) { clearInterval(wingmanSnapshotInterval); wingmanSnapshotInterval = null; }
+      if (wingmanTerminalInterval) { clearInterval(wingmanTerminalInterval); wingmanTerminalInterval = null; }
+      wingmanState = { active: false, session: null, inspecting: false, report: null };
+      wingmanMemoryState = { searchResults: [], totalSessions: 0, loading: false };
+      githubPATState = { configured: false, tokenInvalid: false };
+      agentProxyState = { ...agentProxyState, capturedCallCount: 0, showConsentModal: false };
+      state.lastNotice = "[TEST] Wingman state cleared";
+      push();
+      return;
+    }
+
+    // ── Live terminal widget ─────────────────────────────────────────────────
+    case "terminal-widget-toggle": {
+      liveTerminalWidgetVisible = !liveTerminalWidgetVisible;
+      push();
+      return;
+    }
+
+    case "terminal-widget-move": {
+      liveTerminalWidgetPos = { x: command.x, y: command.y };
+      push();
+      return;
+    }
+
     default:
       if (await handleCopilotCommand(command)) return;
       await handleSessionCommand(command);
@@ -6441,6 +6661,20 @@ app.whenReady().then(async () => {
     void persistGlassUserSettings(glassUserSettings);
   });
   registerIpc();
+
+  // Live terminal widget — always-on polling starts at app launch
+  startLiveTerminalPolling();
+
+  // QA HTTP bridge — only when IIVO_GLASS_TEST=1, never in production
+  if (process.env.IIVO_GLASS_TEST === "1") {
+    const { startGlassQaBridge } = await import("./glassQaBridge.ts");
+    startGlassQaBridge({
+      secret: process.env.GLASS_API_SECRET ?? "",
+      getState: snapshot,
+      runCommand: (cmd) => handleCommand(cmd, undefined),
+    });
+  }
+
   setCommandBarLayoutChangedHandler(() => {
     if (refreshCommandBarOverlayClearance()) {
       push();

@@ -116,11 +116,9 @@ export function initGlassAutoUpdater(
 
   autoUpdater.on("update-downloaded", () => {
     downloadReady = true;
-    onPatch({
-      phase: "installing",
-      downloadPercent: 100,
-      error: undefined,
-    });
+    onPatch({ phase: "installing", downloadPercent: 100, error: undefined });
+    // Quit and relaunch automatically — no second click needed.
+    setTimeout(() => autoUpdater.quitAndInstall(false, true), 1500);
   });
 
   autoUpdater.on("error", (_error, message) => {
@@ -186,17 +184,24 @@ async function openReleaseDmgFallback(
 }
 
 export async function applyGlassAutoUpdate(
-  latestVersion?: string,
+  _latestVersion?: string,
 ): Promise<{ ok: true; usedDmgFallback?: boolean } | { ok: false; error: string }> {
   if (!isGlassAutoUpdateEnabled()) {
     return { ok: false, error: "Auto-update is only available in the packaged Mac app." };
   }
 
-  const version = latestVersion?.trim() || offeredVersion?.trim() || app.getVersion();
-  // Squirrel/ShipIt requires notarized macOS builds. Open the release DMG until notarized zips ship.
-  const dmg = await openReleaseDmgFallback(version);
-  if (dmg.ok) {
-    return { ok: true, usedDmgFallback: true };
+  if (downloadReady) {
+    // Already downloaded — install immediately.
+    autoUpdater.quitAndInstall(false, true);
+    return { ok: true };
   }
-  return dmg;
+
+  try {
+    await autoUpdater.downloadUpdate();
+    // quitAndInstall fires automatically from the "update-downloaded" handler above.
+    return { ok: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: message };
+  }
 }

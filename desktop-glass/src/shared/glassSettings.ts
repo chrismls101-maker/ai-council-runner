@@ -38,6 +38,11 @@ export interface GlassUserSettings {
   autoUploadCapturesToContext: boolean;
   /** After mic pause, auto-send command bar text to IIVO (default off). */
   micAutoSendAfterSilence: boolean;
+  /**
+   * When enabled, Glass classifies clipboard text after each copy and proactively
+   * diagnoses errors or reviews code snippets via AI. Default off (opt-in).
+   */
+  clipboardIntelligenceEnabled: boolean;
   /** Virtual audio input (e.g. BlackHole 2ch) for system-audio fallback. */
   selectedVirtualAudioDeviceId?: string;
   /** User completed Mac output + BlackHole routing setup (WIP audio restore). */
@@ -69,6 +74,7 @@ export const DEFAULT_GLASS_USER_SETTINGS: GlassUserSettings = {
   saveVisualAsksToSession: true,
   autoUploadCapturesToContext: false,
   micAutoSendAfterSilence: false,
+  clipboardIntelligenceEnabled: false,
   copilot: { ...DEFAULT_COPILOT_CONFIG },
 };
 
@@ -89,6 +95,10 @@ export function parseAutoUploadCapturesToContext(value: unknown): boolean {
 }
 
 export function parseMicAutoSendAfterSilence(value: unknown): boolean {
+  return value === true;
+}
+
+export function parseClipboardIntelligenceEnabled(value: unknown): boolean {
   return value === true;
 }
 

@@ -11,6 +11,7 @@ import {
   parseDisplayTarget,
   parseAutoUploadCapturesToContext,
   parseMicAutoSendAfterSilence,
+  parseClipboardIntelligenceEnabled,
   parseBootSoundEnabled,
   parseDockOrientation,
   parseHotkeyPreset,
@@ -25,7 +26,7 @@ function settingsFilePath(): string {
 }
 
 /** Bump when default dock placement changes — clears saved dock origin once. */
-const DOCK_LAYOUT_VERSION = 2;
+const DOCK_LAYOUT_VERSION = 3;
 
 function buildSettingsFromParsed(parsed: Partial<GlassUserSettings>): GlassUserSettings {
   return {
@@ -45,6 +46,9 @@ function buildSettingsFromParsed(parsed: Partial<GlassUserSettings>): GlassUserS
         parsed.autoUploadCapturesToContext,
       ),
       micAutoSendAfterSilence: parseMicAutoSendAfterSilence(parsed.micAutoSendAfterSilence),
+      clipboardIntelligenceEnabled: parseClipboardIntelligenceEnabled(
+        parsed.clipboardIntelligenceEnabled,
+      ),
       selectedVirtualAudioDeviceId:
         typeof parsed.selectedVirtualAudioDeviceId === "string" &&
         parsed.selectedVirtualAudioDeviceId.trim()

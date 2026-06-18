@@ -40,15 +40,13 @@ export function GlassUpdateOverlay({
 
   return (
     <div
-      className="glass-update-overlay"
+      className="glass-update-backdrop"
       data-testid="glass-update-overlay"
       onPointerDown={enterInteractive}
       onMouseEnter={enterInteractive}
       onMouseLeave={leaveInteractive}
     >
-      <div className="glass-update-overlay__scrim" aria-hidden="true" />
       <article className="glass-update-card" role="dialog" aria-labelledby="glass-update-title">
-        <p className="glass-update-card__eyebrow">IIVO Glass</p>
         <h1 id="glass-update-title" className="glass-update-card__title">
           {title}
         </h1>
@@ -57,13 +55,6 @@ export function GlassUpdateOverlay({
             v{appUpdate.currentVersion} → v{appUpdate.latestVersion}
           </p>
         ) : null}
-        {appUpdate.releaseNotes?.trim() ? (
-          <p className="glass-update-card__notes">{appUpdate.releaseNotes.trim()}</p>
-        ) : (
-          <p className="glass-update-card__notes">
-            A newer build is ready. Update now to download and install automatically — no DMG required.
-          </p>
-        )}
         {appUpdate.error ? (
           <p className="glass-update-card__error" data-testid="glass-update-error">
             {appUpdate.error}
@@ -72,7 +63,7 @@ export function GlassUpdateOverlay({
         <div className="glass-update-card__actions">
           <button
             type="button"
-            className="gbtn gbtn--primary gbtn--glass-update"
+            className="glass-update-card__btn-update"
             data-testid="glass-update-apply"
             disabled={busy}
             onClick={() => send({ type: "glass-update-apply" })}
@@ -82,7 +73,7 @@ export function GlassUpdateOverlay({
           {!busy ? (
             <button
               type="button"
-              className="gbtn gbtn--ghost gbtn--glass-update-later"
+              className="glass-update-card__btn-later"
               data-testid="glass-update-dismiss"
               onClick={() => send({ type: "glass-update-dismiss" })}
             >

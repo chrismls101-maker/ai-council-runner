@@ -5,6 +5,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   commandBarLayoutFromDisplay,
+  glassLayoutContentBottomY,
   overlayLayoutFromDisplay,
 } from "../shared/glassLayoutMath.ts";
 import type { DisplayLayoutContext } from "../shared/glassLayoutMath.ts";
@@ -36,7 +37,7 @@ test("overlay bounds match visible workArea", () => {
   assert.equal(overlay.x, display.workArea.x);
   assert.equal(overlay.y, display.workArea.y);
   assert.equal(overlay.width, display.workArea.width);
-  assert.equal(overlay.height, display.workArea.height);
+  assert.equal(overlay.height, glassLayoutContentBottomY(display) - display.workArea.y);
 });
 
 test("command bar is centered near bottom of workArea", () => {

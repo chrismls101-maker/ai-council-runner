@@ -462,3 +462,38 @@ export function detectTerminalLoop(
   }
   return Array.from(counts.values()).some((c) => c >= 3);
 }
+
+// ---------------------------------------------------------------------------
+// File reference extraction from build error output
+// ---------------------------------------------------------------------------
+
+/**
+ * Matches file references with optional line:col, covering common build tool formats:
+ *   TypeScript: src/foo.ts(42,5)  or  src/foo.ts:42:5
+ *   Rust/Go:    src/main.rs:42:5
+ *   ESLint:     src/foo.js:42:5
+ * Only matches paths ending in a known source extension.
+ */
+const FILE_REF_RE =
+  /(?:^|[\s(])([./\w-][\w./\-]*\.(?:tsx|ts|jsx|js|mts|cts|mjs|cjs|rs|go|py|cpp|hpp|c|h|java|swift|kt|rb))(?:[:(](\d+))?/gm;
+
+/**
+ * Extract unique file paths referenced in build error output.
+ * Returns up to 5 distinct paths (most likely to be relevant).
+ * Pure — no fs access, safe to call in any environment.
+ */
+export function extractErrorFileRefs(text: string): string[] {
+  const seen = new Set<string>();
+  const results: string[] = [];
+  let m: RegExpExecArray | null;
+  FILE_REF_RE.lastIndex = 0;
+  while ((m = FILE_REF_RE.exec(text)) !== null) {
+    const p = m[1];
+    if (!seen.has(p)) {
+      seen.add(p);
+      results.push(p);
+      if (results.length >= 5) break;
+    }
+  }
+  return results;
+}

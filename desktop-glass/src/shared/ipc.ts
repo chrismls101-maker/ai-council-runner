@@ -271,6 +271,7 @@ export type GlassCommand =
   // --- Wingman ---
   | { type: "wingman-start"; goal: string }
   | { type: "wingman-end" }
+  | { type: "wingman-new-session" }
   | { type: "wingman-inspect"; prompt?: string }
   | { type: "wingman-add-note"; content: string }
   | { type: "wingman-search-sessions"; query: string }
@@ -280,7 +281,15 @@ export type GlassCommand =
   | { type: "wingman-agent-proxy-consent-grant" }
   | { type: "wingman-github-pat-save"; token: string }
   | { type: "wingman-github-pat-clear" }
-  | { type: "wingman-github-pat-status" };
+  | { type: "wingman-github-pat-status" }
+  // ── Test backdoors — only active when IIVO_GLASS_TEST=1 ──────────────────
+  | { type: "wingman-debug-inject-inspection"; response?: string; prompt?: string }
+  | { type: "wingman-debug-set-token-invalid" }
+  | { type: "wingman-debug-get-session" }
+  | { type: "wingman-debug-clear-state" }
+  // ── Live Terminal Widget ──────────────────────────────────────────────────
+  | { type: "terminal-widget-toggle" }
+  | { type: "terminal-widget-move"; x: number; y: number };
 
 export interface GlassState {
   privacy: PrivacyState;
@@ -375,6 +384,31 @@ export interface GlassState {
   githubPATConfigured: boolean;
   /** Set true if the last GitHub API call rejected the stored PAT. */
   githubTokenInvalid: boolean;
+  /** Live terminal feed — always-on polling of frontmost terminal output. */
+  liveTerminal: LiveTerminalFeed | null;
+  /** Whether the floating terminal widget is visible in the overlay. */
+  terminalWidgetVisible: boolean;
+  /** Position of the floating terminal widget (percent of screen). */
+  terminalWidgetPos: { x: number; y: number };
+}
+
+export interface LiveTerminalLine {
+  text: string;
+  /** "command" = shell prompt+command, "output" = stdout, "error" = stderr/error line, "system" = Glass annotation */
+  kind: "command" | "output" | "error" | "system";
+  ts: number;
+}
+
+export interface LiveTerminalFeed {
+  lines: LiveTerminalLine[];
+  /** The most recently detected running command (null if idle). */
+  activeCommand: string | null;
+  /** Exit code of the last completed command (null if still running or unknown). */
+  lastExitCode: number | null;
+  /** True = last command succeeded (exit 0), false = failed, null = unknown. */
+  lastExitSuccess: boolean | null;
+  /** Name of the terminal app being read (e.g. "Ghostty", "Terminal"). */
+  appName: string | null;
 }
 
 export interface AgentProxyState {
@@ -386,6 +420,8 @@ export interface AgentProxyState {
   port: number;
   /** Whether the consent modal should be shown. */
   showConsentModal: boolean;
+  /** Total number of agent API calls captured this session. */
+  capturedCallCount: number;
 }
 
 export interface SttProcessChunkRequest {

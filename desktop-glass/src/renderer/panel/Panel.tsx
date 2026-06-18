@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { send, useGlassState } from "../useGlassState.ts";
+
+const IS_DEV = process.env.NODE_ENV !== "production";
 import {
   formatDisplayTargetLabel,
   GLASS_HOTKEY_PRESETS,
@@ -8,6 +10,7 @@ import {
 } from "../../shared/glassSettings.ts";
 import { StatusPill } from "../components/StatusPill.tsx";
 import { SessionPill } from "../components/SessionPill.tsx";
+import { CopyButton } from "../components/CopyButton.tsx";
 import type { GlassState } from "../../shared/ipc.ts";
 import { collapseDuplicateTranscriptLines, dedupeTranscriptEventsForDisplay } from "../../shared/transcriptDedupe.ts";
 import type { PanelTab, SavedMoment } from "../../shared/types.ts";
@@ -37,7 +40,7 @@ import { AudioTab } from "./AudioTab.tsx";
 import AccountTab from "./AccountTab.tsx";
 import { LiveNotesTab } from "./LiveNotesTab.tsx";
 
-const TABS: { id: PanelTab; label: string }[] = [
+const ALL_TABS: { id: PanelTab; label: string; devOnly?: boolean }[] = [
   { id: "setup", label: "Setup" },
   { id: "copilot", label: "Copilot" },
   { id: "live-notes", label: "Notes" },
@@ -45,16 +48,10 @@ const TABS: { id: PanelTab; label: string }[] = [
   { id: "audio", label: "Audio" },
   { id: "summary", label: "Summary" },
   { id: "account", label: "Account" },
-  { id: "diagnostics", label: "Diagnostics" },
+  { id: "diagnostics", label: "Diagnostics", devOnly: true },
 ];
 
-async function copyText(text: string): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch {
-    /* clipboard may be unavailable; ignore */
-  }
-}
+const TABS = ALL_TABS.filter((t) => !t.devOnly || IS_DEV);
 
 function NoteList({ items, empty }: { items: string[]; empty: string }): JSX.Element {
   if (items.length === 0) return <p className="empty">{empty}</p>;
@@ -91,9 +88,9 @@ function SummaryView({ state }: { state: GlassState }): JSX.Element {
       {hasSession ? (
         <>
           <div className="transcript__row">
-            <button className="gbtn" onClick={() => void copyText(summary)} disabled={!summary}>
+            <CopyButton className="gbtn" text={summary ?? ""} disabled={!summary}>
               Copy Summary
-            </button>
+            </CopyButton>
             <button
               className="gbtn gbtn--primary"
               onClick={() => send({ type: "session-send-summary" })}
@@ -236,9 +233,9 @@ function EventCard({ event }: { event: GlassSessionEvent }): JSX.Element {
       <EventScreenshot event={event} />
       <div className="moment__actions">
         {event.kind === "iivo_analysis" && event.text ? (
-          <button className="gbtn" onClick={() => void copyText(event.text ?? "")}>
+          <CopyButton className="gbtn" text={event.text ?? ""}>
             Copy Analysis
-          </button>
+          </CopyButton>
         ) : null}
         <button className="gbtn" onClick={() => send({ type: "session-send-event", id: event.id })}>
           Send to IIVO
@@ -414,9 +411,9 @@ function InsightCard({ insight }: { insight: GlassSessionInsight }): JSX.Element
         <button className="gbtn" onClick={() => send({ type: "session-send-insight", id: insight.id })}>
           Send
         </button>
-        <button className="gbtn gbtn--ghost" onClick={() => void copyText(insight.text)}>
+        <CopyButton className="gbtn gbtn--ghost" text={insight.text}>
           Copy
-        </button>
+        </CopyButton>
       </div>
     </div>
   );
@@ -715,7 +712,7 @@ function StatusGrid({ state }: { state: GlassState }): JSX.Element {
         </button>
       </div>
       <GlassLayoutSettings state={state} />
-      <ServerUrlEditor state={state} />
+      {IS_DEV ? <ServerUrlEditor state={state} /> : null}
     </div>
   );
 }

@@ -7,7 +7,7 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { BrowserWindow, globalShortcut, screen, shell, type WebContents } from "electron";
+import { BrowserWindow, globalShortcut, Menu, screen, shell, type WebContents } from "electron";
 import { GLASS_BOOT_SOUND_ENABLED } from "../shared/bootSound.ts";
 import type { GlassConfig } from "../shared/config.ts";
 import {
@@ -32,8 +32,14 @@ import {
 } from "./displayRegistry.ts";
 import { GlassLayoutManager, getPrimaryDisplayContext } from "./glassLayoutManager.ts";
 import {
+  clampCommandBarWindowBounds,
+  commandBarLayoutForStack,
+  commandBarMaxBottomY,
   commandBarWindowHeightForStack,
   COMMAND_BAR_ROOT_BOTTOM_PADDING_PX,
+  dockXAlignedToCommandBar,
+  glassLayoutContentBottomY,
+  OVERLAY_CHAT_STACK_FALLBACK_PX,
   overlayLayoutFromDisplay,
 } from "../shared/glassLayoutMath.ts";
 import {
@@ -47,6 +53,17 @@ import {
   logGlassWindowDiagnostics,
   rectFromWindow,
 } from "./glassWindowDiagnostics.ts";
+import {
+  GLASS_TERMINAL_DEFAULT_HEIGHT,
+  GLASS_TERMINAL_DEFAULT_WIDTH,
+  GLASS_TERMINAL_REVEAL_MS,
+  idealTerminalPanelWidth,
+} from "../renderer/dock/glassTerminalLayout.ts";
+import {
+  GLASS_TERMINAL_WINDOW_PADDING_PX,
+  terminalWindowBoundsBelowDock,
+} from "./glassTerminalWindow.ts";
+import { IPC } from "../shared/ipc.ts";
 
 const isDev = !!process.env.ELECTRON_RENDERER_URL;
 const preloadPath = join(__dirname, "../preload/index.mjs");
@@ -58,7 +75,8 @@ type RendererPage =
   | "command.html"
   | "splash.html"
   | "splash-background.html"
-  | "notes.html";
+  | "notes.html"
+  | "terminal.html";
 
 export interface GlassWindows {
   dock: BrowserWindow;
@@ -66,6 +84,7 @@ export interface GlassWindows {
   overlay: BrowserWindow;
   commandBar: BrowserWindow;
   notesPad: BrowserWindow;
+  terminal: BrowserWindow;
 }
 
 let windows: GlassWindows | null = null;
@@ -84,6 +103,7 @@ let notesPadVisible = false;
 let chromeLayoutLocked = true;
 let dockCustomOrigin: ChromeOrigin | null = null;
 let commandBarCustomOrigin: ChromeOrigin | null = null;
+let lastCommandBarStackHeightPx: number | undefined;
 let chromeLayoutPersist: ((partial: Partial<GlassUserSettings>) => void) | null = null;
 let chromeMovePersistTimer: ReturnType<typeof setTimeout> | null = null;
 /** When true, dock/overlay/command bar stay hidden until {@link finishSplash} completes. */
@@ -129,12 +149,48 @@ const OVERLAY_ALWAYS_ON_TOP_RELATIVE = 0;
 const OVERLAY_RAISED_FOR_NOTIFICATIONS_RELATIVE = 3;
 /** Chrome uses panel type on macOS — keep well above overlay relative levels. */
 const DOCK_ALWAYS_ON_TOP_RELATIVE = 8;
+const TERMINAL_ALWAYS_ON_TOP_RELATIVE = 9;
 const COMMAND_BAR_ALWAYS_ON_TOP_RELATIVE = 10;
 const COMMAND_BAR_TOP_RELATIVE = 12;
 const NOTES_PAD_ALWAYS_ON_TOP_RELATIVE = 14;
 const PANEL_ALWAYS_ON_TOP_RELATIVE = 16;
 
 let overlayRaisedForNotifications = false;
+let overlayPointerOverNotification = false;
+let terminalWindowVisible = false;
+let lastTerminalPanelWidth = GLASS_TERMINAL_DEFAULT_WIDTH;
+let lastTerminalPanelHeight = GLASS_TERMINAL_DEFAULT_HEIGHT;
+let terminalDismissTimer: ReturnType<typeof setTimeout> | null = null;
+let terminalPanelSizedByRenderer = false;
+
+function refreshTerminalPanelWidthFromDisplay(): void {
+  const workW = layoutManager?.getDisplay().workArea.width;
+  if (typeof workW === "number" && workW > 0) {
+    lastTerminalPanelWidth = idealTerminalPanelWidth(workW);
+  }
+}
+
+function resetOverlayClickThroughState(overlay: BrowserWindow): void {
+  if (overlay.isDestroyed()) return;
+  const win = overlay as BrowserWindow & { _resetPassthrough?: () => void };
+  if (typeof win._resetPassthrough === "function") {
+    win._resetPassthrough();
+  } else {
+    configureOverlayClickThrough(overlay);
+  }
+}
+
+/** Renderer reports pointer over the bottom notification card (scroll / click target). */
+export function setOverlayPointerOverNotification(over: boolean): void {
+  overlayPointerOverNotification = over;
+  if (!windows?.overlay || windows.overlay.isDestroyed()) return;
+  if (!overlayRaisedForNotifications || !over) {
+    resetOverlayClickThroughState(windows.overlay);
+    return;
+  }
+  debugSetIgnoreMouseEvents(windows.overlay, "overlay", false);
+  raiseChromeAboveOverlay(windows);
+}
 
 const CHROME_MOUSE_FORWARD = { forward: true } as const;
 
@@ -165,6 +221,11 @@ function raiseChromeAboveOverlay(w: GlassWindows): void {
       : COMMAND_BAR_ALWAYS_ON_TOP_RELATIVE;
     w.commandBar.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, commandBarRelative);
     ensureChromeWindowInteractive(w.commandBar, "commandBar");
+  }
+
+  if (!w.terminal.isDestroyed() && terminalWindowVisible) {
+    w.terminal.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, TERMINAL_ALWAYS_ON_TOP_RELATIVE);
+    ensureChromeWindowInteractive(w.terminal, "terminal");
   }
 
   if (!w.panel.isDestroyed() && w.panel.isVisible()) {
@@ -200,6 +261,34 @@ function configureOverlayClickThrough(overlay: BrowserWindow): void {
  */
 function attachOverlayCursorClickThrough(overlay: BrowserWindow): void {
   const wc = overlay.webContents;
+  // Debounce only the pass-through restore (→ ignore=true) to eliminate cursor
+  // flicker when the cursor rapidly crosses button/text boundaries.
+  // Going interactive (→ ignore=false) stays instant so button clicks never miss.
+  // The syncOverlayPresentationRaised(false) path independently resets immediately,
+  // so a pending passthrough timer cannot cause a stuck click-blocking state.
+  let passthroughTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const setPassthrough = (): void => {
+    if (passthroughTimer !== null) return; // already scheduled
+    passthroughTimer = setTimeout(() => {
+      passthroughTimer = null;
+      if (overlay.isDestroyed()) return;
+      debugSetIgnoreMouseEvents(overlay, "overlay", true, true);
+    }, 40);
+  };
+
+  const setInteractive = (): void => {
+    if (passthroughTimer !== null) { clearTimeout(passthroughTimer); passthroughTimer = null; }
+    debugSetIgnoreMouseEvents(overlay, "overlay", false);
+    if (windows) raiseChromeAboveOverlay(windows);
+  };
+
+  // Called by syncOverlayPresentationRaised(false) to hard-reset without waiting.
+  (overlay as BrowserWindow & { _resetPassthrough?: () => void })._resetPassthrough = () => {
+    if (passthroughTimer !== null) { clearTimeout(passthroughTimer); passthroughTimer = null; }
+    if (!overlay.isDestroyed()) debugSetIgnoreMouseEvents(overlay, "overlay", true, true);
+  };
+
   const onCursorChanged = (_event: Electron.Event, type: string) => {
     if (overlay.isDestroyed()) return;
     // CRITICAL GUARD: the overlay is full-screen. If we call setIgnoreMouseEvents(false)
@@ -207,21 +296,31 @@ function attachOverlayCursorClickThrough(overlay: BrowserWindow): void {
     // unclickable — nothing underneath (Glass dock, commandBar, browser, apps) receives
     // any click. Only toggle interactive when a notification card is actually raised.
     if (!overlayRaisedForNotifications) {
-      // Ensure any stale interactive state is cleared.
+      // Cancel any pending passthrough timer and ensure click-through immediately.
+      if (passthroughTimer !== null) { clearTimeout(passthroughTimer); passthroughTimer = null; }
       debugSetIgnoreMouseEvents(overlay, "overlay", true, true);
       return;
     }
+    if (overlayPointerOverNotification) {
+      setInteractive();
+      return;
+    }
     logGlassClickDebug("cursor-changed", { window: "overlay", type });
-    if (type === "pointer" || type === "hand") {
-      debugSetIgnoreMouseEvents(overlay, "overlay", false);
-      // Full-screen overlay becomes click-blocking — re-raise bounded chrome above it.
-      if (windows) raiseChromeAboveOverlay(windows);
+    const interactiveCursor =
+      type === "pointer" ||
+      type === "hand" ||
+      type === "text" ||
+      type === "ibeam" ||
+      type === "vertical-text";
+    if (interactiveCursor) {
+      setInteractive();
     } else {
-      debugSetIgnoreMouseEvents(overlay, "overlay", true, true);
+      setPassthrough();
     }
   };
   wc.on("cursor-changed", onCursorChanged);
   wc.once("destroyed", () => {
+    if (passthroughTimer !== null) { clearTimeout(passthroughTimer); passthroughTimer = null; }
     wc.removeListener("cursor-changed", onCursorChanged);
   });
 }
@@ -274,6 +373,13 @@ export function syncOverlayPresentationRaised(raised: boolean): void {
     return;
   }
   if (!windows?.overlay || windows.overlay.isDestroyed()) return;
+  // When the notification is dismissed, immediately restore click-through so the
+  // screen never gets stuck in a click-blocking state if the cursor isn't moving.
+  // _resetPassthrough also cancels any pending debounce timer from the cursor handler.
+  if (!raised) {
+    overlayPointerOverNotification = false;
+    resetOverlayClickThroughState(windows.overlay);
+  }
   if (onboardingPending) {
     if (shouldShowOverlayWindow()) {
       presentOnboardingOverlay(windows.overlay);
@@ -301,8 +407,17 @@ export function syncOverlayNoticePinned(pinned: boolean): void {
 }
 
 function destroyGlassWindows(): void {
+  terminalWindowVisible = false;
+  terminalPanelSizedByRenderer = false;
   if (windows) {
-    for (const win of [windows.dock, windows.panel, windows.overlay, windows.commandBar, windows.notesPad]) {
+    for (const win of [
+      windows.dock,
+      windows.panel,
+      windows.overlay,
+      windows.commandBar,
+      windows.notesPad,
+      windows.terminal,
+    ]) {
       if (!win.isDestroyed()) {
         win.destroy();
       }
@@ -395,6 +510,7 @@ function suppressChromeDuringBoot(w: GlassWindows): void {
   if (!w.dock.isDestroyed()) w.dock.hide();
   if (!w.commandBar.isDestroyed()) w.commandBar.hide();
   if (!w.overlay.isDestroyed()) w.overlay.hide();
+  if (!w.terminal.isDestroyed()) w.terminal.hide();
 }
 
 /** Abort boot splash when the page fails to load — show Glass windows immediately. */
@@ -427,13 +543,14 @@ function showPrimaryGlassWindows(): void {
     configureOverlayClickThrough(windows.overlay);
   }
   if (commandBarVisible && !windows.commandBar.isDestroyed()) {
-    windows.commandBar.setBounds(layoutManager.getCommandBarLayout());
+    applyCommandBarLayout();
     windows.commandBar.showInactive();
     // Re-apply last known interactive state; Electron resets setIgnoreMouseEvents on show
     // but cursor-changed won't re-fire if cursor hasn't moved — preserve the state.
     ensureChromeWindowInteractive(windows.commandBar, "commandBar");
   }
   if (!windows.dock.isDestroyed()) {
+    applyDockLayout();
     windows.dock.showInactive();
     ensureChromeWindowInteractive(windows.dock, "dock");
   }
@@ -531,6 +648,12 @@ export function stackGlassWindows(w: GlassWindows): void {
   w.dock.showInactive();
   if (!w.dock.isDestroyed()) ensureChromeWindowInteractive(w.dock, "dock");
 
+  if (!w.terminal.isDestroyed() && terminalWindowVisible) {
+    w.terminal.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, TERMINAL_ALWAYS_ON_TOP_RELATIVE);
+    w.terminal.showInactive();
+    ensureChromeWindowInteractive(w.terminal, "terminal");
+  }
+
   if (
     overlayRaisedForNotifications &&
     !w.overlay.isDestroyed() &&
@@ -591,7 +714,23 @@ function applyDockLayout(resetPosition = false): void {
   let next = auto;
   if (resetPosition) {
     dockCustomOrigin = null;
-    next = auto;
+    next = {
+      ...auto,
+      x: dockXAlignedToCommandBarForWidth(auto.width),
+      y: auto.y,
+    };
+  } else if (chromeLayoutLocked) {
+    // Locked: align to command bar center; keep the pill at its current screen Y when resizing.
+    const centered = layoutManager.getDockLayout(current.width, current.height);
+    if (dockCustomOrigin) {
+      next = resolveChromeWindowBounds(centered, dockCustomOrigin, workArea);
+    } else {
+      next = {
+        ...centered,
+        x: dockXAlignedToCommandBarForWidth(current.width),
+        y: current.y,
+      };
+    }
   } else if (dockCustomOrigin) {
     next = resolveChromeWindowBounds(auto, dockCustomOrigin, workArea);
   } else if (!chromeLayoutLocked) {
@@ -608,20 +747,83 @@ function applyDockLayout(resetPosition = false): void {
   windows.dock.setBounds(next);
 }
 
+function commandBarStackHeightPx(): number {
+  return lastCommandBarStackHeightPx && lastCommandBarStackHeightPx > 0
+    ? lastCommandBarStackHeightPx
+    : OVERLAY_CHAT_STACK_FALLBACK_PX;
+}
+
+function commandBarLayoutForCurrentDisplay(customX?: number | null) {
+  return commandBarLayoutForStack(
+    layoutManager!.getDisplay(),
+    commandBarStackHeightPx(),
+    customX,
+  );
+}
+
+function liveCommandBarCenterX(): number | null {
+  if (!windows?.commandBar || windows.commandBar.isDestroyed()) return null;
+  const b = windows.commandBar.getBounds();
+  return b.x + b.width / 2;
+}
+
+function dockXAlignedToCommandBarForWidth(dockWidth: number): number {
+  const ctx = layoutManager!.getDisplay();
+  const centerX = liveCommandBarCenterX();
+  return dockXAlignedToCommandBar(ctx, dockWidth, {
+    commandBarStackHeightPx: commandBarStackHeightPx(),
+    commandBarCustomX: commandBarCustomOrigin?.x ?? null,
+    commandBarCenterX: centerX ?? undefined,
+  });
+}
+
+/** Keep the dock pill centered on the command bar when the user has not moved the dock. */
+function syncDockHorizontalAlignToCommandBar(): void {
+  if (!windows?.dock || windows.dock.isDestroyed() || !layoutManager || !chromeLayoutLocked) return;
+  if (dockCustomOrigin) return;
+  const current = windows.dock.getBounds();
+  const nextX = dockXAlignedToCommandBarForWidth(current.width);
+  if (current.x === nextX) return;
+  windows.dock.setBounds({ ...current, x: nextX });
+  syncGlassTerminalWindowPosition();
+}
+
 function applyCommandBarLayout(resetPosition = false): void {
   if (!windows?.commandBar || windows.commandBar.isDestroyed() || !layoutManager) return;
   if (!chromeLayoutLocked && !resetPosition) return;
   const current = windows.commandBar.getBounds();
-  const auto = layoutManager.getCommandBarLayout();
   const workArea = layoutManager.getDisplay().workArea;
-  let next = auto;
+  const display = layoutManager.getDisplay();
+  let next;
   if (resetPosition) {
     commandBarCustomOrigin = null;
-    next = auto;
+    next = commandBarLayoutForCurrentDisplay(null);
+  } else if (chromeLayoutLocked) {
+    const auto = commandBarLayoutForCurrentDisplay(null);
+    if (commandBarCustomOrigin) {
+      // User placed the bar while unlocked — keep their X/Y when locking again.
+      next = clampCommandBarWindowBounds(
+        resolveChromeWindowBounds(auto, commandBarCustomOrigin, workArea),
+        display,
+      );
+    } else {
+      // Fresh install / reset: bottom-centered default.
+      next = auto;
+    }
   } else if (commandBarCustomOrigin) {
-    next = resolveChromeWindowBounds(auto, commandBarCustomOrigin, workArea);
-  } else if (!chromeLayoutLocked) {
-    next = { ...auto, x: current.x, y: current.y, height: current.height };
+    next = clampCommandBarWindowBounds(
+      resolveChromeWindowBounds(
+        commandBarLayoutForCurrentDisplay(commandBarCustomOrigin.x),
+        commandBarCustomOrigin,
+        workArea,
+      ),
+      display,
+    );
+  } else {
+    next = clampCommandBarWindowBounds(
+      { ...current, height: commandBarWindowHeightForStack(commandBarStackHeightPx()) },
+      display,
+    );
   }
   if (
     current.x === next.x &&
@@ -632,6 +834,7 @@ function applyCommandBarLayout(resetPosition = false): void {
     return;
   }
   windows.commandBar.setBounds(next);
+  syncDockHorizontalAlignToCommandBar();
 }
 
 function captureChromeOriginsFromWindows(): void {
@@ -672,7 +875,11 @@ function wireChromeMoveListeners(w: GlassWindows): void {
     captureChromeOriginsFromWindows();
     scheduleChromeLayoutPersist();
   };
-  w.dock.on("moved", onMoved);
+  const onDockMoved = (): void => {
+    syncGlassTerminalWindowPosition();
+    onMoved();
+  };
+  w.dock.on("moved", onDockMoved);
   w.commandBar.on("moved", onMoved);
 }
 
@@ -742,6 +949,7 @@ function wireWindowStacking(w: GlassWindows): void {
   w.panel.webContents.on("did-finish-load", restack);
   w.commandBar.webContents.on("did-finish-load", restack);
   w.notesPad.webContents.on("did-finish-load", restack);
+  w.terminal.webContents.on("did-finish-load", restack);
 }
 
 function createOverlayWindow(): BrowserWindow {
@@ -881,6 +1089,29 @@ function createCommandBarWindow(): BrowserWindow {
   });
   loadRenderer(commandBar, "command.html");
   trackGlassWindow(commandBar, "commandBar");
+
+  // Native cut / copy / paste / select-all context menu for text fields
+  commandBar.webContents.on("context-menu", (_event, params) => {
+    const items: Electron.MenuItemConstructorOptions[] = [];
+    if (params.isEditable || params.selectionText.trim().length > 0) {
+      if (params.isEditable) {
+        items.push({ role: "cut", label: "Cut", enabled: params.editFlags.canCut });
+      }
+      items.push({ role: "copy", label: "Copy", enabled: params.editFlags.canCopy });
+      if (params.isEditable) {
+        items.push({ role: "paste", label: "Paste", enabled: params.editFlags.canPaste });
+        items.push({ type: "separator" });
+        items.push({ role: "selectAll", label: "Select All" });
+      }
+    } else if (params.isEditable) {
+      items.push({ role: "paste", label: "Paste", enabled: params.editFlags.canPaste });
+      items.push({ role: "selectAll", label: "Select All" });
+    }
+    if (items.length > 0) {
+      Menu.buildFromTemplate(items).popup({ window: commandBar });
+    }
+  });
+
   return commandBar;
 }
 
@@ -917,6 +1148,39 @@ function createNotesPadWindow(): BrowserWindow {
   return notesPad;
 }
 
+function createTerminalWindow(): BrowserWindow {
+  const pad = GLASS_TERMINAL_WINDOW_PADDING_PX;
+  const terminal = new BrowserWindow({
+    width: GLASS_TERMINAL_DEFAULT_WIDTH + pad * 2,
+    height: GLASS_TERMINAL_DEFAULT_HEIGHT + pad * 2,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    hasShadow: false,
+    fullscreenable: false,
+    show: false,
+    backgroundColor: "#00000000",
+    acceptFirstMouse: true,
+    webPreferences: {
+      preload: preloadPath,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+  terminal.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  ensureChromeWindowInteractive(terminal, "terminal");
+  loadRenderer(terminal, "terminal.html");
+  terminal.webContents.on("did-fail-load", (_event, code, desc, url) => {
+    console.error(`[IIVO Glass] terminal window failed to load (${code}): ${desc} — ${url}`);
+  });
+  trackGlassWindow(terminal, "terminal");
+  return terminal;
+}
+
 export function createWindows(glassConfig: GlassConfig, displayTarget: GlassDisplayTarget = "primary"): GlassWindows {
   destroyGlassWindows();
   layoutManager?.dispose();
@@ -950,15 +1214,18 @@ export function createWindows(glassConfig: GlassConfig, displayTarget: GlassDisp
   const panel = createPanelWindow();
   const commandBar = createCommandBarWindow();
   const notesPad = createNotesPadWindow();
+  const terminal = createTerminalWindow();
 
-  for (const win of [dock, panel, overlay, commandBar, notesPad]) {
+  for (const win of [dock, panel, overlay, commandBar, notesPad, terminal]) {
     win.webContents.setWindowOpenHandler(({ url }) => {
       void shell.openExternal(url);
       return { action: "deny" };
     });
   }
 
-  windows = { dock, panel, overlay, commandBar, notesPad };
+  windows = { dock, panel, overlay, commandBar, notesPad, terminal };
+
+  refreshTerminalPanelWidthFromDisplay();
 
   wireChromeMoveListeners(windows);
   applyChromeMovability();
@@ -1121,6 +1388,7 @@ function collectGlassBrowserWindows(excludeWebContents?: WebContents): BrowserWi
       windows.overlay,
       windows.commandBar,
       windows.notesPad,
+      windows.terminal,
     ]) {
       if (!win.isDestroyed()) wins.push(win);
     }
@@ -1156,25 +1424,34 @@ export function syncCommandBarWindowToStackHeight(stackHeightPx: number): boolea
   if (!windows?.commandBar || windows.commandBar.isDestroyed()) return false;
   const bar = windows.commandBar;
   const current = bar.getBounds();
+  lastCommandBarStackHeightPx = stackHeightPx;
   const nextHeight = commandBarWindowHeightForStack(stackHeightPx);
-  if (current.height === nextHeight) {
+  const display = layoutManager?.getDisplay();
+  const nextY = current.y + current.height - nextHeight;
+  const next = display
+    ? clampCommandBarWindowBounds(
+        { x: current.x, y: nextY, width: current.width, height: nextHeight },
+        display,
+      )
+    : { x: current.x, y: nextY, width: current.width, height: nextHeight };
+  if (
+    current.x === next.x &&
+    current.y === next.y &&
+    current.width === next.width &&
+    current.height === next.height
+  ) {
     if (glassBootPending || onboardingPending) bar.hide();
     return false;
   }
   logGlassClickDebug("syncCommandBarWindowToStackHeight", {
     fromHeight: current.height,
-    toHeight: nextHeight,
+    toHeight: next.height,
     stackHeightPx,
   });
-  const nextY = current.y + current.height - nextHeight;
-  bar.setBounds({
-    x: current.x,
-    y: nextY,
-    width: current.width,
-    height: nextHeight,
-  });
+  bar.setBounds(next);
   if (glassBootPending || onboardingPending) bar.hide();
   ensureChromeWindowInteractive(bar, "commandBar");
+  syncDockHorizontalAlignToCommandBar();
   notifyCommandBarLayoutChanged();
   return true;
 }
@@ -1334,21 +1611,38 @@ export function resizeDockWindow(
   if (!windows?.dock || windows.dock.isDestroyed() || !layoutManager) return;
   const clamped = layoutManager.clampDockSize(width, height, options);
   const current = windows.dock.getBounds();
-  const anchor = layoutManager.getDockLayout(clamped.width, clamped.height, options);
-  let next: Electron.Rectangle = {
-    x: anchor.x,
-    y: anchor.y,
-    width: clamped.width,
-    height: clamped.height,
-  };
-  if (chromeLayoutLocked && dockCustomOrigin) {
-    next = resolveChromeWindowBounds(
-      { ...anchor, width: clamped.width, height: clamped.height },
-      dockCustomOrigin,
-      layoutManager.getDisplay().workArea,
-    );
-  } else if (!chromeLayoutLocked) {
-    next = { ...next, x: current.x, y: current.y };
+  const work = layoutManager.getDisplay().workArea;
+  const edge = 24;
+  let next: Electron.Rectangle;
+  if (chromeLayoutLocked) {
+    const nextX = dockCustomOrigin
+      ? Math.max(
+          work.x + edge,
+          Math.min(
+            Math.round(current.x + current.width / 2 - clamped.width / 2),
+            work.x + work.width - clamped.width - edge,
+          ),
+        )
+      : dockXAlignedToCommandBarForWidth(clamped.width);
+    // Grow downward from the dock pill — never re-anchor Y to the default top slot.
+    let y = current.y;
+    const maxY = work.y + work.height - clamped.height - edge;
+    if (y > maxY) {
+      y = Math.max(work.y + edge, maxY);
+    }
+    next = {
+      x: nextX,
+      y,
+      width: clamped.width,
+      height: clamped.height,
+    };
+  } else {
+    next = {
+      x: current.x,
+      y: current.y,
+      width: clamped.width,
+      height: clamped.height,
+    };
   }
   if (
     current.width === next.width &&
@@ -1359,7 +1653,104 @@ export function resizeDockWindow(
     return;
   }
   windows.dock.setBounds(next, false);
+  syncGlassTerminalWindowPosition();
   stackGlassWindows(windows);
+}
+
+export function isGlassTerminalWindowVisible(): boolean {
+  return terminalWindowVisible;
+}
+
+export function syncGlassTerminalWindowPosition(): void {
+  if (!windows?.terminal || windows.terminal.isDestroyed() || !terminalWindowVisible) return;
+  applyTerminalWindowBounds();
+}
+
+function applyTerminalWindowBounds(): void {
+  if (!windows?.terminal || windows.terminal.isDestroyed()) return;
+  if (!windows.dock || windows.dock.isDestroyed() || !layoutManager) return;
+  const work = layoutManager.getDisplay().workArea;
+  const bounds = terminalWindowBoundsBelowDock(
+    windows.dock.getBounds(),
+    lastTerminalPanelWidth,
+    lastTerminalPanelHeight,
+    work,
+  );
+  const current = windows.terminal.getBounds();
+  if (
+    current.x === bounds.x &&
+    current.y === bounds.y &&
+    current.width === bounds.width &&
+    current.height === bounds.height
+  ) {
+    return;
+  }
+  windows.terminal.setBounds(bounds, false);
+}
+
+export function showGlassTerminalWindow(): void {
+  if (!windows?.terminal || windows.terminal.isDestroyed()) {
+    if (isDev) console.warn("[IIVO Glass] showGlassTerminalWindow: no terminal window");
+    return;
+  }
+  if (terminalDismissTimer) {
+    clearTimeout(terminalDismissTimer);
+    terminalDismissTimer = null;
+  }
+  if (!terminalPanelSizedByRenderer) {
+    refreshTerminalPanelWidthFromDisplay();
+  }
+  terminalWindowVisible = true;
+  applyTerminalWindowBounds();
+  const reveal = (): void => {
+    if (!windows?.terminal || windows.terminal.isDestroyed() || !terminalWindowVisible) return;
+    applyTerminalWindowBounds();
+    windows.terminal.show();
+    ensureChromeWindowInteractive(windows.terminal, "terminal");
+    windows.terminal.webContents.send(IPC.terminalWindowShown);
+    stackGlassWindows(windows);
+    if (isDev) {
+      console.info("[IIVO Glass] terminal window shown", windows.terminal.getBounds());
+    }
+  };
+  if (windows.terminal.webContents.isLoadingMainFrame()) {
+    windows.terminal.webContents.once("did-finish-load", reveal);
+  } else {
+    reveal();
+  }
+}
+
+export function dismissGlassTerminalWindow(): void {
+  if (terminalDismissTimer) {
+    clearTimeout(terminalDismissTimer);
+    terminalDismissTimer = null;
+  }
+  if (!windows?.terminal || windows.terminal.isDestroyed()) return;
+  terminalWindowVisible = false;
+  windows.terminal.hide();
+  if (windows) stackGlassWindows(windows);
+}
+
+/** Hide after the in-renderer close animation (see GLASS_TERMINAL_REVEAL_MS). */
+export function scheduleDismissGlassTerminalWindow(
+  delayMs = GLASS_TERMINAL_REVEAL_MS + 40,
+): void {
+  if (terminalDismissTimer) clearTimeout(terminalDismissTimer);
+  terminalDismissTimer = setTimeout(() => {
+    terminalDismissTimer = null;
+    dismissGlassTerminalWindow();
+  }, delayMs);
+}
+
+export function resizeGlassTerminalWindow(panelWidth: number, panelHeight: number): void {
+  if (typeof panelWidth !== "number" || typeof panelHeight !== "number") return;
+  if (panelWidth < 1 || panelHeight < 1) return;
+  terminalPanelSizedByRenderer = true;
+  lastTerminalPanelWidth = panelWidth;
+  lastTerminalPanelHeight = panelHeight;
+  if (terminalWindowVisible) {
+    syncGlassTerminalWindowPosition();
+  }
 }
 
 export function togglePanel(): boolean {
@@ -1424,7 +1815,14 @@ export function toggleCommandBar(): boolean {
 
 export function broadcast(channel: string, payload: unknown): void {
   if (!windows) return;
-  for (const win of [windows.dock, windows.panel, windows.overlay, windows.commandBar, windows.notesPad]) {
+  for (const win of [
+    windows.dock,
+    windows.panel,
+    windows.overlay,
+    windows.commandBar,
+    windows.notesPad,
+    windows.terminal,
+  ]) {
     if (!win.isDestroyed()) {
       win.webContents.send(channel, payload);
     }
@@ -1516,6 +1914,55 @@ export function unregisterCommandBarHotkeys(): void {
   globalShortcut.unregisterAll();
 }
 
+// Context assembler hotkey — ⌘⇧G (Command+Shift+G). Fires the glass-context-ask
+// pipeline: snapshot window + terminal context, then focus the command bar so the
+// user can type their question without any copy-paste or context explaining.
+const CONTEXT_ASK_ACCEL = "CommandOrControl+Shift+G";
+let contextAskCallback: (() => void) | null = null;
+
+export function registerContextAskHotkey(callback: () => void): void {
+  if (process.env.IIVO_GLASS_E2E === "1") return; // skip during E2E
+  contextAskCallback = callback;
+  try {
+    if (globalShortcut.isRegistered(CONTEXT_ASK_ACCEL)) {
+      globalShortcut.unregister(CONTEXT_ASK_ACCEL);
+    }
+    const ok = globalShortcut.register(CONTEXT_ASK_ACCEL, () => {
+      contextAskCallback?.();
+    });
+    if (!ok) {
+      console.warn(`Glass context-ask hotkey failed to register: ${CONTEXT_ASK_ACCEL}`);
+    } else {
+      console.log(`Glass context-ask hotkey registered: ${CONTEXT_ASK_ACCEL}`);
+    }
+  } catch (err) {
+    console.warn("Glass context-ask hotkey registration error:", err);
+  }
+}
+
+const POWERS_PALETTE_ACCEL = "CommandOrControl+Shift+P";
+let powersPaletteCallback: (() => void) | null = null;
+
+export function registerPowersPaletteHotkey(callback: () => void): void {
+  if (process.env.IIVO_GLASS_E2E === "1") return;
+  powersPaletteCallback = callback;
+  try {
+    if (globalShortcut.isRegistered(POWERS_PALETTE_ACCEL)) {
+      globalShortcut.unregister(POWERS_PALETTE_ACCEL);
+    }
+    const ok = globalShortcut.register(POWERS_PALETTE_ACCEL, () => {
+      powersPaletteCallback?.();
+    });
+    if (!ok) {
+      console.warn(`Glass powers-palette hotkey failed to register: ${POWERS_PALETTE_ACCEL}`);
+    } else {
+      console.log(`Glass powers-palette hotkey registered: ${POWERS_PALETTE_ACCEL}`);
+    }
+  } catch (err) {
+    console.warn("Glass powers-palette hotkey registration error:", err);
+  }
+}
+
 /** Compact display/layout summary for diagnostics. */
 export function getDisplayLayoutSummary(): string {
   if (!layoutManager || !windows) return "display: not initialized";
@@ -1562,6 +2009,8 @@ export function lockChromeLayout(): {
   captureChromeOriginsFromWindows();
   chromeLayoutLocked = true;
   applyChromeMovability();
+  applyDockLayout(false);
+  applyCommandBarLayout(false);
   return getChromeLayoutOrigins();
 }
 
@@ -1585,13 +2034,14 @@ export function nudgeChromeWindowFromWebContents(
   if (win.id !== windows.dock.id && win.id !== windows.commandBar.id) return;
 
   const bounds = win.getBounds();
-  const workArea = layoutManager.getDisplay().workArea;
-  const workBottom = workArea.y + workArea.height;
-  let maxY = workBottom - bounds.height;
+  const display = layoutManager.getDisplay();
+  const maxBottom = commandBarMaxBottomY(display);
+  let maxY = maxBottom - bounds.height;
   if (win.id === windows.commandBar.id) {
-    // Bottom-anchored stack: allow the visible pill to sit flush with the work-area edge.
-    maxY = workBottom - bounds.height + COMMAND_BAR_ROOT_BOTTOM_PADDING_PX;
+    // Bottom-anchored stack: align visible pill with the dock-safe bottom inset.
+    maxY = maxBottom - bounds.height + COMMAND_BAR_ROOT_BOTTOM_PADDING_PX;
   }
+  const workArea = display.workArea;
   const x = Math.max(
     workArea.x,
     Math.min(workArea.x + workArea.width - bounds.width, bounds.x + dx),

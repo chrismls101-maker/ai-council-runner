@@ -1,13 +1,6 @@
 import type { IivoAnalysisState } from "../../shared/ipc.ts";
 import { send } from "../useGlassState.ts";
-
-async function copyText(text: string): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch {
-    /* clipboard may be unavailable; ignore */
-  }
-}
+import { CopyButton } from "./CopyButton.tsx";
 
 export function IivoAnalysisPanel({ analysis }: { analysis: IivoAnalysisState }): JSX.Element | null {
   if (analysis.status === "idle" && !analysis.text) return null;
@@ -48,9 +41,9 @@ export function IivoAnalysisPanel({ analysis }: { analysis: IivoAnalysisState })
                 View full council on web
               </button>
             ) : null}
-            <button className="gbtn" onClick={() => void copyText(analysis.text ?? "")}>
+            <CopyButton className="gbtn" text={analysis.text ?? ""}>
               Copy Analysis
-            </button>
+            </CopyButton>
             {canOpenInIivo ? (
               <button className="gbtn" onClick={() => send({ type: "session-open-in-iivo" })}>
                 Open full analysis in IIVO

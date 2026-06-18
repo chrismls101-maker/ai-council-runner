@@ -1,10 +1,10 @@
-# IIVO Glass — Baseline v0.5.0 (updated: GitHub PAT settings UI)
+# IIVO Glass — Baseline v0.5.0 (updated: QA HTTP bridge + full automation)
 
 **Date:** 2026-06-12  
 **Branch:** main  
 **Typecheck:** ✅ clean  
 **Tests:** 1,394 passing / 0 failing  
-**New since agent proxy baseline:** +90 tests (verification engine + GitHub types) + PAT settings UI (no new tests — UI component)
+**New since PAT UI baseline:** Security fixes + dev-only IPC backdoors + data-testid coverage + 3 new QA scripts + 2 new Playwright E2E specs + 5 new npm scripts + **HTTP QA bridge** (Task #129–#130)
 
 ---
 
@@ -439,20 +439,83 @@ WingmanMemoryState   { searchResults: WingmanSessionRecord[], loading: boolean, 
 
 ---
 
+## What shipped in this update — Full QA Automation + Security Hardening (Tasks #121–#128)
+
+### Security fixes (Task #121 — applied to codebase)
+
+| File | Fix |
+|------|-----|
+| `src/main/index.ts` | `exec()` replaced with `execFileAsync("osascript", ["-e", script])` — eliminates shell injection in browser title detection |
+| `src/main/agentProxyServer.ts` | `MAX_SSE_ACCUMULATE_BYTES = 50_000` cap on SSE accumulation — prevents unbounded memory growth on large streaming responses |
+| `src/main/githubService.ts` | `isPATConfigured()` now checks `existsSync(PAT_STORE_PATH)` first — avoids unnecessary `safeStorage.decryptString` on startup when no PAT exists |
+
+### Dev-only IPC backdoors (Task #122)
+
+4 new commands gated by `process.env.IIVO_GLASS_TEST !== "1"`. Used by automated tests to reach states that are hard/impossible to trigger via normal UI interaction.
+
+| Command | Purpose |
+|---------|---------|
+| `wingman-debug-inject-inspection` | Injects a real `WingmanInspection` into the session, runs `detectLoop` + `detectScopeDrift` on real code paths |
+| `wingman-debug-set-token-invalid` | Sets `githubPATState.tokenInvalid = true` — same state as a real 401 from GitHub |
+| `wingman-debug-get-session` | Returns a snapshot of the current session for assertion |
+| `wingman-debug-clear-state` | Stops intervals, resets `wingmanState` / `wingmanMemoryState` / `githubPATState` |
+
+Added to `src/shared/ipc.ts` `GlassCommand` union. Require Glass to be started with `IIVO_GLASS_TEST=1`.
+
+### data-testid coverage (Task #123)
+
+All interactive elements in `GitHubPATSection` and `AgentProxyConsentModal` now have `data-testid` attributes for Playwright click-through automation:
+
+`GitHubPATSection`: `wingman-github-pat-section`, `wingman-github-pat-connect-btn`, `wingman-github-pat-input`, `wingman-github-pat-save-btn`, `wingman-github-pat-cancel-btn`, `wingman-github-pat-status-connected`, `wingman-github-pat-status-saved`, `wingman-github-pat-status-invalid`, `wingman-github-pat-update-btn`, `wingman-github-pat-remove-btn`, `wingman-github-pat-confirm-remove-btn`, `wingman-github-pat-cancel-remove-btn`, `wingman-github-pat-warn-banner`, `wingman-github-pat-inline-reopen-btn`
+
+`AgentProxyConsentModal`: `agent-proxy-consent-modal`, `agent-proxy-consent-envvar`, `agent-proxy-consent-note`, `agent-proxy-consent-dismiss`, `agent-proxy-consent-enable` (already existed — verified complete)
+
+### New QA scripts (Tasks #124–#125)
+
+| Script | npm run | What it covers |
+|--------|---------|----------------|
+| `scripts/glass-qa-wingman-full.mjs` | `qa:wingman:full` | §1–§20: all MANUAL_QA IPC-testable sections including loop detection, scope drift, and token-invalid via dev backdoors |
+| `scripts/glass-qa-agent-proxy-live.mjs` | `qa:agent:proxy` | Real HTTP client through proxy — verifies forwarding, SSE streaming, capture in GlassState, privacy (API key stripped) |
+
+`glass-qa-wingman-full.mjs` gracefully skips §15–§19 (backdoor sections) when Glass is not in test mode, with clear skip messages.
+
+`glass-qa-agent-proxy-live.mjs` requires `ANTHROPIC_API_KEY` and makes ~70 real tokens of API calls per run (claude-haiku-4-5).
+
+### New Playwright E2E specs (Tasks #126–#127)
+
+| Spec | npm run | What it covers |
+|------|---------|----------------|
+| `tests/e2e/glass-wingman-ui.spec.ts` | `e2e:wingman-ui` | Full UI click-through: all 5 PAT states (B1–B8), dismissedInvalid flow (C1–C3), agent proxy consent modal (D1–D4), terminal awareness (E1–E3), loop detection via backdoor (F1), report structure (G1–G4), cross-session memory (H1–H3), privacy invariants (I1–I3) |
+| `tests/e2e/glass-meeting-intel.spec.ts` | `e2e:meeting-intel` | Meeting Intelligence E2E: transcript injection via `add-transcript-chunk`, type classification (A1), moment capture (A2), moment delete (A3), moment add (A4), debrief structure (A5), type override notice (A6), debrief UI (A7–A9), no audio during Wingman (regression) |
+
+`glass-wingman-ui.spec.ts` uses the same backdoor pattern as the QA scripts — calls `window.glass.send({ type: "wingman-debug-*" })` and gracefully skips backdoor-dependent tests when `IIVO_GLASS_TEST=1` is not set.
+
+### New npm scripts
+
+| Script | Command |
+|--------|---------|
+| `qa:wingman` | `node scripts/glass-qa-wingman.mjs` |
+| `qa:wingman:full` | `node scripts/glass-qa-wingman-full.mjs` |
+| `qa:wingman:full:backdoors` | `IIVO_GLASS_TEST=1 node scripts/glass-qa-wingman-full.mjs` |
+| `qa:agent:proxy` | `node scripts/glass-qa-agent-proxy-live.mjs` |
+| `e2e:wingman-ui` | `npm run build && playwright test tests/e2e/glass-wingman-ui.spec.ts ...` |
+| `e2e:meeting-intel` | `npm run build && playwright test tests/e2e/glass-meeting-intel.spec.ts ...` |
+
+---
+
 ## Known remaining gaps
 
 | Gap | Priority | Notes |
 |-----|----------|-------|
 | `wingman-inspect` E2E | Medium | Requires live screen; tested via QA script only |
-| Meeting Intelligence E2E | Medium | No Playwright spec; unit + QA script only |
 | Update check E2E | Low | Stubbed server required |
-| Terminal awareness E2E | Medium | Needs real terminal session in Playwright |
 | Git diff E2E | Low | Needs real git repo in Playwright; unit-tested (60 tests) |
-| Agent proxy integration test | Medium | End-to-end proxy roundtrip needs a live Anthropic endpoint or mock server |
-| Verification runner integration test | Medium | runTypecheckClaim/runTestsClaim need a real or mock repo; unit-tested at pure layer only |
-| GitHub PAT management UI | ✅ Done | `GitHubPATSection` component — 5 states, dismissedInvalid bug fix, CSS padlock, inline reopen |
+| Verification runner integration test | Medium | `runTypecheckClaim`/`runTestsClaim` need a real or mock repo; unit-tested at pure layer only |
+| GitHub PAT management UI | ✅ Done | `GitHubPATSection` — 5 states, dismissedInvalid fix, testid coverage, Playwright spec (B1–B8, C1–C3) |
+| Meeting Intelligence E2E | ✅ Done | `glass-meeting-intel.spec.ts` — transcript injection, classification, moment CRUD, debrief |
+| Agent proxy integration test | ✅ Done | `glass-qa-agent-proxy-live.mjs` — real HTTP round-trip, privacy contract, SSE streaming |
 | GitHub GraphQL reviewDecision | Low | V1 defaults to "unknown"; needs GraphQL endpoint |
-| GitHub integration test | Medium | fetchSessionPRContext needs mock server or recorded fixtures |
+| GitHub integration test | Medium | `fetchSessionPRContext` needs mock server or recorded fixtures |
 
 ---
 
@@ -492,3 +555,13 @@ WingmanMemoryState   { searchResults: WingmanSessionRecord[], loading: boolean, 
 - [x] All unit tests passing (1,394 / 0)
 - [x] Typecheck clean
 - [x] BASELINE_v0.5.0.md written
+- [x] Security fix: exec()→execFileAsync (no shell injection in browser title reader)
+- [x] Security fix: SSE accumulation cap (50KB, prevents unbounded memory)
+- [x] Security fix: isPATConfigured existsSync fast-path (no decrypt on cold start)
+- [x] Dev-only IPC backdoors (4 commands, IIVO_GLASS_TEST=1 guard)
+- [x] data-testid attributes on all GitHubPATSection + AgentProxyConsentModal elements
+- [x] glass-qa-wingman-full.mjs — §1–§20 full QA including backdoor sections
+- [x] glass-qa-agent-proxy-live.mjs — real HTTP proxy roundtrip + privacy contract
+- [x] glass-wingman-ui.spec.ts — all 5 PAT states, dismissedInvalid, consent modal, loop detection, memory
+- [x] glass-meeting-intel.spec.ts — transcript injection, classification, moment CRUD, debrief
+- [x] 5 new npm scripts added (qa:wingman, qa:wingman:full, qa:agent:proxy, e2e:wingman-ui, e2e:meeting-intel)

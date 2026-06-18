@@ -3,6 +3,7 @@ import { send } from "../useGlassState.ts";
 import type { GlassNotificationView } from "../../shared/glassNotifications.ts";
 import { FeedCard } from "./OverlayFeedCard.tsx";
 import { ensureOverlayInteractive } from "../glassTextInteraction.ts";
+import { copyToClipboard } from "../useCopyToClipboard.ts";
 
 /** Copy the notification text to clipboard with a "paste into command bar" hint. */
 function useCopyNotification(notification: GlassNotificationView | null): {
@@ -15,7 +16,8 @@ function useCopyNotification(notification: GlassNotificationView | null): {
     if (!notification) return;
     const label = notification.title ? `${notification.title}: ` : "";
     const text = `${label}${notification.message}\n\nPaste this into the Glass command bar to get help.`;
-    void navigator.clipboard.writeText(text).then(() => {
+    void copyToClipboard(text).then((ok) => {
+      if (!ok) return;
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
@@ -45,11 +47,13 @@ export function GlassNotificationHost({
     enterInteractive();
     onChatHoverStart();
     ensureOverlayInteractive();
+    window.glass.setOverlayPointerOverNotification(true);
   };
 
   const handleLeave = (): void => {
     leaveInteractive();
     onChatHoverEnd();
+    window.glass.setOverlayPointerOverNotification(false);
   };
 
   const handlePointerDownCapture = (): void => {
@@ -90,8 +94,8 @@ export function GlassNotificationHost({
         compactNotice ? " glass-notification-host--compact" : ""
       }`}
       data-testid="glass-notification-host"
-      onMouseEnter={handleEnter}
-      onMouseLeave={handleLeave}
+      onPointerEnter={handleEnter}
+      onPointerLeave={handleLeave}
     >
       <div
         className={`glass-notification-host__card${
@@ -124,12 +128,8 @@ export function GlassNotificationHost({
                 onClick={copy}
               >
                 {copied ? (
-                  // Checkmark
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-                    <path d="M2 7l3.5 3.5L12 3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
+                  "Copied"
                 ) : (
-                  // Clipboard copy icon
                   <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
                     <rect x="4.5" y="1" width="7.5" height="9.5" rx="1.5" stroke="currentColor" strokeWidth="1.4"/>
                     <path d="M2 4.5H1.5A1.5 1.5 0 000 6v6.5A1.5 1.5 0 001.5 14H9a1.5 1.5 0 001.5-1.5V12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>

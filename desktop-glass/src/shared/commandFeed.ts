@@ -11,7 +11,15 @@ export type GlassCommandFeedKind =
   | "capture"
   | "transcript"
   | "error"
-  | "moment";
+  | "moment"
+  /** Glass terminal detected a non-zero exit code — shows fix suggestion + Fix it button */
+  | "terminal-fix"
+  /** /run <command> executed from the command bar — card is a handle for ShellOutputCard */
+  | "shell"
+  /** Build error detected in-stream from the Glass dock terminal */
+  | "build-error"
+  /** Design-to-code capture card — shows screenshot thumbnail + 4 quick-action buttons */
+  | "design-capture";
 
 export interface GlassCommandFeedItem {
   id: string;
@@ -26,6 +34,33 @@ export interface GlassCommandFeedItem {
   fullBody?: string;
   /** Listen mode — ties card to a moment; only one listen card visible at a time. */
   listenMomentId?: string;
+  // ── Terminal auto-fix fields ──────────────────────────────────────────────
+  /** The PTY session that produced the error (for terminal-fix cards). */
+  termId?: string;
+  /** The exact corrected command to type when "Fix it" is clicked. */
+  fixCommand?: string;
+  /** The original failing command (shown as context in the card). */
+  failedCommand?: string;
+  // ── /run shell output fields ──────────────────────────────────────────────
+  /** Key into GlassState.shellOutputs — used by ShellOutputCard to find streaming data. */
+  shellOutputId?: string;
+  // ── Fix injection fields ──────────────────────────────────────────────────
+  /**
+   * Absolute path to the file that was open in the editor when this response
+   * was generated. Set only when ⌘⇧G captured a code context with a resolved
+   * filePath. Used by the "Apply to file" button in the overlay.
+   */
+  codeFilePath?: string;
+  // ── Build monitor fields ──────────────────────────────────────────────────
+  /** Raw error text captured from the build output (for build-error cards). */
+  errorText?: string;
+  /** File paths referenced in the build error (for "Fix with AI" context). */
+  errorFilePaths?: string[];
+  // ── Design-to-code fields (#163) ─────────────────────────────────────────
+  /** data: URL screenshot thumbnail for design-capture cards. */
+  designImageDataUrl?: string;
+  /** Filename of the detected editor file shown on the design card. */
+  designDetectedFileName?: string;
 }
 
 export const MAX_COMMAND_FEED_ITEMS = 12;
@@ -39,6 +74,10 @@ export const COMMAND_FEED_TITLES: Record<GlassCommandFeedKind, string> = {
   transcript: "Transcript",
   error: "Warning",
   moment: "Saved moment",
+  "terminal-fix": "Glass Terminal",
+  shell: "Running",
+  "build-error": "Build error",
+  "design-capture": "Design to Code",
 };
 
 let feedSeq = 0;
@@ -55,6 +94,15 @@ export function createCommandFeedItem(
     prompt?: string;
     fullBody?: string;
     listenMomentId?: string;
+    termId?: string;
+    fixCommand?: string;
+    failedCommand?: string;
+    shellOutputId?: string;
+    codeFilePath?: string;
+    errorText?: string;
+    errorFilePaths?: string[];
+    designImageDataUrl?: string;
+    designDetectedFileName?: string;
   } = {},
 ): GlassCommandFeedItem {
   feedSeq += 1;
@@ -70,6 +118,15 @@ export function createCommandFeedItem(
     prompt: opts.prompt,
     fullBody: opts.fullBody,
     listenMomentId: opts.listenMomentId,
+    termId: opts.termId,
+    fixCommand: opts.fixCommand,
+    failedCommand: opts.failedCommand,
+    shellOutputId: opts.shellOutputId,
+    codeFilePath: opts.codeFilePath,
+    errorText: opts.errorText,
+    errorFilePaths: opts.errorFilePaths,
+    designImageDataUrl: opts.designImageDataUrl,
+    designDetectedFileName: opts.designDetectedFileName,
   };
 }
 

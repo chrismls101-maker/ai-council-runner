@@ -224,7 +224,8 @@ func cmdSetup() -> Int32 {
         kAudioAggregateDeviceSubDeviceListKey as String: subDevices,
         kAudioAggregateDeviceIsStackedKey as String: true,
         kAudioAggregateDeviceMasterSubDeviceKey as String: currentDefault.uid,
-        kAudioAggregateDeviceClockSourceKey as String: currentDefault.uid,
+        // kAudioAggregateDeviceClockSourceKey removed — not available in current macOS SDK;
+        // HAL selects the master sub-device's clock automatically.
     ]
 
     // 5. Create it

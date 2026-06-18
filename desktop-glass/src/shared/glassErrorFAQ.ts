@@ -27,6 +27,26 @@ interface GlassFAQEntry {
 }
 
 const FAQ: GlassFAQEntry[] = [
+  // ─── Glass terminal (PTY) ──────────────────────────────────────────────────
+  {
+    pattern: /posix_spawnp failed|glass terminal could not start|glass terminal failed to start/i,
+    answer: {
+      title: "Glass terminal could not start",
+      body: `The built-in dock terminal could not spawn your shell.
+
+**Most common fix (macOS):** node-pty's \`spawn-helper\` binary lost its executable permission during install.
+
+1. Run: \`npm run postinstall --prefix desktop-glass\`
+2. Restart Glass (\`npm run glass:dev\`)
+3. Open the dock terminal again (\`>_\`)
+
+**If that doesn't work:**
+- Confirm your shell exists: \`echo $SHELL\` (usually \`/bin/zsh\`)
+- Quit and reopen Glass completely
+- Reinstall deps: \`npm install\` from the repo root`,
+    },
+  },
+
   // ─── System audio: no signal ───────────────────────────────────────────────
   {
     pattern: /no system.audio signal detected|no.*system.audio.*signal|blackhole.*loopback.*audio is playing/i,

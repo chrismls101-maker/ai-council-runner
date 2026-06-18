@@ -1,34 +1,27 @@
 /**
  * IIVO Glass direct AI model configuration (text, vision, semantic, diagnostic).
- * Defaults to GPT-5.5-class models with fallback chain: primary → gpt-4.1 → gpt-4o.
+ * Defaults to Claude Sonnet with fallback chain: primary → claude-opus-4-6 → claude-sonnet-4-6.
  */
 
 import { MODELS } from "./models.js";
 
-export const GLASS_DEFAULT_MODEL = "gpt-5.5";
+export const GLASS_DEFAULT_MODEL = "claude-sonnet-4-6";
 
-/** Not compatible with Glass `/v1/chat/completions` route — excluded from probes and defaults. */
-export const GLASS_CHAT_MODEL_EXCLUDED = new Set([
-  "gpt-5.5-pro",
-  "gpt-5.5-pro-2026-04-23",
-]);
+/** Models excluded from the Glass chat route. */
+export const GLASS_CHAT_MODEL_EXCLUDED = new Set<string>([]);
 
 /** Probe / default order when env is unset (env override always wins first). */
 export const GLASS_CHAT_MODEL_CANDIDATES = [
-  "gpt-5.5",
-  "gpt-5.5-2026-04-23",
-  "gpt-5.4",
-  "gpt-5",
-  "gpt-5-chat-latest",
-  "gpt-4.1",
-  "gpt-4o",
+  "claude-sonnet-4-6",
+  "claude-haiku-4-5-20251001",
 ] as const;
 
 export const GLASS_VISION_MODEL_CANDIDATES = GLASS_CHAT_MODEL_CANDIDATES;
 
-export const GLASS_MODEL_FALLBACK_CHAIN = ["gpt-4.1", "gpt-4o"] as const;
+/** Fallback chain: sonnet fails → haiku (cheap + fast emergency net). Opus is NOT here — too expensive for a command bar fallback. */
+export const GLASS_MODEL_FALLBACK_CHAIN = ["claude-haiku-4-5-20251001"] as const;
 
-export const GLASS_MODEL_FINAL_FALLBACK = MODELS.openai.gpt4o;
+export const GLASS_MODEL_FINAL_FALLBACK = MODELS.anthropic.claudeSonnet4;
 
 export type GlassModelPurpose = "default" | "semantic" | "diagnostic";
 

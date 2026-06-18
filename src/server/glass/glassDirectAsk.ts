@@ -8,7 +8,7 @@ import {
   resolveGlassModelPrimary,
   type GlassModelPurpose,
 } from "../config/glassModels.js";
-import { callOpenAIWithModelChain, callOpenAIStreamingWithModelChain, ProviderError } from "../providers/openai.js";
+import { callAnthropicWithModelChain, callAnthropicStreamingWithModelChain, ProviderError, type AnthropicCallWithFallbackResult } from "../providers/anthropic.js";
 import type { GlassAskRequestBody, GlassAskResponseBody, GlassAskSessionPayload } from "./glassAskTypes.js";
 import { buildActiveListeningPromptBlock } from "./activeListeningPrompt.js";
 import { buildGlassLensContextBlock, type GlassAskLensContext } from "./glassLensContext.js";
@@ -215,12 +215,12 @@ export type GlassDirectAskCaller = (
   userPrompt: string,
   signal?: AbortSignal,
   purpose?: GlassModelPurpose,
-) => Promise<import("../providers/openai.js").OpenAICallWithFallbackResult>;
+) => Promise<AnthropicCallWithFallbackResult>;
 
 const defaultCaller: GlassDirectAskCaller = async (system, user, signal, purpose = "default") => {
   const selected = resolveGlassModelPrimary("text", purpose);
   const chain = buildGlassModelTryChain(selected);
-  const result = await callOpenAIWithModelChain(system, user, chain, signal, 900);
+  const result = await callAnthropicWithModelChain(system, user, chain, signal, 900);
   recordGlassModelRuntime("text", purpose, {
     requestedModel: result.requestedModel,
     selectedModel: result.selectedModel,
@@ -524,7 +524,7 @@ export function formatGlassDirectAnswer(
 }
 
 export function validateGlassDirectApiKey(): string[] {
-  return process.env.OPENAI_API_KEY?.trim() ? [] : ["OPENAI_API_KEY"];
+  return process.env.ANTHROPIC_API_KEY?.trim() ? [] : ["ANTHROPIC_API_KEY"];
 }
 
 export async function runGlassDirectAsk(
@@ -623,7 +623,7 @@ export async function runGlassDirectAskStream(
   const selected = resolveGlassModelPrimary("text", purpose);
   const chain = buildGlassModelTryChain(selected);
 
-  const result = await callOpenAIStreamingWithModelChain(
+  const result = await callAnthropicStreamingWithModelChain(
     GLASS_DIRECT_SYSTEM_PROMPT,
     userPrompt,
     chain,

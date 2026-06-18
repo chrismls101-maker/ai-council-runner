@@ -14,37 +14,19 @@ import { GlassUpdateOverlay } from "./GlassUpdateOverlay.tsx";
 import { GlassOnboardingOverlay } from "./GlassOnboardingOverlay.tsx";
 import { LiveTranslateCaptionsOverlay } from "./LiveTranslateCaptionsOverlay.tsx";
 import { useGlassNotification } from "./useGlassNotification.ts";
+import { TerminalFeedWidget } from "./TerminalFeedWidget.tsx";
 import { overlayNotificationBottomPx } from "../../shared/glassLayoutMath.ts";
 import { overlayFeedNotificationActive, overlayNoticeNotificationActive } from "../../shared/overlayPointerPolicy.ts";
 import { isLiveTranslateActive } from "../../shared/liveTranslateState.ts";
 
 const CARD_TTL_MS = 8_000;
 const MAX_CARDS = 4;
-/** Built-in primary display — locked; sits at dock edge (workArea bottom). */
+/** Built-in primary display — visual frame inset from overlay window bottom. */
 const PRIMARY_FRAME_BOTTOM_INSET_PX = 10;
-/** HDMI / external TV — same bottom alignment when Glass is on Display 2+. */
-const EXTERNAL_FRAME_BOTTOM_INSET_PX = 10;
 
-function overlayFrameBottomInsetPx(state: GlassState): number {
-  const displays = state.connectedDisplays;
-  if (!displays.length) return PRIMARY_FRAME_BOTTOM_INSET_PX;
-
-  const target = state.glassSettings.displayTarget;
-  const active =
-    displays.find((d) =>
-      target === "follow_mouse"
-        ? d.cursorInside
-        : typeof target === "number"
-          ? d.id === target
-          : d.isPrimary,
-    ) ?? displays.find((d) => d.isPrimary);
-
-  if (!active) return PRIMARY_FRAME_BOTTOM_INSET_PX;
-
-  if (active.internal === false) {
-    return EXTERNAL_FRAME_BOTTOM_INSET_PX;
-  }
-
+function overlayFrameBottomInsetPx(_state: GlassState): number {
+  // Decorative frame only — keep near the overlay bottom so the command bar
+  // (separate window) still sits inside the framed region.
   return PRIMARY_FRAME_BOTTOM_INSET_PX;
 }
 
@@ -98,15 +80,6 @@ function OverlayPassiveLayer({
       </div>
       <div className="overlay-glass-glow overlay-glass-glow--tl" aria-hidden="true" />
       <div className="overlay-glass-glow overlay-glass-glow--br" aria-hidden="true" />
-      <div className="overlay-badge">
-        <span className="overlay-badge__dot" aria-hidden="true" />
-        IIVO Glass active
-        {meetingsActive ? (
-          <span className="overlay-badge__mode"> · meetings</span>
-        ) : overlayMode === "insights" ? (
-          <span className="overlay-badge__mode"> · insights</span>
-        ) : null}
-      </div>
     </>
   );
 }
@@ -419,6 +392,16 @@ export function Overlay(): JSX.Element {
           runtime={state.liveTranslate}
           enterInteractive={enterInteractive}
           leaveInteractive={leaveInteractive}
+        />
+      ) : null}
+
+      {state.terminalWidgetVisible && state.liveTerminal ? (
+        <TerminalFeedWidget
+          feed={state.liveTerminal}
+          pos={state.terminalWidgetPos}
+          onClose={() => send({ type: "terminal-widget-toggle" })}
+          onPointerEnter={enterInteractive}
+          onPointerLeave={leaveInteractive}
         />
       ) : null}
     </div>

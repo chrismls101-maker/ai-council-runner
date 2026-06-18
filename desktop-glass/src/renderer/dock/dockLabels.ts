@@ -27,7 +27,9 @@ export type DockActionKey =
   | "overlay-mode"
   | "analyze-now"
   | "send-session"
-  | "open-in-iivo";
+  | "open-in-iivo"
+  | "terminal-open"
+  | "terminal-close";
 
 /** Human-readable label for each dock action. */
 export const DOCK_LABELS: Record<DockActionKey, string> = {
@@ -51,6 +53,8 @@ export const DOCK_LABELS: Record<DockActionKey, string> = {
   "analyze-now": "Analyze Now",
   "send-session": "Send Session",
   "open-in-iivo": "Open in IIVO",
+  "terminal-open": "Glass Terminal",
+  "terminal-close": "Hide terminal",
 };
 
 // ─── Conditional label helpers ────────────────────────────────────────────────
@@ -80,4 +84,9 @@ export function resolveDockOrientationLabel(vertical: boolean): string {
 /** "Send Session" vs "Send to IIVO" depending on whether a session is active. */
 export function resolveSendLabel(hasSession: boolean): string {
   return hasSession ? DOCK_LABELS["send-session"] : "Send to IIVO";
+}
+
+/** Terminal toggle label based on whether the terminal window is open. */
+export function resolveTerminalLabel(terminalOpen: boolean): string {
+  return terminalOpen ? DOCK_LABELS["terminal-close"] : DOCK_LABELS["terminal-open"];
 }

@@ -161,8 +161,11 @@ export async function askIivoGlassStream(
 
   if (signal?.aborted) throw new GlassAskCancelledError();
 
-  if (!finalResponse?.answer?.trim()) {
-    throw new Error("IIVO stream ended without a final answer.");
+  if (!finalResponse) {
+    throw new Error("IIVO connection was interrupted before a response arrived. The server may have restarted — please try again.");
+  }
+  if (!finalResponse.answer?.trim()) {
+    throw new Error("IIVO returned an empty answer.");
   }
 
   return finalResponse;

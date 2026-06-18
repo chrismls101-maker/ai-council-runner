@@ -482,7 +482,7 @@ export function buildWingmanReport(
             .slice(0, 2)
             .map((i) => `${i.response.slice(0, 80)}… (observed, not verified)`),
         ]
-      : ["No screen inspections were performed during this session"];
+      : ["No screen content was observed during this session — findings are not independently verified"];
 
   // What still needs checking
   const checklist = buildVerificationChecklist(session);

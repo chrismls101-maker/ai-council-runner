@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useCallback } from "react";
 import { ChromeRepositionOverlay } from "../ChromeRepositionOverlay.tsx";
 import { send, useGlassState } from "../useGlassState.ts";
 import { useChromeLockToggle } from "../useChromeLockToggle.ts";
@@ -13,6 +13,8 @@ import {
 } from "../../shared/glassModePresets.ts";
 import { MEETING_SUB_TYPE_LABELS } from "../../shared/meetingIntelligenceTypes.ts";
 import type { PanelTab } from "../../shared/types.ts";
+import { resolveChromeLockLabel, resolveTerminalLabel } from "./dockLabels.ts";
+import { GlassHoverTooltip } from "../components/GlassHoverTooltip.tsx";
 
 // ─── Mode colour tokens ───────────────────────────────────────────────────────
 const MODE_COLORS: Record<
@@ -32,8 +34,19 @@ export function Dock(): JSX.Element {
   const actionsRef = useRef<HTMLDivElement>(null);
   const stackRef = useRef<HTMLDivElement>(null);
 
+  const terminalOpen = state.glassDockTerminalOpen ?? false;
+  const terminalActive = !!state.glassDockTerminalId;
+
+  const handleTerminalToggle = useCallback((): void => {
+    if (terminalOpen) {
+      send({ type: "glass-terminal-close" });
+    } else {
+      send({ type: "glass-terminal-open" });
+    }
+  }, [terminalOpen]);
+
   const chromeLocked = state.glassSettings.chromeLayoutLocked !== false;
-  const toggleChromeLock = useChromeLockToggle(chromeLocked);
+  const toggleChromeLock = useChromeLockToggle();
   const vertical = state.glassSettings.dockOrientation === "vertical";
   useChromeWindowDrag(!chromeLocked, stackRef);
 
@@ -58,7 +71,7 @@ export function Dock(): JSX.Element {
 
   const meetingIntel = activeMode === "meetings" ? state.meetingIntelligence : undefined;
 
-  useDockResize(dockRef, actionsRef, [
+  useDockResize(dockRef, stackRef, actionsRef, [
     sessionStatus,
     state.panelVisible,
     sessionLive,
@@ -69,6 +82,8 @@ export function Dock(): JSX.Element {
     vertical,
     !!meetingIntel,
     meetingIntel?.classification?.subType,
+    terminalOpen,
+    terminalActive,
   ]);
 
   const openPanel = (tab: PanelTab = "copilot"): void => {
@@ -95,7 +110,7 @@ export function Dock(): JSX.Element {
 
   return (
     <div
-      className={`dock dock--v3 dock--minimal${vertical ? " dock--vertical" : ""}${audioLive ? " dock--listening" : ""}${!chromeLocked ? " dock--unlocked" : ""}`}
+      className={`dock dock--v3 dock--minimal${vertical ? " dock--vertical" : ""}${audioLive ? " dock--listening" : ""}${terminalOpen ? " dock--terminal-open" : ""}${!chromeLocked ? " dock--unlocked" : ""}`}
       ref={dockRef}
       style={dockStyle}
       data-testid="glass-dock"
@@ -103,10 +118,10 @@ export function Dock(): JSX.Element {
       <div
         className={`dock-stack${!chromeLocked ? " dock-stack--unlocked" : ""}`}
         ref={stackRef}
-        title={chromeLocked ? undefined : "Layout unlocked — drag to move, then lock in Panel › Setup"}
+        title={chromeLocked ? undefined : "Layout unlocked — drag to move, then lock"}
       >
+        <div className="dock__chrome">
         {!chromeLocked ? <ChromeRepositionOverlay /> : null}
-
         <div className="dock__actions" ref={actionsRef}>
 
           {/* ── Zone 1: Identity ── */}
@@ -224,7 +239,26 @@ export function Dock(): JSX.Element {
             📝
           </button>
 
-          {/* Emergency stop — only visible when something is running */}
+          {/* Terminal toggle — always visible */}
+          <GlassHoverTooltip label={resolveTerminalLabel(terminalOpen)}>
+            <button
+              type="button"
+              className={`gbtn dock__btn-tool dock__btn-terminal${terminalOpen ? " dock__btn-terminal--active" : ""}`}
+              data-testid="glass-dock-terminal-toggle"
+              aria-label={resolveTerminalLabel(terminalOpen)}
+              onClick={handleTerminalToggle}
+            >
+              {/* Live indicator — visible while open, pulses when the PTY session is active */}
+              {terminalOpen && (
+                <span
+                  className={`dock__terminal-dot${terminalActive ? " dock__terminal-dot--live" : ""}`}
+                  aria-hidden="true"
+                />
+              )}
+              {">_"}
+            </button>
+          </GlassHoverTooltip>
+
           {anythingActive && (
             <button
               type="button"
@@ -240,8 +274,22 @@ export function Dock(): JSX.Element {
             </button>
           )}
 
+          <span className="dock__sep dock__sep--lock" aria-hidden="true" />
+
+          <button
+            type="button"
+            className={`gbtn dock__btn-tool dock__btn-chrome-lock${chromeLocked ? "" : " dock__btn-chrome-lock--unlocked"}`}
+            data-testid="glass-dock-chrome-lock"
+            data-chrome-no-drag
+            title={resolveChromeLockLabel(chromeLocked)}
+            aria-label={resolveChromeLockLabel(chromeLocked)}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={toggleChromeLock}
+          >
+            {chromeLocked ? "🔒" : "🔓"}
+          </button>
+
         </div>
-      </div>
 
       {/* ── Meeting intel strip — second row, meetings mode only ── */}
       {meetingIntel && (
@@ -273,7 +321,9 @@ export function Dock(): JSX.Element {
         </button>
       )}
 
-      <span className="dock-led-rim ui-led-line" aria-hidden="true" />
+        <span className="dock-led-rim ui-led-line" aria-hidden="true" />
+        </div>
+      </div>
     </div>
   );
 }

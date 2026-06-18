@@ -4,8 +4,12 @@ import {
   clampDockSize,
   dockSizeLimits,
   commandBarLayoutFromDisplay,
+  commandBarLayoutForStack,
   DOCK_TOP_MARGIN,
   dockLayoutFromDisplay,
+  dockXAlignedToCommandBar,
+  glassLayoutContentBottomY,
+  OVERLAY_CHAT_STACK_FALLBACK_PX,
   overlayLayoutFromDisplay,
   panelLayoutFromDisplay,
   type DisplayLayoutContext,
@@ -31,7 +35,7 @@ test("overlay uses selected display workArea", () => {
   assert.equal(layout.x, macBook13.workArea.x);
   assert.equal(layout.y, macBook13.workArea.y);
   assert.equal(layout.width, macBook13.workArea.width);
-  assert.equal(layout.height, macBook13.workArea.height);
+  assert.equal(layout.height, glassLayoutContentBottomY(macBook13) - macBook13.workArea.y);
 });
 
 test("panel uses workArea and responsive width", () => {
@@ -65,6 +69,15 @@ test("dock compact preset is horizontally centered and top-anchored", () => {
   // Dock sits at the top of the work area.
   assert.equal(layout.y, macBook13.workArea.y + DOCK_TOP_MARGIN);
   assert.ok(layout.width <= 720);
+});
+
+test("dock X aligns to command bar when bar uses a custom X", () => {
+  const bar = commandBarLayoutForStack(macBook13, OVERLAY_CHAT_STACK_FALLBACK_PX, 900);
+  const dockW = 320;
+  const dockX = dockXAlignedToCommandBar(macBook13, dockW, {
+    commandBarCustomX: 900,
+  });
+  assert.equal(dockX + dockW / 2, bar.x + bar.width / 2);
 });
 
 test("dock floating preset is horizontally centered and top-anchored", () => {

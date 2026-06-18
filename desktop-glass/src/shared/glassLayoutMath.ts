@@ -62,7 +62,14 @@ const DOCK_DEFAULT_MAX_WIDTH = 720;
 const COMMAND_BAR_MAX_WIDTH = 760;
 /** Max bar window height when Lens / voice accessories expand the stack. */
 export const COMMAND_BAR_HEIGHT = 280;
-export const COMMAND_BAR_BOTTOM_MARGIN = 28;
+/** Gap above the macOS dock — default command bar sits a little higher on first install. */
+export const COMMAND_BAR_BOTTOM_MARGIN = 48;
+/** macOS built-in display often reports workArea flush with screen bottom (dock overlays windows). */
+export const MACOS_DOCK_DEFAULT_CLEARANCE_PX = 72;
+/** Composer row block height (min-height 58 + shell padding 19). */
+export const COMMAND_BAR_COMPOSER_ROW_PX = 77;
+/** Room below the stack for composer box-shadow (excluded from ResizeObserver height). */
+export const COMMAND_BAR_SHADOW_BOTTOM_PX = 18;
 /** `.command-root` padding-bottom — stack sits above this inset inside the bar window. */
 export const COMMAND_BAR_ROOT_BOTTOM_PADDING_PX = 4;
 /** Extra headroom above the measured stack inside the bar window (Lens panel, etc.). */
@@ -76,13 +83,20 @@ export const DOCK_TOP_MARGIN = 12;
 export const OVERLAY_CHAT_STACK_GAP_PX = 14;
 
 /** Fallback stack height when the command bar has not reported measured height yet. */
-export const OVERLAY_CHAT_STACK_FALLBACK_PX = 58;
+export const OVERLAY_CHAT_STACK_FALLBACK_PX = COMMAND_BAR_COMPOSER_ROW_PX;
+
+/** Padding inside the command bar window around the measured stack. */
+export function commandBarWindowChromePaddingPx(): number {
+  return (
+    COMMAND_BAR_ROOT_BOTTOM_PADDING_PX +
+    COMMAND_BAR_STACK_TOP_PADDING_PX +
+    COMMAND_BAR_SHADOW_BOTTOM_PX
+  );
+}
 
 /** Compact bar window — composer row only (no 280px invisible drag dead zone). */
 export const COMMAND_BAR_MIN_WINDOW_HEIGHT =
-  OVERLAY_CHAT_STACK_FALLBACK_PX +
-  COMMAND_BAR_ROOT_BOTTOM_PADDING_PX +
-  COMMAND_BAR_STACK_TOP_PADDING_PX;
+  COMMAND_BAR_COMPOSER_ROW_PX + commandBarWindowChromePaddingPx();
 
 /**
  * Distance from the overlay work-area bottom to the top of the command bar stack
@@ -142,14 +156,36 @@ export function displayBottomReserve(ctx: DisplayLayoutContext): number {
   return Math.max(0, boundsBottom - workBottom);
 }
 
-/** Visible desktop region — align overlay to workArea so the frame stays on-screen. */
+/** Dock / system strip clearance — built-in Mac panels often omit this from workArea. */
+export function macDockClearancePx(ctx: DisplayLayoutContext): number {
+  const dockStrip = displayBottomReserve(ctx);
+  if (dockStrip >= 24) {
+    return dockStrip;
+  }
+  return MACOS_DOCK_DEFAULT_CLEARANCE_PX;
+}
+
+/** Bottom of the interactive Glass frame (overlay) — sits above the dock strip. */
+export function glassLayoutContentBottomY(ctx: DisplayLayoutContext): number {
+  const boundsBottom = ctx.bounds.y + ctx.bounds.height;
+  return boundsBottom - macDockClearancePx(ctx);
+}
+
+/** Visible desktop region — align overlay above the macOS dock, not under it. */
 export function overlayLayoutFromDisplay(ctx: DisplayLayoutContext): OverlayLayout {
+  const contentBottom = glassLayoutContentBottomY(ctx);
   return {
     x: ctx.workArea.x,
     y: ctx.workArea.y,
     width: ctx.workArea.width,
-    height: ctx.workArea.height,
+    height: Math.max(0, contentBottom - ctx.workArea.y),
   };
+}
+
+/** Bottom Y for Glass chrome (command bar window bottom edge) above the macOS dock. */
+export function commandBarMaxBottomY(ctx: DisplayLayoutContext): number {
+  const overlay = overlayLayoutFromDisplay(ctx);
+  return overlay.y + overlay.height - COMMAND_BAR_BOTTOM_MARGIN;
 }
 
 export function panelLayoutFromDisplay(
@@ -199,35 +235,77 @@ export function listenNotesPadLayoutFromDisplay(ctx: DisplayLayoutContext): Pane
 /** @deprecated Use listenNotesPadLayoutFromDisplay */
 export const listenNotesPanelLayoutFromDisplay = listenNotesPadLayoutFromDisplay;
 
-/** Bar window height that fits a measured accessory stack without clipping the top. */
+/** Bar window height that fits a measured accessory stack without clipping the shell or shadow. */
 export function commandBarWindowHeightForStack(stackHeightPx: number): number {
-  const stack = Math.max(0, Math.round(stackHeightPx));
-  if (stack <= 0) return COMMAND_BAR_MIN_WINDOW_HEIGHT;
-  const fitted = stack + COMMAND_BAR_ROOT_BOTTOM_PADDING_PX + COMMAND_BAR_STACK_TOP_PADDING_PX;
-  return Math.max(COMMAND_BAR_MIN_WINDOW_HEIGHT, fitted);
+  const stack = Math.max(COMMAND_BAR_COMPOSER_ROW_PX, Math.round(stackHeightPx));
+  return stack + commandBarWindowChromePaddingPx();
 }
 
-/** Bottom-centered command bar inside the visible work area. */
-export function commandBarLayoutFromDisplay(ctx: DisplayLayoutContext): CommandBarLayout {
+/** Keep the command bar window fully inside the work area (bottom-anchored safe inset). */
+export function clampCommandBarWindowBounds(
+  bounds: LayoutRect,
+  ctx: DisplayLayoutContext,
+): LayoutRect {
+  const maxBottom = commandBarMaxBottomY(ctx);
+  const minY = ctx.workArea.y + EDGE_MARGIN;
+  let y = bounds.y;
+  if (y + bounds.height > maxBottom) {
+    y = maxBottom - bounds.height;
+  }
+  if (y < minY) {
+    y = minY;
+  }
+  const minX = ctx.workArea.x + EDGE_MARGIN;
+  const maxX = ctx.workArea.x + ctx.workArea.width - bounds.width - EDGE_MARGIN;
+  const x = Math.round(Math.max(minX, Math.min(bounds.x, maxX)));
+  return {
+    x,
+    y: Math.round(y),
+    width: bounds.width,
+    height: bounds.height,
+  };
+}
+
+/** Bottom-centered command bar for a measured stack height; optional custom X when locked. */
+export function commandBarLayoutForStack(
+  ctx: DisplayLayoutContext,
+  stackHeightPx: number,
+  customX?: number | null,
+): CommandBarLayout {
   const width = Math.min(
     COMMAND_BAR_MAX_WIDTH,
     Math.max(320, ctx.workArea.width - COMMAND_BAR_SIDE_MARGIN),
   );
-  const height = commandBarWindowHeightForStack(OVERLAY_CHAT_STACK_FALLBACK_PX);
-  const x = ctx.workArea.x + Math.round((ctx.workArea.width - width) / 2);
-  const y = ctx.workArea.y + ctx.workArea.height - height - COMMAND_BAR_BOTTOM_MARGIN;
+  const height = commandBarWindowHeightForStack(stackHeightPx);
+  const defaultX = ctx.workArea.x + Math.round((ctx.workArea.width - width) / 2);
+  const x =
+    customX != null
+      ? Math.round(
+          Math.max(
+            ctx.workArea.x + EDGE_MARGIN,
+            Math.min(customX, ctx.workArea.x + ctx.workArea.width - width - EDGE_MARGIN),
+          ),
+        )
+      : defaultX;
+  const y = commandBarMaxBottomY(ctx) - height;
+  return clampCommandBarWindowBounds({ x, y, width, height }, ctx);
+}
 
-  return { x, y, width, height };
+/** Bottom-centered command bar inside the visible work area. */
+export function commandBarLayoutFromDisplay(ctx: DisplayLayoutContext): CommandBarLayout {
+  return commandBarLayoutForStack(ctx, OVERLAY_CHAT_STACK_FALLBACK_PX);
 }
 
 export type DockClampOptions = {
   minWidth?: number;
   /** Vertical dock stacks every action — allow the full height cap, not the horizontal 25% limit. */
   vertical?: boolean;
+  /** Built-in terminal dropdown needs more vertical room than the compact dock pill. */
+  terminalOpen?: boolean;
 };
 
-function dockMaxHeight(ctx: DisplayLayoutContext, vertical?: boolean): number {
-  if (vertical) {
+function dockMaxHeight(ctx: DisplayLayoutContext, vertical?: boolean, terminalOpen?: boolean): number {
+  if (vertical || terminalOpen) {
     return DOCK_MAX_HEIGHT_CAP;
   }
   return Math.min(
@@ -241,7 +319,7 @@ export function dockSizeLimits(ctx: DisplayLayoutContext, options?: DockClampOpt
     minWidth: DOCK_MIN_WIDTH,
     minHeight: DOCK_MIN_HEIGHT,
     maxWidth: Math.max(DOCK_MIN_WIDTH, ctx.workArea.width - EDGE_MARGIN * 2),
-    maxHeight: dockMaxHeight(ctx, options?.vertical),
+    maxHeight: dockMaxHeight(ctx, options?.vertical, options?.terminalOpen),
   };
 }
 
@@ -260,7 +338,38 @@ export function clampDockSize(
 }
 
 function dockAnchorX(ctx: DisplayLayoutContext, _preset: GlassLayoutPreset, width: number): number {
-  return ctx.workArea.x + Math.round((ctx.workArea.width - width) / 2);
+  return dockXAlignedToCommandBar(ctx, width);
+}
+
+/** Horizontal X for a dock window so its center matches the command bar center. */
+export function dockXAlignedToCommandBar(
+  ctx: DisplayLayoutContext,
+  dockWidth: number,
+  options?: {
+    commandBarStackHeightPx?: number;
+    commandBarCustomX?: number | null;
+    commandBarCenterX?: number;
+  },
+): number {
+  const centerX =
+    options?.commandBarCenterX ??
+    (() => {
+      const bar = commandBarLayoutForStack(
+        ctx,
+        options?.commandBarStackHeightPx ?? OVERLAY_CHAT_STACK_FALLBACK_PX,
+        options?.commandBarCustomX,
+      );
+      return bar.x + bar.width / 2;
+    })();
+  return Math.round(
+    Math.max(
+      ctx.workArea.x + EDGE_MARGIN,
+      Math.min(
+        centerX - dockWidth / 2,
+        ctx.workArea.x + ctx.workArea.width - dockWidth - EDGE_MARGIN,
+      ),
+    ),
+  );
 }
 
 /** Vertical center of the command bar window (dock aligns to this Y). */
@@ -309,8 +418,9 @@ export function repositionDockInWorkArea(
   current: LayoutRect,
   nextWidth: number,
   nextHeight: number,
+  clampOptions?: DockClampOptions,
 ): LayoutRect {
-  const { width, height } = clampDockSize(ctx, nextWidth, nextHeight);
+  const { width, height } = clampDockSize(ctx, nextWidth, nextHeight, clampOptions);
   const layout = dockLayoutFromDisplay(ctx, preset, width, height);
 
   const wasDefaultAligned =

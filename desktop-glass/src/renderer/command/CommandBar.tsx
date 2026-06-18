@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { send, useGlassState } from "../useGlassState.ts";
 import { ChromeRepositionOverlay } from "../ChromeRepositionOverlay.tsx";
 import { ensureCommandBarClickable, useChromeLockToggle } from "../useChromeLockToggle.ts";
+import { GlassPowersPalette } from "./GlassPowersPalette.tsx";
 import { useChromeWindowDrag } from "../useChromeWindowDrag.ts";
 import { useTranscriptionContext } from "../TranscriptionProvider.tsx";
 import { VoiceModePanel } from "./VoiceModePanel.tsx";
@@ -10,7 +11,9 @@ import { CommandMicIcon } from "./CommandMicIcon.tsx";
 import { CommandSendIcon, CommandStopIcon } from "./CommandSendIcon.tsx";
 import { CommandTranslateIcon } from "./CommandTranslateIcon.tsx";
 import { CommandLensIcon } from "./CommandLensIcon.tsx";
+import { CommandDesignIcon } from "./CommandDesignIcon.tsx";
 import { GlassHoverTooltip } from "../components/GlassHoverTooltip.tsx";
+import { GlassAwarenessStrip } from "./GlassAwarenessStrip.tsx";
 import type { TranscriptionMode } from "../../shared/audioCaptureTypes.ts";
 import { useVoiceMode } from "../useVoiceMode.ts";
 import {
@@ -289,7 +292,7 @@ export function CommandBar(): JSX.Element {
   }, [lensPage]);
 
   const chromeLocked = state.glassSettings.chromeLayoutLocked !== false;
-  const toggleChromeLock = useChromeLockToggle(chromeLocked);
+  const toggleChromeLock = useChromeLockToggle();
   useChromeWindowDrag(!chromeLocked, stackRef);
 
   useEffect(() => {
@@ -365,7 +368,9 @@ export function CommandBar(): JSX.Element {
     ) : null;
 
   const hasAccessories = Boolean(
-    screenContextLine ||
+    state.workingContext ||
+      state.activeApp ||
+      screenContextLine ||
       voiceActive ||
       showSecondary ||
       lensOpen ||
@@ -374,13 +379,14 @@ export function CommandBar(): JSX.Element {
 
   return (
     <div className="command-root">
+      {/* Powers palette — renders above the command stack when ⌘⇧P is pressed */}
+      <GlassPowersPalette />
+
       <div
         ref={stackRef}
         className={`command-bar-stack${!chromeLocked ? " command-bar-stack--unlocked" : ""}`}
         data-testid="glass-command-bar-stack"
       >
-        {!chromeLocked ? <ChromeRepositionOverlay /> : null}
-
         {hasAccessories ? (
           <div className="command-bar-accessories" data-testid="glass-command-bar-accessories">
             {screenContextLine ? (
@@ -512,6 +518,7 @@ export function CommandBar(): JSX.Element {
                 ) : null}
               </div>
             ) : null}
+            <GlassAwarenessStrip />
           </div>
         ) : null}
 
@@ -568,6 +575,12 @@ export function CommandBar(): JSX.Element {
           }
           onPointerDownCapture={prepareGlassTextPointerDown}
         >
+          {!chromeLocked ? <ChromeRepositionOverlay /> : null}
+          {!chromeLocked ? (
+            <div className="command-bar__drag" aria-hidden="true">
+              <span className="command-bar__drag-grip" />
+            </div>
+          ) : null}
           <div className="command-bar__row composer-main">
             <button
               type="button"
@@ -615,7 +628,7 @@ export function CommandBar(): JSX.Element {
                             ? "Looking…"
                             : askPending
                               ? "IIVO is thinking…"
-                              : lensPlaceholder ?? "Ask IIVO while you work…"
+                              : lensPlaceholder ?? (state.workingContext ? `Watching: ${state.workingContext}` : "Ask IIVO while you work…")
                 }
                 disabled={askPending || (transcribing && !translateActive)}
                 onChange={(e) => {
@@ -650,6 +663,20 @@ export function CommandBar(): JSX.Element {
                   onMouseEnter={ensureCommandBarClickable}
                 >
                   <CommandTranslateIcon />
+                </button>
+              </GlassHoverTooltip>
+
+              <GlassHoverTooltip label="Design to Code — capture screen, generate component">
+                <button
+                  type="button"
+                  data-testid="glass-command-design"
+                  className="command-design-btn"
+                  aria-label="Design to Code"
+                  onClick={() => send({ type: "design-capture" })}
+                  onPointerDown={ensureCommandBarClickable}
+                  onMouseEnter={ensureCommandBarClickable}
+                >
+                  <CommandDesignIcon />
                 </button>
               </GlassHoverTooltip>
 
@@ -704,9 +731,13 @@ export function CommandBar(): JSX.Element {
                 <button
                   type="button"
                   data-testid="glass-command-chrome-lock"
+                  data-chrome-no-drag
                   className={`command-chrome-lock composer-icon-btn${chromeLocked ? " command-chrome-lock--locked" : " command-chrome-lock--unlocked"}`}
                   aria-label={chromeLocked ? "Unlock layout" : "Lock layout"}
-                  onPointerDown={ensureCommandBarClickable}
+                  onPointerDown={(event) => {
+                    event.stopPropagation();
+                    ensureCommandBarClickable();
+                  }}
                   onMouseEnter={ensureCommandBarClickable}
                   onClick={toggleChromeLock}
                 >

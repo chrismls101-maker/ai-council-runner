@@ -143,8 +143,13 @@ export class GlassLayoutManager {
     return clampDockSize(this.getDisplay(), width, height, clampOptions);
   }
 
-  repositionDock(current: Electron.Rectangle, nextWidth: number, nextHeight: number): Electron.Rectangle {
-    return repositionDockInWorkArea(this.getDisplay(), this.preset, current, nextWidth, nextHeight);
+  repositionDock(
+    current: Electron.Rectangle,
+    nextWidth: number,
+    nextHeight: number,
+    clampOptions?: import("../shared/glassLayoutMath.ts").DockClampOptions,
+  ): Electron.Rectangle {
+    return repositionDockInWorkArea(this.getDisplay(), this.preset, current, nextWidth, nextHeight, clampOptions);
   }
 
   onDisplayChanged(callback: () => void): void {

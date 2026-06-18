@@ -35,6 +35,7 @@ import type { WingmanMemoryState, WingmanSessionRecord } from "../../shared/wing
 import { formatSessionAge, formatSessionDuration } from "../../shared/wingmanMemory.ts";
 import type { AgentProxyState } from "../../shared/ipc.ts";
 import { AgentProxyConsentModal } from "./AgentProxyConsentModal.tsx";
+import { CopyButton } from "../components/CopyButton.tsx";
 import {
   reviewDecisionLabel,
   reviewDecisionToken,
@@ -51,6 +52,7 @@ interface WingmanPanelProps {
   agentProxy: AgentProxyState;
   githubPATConfigured: boolean;
   githubTokenInvalid: boolean;
+  terminalWidgetVisible: boolean;
   detectedApp?: string;
 }
 
@@ -488,13 +490,16 @@ function GitHubPATSection({
       <div className="wm-hb-gh-header">
         <div className="wm-hb-gh-label">GitHub</div>
         {(showConnected || savedFeedback) && (
-          <div className={`wm-hb-gh-status ${savedFeedback ? "wm-hb-gh-status--saved" : "wm-hb-gh-status--ok"}`}>
+          <div
+            className={`wm-hb-gh-status ${savedFeedback ? "wm-hb-gh-status--saved" : "wm-hb-gh-status--ok"}`}
+            data-testid={savedFeedback ? "wingman-github-pat-status-saved" : "wingman-github-pat-status-connected"}
+          >
             <span className="wm-hb-gh-status-dot" />
             {savedFeedback ? "Saved" : "Connected"}
           </div>
         )}
         {tokenInvalid && (
-          <div className="wm-hb-gh-status wm-hb-gh-status--warn">
+          <div className="wm-hb-gh-status wm-hb-gh-status--warn" data-testid="wingman-github-pat-status-invalid">
             <span className="wm-hb-gh-status-dot" />
             Token rejected
           </div>
@@ -511,6 +516,7 @@ function GitHubPATSection({
             <button
               type="button"
               className="wm-hb-gh-btn-secondary"
+              data-testid="wingman-github-pat-update-btn"
               onClick={() => { setIsEditing(true); setConfirmRemove(false); }}
             >
               Update token
@@ -521,6 +527,7 @@ function GitHubPATSection({
                 <button
                   type="button"
                   className="wm-hb-gh-btn-danger"
+                  data-testid="wingman-github-pat-confirm-remove-btn"
                   onClick={() => {
                     send({ type: "wingman-github-pat-clear" });
                     setConfirmRemove(false);
@@ -531,6 +538,7 @@ function GitHubPATSection({
                 <button
                   type="button"
                   className="wm-hb-gh-btn-ghost"
+                  data-testid="wingman-github-pat-cancel-remove-btn"
                   onClick={() => setConfirmRemove(false)}
                 >
                   Cancel
@@ -540,6 +548,7 @@ function GitHubPATSection({
               <button
                 type="button"
                 className="wm-hb-gh-btn-remove"
+                data-testid="wingman-github-pat-remove-btn"
                 onClick={() => setConfirmRemove(true)}
               >
                 Remove
@@ -558,6 +567,7 @@ function GitHubPATSection({
           <button
             type="button"
             className="wm-hb-gh-btn-connect"
+            data-testid="wingman-github-pat-connect-btn"
             onClick={() => setIsEditing(true)}
           >
             Connect GitHub
@@ -567,13 +577,14 @@ function GitHubPATSection({
 
       {/* Token-invalid warning banner */}
       {tokenInvalid && (
-        <div className="wm-hb-gh-warn-banner" role="alert">
+        <div className="wm-hb-gh-warn-banner" role="alert" data-testid="wingman-github-pat-warn-banner">
           {dismissedInvalid ? (
             <>
               Token was rejected (401).{" "}
               <button
                 type="button"
                 className="wm-hb-gh-inline-reopen"
+                data-testid="wingman-github-pat-inline-reopen-btn"
                 onClick={() => { setDismissedInvalid(false); setIsEditing(true); }}
               >
                 Update token
@@ -642,6 +653,7 @@ function GitHubPATSection({
             <button
               type="button"
               className="wm-hb-gh-btn-ghost"
+              data-testid="wingman-github-pat-cancel-btn"
               onClick={handleCancel}
               disabled={saving}
             >
@@ -1042,13 +1054,13 @@ function ReportView({
         {report.notVerified.length > 0 && (
           <div className="wm-hb-rsec" data-testid="wingman-report-not-verified">
             <div className="wm-hb-rslbl">Could not verify</div>
-            <div className="wm-hb-uv">
+            <ul className="wm-hb-uv">
               {report.notVerified.map((item, i) => (
-                <div key={i} className="wm-hb-uvitem">
+                <li key={i} className="wm-hb-uvitem">
                   {item}
-                </div>
+                </li>
               ))}
-            </div>
+            </ul>
           </div>
         )}
 
@@ -1127,6 +1139,7 @@ export function WingmanPanel({
   agentProxy,
   githubPATConfigured,
   githubTokenInvalid,
+  terminalWidgetVisible,
   detectedApp,
 }: WingmanPanelProps): JSX.Element {
   const [goalInput, setGoalInput] = useState("");
@@ -1143,6 +1156,8 @@ export function WingmanPanel({
     setAddingNote(false);
     setCustomPrompt("");
     setPromptingInspect(false);
+    // Clear the report from main-process state so the panel transitions to inactive.
+    send({ type: "wingman-new-session" });
   }
 
   // ── Consent modal (overlay — shown before proxy starts) ──────────────────────
@@ -1452,6 +1467,16 @@ export function WingmanPanel({
           >
             {session.terminalWatching ? "On" : "Off"}
           </button>
+          <button
+            type="button"
+            className={terminalWidgetVisible ? "wm-hb-terminal-btn wm-hb-terminal-btn--active" : "wm-hb-terminal-btn"}
+            data-testid="wingman-terminal-widget-btn"
+            title={terminalWidgetVisible ? "Hide terminal overlay" : "Show terminal overlay"}
+            onClick={() => send({ type: "terminal-widget-toggle" })}
+          >
+            <i className="ti ti-layout-bottombar" aria-hidden="true" />
+            Terminal
+          </button>
         </div>
 
         {/* Agent proxy toggle */}
@@ -1459,18 +1484,13 @@ export function WingmanPanel({
           <i className="ti ti-api" aria-hidden="true" />
           <span className="wm-hb-tlbl">Agent interception</span>
           {agentProxy.running && (
-            <button
-              type="button"
+            <CopyButton
               className="wm-hb-proxy-copy"
               data-testid="wingman-agent-proxy-copy-env"
-              onClick={() =>
-                navigator.clipboard.writeText(
-                  `ANTHROPIC_BASE_URL=http://localhost:${agentProxy.port}`,
-                )
-              }
+              text={`ANTHROPIC_BASE_URL=http://localhost:${agentProxy.port}`}
             >
               Copy env
-            </button>
+            </CopyButton>
           )}
           <button
             type="button"

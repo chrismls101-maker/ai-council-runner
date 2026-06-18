@@ -92,9 +92,15 @@ const fallbackState: GlassState = {
     running: false,
     port: 7421,
     showConsentModal: false,
+    capturedCallCount: 0,
   },
   githubPATConfigured: false,
   githubTokenInvalid: false,
+  liveTerminal: null,
+  terminalWidgetVisible: false,
+  terminalWidgetPos: { x: 20, y: 60 },
+  glassDockTerminalOpen: false,
+  glassDockTerminalId: undefined,
 };
 
 export function useGlassState(): GlassState {

@@ -59,8 +59,22 @@ const glassApi = {
   setOverlayNotificationActive(active: boolean): void {
     ipcRenderer.send(IPC.overlayNotificationActive, active);
   },
+  setOverlayPointerOverNotification(over: boolean): void {
+    ipcRenderer.send(IPC.overlayPointerOverNotification, over);
+  },
   resizeDock(width: number, height: number): void {
     ipcRenderer.send(IPC.resizeDock, width, height);
+  },
+  resizeTerminal(width: number, height: number): void {
+    ipcRenderer.send(IPC.resizeTerminal, width, height);
+  },
+  dismissTerminalWindow(): void {
+    ipcRenderer.send(IPC.dismissTerminalWindow);
+  },
+  onTerminalWindowShown(listener: () => void): () => void {
+    const handler = (): void => listener();
+    ipcRenderer.on(IPC.terminalWindowShown, handler);
+    return () => ipcRenderer.removeListener(IPC.terminalWindowShown, handler);
   },
   getE2eExternalUrls(): Promise<string[]> {
     return ipcRenderer.invoke(IPC.e2eGetExternalUrls) as Promise<string[]>;
@@ -115,6 +129,28 @@ const glassApi = {
     systemAudioDetail?: string;
   }): Promise<{ ok: boolean }> {
     return ipcRenderer.invoke(IPC.e2eSetCaptureProbes, payload) as Promise<{ ok: boolean }>;
+  },
+  // ── Built-in terminal (PTY) ─────────────────────────────────────────────────
+  /** Subscribe to PTY output data from main process. Returns unsubscribe fn. */
+  onPtyData(listener: (termId: string, data: string) => void): () => void {
+    const handler = (_event: unknown, termId: string, data: string): void =>
+      listener(termId, data);
+    ipcRenderer.on(IPC.ptyData, handler);
+    return () => ipcRenderer.removeListener(IPC.ptyData, handler);
+  },
+  /** Send keystroke/paste data to a PTY session. High-frequency, raw channel. */
+  sendPtyInput(termId: string, data: string): void {
+    ipcRenderer.send(IPC.ptyInput, termId, data);
+  },
+  /** Notify main process that the terminal was resized. */
+  sendPtyResize(termId: string, cols: number, rows: number): void {
+    ipcRenderer.send(IPC.ptyResize, termId, cols, rows);
+  },
+  replayPtySession(termId: string): Promise<string> {
+    return ipcRenderer.invoke(IPC.ptyReplay, termId) as Promise<string>;
+  },
+  writeClipboard(text: string): Promise<boolean> {
+    return ipcRenderer.invoke(IPC.writeClipboard, text) as Promise<boolean>;
   },
 };
 

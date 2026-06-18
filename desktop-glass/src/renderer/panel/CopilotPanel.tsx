@@ -362,6 +362,7 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
           agentProxy={state.agentProxy}
           githubPATConfigured={state.githubPATConfigured}
           githubTokenInvalid={state.githubTokenInvalid}
+          terminalWidgetVisible={state.terminalWidgetVisible}
           detectedApp={
             state.wingman.session?.appSnapshots.at(-1)?.app ??
             state.windowContext.status === "available" ? (state.windowContext as { status: "available"; app: string }).app : undefined

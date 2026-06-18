@@ -4,6 +4,7 @@ import {
   pickGlassNotification,
   shouldRaiseOverlayForNotifications,
 } from "../shared/glassNotifications.ts";
+import { lookupGlassErrorAnswer } from "../shared/glassErrorFAQ.ts";
 import type { GlassCommandFeedItem } from "../shared/commandFeed.ts";
 import { createCommandFeedItem } from "../shared/commandFeed.ts";
 
@@ -64,30 +65,26 @@ test("shouldRaiseOverlayForNotifications raises when any source active", () => {
   assert.equal(
     shouldRaiseOverlayForNotifications({
       lastError: "fail",
-      commandFeedLength: 0,
-    }),
-    true,
-  );
-  assert.equal(
-    shouldRaiseOverlayForNotifications({
-      commandFeedLength: 2,
     }),
     true,
   );
   assert.equal(
     shouldRaiseOverlayForNotifications({
       rendererNotificationActive: true,
-      commandFeedLength: 0,
     }),
     true,
   );
 });
 
 test("shouldRaiseOverlayForNotifications does not raise when idle", () => {
-  assert.equal(
-    shouldRaiseOverlayForNotifications({
-      commandFeedLength: 0,
-    }),
-    false,
+  assert.equal(shouldRaiseOverlayForNotifications({}), false);
+});
+
+test("lookupGlassErrorAnswer recognises pasted terminal spawn failures", () => {
+  const answer = lookupGlassErrorAnswer(
+    "Error: posix_spawnp failed.\n\nPaste this into the Glass command bar to get help.",
   );
+  assert.ok(answer);
+  assert.match(answer!.title, /terminal/i);
+  assert.match(answer!.body, /postinstall/i);
 });

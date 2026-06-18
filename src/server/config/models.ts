@@ -7,7 +7,8 @@ export const MODELS = {
     gpt4o: "gpt-4o",
   },
   anthropic: {
-    claudeSonnet4: "claude-sonnet-4-5-20250929",
+    claudeSonnet4: "claude-sonnet-4-6",
+    claudeOpus4: "claude-opus-4-6",
   },
   perplexity: {
     sonar: "sonar",
