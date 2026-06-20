@@ -9,7 +9,8 @@ export type GlassSystemSettingsTarget =
   | "microphone"
   | "privacy"
   | "audioMidi"
-  | "sound";
+  | "sound"
+  | "accessibility";
 
 const MACOS_URLS: Record<GlassSystemSettingsTarget, string[]> = {
   screenRecording: [
@@ -28,6 +29,10 @@ const MACOS_URLS: Record<GlassSystemSettingsTarget, string[]> = {
   sound: [
     "x-apple.systempreferences:com.apple.preference.sound",
     "x-apple.systempreferences:com.apple.Sound-Settings.extension",
+  ],
+  accessibility: [
+    "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+    "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility",
   ],
 };
 
@@ -57,6 +62,13 @@ export async function openGlassSystemSettings(
       }
       if (target === "sound") {
         return { ok: true, message: "Opened Sound settings." };
+      }
+      if (target === "accessibility") {
+        return {
+          ok: true,
+          message:
+            "Opened Accessibility settings. Enable IIVO Glass, then try Build in Cursor/Claude again.",
+        };
       }
       return { ok: true, message: "Opened Privacy & Security." };
     } catch {

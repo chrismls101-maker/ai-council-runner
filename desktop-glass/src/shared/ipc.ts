@@ -77,11 +77,19 @@ export const IPC = {
   overlayNotificationActive: "glass:overlay-notification-active",
   /** Renderer → main: pointer entered/left the notification card host. */
   overlayPointerOverNotification: "glass:overlay-pointer-over-notification",
+  /** Renderer → main: builder strip mounted/unmounted (guards pointer-over IPC). */
+  builderStripVisible: "glass:builder-strip-visible",
+  /** Renderer → main: pointer entered/left the builder strip (Prompts / Keys). */
+  overlayPointerOverBuilderStrip: "glass:overlay-pointer-over-builder-strip",
+  /** Renderer → main: builder strip panel (Prompts/Keys) open — keep overlay interactive. */
+  builderStripPanelOpen: "glass:builder-strip-panel-open",
   resizeDock: "glass:resize-dock",
   resizeTerminal: "glass:resize-terminal",
   dismissTerminalWindow: "glass:dismiss-terminal-window",
   /** Main → terminal renderer: frameless window was shown; run open reveal. */
   terminalWindowShown: "glass:terminal-window-shown",
+  /** Main → renderer: foreground process title update for a PTY tab. Payload: (termId, title|null). */
+  terminalTitleUpdate: "glass:terminal-title-update",
   windowContextGet: "glass:window-context-get-current",
   sttProcessChunk: "glass:stt-process-chunk",
   transcriptionControl: "glass:transcription-control",
@@ -113,9 +121,391 @@ export const IPC = {
   ptyResize: "glass:pty-resize",
   /** Renderer → main: fetch buffered PTY output for replay after attach. */
   ptyReplay: "glass:pty-replay",
+  /** Renderer → main: byte length of the PTY replay buffer (before resize / attach). */
+  ptyReplayLength: "glass:pty-replay-length",
   /** Renderer → main: write plain text to the system clipboard. */
   writeClipboard: "glass:write-clipboard",
+  // ── API Key Manager ────────────────────────────────────────────────────────
+  /** Renderer → main: list all stored key metadata (no values). */
+  apiKeyList: "glass:api-key-list",
+  /** Renderer → main: get decrypted value for a specific key id. */
+  apiKeyGetValue: "glass:api-key-get-value",
+  /** Renderer → main: save (create or update) a key. Payload: { meta, value }. */
+  apiKeySave: "glass:api-key-save",
+  /** Renderer → main: delete a key by id. */
+  apiKeyDelete: "glass:api-key-delete",
+  // ── Power Prompt Generator ─────────────────────────────────────────────────
+  /** Renderer → main: generate an expert prompt from intent + target + mode. */
+  promptGenerate: "glass:prompt-generate",
+  // ── AI Spend Tracker ───────────────────────────────────────────────────────
+  /** Renderer → main: get cached spend snapshot (instant, never triggers fetch). */
+  spendGet: "glass:spend-get",
+  /** Renderer → main: force-refresh all provider spend data and return snapshot. */
+  spendRefresh: "glass:spend-refresh",
+  /**
+   * Renderer → main: one-off billing URL fetch using a stored API key.
+   * Main handles the HTTP request so CORS never applies.
+   */
+  spendCustomFetch: "glass:spend-custom-fetch",
+  /** Renderer → main: get logged spend history (last N days). */
+  spendHistoryGet: "glass:spend-history-get",
+  // ── Terminal AI ────────────────────────────────────────────────────────────
+  /**
+   * Renderer → main: explain the last terminal command + its output using Claude.
+   * Returns a short explanation + optional fix suggestion.
+   */
+  terminalExplain: "glass:terminal-explain",
+  /**
+   * Renderer → main: convert a natural-language description into a single
+   * shell command for macOS/zsh using Claude.
+   */
+  nlToShell: "glass:nl-to-shell",
+  /**
+   * Renderer (terminal window) → main: transcribe recorded audio via Deepgram's
+   * pre-recorded REST API. Used by the Voice → Shell feature (Task #44).
+   */
+  voiceShellTranscribe: "glass:voice-shell-transcribe",
+  /**
+   * Renderer → main (fire-and-forget): push recent built-in terminal command
+   * blocks into the rolling AI context buffer (Task #41).
+   */
+  terminalContextPush: "glass:terminal-context-push",
+  /**
+   * Renderer (terminal window) → main: capture the full screen, package it with
+   * terminal context, and analyze it via Claude Vision (Task #45). The screenshot
+   * is captured in the main process — the renderer sends only text context.
+   */
+  terminalVisionAnalyze: "glass:terminal-vision-analyze",
+  /**
+   * Renderer (terminal window) → main: after a command finishes, ask Claude for
+   * 3 AI-powered next-command suggestions based on the last command + cwd (Task #46).
+   */
+  terminalSuggest: "glass:terminal-suggest",
+  // ── Persistent Smart Scrollback (Task #47) ──────────────────────────────────
+  /**
+   * Renderer (terminal window) → main (fire-and-forget): persist finished
+   * terminal command blocks to the encrypted SQLite scrollback store.
+   */
+  scrollbackWrite: "glass:scrollback-write",
+  /**
+   * Renderer (terminal window) → main: natural-language search over the
+   * encrypted command history. Claude ranks recent rows; matching rows are
+   * decrypted and returned.
+   */
+  scrollbackSearch: "glass:scrollback-search",
+  // ── Extract & Build Mode ────────────────────────────────────────────────────
+  /**
+   * Renderer → main: run stage-1 detection on a transcript chunk.
+   * Returns a 4-6 word label if build content is detected, null otherwise.
+   */
+  extractDetect: "glass:extract-detect",
+  /**
+   * Renderer → main: run stage-2 grand master prompt generation on full transcript.
+   * Returns the structured build prompt string.
+   */
+  extractGenerate: "glass:extract-generate",
+  extractBuildHandoff: "glass:extract-build-handoff",
+  /** Main → overlay: full extract-mode transcript snapshot (system audio STT). */
+  extractModeTranscript: "glass:extract-mode-transcript",
 } as const;
+
+// ── Built-in terminal AI context (Task #41) ──────────────────────────────────
+
+/** One recent built-in terminal command, fed into the AI `userContext`. */
+export interface TerminalContextBlock {
+  command: string;
+  output: string;     // already ANSI-stripped, safe to truncate
+  exitCode?: number;
+  status: "success" | "error" | "unknown";
+  durationMs?: number;
+}
+
+// ── Terminal AI ──────────────────────────────────────────────────────────────
+
+export interface NlToShellRequest {
+  prompt: string;
+  /** Last 5 finished commands for context. */
+  recentCommands?: string[];
+}
+
+export interface NlToShellResponse {
+  command?: string;
+  error?: string;
+}
+
+// ── Voice → Shell (Task #44) ─────────────────────────────────────────────────
+
+export interface VoiceShellTranscribeRequest {
+  buffer: ArrayBuffer;
+  mimeType: string;
+}
+
+export interface VoiceShellTranscribeResponse {
+  transcript?: string;
+  error?: string;
+}
+
+export interface TerminalExplainRequest {
+  /** The command that was run (e.g. "npm run build"). */
+  command: string;
+  /** Raw output / error text from the command (ANSI stripped). Max 8000 chars. */
+  output: string;
+  /** Optional exit code for extra context. */
+  exitCode?: number;
+}
+
+export interface TerminalExplainResponse {
+  /** Short explanation + fix suggestion in Markdown. */
+  explanation?: string;
+  error?: string;
+}
+
+// ── Screen-Aware Terminal Assistant (Task #45) ───────────────────────────────
+
+export interface TerminalVisionRequest {
+  terminalContext: string;
+  lastCommand?: string;
+  lastOutput?: string;
+}
+
+export interface TerminalVisionResponse {
+  analysis?: string;
+  error?: string;
+}
+
+// ── AI Command Suggestions (Task #46) ────────────────────────────────────────
+
+export interface TerminalSuggestRequest {
+  lastCommand: string;
+  lastStatus: "success" | "error" | "unknown";
+  cwd: string;
+  recentCommands: string[]; // last 5 commands
+}
+
+export interface TerminalSuggestion {
+  command: string;
+  why: string; // one short sentence
+}
+
+export interface TerminalSuggestResponse {
+  suggestions?: TerminalSuggestion[];
+  error?: string;
+}
+
+// ── Persistent Smart Scrollback (Task #47) ───────────────────────────────────
+
+export interface ScrollbackWriteBlock {
+  sessionId: string;
+  command: string;
+  output: string;
+  exitCode?: number;
+  status: "success" | "error" | "unknown";
+  cwd?: string;
+  startedAt: number;
+  durationMs?: number;
+}
+
+export interface ScrollbackSearchRequest {
+  query: string;
+}
+
+export interface ScrollbackSearchResult {
+  id: number;
+  command: string;
+  output: string;
+  status: "success" | "error" | "unknown";
+  exitCode?: number;
+  cwd?: string;
+  startedAt: number;
+  durationMs?: number;
+}
+
+export interface ScrollbackSearchResponse {
+  results?: ScrollbackSearchResult[];
+  error?: string;
+}
+
+// ── API Key Manager ──────────────────────────────────────────────────────────
+
+export interface ApiKeyMeta {
+  id: string;
+  service: string;
+  label: string;
+  environment: "dev" | "prod" | "any";
+  createdAt: number;
+  lastUsedAt: number | null;
+}
+
+export interface ApiKeySaveRequest {
+  meta: ApiKeyMeta;
+  value: string;
+}
+
+export interface ApiKeyListResponse {
+  keys: ApiKeyMeta[];
+  error?: string;
+  encryptionAvailable?: boolean;
+}
+
+export interface ApiKeyValueResponse {
+  value: string | null;
+}
+
+export interface ApiKeyMutateResponse {
+  ok: boolean;
+  error?: string;
+}
+
+// ── Power Prompt Generator ───────────────────────────────────────────────────
+
+/** Target AI the generated prompt is optimized for. */
+export type PromptTarget =
+  | "claude"
+  | "gpt"
+  | "cursor"
+  | "v0"
+  | "midjourney"
+  | "agent"
+  | "general";
+
+/** The type of task the prompt should accomplish. */
+export type PromptMode =
+  | "build"
+  | "debug"
+  | "explain"
+  | "create"
+  | "research"
+  | "design-agent"
+  | "review";
+
+export interface PromptGenerateRequest {
+  /** One-sentence description of what the user wants to achieve. */
+  intent: string;
+  /** Which AI the generated prompt is for. */
+  target: PromptTarget;
+  /** The category of task. */
+  mode: PromptMode;
+  /**
+   * User-edited context string — overrides Glass auto-detected context entirely.
+   * When empty, main process falls back to state.workingContext.
+   */
+  userContext?: string;
+}
+
+export interface PromptGenerateResponse {
+  /** The generated expert-level prompt, ready to copy and use. */
+  result?: string;
+  /** Set when generation failed. */
+  error?: string;
+  /** The Glass working-context string that was injected (shown in panel for transparency). */
+  usedContext?: string;
+  /** The active app at generation time. */
+  usedApp?: string;
+}
+
+// ── AI Spend Tracker ─────────────────────────────────────────────────────────
+
+export interface ProviderSpendResult {
+  /** Normalized service id (e.g. "openai", "elevenlabs", "deepgram", "anthropic"). */
+  service: string;
+  /** Display name shown in the panel. */
+  displayName: string;
+  /** "ok" = data fetched, "error" = fetch failed, "unavailable" = no API, "no-key" = key not stored. */
+  status: "ok" | "error" | "unavailable" | "no-key";
+  /** Spend today in USD (where available). */
+  todayUSD?: number;
+  /** Spend this billing period in USD (where available). */
+  monthUSD?: number;
+  /** Unit label for non-USD usage (e.g. "characters", "hours"). */
+  unitLabel?: string;
+  /** Units consumed this period. */
+  unitsUsed?: number;
+  /** Total unit limit for this period (for a usage bar). */
+  unitLimit?: number;
+  /** Unix ms when units reset. */
+  unitReset?: number;
+  /** Remaining credit balance in USD (Deepgram prepaid credit). */
+  balanceUSD?: number;
+  /** Error message if status is "error". */
+  error?: string;
+  /** Unix ms when this result was last fetched. */
+  lastFetched: number;
+}
+
+/**
+ * Config for a user-defined custom billing provider.
+ * Stored in renderer localStorage; fetched via spendCustomFetch IPC.
+ */
+export interface CustomSpendProvider {
+  /** Unique id (nanoid or Date.now string). */
+  id: string;
+  /** Display name, e.g. "My Custom LLM". */
+  name: string;
+  /** Full billing endpoint URL. */
+  url: string;
+  /** How to authenticate the request. */
+  authStyle: "bearer" | "token" | "custom-header" | "query-param";
+  /** Header name when authStyle = "custom-header" (e.g. "xi-api-key"). */
+  customHeaderName?: string;
+  /** Query param name when authStyle = "query-param" (e.g. "api_key"). */
+  queryParamName?: string;
+  /** API Key Manager key id to use for auth. */
+  keyId: string;
+  /**
+   * Dot-path into the JSON response body to find the USD spend value.
+   * Examples: "total_usage", "data.cost_usd", "balance.amount"
+   * Supports array index notation: "items.0.amount"
+   */
+  responsePath: string;
+  /**
+   * Optional divisor — e.g. 100 if the API returns cents.
+   * Leave undefined / 1 if the value is already in USD.
+   */
+  divisor?: number;
+  /** Optional: label this as "today" or "month" spend. Defaults to "month". */
+  spendPeriod?: "today" | "month";
+}
+
+/** One day's aggregated spend across all providers. */
+export interface SpendDaySummary {
+  /** ISO date string "YYYY-MM-DD". */
+  date: string;
+  /** Sum of all provider USD spend for this day. */
+  totalUSD: number;
+  /** Per-provider breakdown. */
+  providers: {
+    service: string;
+    displayName: string;
+    usd: number;
+  }[];
+}
+
+export interface SpendCustomFetchRequest {
+  url: string;
+  authStyle: CustomSpendProvider["authStyle"];
+  customHeaderName?: string;
+  queryParamName?: string;
+  keyId: string;
+}
+
+export interface SpendCustomFetchResponse {
+  ok: boolean;
+  /** Raw parsed JSON body (if ok). */
+  body?: unknown;
+  /** HTTP status code. */
+  status?: number;
+  error?: string;
+}
+
+export interface SpendSnapshot {
+  providers: ProviderSpendResult[];
+  /** Sum of todayUSD across providers that have it. */
+  totalTodayUSD: number;
+  /** Sum of monthUSD across providers that have it. */
+  totalMonthUSD: number;
+  /** Unix ms when the snapshot was assembled. */
+  refreshedAt: number;
+}
 
 export interface SaveGlassMemoryRequest {
   content: string;
@@ -167,6 +557,7 @@ export type GlassCommand =
   | { type: "prefill-command-bar"; text: string }
   | { type: "cancel-glass-ask" }
   | { type: "set-glass-hotkey"; preset: GlassUserSettings["hotkeyPreset"] }
+  | { type: "set-ui-locale"; locale: import("./glassLocale.ts").GlassUiLocale }
   | { type: "set-glass-display"; target: GlassUserSettings["displayTarget"] }
   | { type: "refresh-glass-layout" }
   | { type: "set-chrome-layout-locked"; locked: boolean }
@@ -206,6 +597,7 @@ export type GlassCommand =
   | { type: "report-mic-permission"; status: import("./glassCapabilities.ts").MicPermissionReport }
   | { type: "open-screen-recording-settings" }
   | { type: "open-microphone-settings" }
+  | { type: "open-accessibility-settings" }
   | { type: "open-privacy-settings" }
   | { type: "open-audio-midi-setup" }
   | { type: "open-sound-settings" }
@@ -344,12 +736,21 @@ export type GlassCommand =
   | { type: "glass-terminal-open" }
   | { type: "glass-terminal-close" }
   | { type: "glass-terminal-kill" }
+  | { type: "glass-terminal-new-tab" }
+  | { type: "glass-terminal-close-tab"; termId?: string }
+  | { type: "glass-terminal-switch-tab"; termId: string }
+  | { type: "glass-terminal-action"; action: import("./terminalPanelActions.ts").GlassTerminalPanelAction }
   // ── Context assembler ─────────────────────────────────────────────────────
   /** Hotkey-triggered: snapshot screen + window + terminal context, focus command bar */
   | { type: "glass-context-ask" }
   // ── Terminal auto-fix ─────────────────────────────────────────────────────
   /** User clicked "Fix it" on a terminal-fix overlay card — types fix into PTY */
   | { type: "glass-terminal-fix-accept"; termId: string; command: string }
+  // ── Extract & Build Mode ────────────────────────────────────────────────────
+  /** Start system-audio capture for Extract & Build Mode. */
+  | { type: "extract-mode-start" }
+  /** Stop Extract & Build Mode capture (may stop listening if mode started it). */
+  | { type: "extract-mode-stop" }
   // ── Glass Powers palette ──────────────────────────────────────────────────
   /** ⌘⇧P — open / toggle the Glass Powers quick-launcher palette */
   | { type: "toggle-powers-palette" }
@@ -386,18 +787,32 @@ export type GlassCommand =
   /** One-click button in command bar: capture screen, detect editor, show design card. */
   | { type: "design-capture" }
   /** User clicked one of the 4 quick-action buttons on the design capture card. */
-  | { type: "design-generate"; feedItemId: string; action: import("./designToCode.ts").DesignToCodeAction }
+  | { type: "design-generate"; feedItemId: string; action: import("./designToCode.ts").DesignToCodeAction; refinementFeedback?: string }
   /** Permission prompt → Allow: read editor file then generate. */
   | { type: "design-grant-file-read"; feedItemId: string; action: import("./designToCode.ts").DesignToCodeAction }
   /** Permission prompt → Skip: generate without codebase context. */
   | { type: "design-skip-file-read"; feedItemId: string; action: import("./designToCode.ts").DesignToCodeAction }
+  /** User changed the target framework/stack in the design card picker (#163-F). */
+  | { type: "set-design-stack"; stack: import("./designToCode.ts").DesignStack }
   /** Restore latest .glass-backup-*.bak over the original file (undo apply). */
   | { type: "glass-restore-backup"; feedItemId: string; filePath: string }
   /** Run tsc --noEmit or npm run build in the dock terminal to verify a file write compiled. */
   | { type: "glass-verify-build"; feedItemId: string; filePath: string }
   // ── Custom slash commands (#165) ──────────────────────────────────────────
   /** User invoked a custom command from the powers palette. */
-  | { type: "custom-command-run"; name: string };
+  | { type: "custom-command-run"; name: string }
+  /** Renderer requests TTS — main calls ElevenLabs and plays audio back. */
+  | { type: "glass-tts"; text: string }
+  /** Sorting Hat placement complete — write persona + mark onboarding done. */
+  | { type: "glass-onboarding-complete"; persona: "developer" | "sales" | "operator" | "writer" | "general" }
+  /** User skipped onboarding — just mark complete with no persona set. */
+  | { type: "glass-onboarding-skip" }
+  /** Re-run Sorting Hat persona calibration (from Settings). */
+  | { type: "glass-onboarding-recalibrate" }
+  /** E2E — force Sorting Hat visible without wiping userData. */
+  | { type: "e2e-open-sorting-hat" }
+  /** Dev only — open Sorting Hat onboarding on the running app (keeps 8s manifest). */
+  | { type: "dev-open-onboarding" };
 
 export interface GlassState {
   privacy: PrivacyState;
@@ -463,6 +878,20 @@ export interface GlassState {
   liveTranslate?: import("./liveTranslateTypes.ts").LiveTranslateRuntimeState;
   /** First-run calibration modal blocks chrome until complete or skipped. */
   onboardingOpen: boolean;
+  /** Whether first-launch onboarding has been completed. */
+  onboardingComplete?: boolean;
+  /** Boot splash finished — Sorting Hat must not mount or speak until true. */
+  glassBootComplete?: boolean;
+  /** The persona assigned during onboarding. */
+  persona?: "developer" | "sales" | "operator" | "writer" | "general";
+  /** Epoch ms when Sorting Hat last finished — suppresses greeting TTS overlap. */
+  onboardingFinishedAt?: number;
+  /** E2E — shorten Sorting Hat manifest delays. */
+  e2eFastOnboarding?: boolean;
+  /** Unpackaged Electron dev build — unlocks builder strip for local testing. */
+  glassDevMode?: boolean;
+  /** Audio chunk from TTS — base64 encoded mp3, played by renderer then cleared. */
+  ttsAudio?: { id: string; data: string };
   glassUserProfile: import("./glassUserProfile.ts").GlassUserProfile | null;
   /** Progress of the one-click BlackHole + Multi-Output Device install flow. */
   blackHoleInstallStatus?: "idle" | "downloading" | "installing" | "configuring" | "done" | "error";
@@ -558,6 +987,8 @@ export interface GlassState {
     phase: "ready" | "permission" | "reading" | "generating" | "done";
     /** Which action is mid-flight. */
     pendingAction?: import("./designToCode.ts").DesignToCodeAction;
+    /** Refinement feedback pending through a permission dialog. */
+    pendingRefinementFeedback?: string;
     /** Human-readable status line shown in the card, e.g. "Reading Button.tsx…" */
     statusLine?: string;
   }>;
@@ -573,6 +1004,10 @@ export interface GlassState {
   glassDockTerminalOpen?: boolean;
   /** Active PTY session id (set while terminal is running). */
   glassDockTerminalId?: string;
+  /** Open PTY tabs — active id is glassDockTerminalId. */
+  glassDockTerminalTabs?: import("./terminalPanelActions.ts").GlassTerminalTab[];
+  /** One-shot action for the terminal renderer (⌘⇧P, etc.). */
+  glassTerminalPendingAction?: import("./terminalPanelActions.ts").GlassTerminalPendingAction;
   // ── Glass Powers palette ───────────────────────────────────────────────────
   /** Whether the ⌘⇧P powers quick-launcher is currently visible. */
   powersPaletteOpen?: boolean;
@@ -581,6 +1016,8 @@ export interface GlassState {
   customCommands?: import("../shared/customCommands.ts").CustomCommand[];
   /** Validation warnings from the last custom commands config load. */
   customCommandsWarnings?: string[];
+  /** True while Extract & Build Mode is capturing system audio in main. */
+  extractBuildModeActive?: boolean;
 }
 
 export interface LiveTerminalLine {
@@ -627,4 +1064,46 @@ export interface SttProcessChunkResponse {
   text?: string;
   error?: string;
   eventId?: string;
+}
+
+// ── Extract & Build Mode ──────────────────────────────────────────────────────
+
+/** Stage-1: detect if transcript chunk contains "how to build X" content. */
+export interface ExtractDetectRequest {
+  /** Recent transcript text to analyze (last ~2 min of audio). */
+  transcript: string;
+}
+
+export interface ExtractDetectResponse {
+  /** 4-6 word label describing what's being built, e.g. "AI agents for enterprise companies". Null if no build content detected. */
+  label: string | null;
+  error?: string;
+}
+
+/** Stage-2: generate grand master build prompt from full accumulated transcript. */
+export interface ExtractGenerateRequest {
+  /** Full accumulated transcript text. */
+  transcript: string;
+  /** The detected label for context. */
+  detectedLabel?: string;
+}
+
+export interface ExtractGenerateResponse {
+  /** The grand master build prompt ready to paste into Cursor/Claude Code. */
+  prompt?: string;
+  error?: string;
+}
+
+export interface ExtractBuildHandoffRequest {
+  target: import("./extractBuildHandoff.ts").ExtractBuildTarget;
+  prompt: string;
+}
+
+export interface ExtractBuildHandoffResponse {
+  ok: boolean;
+  pasted: boolean;
+  notice?: string;
+  error?: string;
+  /** True when Accessibility settings were opened to help the user grant paste permission. */
+  openedAccessibilitySettings?: boolean;
 }

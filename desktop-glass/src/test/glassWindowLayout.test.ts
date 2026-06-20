@@ -6,6 +6,7 @@ import {
 } from "../main/glassWindowDiagnostics.ts";
 import { parseOverlayMode } from "../shared/glassWindowTypes.ts";
 import {
+  builderStripLayoutReservePx,
   commandBarLayoutFromDisplay,
   commandBarLayoutForStack,
   clampCommandBarWindowBounds,
@@ -175,6 +176,19 @@ test("commandBarLayoutForStack bottom-anchors tall stacks with custom X", () => 
   const layout = commandBarLayoutForStack(ctx, 180, 1988);
   assert.equal(layout.x, 1988);
   assert.equal(layout.y + layout.height, commandBarMaxBottomY(ctx));
+});
+
+test("builder strip reserve lifts command bar above strip band", () => {
+  const reserve = builderStripLayoutReservePx();
+  const base = commandBarLayoutFromDisplay(primaryDisplay);
+  const lifted = commandBarLayoutForStack(
+    primaryDisplay,
+    OVERLAY_CHAT_STACK_FALLBACK_PX,
+    null,
+    reserve,
+  );
+  assert.equal(lifted.y + lifted.height, commandBarMaxBottomY(primaryDisplay, reserve));
+  assert.equal(base.y - lifted.y, reserve);
 });
 
 test("locked command bar keeps a user-placed Y instead of bottom re-anchoring", () => {

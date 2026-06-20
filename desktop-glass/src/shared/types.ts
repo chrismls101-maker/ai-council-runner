@@ -24,7 +24,8 @@ export type PanelTab =
   | "hypotheses"
   | "actions"
   | "diagnostics"
-  | "account";
+  | "account"
+  | "power-stack";
 
 /** Mirrors the server ContextItemType union (src/server/contextBridge/types.ts). */
 export type ServerContextItemType =

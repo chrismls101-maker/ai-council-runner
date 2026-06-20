@@ -1,5 +1,5 @@
 /** Fallback height; width is chosen from the display (see defaultTerminalSize). */
-export const GLASS_TERMINAL_DEFAULT_HEIGHT = 320;
+export const GLASS_TERMINAL_DEFAULT_HEIGHT = 460;
 export const GLASS_TERMINAL_MIN_WIDTH = 560;
 export const GLASS_TERMINAL_MIN_HEIGHT = 180;
 export const GLASS_TERMINAL_MAX_WIDTH = 2400;
@@ -19,7 +19,7 @@ export interface GlassTerminalSize {
 type StoredTerminalSize = GlassTerminalSize & { v?: number };
 
 const STORAGE_KEY = "iivo-glass-terminal-size";
-const STORAGE_VERSION = 3;
+const STORAGE_VERSION = 4;
 
 /** Horizontal margin from display edges when sizing the default terminal width. */
 const TERMINAL_SCREEN_EDGE_MARGIN_PX = 48;

@@ -36,6 +36,21 @@ export async function persistGlassOnboardingState(state: GlassOnboardingState): 
   }
 }
 
+/** Update profile mid-onboarding without marking the legacy store complete. */
+export async function persistGlassUserProfile(
+  profile: GlassUserProfile | null,
+  completed: boolean,
+): Promise<GlassOnboardingState> {
+  const next: GlassOnboardingState = {
+    completed,
+    profile: profile
+      ? { ...profile, updatedAt: profile.updatedAt ?? new Date().toISOString() }
+      : null,
+  };
+  await persistGlassOnboardingState(next);
+  return next;
+}
+
 export async function completeGlassOnboardingStore(
   profile: GlassUserProfile | null,
 ): Promise<GlassOnboardingState> {

@@ -12,6 +12,37 @@ import {
   type SaveGlassMemoryResponse,
   type SttProcessChunkRequest,
   type SttProcessChunkResponse,
+  type ApiKeyMeta,
+  type ApiKeyListResponse,
+  type ApiKeyValueResponse,
+  type ApiKeyMutateResponse,
+  type ApiKeySaveRequest,
+  type PromptGenerateRequest,
+  type PromptGenerateResponse,
+  type SpendSnapshot,
+  type SpendCustomFetchRequest,
+  type SpendCustomFetchResponse,
+  type SpendDaySummary,
+  type TerminalExplainRequest,
+  type TerminalExplainResponse,
+  type NlToShellRequest,
+  type NlToShellResponse,
+  type VoiceShellTranscribeRequest,
+  type VoiceShellTranscribeResponse,
+  type TerminalVisionRequest,
+  type TerminalVisionResponse,
+  type TerminalSuggestRequest,
+  type TerminalSuggestResponse,
+  type TerminalContextBlock,
+  type ScrollbackWriteBlock,
+  type ScrollbackSearchRequest,
+  type ScrollbackSearchResponse,
+  type ExtractDetectRequest,
+  type ExtractDetectResponse,
+  type ExtractGenerateRequest,
+  type ExtractGenerateResponse,
+  type ExtractBuildHandoffRequest,
+  type ExtractBuildHandoffResponse,
 } from "../shared/ipc.ts";
 import type { WindowContext } from "../shared/windowContextTypes.ts";
 
@@ -62,6 +93,15 @@ const glassApi = {
   setOverlayPointerOverNotification(over: boolean): void {
     ipcRenderer.send(IPC.overlayPointerOverNotification, over);
   },
+  setBuilderStripVisible(visible: boolean): void {
+    ipcRenderer.send(IPC.builderStripVisible, visible);
+  },
+  setOverlayPointerOverBuilderStrip(over: boolean): void {
+    ipcRenderer.send(IPC.overlayPointerOverBuilderStrip, over);
+  },
+  setBuilderStripPanelOpen(open: boolean): void {
+    ipcRenderer.send(IPC.builderStripPanelOpen, open);
+  },
   resizeDock(width: number, height: number): void {
     ipcRenderer.send(IPC.resizeDock, width, height);
   },
@@ -75,6 +115,12 @@ const glassApi = {
     const handler = (): void => listener();
     ipcRenderer.on(IPC.terminalWindowShown, handler);
     return () => ipcRenderer.removeListener(IPC.terminalWindowShown, handler);
+  },
+  onTerminalTitleUpdate(listener: (termId: string, title: string | null) => void): () => void {
+    const handler = (_event: unknown, termId: string, title: string | null): void =>
+      listener(termId, title);
+    ipcRenderer.on(IPC.terminalTitleUpdate, handler);
+    return () => ipcRenderer.removeListener(IPC.terminalTitleUpdate, handler);
   },
   getE2eExternalUrls(): Promise<string[]> {
     return ipcRenderer.invoke(IPC.e2eGetExternalUrls) as Promise<string[]>;
@@ -146,11 +192,92 @@ const glassApi = {
   sendPtyResize(termId: string, cols: number, rows: number): void {
     ipcRenderer.send(IPC.ptyResize, termId, cols, rows);
   },
-  replayPtySession(termId: string): Promise<string> {
-    return ipcRenderer.invoke(IPC.ptyReplay, termId) as Promise<string>;
+  replayPtySession(termId: string, fromByte?: number): Promise<string> {
+    return ipcRenderer.invoke(IPC.ptyReplay, termId, fromByte) as Promise<string>;
+  },
+  replayPtyByteLength(termId: string): Promise<number> {
+    return ipcRenderer.invoke(IPC.ptyReplayLength, termId) as Promise<number>;
   },
   writeClipboard(text: string): Promise<boolean> {
     return ipcRenderer.invoke(IPC.writeClipboard, text) as Promise<boolean>;
+  },
+  // ── API Key Manager ────────────────────────────────────────────────────────
+  apiKeyList(): Promise<ApiKeyListResponse> {
+    return ipcRenderer.invoke(IPC.apiKeyList) as Promise<ApiKeyListResponse>;
+  },
+  apiKeyGetValue(id: string): Promise<ApiKeyValueResponse> {
+    return ipcRenderer.invoke(IPC.apiKeyGetValue, id) as Promise<ApiKeyValueResponse>;
+  },
+  apiKeySave(payload: ApiKeySaveRequest): Promise<ApiKeyMutateResponse> {
+    return ipcRenderer.invoke(IPC.apiKeySave, payload) as Promise<ApiKeyMutateResponse>;
+  },
+  apiKeyDelete(id: string): Promise<ApiKeyMutateResponse> {
+    return ipcRenderer.invoke(IPC.apiKeyDelete, id) as Promise<ApiKeyMutateResponse>;
+  },
+  // ── Power Prompt Generator ─────────────────────────────────────────────────
+  promptGenerate(payload: PromptGenerateRequest): Promise<PromptGenerateResponse> {
+    return ipcRenderer.invoke(IPC.promptGenerate, payload) as Promise<PromptGenerateResponse>;
+  },
+  // ── AI Spend Tracker ───────────────────────────────────────────────────────
+  spendGet(): Promise<SpendSnapshot> {
+    return ipcRenderer.invoke(IPC.spendGet) as Promise<SpendSnapshot>;
+  },
+  spendRefresh(): Promise<SpendSnapshot> {
+    return ipcRenderer.invoke(IPC.spendRefresh) as Promise<SpendSnapshot>;
+  },
+  spendCustomFetch(payload: SpendCustomFetchRequest): Promise<SpendCustomFetchResponse> {
+    return ipcRenderer.invoke(IPC.spendCustomFetch, payload) as Promise<SpendCustomFetchResponse>;
+  },
+  spendHistoryGet(days?: number): Promise<{ entries: SpendDaySummary[]; allTimeTotal: number; since: string | null }> {
+    return ipcRenderer.invoke(IPC.spendHistoryGet, days) as Promise<{
+      entries: SpendDaySummary[];
+      allTimeTotal: number;
+      since: string | null;
+    }>;
+  },
+  // ── Terminal AI ────────────────────────────────────────────────────────────
+  terminalExplain(payload: TerminalExplainRequest): Promise<TerminalExplainResponse> {
+    return ipcRenderer.invoke(IPC.terminalExplain, payload) as Promise<TerminalExplainResponse>;
+  },
+  nlToShell(payload: NlToShellRequest): Promise<NlToShellResponse> {
+    return ipcRenderer.invoke(IPC.nlToShell, payload) as Promise<NlToShellResponse>;
+  },
+  voiceShellTranscribe(payload: VoiceShellTranscribeRequest): Promise<VoiceShellTranscribeResponse> {
+    return ipcRenderer.invoke(IPC.voiceShellTranscribe, payload) as Promise<VoiceShellTranscribeResponse>;
+  },
+  terminalVisionAnalyze(payload: TerminalVisionRequest): Promise<TerminalVisionResponse> {
+    return ipcRenderer.invoke(IPC.terminalVisionAnalyze, payload) as Promise<TerminalVisionResponse>;
+  },
+  terminalSuggest(payload: TerminalSuggestRequest): Promise<TerminalSuggestResponse> {
+    return ipcRenderer.invoke(IPC.terminalSuggest, payload) as Promise<TerminalSuggestResponse>;
+  },
+  // ── Built-in terminal AI context (Task #41) ─────────────────────────────────
+  terminalContextPush(blocks: TerminalContextBlock[]): void {
+    ipcRenderer.send(IPC.terminalContextPush, blocks);
+  },
+  // ── Persistent Smart Scrollback (Task #47) ──────────────────────────────────
+  scrollbackWrite(blocks: ScrollbackWriteBlock[]): void {
+    ipcRenderer.send(IPC.scrollbackWrite, blocks);
+  },
+  scrollbackSearch(payload: ScrollbackSearchRequest): Promise<ScrollbackSearchResponse> {
+    return ipcRenderer.invoke(IPC.scrollbackSearch, payload) as Promise<ScrollbackSearchResponse>;
+  },
+  // ── Extract & Build Mode ───────────────────────────────────────────────────
+  extractDetect(payload: ExtractDetectRequest): Promise<ExtractDetectResponse> {
+    return ipcRenderer.invoke(IPC.extractDetect, payload) as Promise<ExtractDetectResponse>;
+  },
+  extractGenerate(payload: ExtractGenerateRequest): Promise<ExtractGenerateResponse> {
+    return ipcRenderer.invoke(IPC.extractGenerate, payload) as Promise<ExtractGenerateResponse>;
+  },
+  extractBuildHandoff(payload: ExtractBuildHandoffRequest): Promise<ExtractBuildHandoffResponse> {
+    return ipcRenderer.invoke(IPC.extractBuildHandoff, payload) as Promise<ExtractBuildHandoffResponse>;
+  },
+  onExtractModeTranscript(handler: (text: string) => void): () => void {
+    const listener = (_event: Electron.IpcRendererEvent, text: string): void => {
+      handler(text);
+    };
+    ipcRenderer.on(IPC.extractModeTranscript, listener);
+    return () => ipcRenderer.removeListener(IPC.extractModeTranscript, listener);
   },
 };
 

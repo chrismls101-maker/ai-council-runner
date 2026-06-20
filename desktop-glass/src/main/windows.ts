@@ -110,6 +110,8 @@ let chromeMovePersistTimer: ReturnType<typeof setTimeout> | null = null;
 let glassBootPending = false;
 /** When true, onboarding blocks dock and command bar until calibration completes. */
 let onboardingPending = false;
+/** Renderer requested full/partial interactive overlay during onboarding (language picker, inputs). */
+let onboardingOverlayForceInteractive = false;
 let onGlassBootSequenceComplete: (() => void) | null = null;
 const ONBOARDING_ESCAPE_ACCEL = "Escape";
 let onboardingEmergencyHandler: (() => void) | null = null;
@@ -157,6 +159,9 @@ const PANEL_ALWAYS_ON_TOP_RELATIVE = 16;
 
 let overlayRaisedForNotifications = false;
 let overlayPointerOverNotification = false;
+let overlayPointerOverBuilderStrip = false;
+let builderStripPanelOpen = false;
+let builderStripBottomReservePx = 0;
 let terminalWindowVisible = false;
 let lastTerminalPanelWidth = GLASS_TERMINAL_DEFAULT_WIDTH;
 let lastTerminalPanelHeight = GLASS_TERMINAL_DEFAULT_HEIGHT;
@@ -190,6 +195,30 @@ export function setOverlayPointerOverNotification(over: boolean): void {
   }
   debugSetIgnoreMouseEvents(windows.overlay, "overlay", false);
   raiseChromeAboveOverlay(windows);
+}
+
+function applyBuilderStripOverlayInteractivity(): void {
+  if (!windows?.overlay || windows.overlay.isDestroyed()) return;
+  const interactive = overlayPointerOverBuilderStrip || builderStripPanelOpen;
+  if (!interactive) {
+    if (!overlayPointerOverNotification) {
+      resetOverlayClickThroughState(windows.overlay);
+    }
+    return;
+  }
+  debugSetIgnoreMouseEvents(windows.overlay, "overlay", false);
+}
+
+/** Renderer reports pointer over the builder strip (Prompts / Keys tabs). */
+export function setOverlayPointerOverBuilderStrip(over: boolean): void {
+  overlayPointerOverBuilderStrip = over;
+  applyBuilderStripOverlayInteractivity();
+}
+
+/** Renderer reports a builder strip panel is open — keep overlay interactive until closed. */
+export function setBuilderStripPanelOpen(open: boolean): void {
+  builderStripPanelOpen = open;
+  applyBuilderStripOverlayInteractivity();
 }
 
 const CHROME_MOUSE_FORWARD = { forward: true } as const;
@@ -243,6 +272,30 @@ function raiseChromeAboveOverlay(w: GlassWindows): void {
   }
 }
 
+/** Re-apply OS click-through on the onboarding overlay (macOS resets this on setBounds/show). */
+export function ensureOnboardingOverlayClickThrough(): void {
+  if (!onboardingPending || !windows?.overlay || windows.overlay.isDestroyed()) return;
+  if (onboardingOverlayForceInteractive) {
+    debugSetIgnoreMouseEvents(windows.overlay, "overlay", false);
+    return;
+  }
+  debugSetIgnoreMouseEvents(windows.overlay, "overlay", true, true);
+}
+
+/** Keep overlay fully interactive while the post-boot language picker is visible. */
+export function syncLanguagePickerOverlayInteractivity(active: boolean): void {
+  if (!onboardingPending || !windows?.overlay || windows.overlay.isDestroyed()) return;
+  if (active) {
+    onboardingOverlayForceInteractive = true;
+    debugSetIgnoreMouseEvents(windows.overlay, "overlay", false);
+    return;
+  }
+  if (onboardingOverlayForceInteractive) {
+    onboardingOverlayForceInteractive = false;
+    debugSetIgnoreMouseEvents(windows.overlay, "overlay", true, true);
+  }
+}
+
 /** Full-screen overlay — reset to click-through (called after every showInactive). */
 function configureOverlayClickThrough(overlay: BrowserWindow): void {
   if (overlay.isDestroyed()) return;
@@ -286,16 +339,38 @@ function attachOverlayCursorClickThrough(overlay: BrowserWindow): void {
   // Called by syncOverlayPresentationRaised(false) to hard-reset without waiting.
   (overlay as BrowserWindow & { _resetPassthrough?: () => void })._resetPassthrough = () => {
     if (passthroughTimer !== null) { clearTimeout(passthroughTimer); passthroughTimer = null; }
-    if (!overlay.isDestroyed()) debugSetIgnoreMouseEvents(overlay, "overlay", true, true);
+    if (overlay.isDestroyed()) return;
+    if (onboardingOverlayForceInteractive) {
+      debugSetIgnoreMouseEvents(overlay, "overlay", false);
+    } else {
+      debugSetIgnoreMouseEvents(overlay, "overlay", true, true);
+    }
   };
+
+  const allowCursorInteractiveToggle = (): boolean => overlayRaisedForNotifications;
 
   const onCursorChanged = (_event: Electron.Event, type: string) => {
     if (overlay.isDestroyed()) return;
+    // Language picker + Sorting Hat drive interactivity via renderer IPC — never override here.
+    if (onboardingOverlayForceInteractive) {
+      if (passthroughTimer !== null) { clearTimeout(passthroughTimer); passthroughTimer = null; }
+      debugSetIgnoreMouseEvents(overlay, "overlay", false);
+      return;
+    }
+    if (onboardingPending) {
+      return;
+    }
     // CRITICAL GUARD: the overlay is full-screen. If we call setIgnoreMouseEvents(false)
     // while captions-only / passive modes are active, the entire display becomes
     // unclickable — nothing underneath (Glass dock, commandBar, browser, apps) receives
-    // any click. Only toggle interactive when a notification card is actually raised.
-    if (!overlayRaisedForNotifications) {
+    // any click. Only toggle interactive when notifications or onboarding UI need it.
+    if (!allowCursorInteractiveToggle()) {
+      // Builder strip: stay OS-interactive so CSS cursor:pointer shows on tab buttons.
+      if (overlayPointerOverBuilderStrip || builderStripPanelOpen) {
+        if (passthroughTimer !== null) { clearTimeout(passthroughTimer); passthroughTimer = null; }
+        debugSetIgnoreMouseEvents(overlay, "overlay", false);
+        return;
+      }
       // Cancel any pending passthrough timer and ensure click-through immediately.
       if (passthroughTimer !== null) { clearTimeout(passthroughTimer); passthroughTimer = null; }
       debugSetIgnoreMouseEvents(overlay, "overlay", true, true);
@@ -325,17 +400,18 @@ function attachOverlayCursorClickThrough(overlay: BrowserWindow): void {
   });
 }
 
-/** First-run onboarding always uses the primary display and must receive clicks/focus. */
+/** First-run onboarding on primary display — click-through like Glass, interactive on hover. */
 function presentOnboardingOverlay(overlay: BrowserWindow): void {
   const layout = overlayLayoutFromDisplay(getPrimaryDisplayContext());
   overlay.setBounds(layout);
   overlay.setFocusable(true);
   overlay.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, OVERLAY_ALWAYS_ON_TOP_RELATIVE);
-  overlay.show();
-  overlay.focus();
+  overlay.showInactive();
   overlay.moveTop();
-  if (!overlay.webContents.isDestroyed()) {
-    overlay.webContents.focus();
+  if (onboardingOverlayForceInteractive) {
+    debugSetIgnoreMouseEvents(overlay, "overlay", false);
+  } else {
+    debugSetIgnoreMouseEvents(overlay, "overlay", true, true);
   }
 }
 
@@ -362,6 +438,29 @@ export function setOverlayPinnedForTranslate(pinned: boolean): void {
     windows.overlay.hide();
   }
   stackGlassWindows(windows);
+}
+
+/** Called when the builder strip mounts/unmounts — safety reset for OS click-through. */
+export function setBuilderStripVisible(visible: boolean): void {
+  if (!windows?.overlay || windows.overlay.isDestroyed()) return;
+  if (!visible) {
+    overlayPointerOverBuilderStrip = false;
+    builderStripPanelOpen = false;
+    if (!overlayPointerOverNotification) {
+      resetOverlayClickThroughState(windows.overlay);
+    }
+    return;
+  }
+  configureOverlayClickThrough(windows.overlay);
+}
+
+/** Reserve bottom space so the command bar sits above the builder strip band. */
+export function setBuilderStripLayoutReserve(px: number): void {
+  const next = Math.max(0, Math.round(px));
+  if (builderStripBottomReservePx === next) return;
+  builderStripBottomReservePx = next;
+  applyCommandBarLayout(false);
+  if (windows) stackGlassWindows(windows);
 }
 
 /** Show/hide the overlay window and raise it above the dock when notifications are active. */
@@ -608,6 +707,9 @@ function revealChromeAfterOnboarding(): void {
 /** Block dock/command bar until first-run onboarding completes. */
 export function setOnboardingPending(pending: boolean): void {
   onboardingPending = pending;
+  if (!pending) {
+    onboardingOverlayForceInteractive = false;
+  }
   if (pending) {
     pinLayoutToPrimaryDisplay();
   } else {
@@ -758,6 +860,7 @@ function commandBarLayoutForCurrentDisplay(customX?: number | null) {
     layoutManager!.getDisplay(),
     commandBarStackHeightPx(),
     customX,
+    builderStripBottomReservePx,
   );
 }
 
@@ -910,10 +1013,9 @@ function relayoutAllWindows(options?: { resetDock?: boolean }): void {
   if (!windows.overlay.isDestroyed()) {
     windows.overlay.setBounds(layoutManager.getOverlayLayout());
     // macOS resets setIgnoreMouseEvents as a side effect of repositioning.
-    // Re-apply click-through immediately — stackGlassWindows below will also
-    // do this via showInactive(), but the setBounds() path needs its own guard
-    // so the primary display isn't left click-blocking during HDMI plug/unplug.
-    if (!onboardingPending) {
+    if (onboardingPending) {
+      ensureOnboardingOverlayClickThrough();
+    } else {
       configureOverlayClickThrough(windows.overlay);
     }
   }
@@ -1290,7 +1392,7 @@ export function createSplashWindow(): BrowserWindow {
   // Sit above every Glass window (overlay/dock/command/panel) while booting.
   splash.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, 12);
   splash.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  debugSetIgnoreMouseEvents(splash, "splash", true);
+  debugSetIgnoreMouseEvents(splash, "splash", false);
   splash.once("ready-to-show", () => {
     if (!splash.isDestroyed()) splash.showInactive();
   });
@@ -1524,13 +1626,18 @@ export function setOverlayClickThrough(_enabled: boolean): void {}
 
 export function setOverlayClickThroughFromWindow(_win: BrowserWindow, _enabled: boolean): void {}
 
-/** @deprecated Renderer IPC ignored — overlay/dock/command bar click policy is fixed in main. */
-export function setIgnoreMouseFromWindow(win: BrowserWindow, enabled: boolean): void {
+/** @deprecated Renderer IPC — honored during onboarding overlay only. */
+export function setIgnoreMouseFromWindow(win: BrowserWindow, ignore: boolean): void {
   const windowName = resolveGlassWindowName(win);
-  logGlassClickDebug("setIgnoreMouseFromWindow IPC (no-op)", {
-    window: windowName,
-    ignore: enabled,
-  });
+  if (!windows?.overlay || win.isDestroyed() || win.id !== windows.overlay.id || !onboardingPending) {
+    logGlassClickDebug("setIgnoreMouseFromWindow IPC (no-op)", {
+      window: windowName,
+      ignore,
+    });
+    return;
+  }
+  onboardingOverlayForceInteractive = !ignore;
+  debugSetIgnoreMouseEvents(win, "overlay", ignore, ignore);
 }
 
 function resolveGlassWindowName(win: BrowserWindow): string {
@@ -1787,7 +1894,11 @@ export function focusCommandBar(): void {
 export function prefillCommandBar(text: string): void {
   if (!windows?.commandBar || windows.commandBar.isDestroyed()) return;
   focusCommandBar();
-  windows.commandBar.webContents.send("glass:command-bar-prefill", text);
+  // Brief delay so focus + click-through settle before prefill lands in the input.
+  setTimeout(() => {
+    if (!windows?.commandBar || windows.commandBar.isDestroyed()) return;
+    windows.commandBar.webContents.send("glass:command-bar-prefill", text);
+  }, 80);
 }
 
 export function blurCommandBar(): void {
@@ -2035,7 +2146,7 @@ export function nudgeChromeWindowFromWebContents(
 
   const bounds = win.getBounds();
   const display = layoutManager.getDisplay();
-  const maxBottom = commandBarMaxBottomY(display);
+  const maxBottom = commandBarMaxBottomY(display, builderStripBottomReservePx);
   let maxY = maxBottom - bounds.height;
   if (win.id === windows.commandBar.id) {
     // Bottom-anchored stack: align visible pill with the dock-safe bottom inset.

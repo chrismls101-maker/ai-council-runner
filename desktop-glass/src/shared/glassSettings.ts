@@ -4,6 +4,7 @@
 
 import { DEFAULT_COPILOT_CONFIG, type GlassCopilotConfig } from "./copilotTypes.ts";
 import { parseCopilotConfig } from "./copilotConfig.ts";
+import { DEFAULT_DESIGN_STACK } from "./designToCode.ts";
 
 export type GlassHotkeyPreset =
   | "cmd-shift-space"
@@ -61,6 +62,18 @@ export interface GlassUserSettings {
    * When set, takes precedence over IIVO_WEB_URL env var.
    */
   iivoWebUrl?: string;
+  /**
+   * Target framework/stack for design-to-code generation (#163-F).
+   * Used when no code file is open to infer stack from context.
+   * Defaults to "react-tsx".
+   */
+  designStack?: import("./designToCode.ts").DesignStack;
+  /** Sorting Hat placement — set during first-launch onboarding. */
+  persona?: "developer" | "sales" | "operator" | "writer" | "general";
+  /** UI + onboarding language chosen on post-boot picker. */
+  uiLocale?: import("./glassLocale.ts").GlassUiLocale;
+  /** True once the onboarding flow has been completed (or skipped). */
+  onboardingComplete?: boolean;
 }
 
 export const DEFAULT_GLASS_USER_SETTINGS: GlassUserSettings = {
@@ -76,6 +89,8 @@ export const DEFAULT_GLASS_USER_SETTINGS: GlassUserSettings = {
   micAutoSendAfterSilence: false,
   clipboardIntelligenceEnabled: false,
   copilot: { ...DEFAULT_COPILOT_CONFIG },
+  designStack: DEFAULT_DESIGN_STACK,
+  onboardingComplete: false,
 };
 
 export function parseCopilotSettings(value: unknown): GlassCopilotConfig {

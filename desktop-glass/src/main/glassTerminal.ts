@@ -13,6 +13,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
+import { exec } from "node:child_process";
+import { promisify } from "node:util";
+
+const execAsync = promisify(exec);
 
 const require = createRequire(import.meta.url);
 
@@ -71,6 +75,18 @@ function appendPtyReplay(termId: string, data: string): void {
 
 export function getPtyReplayBuffer(termId: string): string {
   return sessionReplayBuffers.get(termId) ?? "";
+}
+
+export function getPtyReplayBufferLength(termId: string): number {
+  return (sessionReplayBuffers.get(termId) ?? "").length;
+}
+
+/** Replay PTY output from a byte offset (used after resize so the shell prompt is not duplicated). */
+export function getPtyReplayBufferFrom(termId: string, fromByte: number): string {
+  const full = sessionReplayBuffers.get(termId) ?? "";
+  if (fromByte <= 0) return full;
+  if (fromByte >= full.length) return "";
+  return full.slice(fromByte);
 }
 
 // ─── Session registry ─────────────────────────────────────────────────────────
@@ -284,4 +300,29 @@ export function killAllPtySessions(): void {
  */
 export function getActivePtySessionIds(): string[] {
   return [...sessions.keys()];
+}
+
+/**
+ * Returns the name of the foreground process running in the PTY session,
+ * or null if the shell itself is in the foreground (no child processes).
+ * macOS/zsh compatible.
+ */
+export async function getForegroundProcessName(termId: string): Promise<string | null> {
+  const session = sessions.get(termId);
+  if (!session) return null;
+  const shellPid = session.term.pid;
+  try {
+    // Get direct child PIDs of the shell
+    const { stdout: childPids } = await execAsync(`pgrep -P ${shellPid} 2>/dev/null || true`);
+    const firstChild = childPids.trim().split("\n").filter(Boolean)[0];
+    if (!firstChild) return null; // shell is foreground, no title to show
+    // Get the process name
+    const { stdout: name } = await execAsync(`ps -o comm= -p ${firstChild} 2>/dev/null || true`);
+    const processName = name.trim();
+    // Filter out shell sub-processes we don't want to show (pgrep, ps itself)
+    if (!processName || processName === "pgrep" || processName === "ps") return null;
+    return processName;
+  } catch {
+    return null;
+  }
 }
