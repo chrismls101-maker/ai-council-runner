@@ -82,6 +82,25 @@ export const DOCK_TOP_MARGIN = 12;
 /** Gap between measured command bar stack and overlay chat cards. */
 export const OVERLAY_CHAT_STACK_GAP_PX = 14;
 
+/** Builder strip tab bar — flush above the frame bottom border (L-brackets stay on top via z-index). */
+export const BUILDER_STRIP_HEIGHT_PX = 40;
+/** Frame inset from overlay bottom (matches --overlay-frame-bottom). */
+export const BUILDER_STRIP_FRAME_INSET_PX = 7;
+/** Hairline gap above the frame box bottom edge (frame uses 1px border on that edge). */
+export const BUILDER_STRIP_ABOVE_FRAME_BOTTOM_GAP_PX = 1;
+/** Gap between strip top and command bar window bottom. */
+export const BUILDER_STRIP_ABOVE_COMMAND_BAR_GAP_PX = 8;
+
+/** Extra bottom reserve so the command bar clears the builder strip band. */
+export function builderStripLayoutReservePx(): number {
+  return (
+    BUILDER_STRIP_FRAME_INSET_PX +
+    BUILDER_STRIP_ABOVE_FRAME_BOTTOM_GAP_PX +
+    BUILDER_STRIP_HEIGHT_PX +
+    BUILDER_STRIP_ABOVE_COMMAND_BAR_GAP_PX
+  );
+}
+
 /** Fallback stack height when the command bar has not reported measured height yet. */
 export const OVERLAY_CHAT_STACK_FALLBACK_PX = COMMAND_BAR_COMPOSER_ROW_PX;
 
@@ -183,9 +202,12 @@ export function overlayLayoutFromDisplay(ctx: DisplayLayoutContext): OverlayLayo
 }
 
 /** Bottom Y for Glass chrome (command bar window bottom edge) above the macOS dock. */
-export function commandBarMaxBottomY(ctx: DisplayLayoutContext): number {
+export function commandBarMaxBottomY(
+  ctx: DisplayLayoutContext,
+  bottomReservePx = 0,
+): number {
   const overlay = overlayLayoutFromDisplay(ctx);
-  return overlay.y + overlay.height - COMMAND_BAR_BOTTOM_MARGIN;
+  return overlay.y + overlay.height - COMMAND_BAR_BOTTOM_MARGIN - Math.max(0, bottomReservePx);
 }
 
 export function panelLayoutFromDisplay(
@@ -245,8 +267,9 @@ export function commandBarWindowHeightForStack(stackHeightPx: number): number {
 export function clampCommandBarWindowBounds(
   bounds: LayoutRect,
   ctx: DisplayLayoutContext,
+  bottomReservePx = 0,
 ): LayoutRect {
-  const maxBottom = commandBarMaxBottomY(ctx);
+  const maxBottom = commandBarMaxBottomY(ctx, bottomReservePx);
   const minY = ctx.workArea.y + EDGE_MARGIN;
   let y = bounds.y;
   if (y + bounds.height > maxBottom) {
@@ -271,6 +294,7 @@ export function commandBarLayoutForStack(
   ctx: DisplayLayoutContext,
   stackHeightPx: number,
   customX?: number | null,
+  bottomReservePx = 0,
 ): CommandBarLayout {
   const width = Math.min(
     COMMAND_BAR_MAX_WIDTH,
@@ -287,8 +311,8 @@ export function commandBarLayoutForStack(
           ),
         )
       : defaultX;
-  const y = commandBarMaxBottomY(ctx) - height;
-  return clampCommandBarWindowBounds({ x, y, width, height }, ctx);
+  const y = commandBarMaxBottomY(ctx, bottomReservePx) - height;
+  return clampCommandBarWindowBounds({ x, y, width, height }, ctx, bottomReservePx);
 }
 
 /** Bottom-centered command bar inside the visible work area. */

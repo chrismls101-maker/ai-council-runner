@@ -1,0 +1,192 @@
+/* ─── Builder Strip — bottom tab bar (matches command bar composer shell) ─── */
+
+:root {
+  --builder-strip-height: 40px;
+  --builder-strip-side-inset: var(--overlay-glass-frame-inset-left, 10px);
+  --builder-strip-frame-inset: var(--overlay-frame-bottom, 7px);
+  /* Frame box bottom is at frame-inset; +1px clears its 1px bottom border line. */
+  --builder-strip-above-frame-bottom: 1px;
+  --builder-strip-bottom: calc(
+    var(--builder-strip-frame-inset) + var(--builder-strip-above-frame-bottom)
+  );
+  --builder-panel-radius: 16px;
+  --builder-accent: rgba(255, 255, 255, 0.72);
+}
+
+/* ── Strip container ──────────────────────────────────────────────────────── */
+.builder-strip {
+  position: fixed;
+  bottom: var(--builder-strip-bottom);
+  left: var(--builder-strip-side-inset);
+  right: var(--overlay-glass-frame-inset-right, var(--builder-strip-side-inset));
+  height: var(--builder-strip-height);
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 12px;
+  pointer-events: auto;
+  isolation: isolate;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+
+  background: var(
+    --glass-command-bar-shell-bg,
+    linear-gradient(165deg, rgba(10, 12, 18, 0.94), rgba(6, 8, 14, 0.9))
+  );
+  backdrop-filter: blur(32px) saturate(175%);
+  -webkit-backdrop-filter: blur(32px) saturate(175%);
+  border: 1px solid var(--glass-command-bar-shell-border, rgba(255, 255, 255, 0.2));
+  border-bottom: none;
+  border-radius: 12px 12px 0 0;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 -8px 24px rgba(0, 0, 0, 0.35);
+
+  opacity: 0;
+  animation: builder-strip-in 0.45s 0.3s cubic-bezier(0.22, 0.8, 0.22, 1) forwards;
+}
+
+.builder-strip::-webkit-scrollbar { display: none; }
+
+.builder-strip::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 0;
+  background: var(--glass-apple-sheen);
+}
+
+@keyframes builder-strip-in {
+  to { opacity: 1; }
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .builder-strip {
+    background: linear-gradient(165deg, rgba(10, 12, 18, 0.98), rgba(6, 8, 14, 0.96));
+  }
+}
+
+/* ── Tab buttons ─────────────────────────────────────────────────────────── */
+.builder-tab {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 12px;
+  height: 28px;
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--glass-text-dim, rgba(255, 255, 255, 0.52));
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: color 0.18s ease, background 0.18s ease;
+  white-space: nowrap;
+  pointer-events: auto;
+}
+
+.builder-tab,
+.builder-tab * {
+  cursor: pointer;
+}
+
+.builder-tab:hover {
+  color: rgba(255, 255, 255, 0.78);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.builder-tab--active {
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.builder-tab--active::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--glass-led-line, rgba(255, 255, 255, 0.55));
+  opacity: 0.85;
+}
+
+.builder-tab__icon {
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.builder-strip__divider {
+  flex: 1;
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Panel host — sits above the strip ───────────────────────────────────── */
+.builder-panel-host {
+  position: fixed;
+  bottom: calc(var(--builder-strip-bottom) + var(--builder-strip-height));
+  left: var(--builder-strip-side-inset);
+  right: var(--overlay-glass-frame-inset-right, var(--builder-strip-side-inset));
+  z-index: 119;
+  pointer-events: none;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+}
+
+/* ── Panel ───────────────────────────────────────────────────────────────── */
+.builder-panel {
+  width: 440px;
+  max-height: 520px;
+  pointer-events: auto;
+  isolation: isolate;
+  overflow: hidden;
+
+  background: var(
+    --glass-command-bar-shell-bg,
+    linear-gradient(165deg, rgba(10, 12, 18, 0.94), rgba(6, 8, 14, 0.9))
+  );
+  backdrop-filter: blur(32px) saturate(175%);
+  -webkit-backdrop-filter: blur(32px) saturate(175%);
+  border: 1px solid var(--glass-command-bar-shell-border, rgba(255, 255, 255, 0.2));
+  border-bottom: none;
+  border-radius: var(--builder-panel-radius) var(--builder-panel-radius) 0 0;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 -8px 32px rgba(0, 0, 0, 0.4);
+
+  display: flex;
+  flex-direction: column;
+
+  animation: builder-panel-open 0.28s cubic-bezier(0.22, 0.8, 0.22, 1) both;
+}
+
+@keyframes builder-panel-open {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .builder-panel {
+    background: linear-gradient(165deg, rgba(10, 12, 18, 0.98), rgba(6, 8, 14, 0.96));
+  }
+}

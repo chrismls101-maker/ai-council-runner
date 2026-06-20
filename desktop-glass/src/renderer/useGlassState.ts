@@ -80,6 +80,7 @@ const fallbackState: GlassState = {
   },
   appUpdate: emptyGlassAppUpdateState("0.1.0"),
   onboardingOpen: false,
+  onboardingComplete: false,
   glassUserProfile: null,
   commandBarOverlayClearancePx: undefined,
   iivoAccountLink: null,
@@ -101,6 +102,8 @@ const fallbackState: GlassState = {
   terminalWidgetPos: { x: 20, y: 60 },
   glassDockTerminalOpen: false,
   glassDockTerminalId: undefined,
+  glassDockTerminalTabs: undefined,
+  glassTerminalPendingAction: undefined,
 };
 
 export function useGlassState(): GlassState {

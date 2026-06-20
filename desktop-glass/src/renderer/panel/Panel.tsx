@@ -39,8 +39,10 @@ import { CopilotPanel } from "./CopilotPanel.tsx";
 import { AudioTab } from "./AudioTab.tsx";
 import AccountTab from "./AccountTab.tsx";
 import { LiveNotesTab } from "./LiveNotesTab.tsx";
+import { PowerStackTab } from "./PowerStackTab.tsx";
 
-const ALL_TABS: { id: PanelTab; label: string; devOnly?: boolean }[] = [
+const ALL_TABS: { id: PanelTab; label: string; devOnly?: boolean; builderOnly?: boolean }[] = [
+  { id: "power-stack", label: "POWER STACK", builderOnly: true },
   { id: "setup", label: "Setup" },
   { id: "copilot", label: "Copilot" },
   { id: "live-notes", label: "Notes" },
@@ -50,8 +52,6 @@ const ALL_TABS: { id: PanelTab; label: string; devOnly?: boolean }[] = [
   { id: "account", label: "Account" },
   { id: "diagnostics", label: "Diagnostics", devOnly: true },
 ];
-
-const TABS = ALL_TABS.filter((t) => !t.devOnly || IS_DEV);
 
 function NoteList({ items, empty }: { items: string[]; empty: string }): JSX.Element {
   if (items.length === 0) return <p className="empty">{empty}</p>;
@@ -556,8 +556,18 @@ function Transcript({ transcript }: { transcript: string }): JSX.Element {
 
 
 // ---------- Profile editor ----------
+
+const PERSONA_LABELS: Record<NonNullable<GlassState["persona"]>, string> = {
+  developer: "Builder",
+  sales: "Closer",
+  operator: "Operator",
+  writer: "Creator",
+  general: "Explorer",
+};
+
 function ProfileEditor({ state }: { state: GlassState }): JSX.Element {
   const profile = state.glassUserProfile;
+  const persona = state.persona;
   const [draft, setDraft] = useState({
     name: profile?.name ?? "",
     usualWork: profile?.usualWork ?? "",
@@ -644,6 +654,23 @@ function ProfileEditor({ state }: { state: GlassState }): JSX.Element {
             ✓ Saved
           </span>
         ) : null}
+      </div>
+      <div className="panel-profile-persona" data-testid="glass-panel-persona-section">
+        <p className="panel-profile-label">Persona</p>
+        <p className="hint panel-profile-persona-value" data-testid="glass-panel-persona-value">
+          {persona ? PERSONA_LABELS[persona] : "Not set — run calibration to load your power stack."}
+        </p>
+        <button
+          type="button"
+          className="gbtn panel-profile-recalibrate"
+          onClick={() => send({ type: "glass-onboarding-recalibrate" })}
+          data-testid="glass-panel-recalibrate-persona"
+        >
+          Recalibrate persona
+        </button>
+        <p className="hint panel-profile-recalibrate-hint">
+          Re-run the Sorting Hat to update your power stack and persona fit.
+        </p>
       </div>
     </section>
   );
@@ -980,11 +1007,18 @@ function MomentCard({ moment }: { moment: SavedMoment }): JSX.Element {
 
 export function Panel(): JSX.Element {
   const state = useGlassState();
-  const [tab, setTab] = useState<PanelTab>("setup");
+  const isBuilder = state.persona === "developer";
+  const [tab, setTab] = useState<PanelTab>(isBuilder ? "power-stack" : "setup");
 
   useEffect(() => {
     setTab(state.panelTab);
   }, [state.panelTab]);
+
+  const TABS = ALL_TABS.filter((t) => {
+    if (t.devOnly && !IS_DEV) return false;
+    if (t.builderOnly && !isBuilder) return false;
+    return true;
+  });
 
   const sessionLive =
     state.session?.status === "active" || state.session?.status === "paused";
@@ -1095,6 +1129,12 @@ export function Panel(): JSX.Element {
           {tab === "live-notes" ? (
             <div className="panel__body panel__body--live-notes" data-testid="glass-panel-notes-tab">
               <LiveNotesTab state={state} />
+            </div>
+          ) : null}
+
+          {tab === "power-stack" ? (
+            <div className="panel__body" style={{ padding: 0, overflow: "hidden", height: "100%" }}>
+              <PowerStackTab />
             </div>
           ) : null}
 

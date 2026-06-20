@@ -6,6 +6,7 @@
  * captures or sends without an explicit command from the UI.
  */
 
+import { fetchElevenLabsTtsBuffer, glassElevenLabsConfig, describeElevenLabsVoice } from "./glassElevenLabsTts.ts";
 import { loadGlassEnv } from "./loadGlassEnv.ts";
 import * as Sentry from "@sentry/electron/main";
 import { installGlassE2eHooks, getE2eExternalUrls, resetE2eExternalUrls } from "./e2eMainHooks.ts";
@@ -39,7 +40,39 @@ import {
   type GlassState,
   type SaveGlassMemoryRequest,
   type SessionActionStatus,
+  type ApiKeySaveRequest,
+  type PromptGenerateRequest,
+  type SpendSnapshot,
+  type SpendCustomFetchRequest,
+  type SpendCustomFetchResponse,
+  type TerminalExplainRequest,
+  type TerminalExplainResponse,
+  type NlToShellRequest,
+  type NlToShellResponse,
+  type VoiceShellTranscribeRequest,
+  type VoiceShellTranscribeResponse,
+  type TerminalVisionRequest,
+  type TerminalVisionResponse,
+  type TerminalSuggestRequest,
+  type TerminalSuggestResponse,
+  type TerminalSuggestion,
+  type TerminalContextBlock,
+  type ScrollbackWriteBlock,
+  type ScrollbackSearchRequest,
+  type ScrollbackSearchResponse,
+  type ExtractDetectRequest,
+  type ExtractDetectResponse,
+  type ExtractGenerateRequest,
+  type ExtractGenerateResponse,
+  type ExtractBuildHandoffRequest,
+  type ExtractBuildHandoffResponse,
 } from "../shared/ipc.ts";
+import {
+  pushTerminalContext,
+  clearTerminalContext,
+  getTerminalContextString,
+  normalizeTerminalContextBlocks,
+} from "./terminalContext.ts";
 import { saveResponseToMemoryVault } from "../shared/iivoMemoryClient.ts";
 import { waitForMinLookingDuration, waitForMinThinkingDuration, GLASS_ASK_TIMEOUT_MS, VOICE_ASK_STATUS } from "../shared/glassAskTiming.ts";
 import type { PanelTab } from "../shared/types.ts";
@@ -124,13 +157,30 @@ import {
   syncCommandBarWindowToStackHeight,
   setIgnoreMouseFromWindow,
   setOverlayPointerOverNotification,
+  setBuilderStripVisible,
+  setBuilderStripLayoutReserve,
+  setOverlayPointerOverBuilderStrip,
+  setBuilderStripPanelOpen,
+  ensureOnboardingOverlayClickThrough,
+  syncLanguagePickerOverlayInteractivity,
 } from "./windows.ts";
-import { computeCommandBarOverlayClearancePx, glassLayoutContentBottomY } from "../shared/glassLayoutMath.ts";
+import { computeCommandBarOverlayClearancePx, builderStripLayoutReservePx, glassLayoutContentBottomY } from "../shared/glassLayoutMath.ts";
+import { shouldShowBuilderStrip } from "../shared/builderStripVisibility.ts";
 import { logGlassClickDebug } from "./glassClickDebug.ts";
+import {
+  listApiKeys,
+  getApiKeyValue,
+  saveApiKey,
+  deleteApiKey,
+  touchApiKey,
+  isApiKeyEncryptionAvailable,
+} from "./apiKeyStore.ts";
 import {
   completeGlassOnboardingStore,
   loadGlassOnboardingState,
+  persistGlassUserProfile,
 } from "./glassOnboardingStore.ts";
+import { normalizeGlassUserProfile, type GlassUserProfile } from "../shared/glassUserProfile.ts";
 import {
   loadGlassContextProfile,
   persistGlassContextProfile,
@@ -140,7 +190,18 @@ import {
   resolveGlassUserContext,
   type GlassContextProfile,
 } from "../shared/glassContextEngine.ts";
-import { normalizeGlassUserProfile, type GlassUserProfile } from "../shared/glassUserProfile.ts";
+import {
+  normalizeApiKeyId,
+  normalizeApiKeyMeta,
+  normalizeApiKeyValue,
+} from "../shared/apiKeyValidation.ts";
+import { buildMetaPrompt } from "./powerPromptEngine.ts";
+import { buildDetectionPrompt, buildGenerationPrompt } from "./extractMode.ts";
+import { parseExtractDetectLabel } from "../shared/extractModeLogic.ts";
+import { runExtractBuildHandoff } from "./extractBuildHandoffRunner.ts";
+import { EXTRACT_BUILD_MACOS_PERMISSION_EXPLAIN } from "../shared/extractBuildHandoff.ts";
+import { getSpendSnapshot, refreshSpendSnapshot, startSpendPolling } from "./spendTracker.ts";
+import { getSpendHistory, getAllTimeTotal } from "./spendHistory.ts";
 import { loadMoments, persistMoments } from "./store.ts";
 import {
   loadIivoAccountLink,
@@ -164,7 +225,7 @@ import {
   applySystemAudioChromiumFlags,
   registerSystemAudioHandler,
 } from "./systemAudioHandler.ts";
-import { release } from "node:os";
+import { release, homedir } from "node:os";
 import { resolveInitialSystemAudioStatus, darwinMajorFromRelease } from "../shared/systemAudioCapture.ts";
 import type { SystemAudioStatus } from "../shared/systemAudioTypes.ts";
 import { buildGlassSttState, resolveSttConfig } from "../shared/sttTypes.ts";
@@ -416,6 +477,7 @@ import {
   DEFAULT_GLASS_USER_SETTINGS,
   type GlassUserSettings,
 } from "../shared/glassSettings.ts";
+import { parseUiLocale, isUiLocaleChosen, deepgramLanguageCode } from "../shared/glassLocale.ts";
 import { loadGlassUserSettings, persistGlassUserSettings } from "./glassSettingsPersistence.ts";
 import {
   buildGlassSetupCapabilities,
@@ -468,7 +530,9 @@ import {
 import {
   buildDesignToCodePrompt,
   isEditorAppName,
+  DEFAULT_DESIGN_STACK,
   type DesignToCodeAction,
+  type DesignStack,
 } from "../shared/designToCode.ts";
 import { computeUnifiedDiff, collapseUnchanged } from "../shared/diff.ts";
 import {
@@ -478,7 +542,22 @@ import {
   killPtySession,
   killAllPtySessions,
   getPtyReplayBuffer,
+  getPtyReplayBufferFrom,
+  getPtyReplayBufferLength,
+  getForegroundProcessName,
+  getActivePtySessionIds,
 } from "./glassTerminal.ts";
+import {
+  registerSession as registerScrollbackSession,
+  writeBlocks as writeScrollbackBlocks,
+  getRecentSummary as getScrollbackRecentSummary,
+  getByIdsInOrder as getScrollbackByIdsInOrder,
+  closeDb as closeScrollbackDb,
+} from "./scrollbackStore.ts";
+import {
+  normalizeScrollbackWriteBlocks,
+  parseScrollbackSearchIds,
+} from "./scrollbackValidation.ts";
 import {
   readCodeContext,
   formatCodeContext,
@@ -496,6 +575,19 @@ import {
 } from "./clipboardIntelligence.ts";
 
 loadGlassEnv();
+
+{
+  const { apiKey, voiceId, model } = glassElevenLabsConfig();
+  if (apiKey) {
+    console.log(
+      `[IIVO Glass] TTS: ElevenLabs — ${describeElevenLabsVoice(voiceId)} (${voiceId}) model=${model}`,
+    );
+  } else {
+    console.warn(
+      "[IIVO Glass] TTS: no ELEVENLABS_API_KEY — Sorting Hat will fall back to macOS speech if server TTS unavailable",
+    );
+  }
+}
 
 /**
  * Scrub known secrets and token-shaped strings from Sentry event payloads
@@ -572,7 +664,7 @@ app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 installDefaultGlassHandoffOpener();
 installGlassE2eHooks();
 
-if (process.env.IIVO_GLASS_E2E === "1") {
+if (process.env.IIVO_GLASS_E2E === "1" || !app.isPackaged) {
   app.commandLine.appendSwitch("remote-debugging-port", "19222");
 }
 
@@ -678,6 +770,10 @@ interface AppState {
   glassDockTerminalOpen?: boolean;
   /** Active PTY session id. */
   glassDockTerminalId?: string;
+  /** Open PTY tabs — active id is glassDockTerminalId. */
+  glassDockTerminalTabs?: Array<{ id: string }>;
+  /** One-shot action for the terminal renderer (⌘⇧P, etc.). */
+  glassTerminalPendingAction?: import("../shared/terminalPanelActions.ts").GlassTerminalPendingAction;
   /** Whether the ⌘⇧P powers quick-launcher palette is visible. */
   powersPaletteOpen?: boolean;
   /** Pending diff previews keyed by feed item id. */
@@ -690,6 +786,18 @@ interface AppState {
   customCommands?: import("../shared/ipc.ts").GlassState["customCommands"];
   /** Validation warnings from last custom commands load (#165). */
   customCommandsWarnings?: string[];
+  /** Whether first-launch onboarding has been completed (Sorting Hat). */
+  onboardingComplete?: boolean;
+  /** Boot splash finished — Sorting Hat must not mount until true. */
+  glassBootComplete?: boolean;
+  /** The persona assigned during Sorting Hat onboarding. */
+  persona?: "developer" | "sales" | "operator" | "writer" | "general";
+  /** Audio chunk from TTS — base64 encoded mp3, played by renderer then cleared. */
+  ttsAudio?: { id: string; data: string };
+  /** Epoch ms when Sorting Hat last finished — suppresses greeting TTS overlap. */
+  onboardingFinishedAt?: number;
+  /** E2E — shorten Sorting Hat manifest delays. */
+  e2eFastOnboarding?: boolean;
 }
 
 /** Set true in will-quit — prevents PTY onExit callbacks from calling push() on destroyed windows. */
@@ -704,6 +812,143 @@ const buildMonitorBuffers = new Map<string, string[]>();
 const buildMonitorLastFingerprint = new Map<string, string>();
 const BUILD_MONITOR_BUFFER_LINES = 60;
 const BUILD_MONITOR_DEBOUNCE_MS = 600;
+
+// ── Terminal tab auto-title (#42) ───────────────────────────────────────────────
+/** Foreground-process polling timers keyed by PTY session id. */
+const titlePollIntervals = new Map<string, ReturnType<typeof setInterval>>();
+
+function startTitlePolling(termId: string): void {
+  stopTitlePolling(termId); // clear any existing
+  const interval = setInterval(async () => {
+    try {
+      const title = await getForegroundProcessName(termId);
+      const win = getWindows()?.terminal;
+      if (win && !win.isDestroyed()) {
+        win.webContents.send(IPC.terminalTitleUpdate, termId, title);
+      }
+    } catch { /* ignore */ }
+  }, 2000);
+  titlePollIntervals.set(termId, interval);
+}
+
+function stopTitlePolling(termId: string): void {
+  const existing = titlePollIntervals.get(termId);
+  if (existing) {
+    clearInterval(existing);
+    titlePollIntervals.delete(termId);
+  }
+  // Send a null title to reset the header
+  const win = getWindows()?.terminal;
+  if (win && !win.isDestroyed()) {
+    win.webContents.send(IPC.terminalTitleUpdate, termId, null);
+  }
+}
+
+let terminalActionNonce = 0;
+
+function getTerminalTabs(): Array<{ id: string }> {
+  return state.glassDockTerminalTabs ?? [];
+}
+
+function setTerminalTabs(tabs: Array<{ id: string }>): void {
+  state.glassDockTerminalTabs = tabs.length > 0 ? tabs : undefined;
+}
+
+function syncTerminalTabsWithLiveSessions(): void {
+  const live = new Set(getActivePtySessionIds());
+  setTerminalTabs(getTerminalTabs().filter((t) => live.has(t.id)));
+}
+
+function appendTerminalTab(termId: string): void {
+  setTerminalTabs([...getTerminalTabs(), { id: termId }]);
+}
+
+function removeTerminalTab(termId: string): void {
+  setTerminalTabs(getTerminalTabs().filter((t) => t.id !== termId));
+}
+
+function pickLiveTerminalTabId(): string | undefined {
+  const live = new Set(getActivePtySessionIds());
+  const active = state.glassDockTerminalId;
+  if (active && live.has(active)) return active;
+  return getTerminalTabs().find((t) => live.has(t.id))?.id;
+}
+
+function handlePtySessionData(id: string, data: string): void {
+  const terminal = getWindows()?.terminal;
+  if (terminal && !terminal.isDestroyed()) {
+    terminal.webContents.send(IPC.ptyData, id, data);
+  }
+  const stripped = data.replace(/\x1b\[[0-9;]*[A-Za-z]|\x1b\][^\x07]*\x07/g, "").replace(/\r/g, "");
+  const buf = buildMonitorBuffers.get(id) ?? [];
+  buf.push(...stripped.split("\n"));
+  if (buf.length > BUILD_MONITOR_BUFFER_LINES) {
+    buf.splice(0, buf.length - BUILD_MONITOR_BUFFER_LINES);
+  }
+  buildMonitorBuffers.set(id, buf);
+  const existing = buildMonitorDebounce.get(id);
+  if (existing) clearTimeout(existing);
+  buildMonitorDebounce.set(id, setTimeout(() => {
+    buildMonitorDebounce.delete(id);
+    void checkBuildMonitor(id, buf);
+  }, BUILD_MONITOR_DEBOUNCE_MS));
+}
+
+function handlePtySessionExit(
+  id: string,
+  exitCode: number,
+  context: import("./glassTerminal.ts").GlassTerminalExitContext,
+): void {
+  if (appIsQuitting) return;
+  stopTitlePolling(id);
+  removeTerminalTab(id);
+  if (state.glassDockTerminalId === id) {
+    state.glassDockTerminalId = pickLiveTerminalTabId();
+  }
+  const debounce = buildMonitorDebounce.get(id);
+  if (debounce) { clearTimeout(debounce); buildMonitorDebounce.delete(id); }
+  buildMonitorBuffers.delete(id);
+  buildMonitorLastFingerprint.delete(id);
+  push();
+  if (exitCode !== 0 && context.lastCommand) {
+    void handleTerminalAutoFix(id, exitCode, context);
+  }
+}
+
+function spawnGlassDockPtySession(): string {
+  const termId = createPtySession({
+    onData: handlePtySessionData,
+    onExit: handlePtySessionExit,
+  });
+  appendTerminalTab(termId);
+  state.glassDockTerminalId = termId;
+  registerScrollbackSession(termId, homedir());
+  startTitlePolling(termId);
+  return termId;
+}
+
+function killGlassDockTerminalTab(termId: string): void {
+  stopTitlePolling(termId);
+  killPtySession(termId);
+}
+
+function ensureGlassTerminalSession(): string {
+  syncTerminalTabsWithLiveSessions();
+  const live = pickLiveTerminalTabId();
+  if (live) {
+    state.glassDockTerminalId = live;
+    return live;
+  }
+  return spawnGlassDockPtySession();
+}
+
+function dispatchTerminalPanelAction(
+  action: import("../shared/terminalPanelActions.ts").GlassTerminalPanelAction,
+): void {
+  state.glassTerminalPendingAction = { action, nonce: ++terminalActionNonce };
+  push();
+  showGlassTerminalWindow();
+}
 
 let askAbortController: AbortController | null = null;
 let askRequestGeneration = 0;
@@ -1055,8 +1300,55 @@ function stopListenDeepgramSession(): void {
 }
 let listenLastChunkMs: number | undefined;
 let listenRollingTranscript: ListenRollingTranscriptState = initialListenRollingTranscript();
+
+/** Extract & Build Mode — system-audio transcript + capture ownership. */
+let extractBuildModeActive = false;
+let extractModeStartedCapture = false;
+let extractRollingTranscript = "";
 /** Speaker names resolved from transcript patterns — e.g. { "0": "Lex", "1": "Sam Altman" }. */
 let listenSpeakerNames: Record<string, string> = {};
+
+function syncExtractTranscriptToOverlay(text: string): void {
+  const overlay = getWindows()?.overlay;
+  if (overlay && !overlay.isDestroyed()) {
+    overlay.webContents.send(IPC.extractModeTranscript, text);
+  }
+}
+
+function feedExtractModeTranscriptChunk(chunk: string): void {
+  if (!extractBuildModeActive || !chunk.trim()) return;
+  const next = appendTranscriptDeduped(extractRollingTranscript, chunk.trim());
+  if (next === extractRollingTranscript) return;
+  extractRollingTranscript = next;
+  syncExtractTranscriptToOverlay(extractRollingTranscript);
+}
+
+function startExtractBuildCapture(): void {
+  extractBuildModeActive = true;
+  extractRollingTranscript = "";
+  extractModeStartedCapture = !state.privacy.listening;
+  if (state.transcriptionMode !== "system_audio") {
+    state.transcriptionMode = "system_audio";
+  }
+  if (!state.privacy.listening) {
+    dispatchPrivacy({ type: "START_LISTENING", at: new Date().toISOString() });
+    state.stt = { ...state.stt, listeningElapsedMs: 0, lastError: undefined };
+    broadcastTranscriptionControl({ type: "start" });
+  }
+  syncExtractTranscriptToOverlay("");
+  push();
+}
+
+function stopExtractBuildCapture(): void {
+  extractBuildModeActive = false;
+  if (extractModeStartedCapture && state.privacy.listening) {
+    broadcastTranscriptionControl({ type: "stop" });
+    dispatchPrivacy({ type: "PAUSE", at: new Date().toISOString() });
+    state.stt = { ...state.stt, listeningElapsedMs: 0 };
+  }
+  extractModeStartedCapture = false;
+  push();
+}
 
 function listenCheckpointsForSession(): import("../shared/listenCheckpoint.ts").ListenCheckpointSummary[] {
   const session = sessions.current();
@@ -2894,6 +3186,13 @@ function snapshot(): GlassState {
     listenLiveNotes: isListenModeActive() ? buildCurrentListenLiveNotes() : undefined,
     liveTranslate: isTranslateActive() ? liveTranslateRuntime : undefined,
     onboardingOpen: state.onboardingOpen,
+    onboardingComplete: state.onboardingComplete,
+    glassBootComplete: state.glassBootComplete,
+    persona: state.persona,
+    ttsAudio: state.ttsAudio,
+    onboardingFinishedAt: state.onboardingFinishedAt,
+    e2eFastOnboarding: state.e2eFastOnboarding,
+    glassDevMode: !app.isPackaged,
     glassUserProfile: state.glassUserProfile,
     blackHoleInstallStatus: state.blackHoleInstallStatus,
     blackHoleInstallProgress: state.blackHoleInstallProgress,
@@ -2919,6 +3218,15 @@ function snapshot(): GlassState {
     actionResult: state.actionResult,
     glassDockTerminalOpen: state.glassDockTerminalOpen,
     glassDockTerminalId: state.glassDockTerminalId,
+    glassDockTerminalTabs: state.glassDockTerminalTabs,
+    glassTerminalPendingAction: state.glassTerminalPendingAction,
+    designCaptures: state.designCaptures,
+    pendingDiffs: state.pendingDiffs,
+    buildVerifications: state.buildVerifications,
+    powersPaletteOpen: state.powersPaletteOpen,
+    customCommands: state.customCommands,
+    customCommandsWarnings: state.customCommandsWarnings,
+    extractBuildModeActive,
   };
 }
 
@@ -2954,6 +3262,77 @@ async function finishGlassOnboarding(profile: GlassUserProfile | null): Promise<
   push();
 }
 
+function syncBuilderStripLayoutReserve(): void {
+  const reserve = shouldShowBuilderStrip({
+    onboardingComplete: state.onboardingComplete,
+    persona: state.persona,
+    glassDevMode: !app.isPackaged,
+  })
+    ? builderStripLayoutReservePx()
+    : 0;
+  setBuilderStripLayoutReserve(reserve);
+}
+
+async function finishSortingHatOnboarding(persona?: GlassState["persona"]): Promise<void> {
+  unregisterOnboardingEmergencyShortcut();
+  const effectivePersona =
+    persona ?? (!app.isPackaged ? ("developer" as const) : undefined);
+  state.onboardingOpen = false;
+  glassUserSettings = {
+    ...glassUserSettings,
+    onboardingComplete: true,
+    ...(effectivePersona ? { persona: effectivePersona } : {}),
+    displayTarget: "primary",
+    chromeLayoutLocked: true,
+    dockCustomOrigin: null,
+    commandBarCustomOrigin: null,
+  };
+  state.glassSettings = glassUserSettings;
+  state.onboardingComplete = true;
+  if (effectivePersona) state.persona = effectivePersona;
+  state.onboardingFinishedAt = Date.now();
+  syncBuilderStripLayoutReserve();
+
+  const stored = await completeGlassOnboardingStore(state.glassUserProfile);
+  state.glassUserProfile = stored.profile;
+  await persistGlassUserSettings(glassUserSettings);
+  syncChromeLayoutFromSettings(glassUserSettings, { clearCustomOrigins: true });
+  const manager = getLayoutManager();
+  manager?.setDisplayTarget("primary");
+  setOnboardingPending(false);
+
+  const externalDisplay = getConnectedDisplays().find((d) => !d.isPrimary);
+  if (externalDisplay) {
+    state.lastNotice = `External display detected (${externalDisplay.label}). Move Glass there in Settings → Display.`;
+  }
+
+  push();
+}
+
+async function beginSortingHatRecalibration(): Promise<void> {
+  unregisterOnboardingEmergencyShortcut();
+  state.onboardingOpen = false;
+  glassUserSettings = {
+    ...glassUserSettings,
+    onboardingComplete: false,
+    persona: undefined,
+    uiLocale: undefined,
+  };
+  state.glassSettings = glassUserSettings;
+  state.onboardingComplete = false;
+  state.persona = undefined;
+  state.onboardingFinishedAt = undefined;
+  state.glassBootComplete = true;
+  syncBuilderStripLayoutReserve();
+  await persistGlassUserSettings(glassUserSettings);
+  setOnboardingPending(true);
+  setOnboardingEmergencyHandler(() => {
+    void finishSortingHatOnboarding();
+  });
+  registerOnboardingEmergencyShortcut();
+  push();
+}
+
 function skipGlassOnboardingEmergency(): void {
   void finishGlassOnboarding(null);
 }
@@ -2986,6 +3365,13 @@ function push(): void {
       appUpdateVisible,
     }),
   );
+  syncLanguagePickerOverlayInteractivity(
+    state.onboardingComplete === false &&
+      state.glassBootComplete === true &&
+      !state.onboardingOpen &&
+      !isUiLocaleChosen(state.glassSettings?.uiLocale),
+  );
+  ensureOnboardingOverlayClickThrough();
   broadcast(IPC.state, snapshot());
 }
 
@@ -3637,6 +4023,30 @@ async function submitCommand(
     presetImageDataUrl?: string;
     /** Thread a file path onto the response card for Apply-to-file wiring. */
     codeFilePath?: string;
+    /**
+     * When the submission comes from design-to-code (#163-F), records which action
+     * was used so the response card can offer the right "Save component" extension.
+     */
+    designAction?: import("../shared/designToCode.ts").DesignToCodeAction;
+    /**
+     * The stack setting at generation time — snapshotted so "Save component" uses
+     * the correct extension even if the user changes the picker after generation.
+     */
+    designStack?: import("../shared/designToCode.ts").DesignStack;
+    /**
+     * Hint for server-side model selection.
+     * - "fast"     → lightweight model for background / ambient tasks
+     * - "standard" → default-tier model for normal questions
+     * - "deep"     → strongest model for complex multi-step reasoning (build errors, codebase analysis)
+     * Omit to let the server default (equivalent to "default" modelPurpose).
+     */
+    taskComplexity?: "fast" | "standard" | "deep";
+    /**
+     * Id of the design-capture feed item that triggered this generation (#166).
+     * Stored on the response card so the renderer can send the correct feedItemId
+     * when the user submits a refinement — state.designCaptures is keyed by capture id.
+     */
+    designCaptureId?: string;
   },
 ): Promise<void> {
   // Consume any pending context snapshot (set by glass-context-ask hotkey).
@@ -4048,6 +4458,12 @@ async function submitCommand(
   push();
 
   const userContext = resolveGlassAskUserContext();
+  // Append built-in terminal context if available (Task #41) — additive: when
+  // no terminal context exists, enrichedUserContext === userContext exactly.
+  const termCtx = getTerminalContextString();
+  const enrichedUserContext = termCtx
+    ? [userContext, termCtx].filter(Boolean).join("\n\n")
+    : userContext;
   const askRequest = {
     prompt: text,
     session: buildGlassAskSessionPayload(text),
@@ -4055,7 +4471,8 @@ async function submitCommand(
     lensContext: lensAttached ?? undefined,
     visualIntent: visualIntent || Boolean(lensScreenshotPayload) || undefined,
     responseStyle: "overlay" as const,
-    ...(userContext ? { userContext } : {}),
+    modelPurpose: (opts?.taskComplexity === "deep" ? "diagnostic" : "default") as import("../shared/glassAskTypes.ts").GlassAskRequest["modelPurpose"],
+    ...(enrichedUserContext ? { userContext: enrichedUserContext } : {}),
   };
 
   // Use streaming for pure-text asks (no screenshot/vision); fall back to
@@ -4125,6 +4542,9 @@ async function submitCommand(
         runId: result.runId,
         contextId: result.contextId,
         codeFilePath: askFilePath ?? undefined,
+        designAction: opts?.designAction,
+        designStack: opts?.designStack,
+        designCaptureId: opts?.designCaptureId,
       }),
     );
     // Persist Q&A pair to durable cross-session memory (fire-and-forget)
@@ -4356,6 +4776,35 @@ async function submitCommand(
       push();
     }
   }
+}
+
+/** Fetch TTS audio — prefers IIVO server /api/tts (same path as speak.ts), then direct ElevenLabs. */
+async function fetchGlassTtsBuffer(text: string): Promise<Buffer | null> {
+  const payload = text.trim().slice(0, 2000);
+  if (!payload) return null;
+
+  const locale = parseUiLocale(state.glassSettings?.uiLocale);
+  const { voiceId, model } = glassElevenLabsConfig(locale);
+  try {
+    const serverRes = await fetch(`${config.iivoApiUrl}/api/tts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: payload, voiceId, model }),
+    });
+    if (serverRes.ok) {
+      console.log(`[Glass TTS] server /api/tts ok voice=${voiceId} model=${model}`);
+      return Buffer.from(await serverRes.arrayBuffer());
+    }
+    console.warn("[Glass TTS] /api/tts failed", serverRes.status);
+  } catch (err) {
+    console.warn("[Glass TTS] server unreachable, trying direct ElevenLabs", err);
+  }
+
+  const direct = await fetchElevenLabsTtsBuffer(payload, locale);
+  if (direct) return direct;
+
+  console.warn("[Glass TTS] no audio — set ELEVENLABS_API_KEY in .env or run IIVO server with TTS");
+  return null;
 }
 
 async function handleCommand(
@@ -4620,6 +5069,11 @@ async function handleCommand(
       if (!chunk) return;
       const source = transcriptSourceFromTags(command.tags);
       const isInterim = command.interim === true;
+
+      if (extractBuildModeActive && command.tags?.includes("system_audio") && !isInterim) {
+        feedExtractModeTranscriptChunk(chunk);
+      }
+
       const session = sessions.current();
       const recentEvents = (session?.events ?? []).filter((e) => e.kind === "transcript_note").slice(-40);
       if (!isInterim && isDuplicateTranscriptChunk(chunk, source, recentEvents)) {
@@ -4788,6 +5242,15 @@ async function handleCommand(
     case "prefill-command-bar":
       prefillCommandBar(command.text);
       return;
+
+    // ── Extract & Build Mode ───────────────────────────────────────────────────
+    case "extract-mode-start":
+      startExtractBuildCapture();
+      return;
+    case "extract-mode-stop":
+      stopExtractBuildCapture();
+      return;
+
     case "report-command-bar-stack-height": {
       const heightPx = Math.max(0, Math.round(command.heightPx));
       const stackChanged = state.commandBarStackHeightPx !== heightPx;
@@ -4821,6 +5284,12 @@ async function handleCommand(
       glassUserSettings = state.glassSettings;
       await persistGlassUserSettings(glassUserSettings);
       registerGlobalHotkeys();
+      push();
+      return;
+    case "set-ui-locale":
+      state.glassSettings = { ...state.glassSettings, uiLocale: command.locale };
+      glassUserSettings = state.glassSettings;
+      await persistGlassUserSettings(glassUserSettings);
       push();
       return;
     case "set-glass-display": {
@@ -5137,6 +5606,12 @@ async function handleCommand(
     }
     case "open-microphone-settings": {
       const opened = await openGlassSystemSettings("microphone");
+      state.lastNotice = opened.message;
+      push();
+      return;
+    }
+    case "open-accessibility-settings": {
+      const opened = await openGlassSystemSettings("accessibility");
       state.lastNotice = opened.message;
       push();
       return;
@@ -5864,13 +6339,18 @@ async function handleCommand(
       }
       return;
     case "update-glass-profile": {
-      const profile = normalizeGlassUserProfile(command.profile);
-      if (profile) {
-        state.glassUserProfile = profile;
-        const next = await completeGlassOnboardingStore(profile);
-        state.glassUserProfile = next.profile;
-        push();
-      }
+      const incoming = normalizeGlassUserProfile(command.profile);
+      if (!incoming) return;
+      const merged = normalizeGlassUserProfile({
+        ...state.glassUserProfile,
+        ...incoming,
+        updatedAt: new Date().toISOString(),
+      });
+      if (!merged) return;
+      state.glassUserProfile = merged;
+      const next = await persistGlassUserProfile(merged, state.onboardingComplete === true);
+      state.glassUserProfile = next.profile;
+      push();
       return;
     }
     // ── TEST BACKDOORS ─────────────────────────────────────────────────────────
@@ -6145,7 +6625,7 @@ async function handleCommand(
       // Remove the build-error card so it doesn't linger next to the thinking card
       state.commandFeed = state.commandFeed.filter((f) => f.id !== command.feedItemId);
 
-      void submitCommand(prompt);
+      void submitCommand(prompt, undefined, { taskComplexity: "deep" });
       return;
     }
 
@@ -6274,31 +6754,45 @@ async function handleCommand(
 
     case "design-generate": {
       const { feedItemId, action } = command;
+      const refinementFeedback = command.refinementFeedback;
       const capture = state.designCaptures?.[feedItemId];
       if (!capture) return;
 
       if (action === "match-codebase" && capture.detectedFile?.filePath) {
-        // Need file content — ask permission first
+        // Need file content — ask permission first; stash feedback so grant/skip can carry it through
         capture.phase = "permission";
         capture.pendingAction = action;
+        capture.pendingRefinementFeedback = refinementFeedback;
         capture.statusLine = `Allow Glass to read ${capture.detectedFile.fileName}?`;
         push();
       } else {
         // No file read needed — generate immediately
-        void runDesignGeneration(feedItemId, action, false);
+        void runDesignGeneration(feedItemId, action, false, { refinementFeedback });
       }
       return;
     }
 
     case "design-grant-file-read": {
       const { feedItemId, action } = command;
-      void runDesignGeneration(feedItemId, action, true);
+      const grantCapture = state.designCaptures?.[feedItemId];
+      const pendingFeedback = grantCapture?.pendingRefinementFeedback;
+      void runDesignGeneration(feedItemId, action, true, pendingFeedback ? { refinementFeedback: pendingFeedback } : undefined);
       return;
     }
 
     case "design-skip-file-read": {
       const { feedItemId, action } = command;
-      void runDesignGeneration(feedItemId, action, false);
+      const skipCapture = state.designCaptures?.[feedItemId];
+      const pendingFeedback = skipCapture?.pendingRefinementFeedback;
+      void runDesignGeneration(feedItemId, action, false, pendingFeedback ? { refinementFeedback: pendingFeedback } : undefined);
+      return;
+    }
+
+    case "set-design-stack": {
+      const { stack } = command;
+      state.glassSettings.designStack = stack;
+      push();
+      void persistGlassUserSettings(state.glassSettings);
       return;
     }
 
@@ -6426,61 +6920,14 @@ async function handleCommand(
     // ── Glass built-in terminal (PTY) ────────────────────────────────────────
 
     case "glass-terminal-open": {
-      // If already open, just toggle the panel visible via state
-      if (!state.glassDockTerminalId) {
-        try {
-          const termId = createPtySession({
-            onData: (id, data) => {
-              const terminal = getWindows()?.terminal;
-              if (terminal && !terminal.isDestroyed()) {
-                terminal.webContents.send(IPC.ptyData, id, data);
-              }
-              // Build monitor: accumulate stripped lines, debounce detection
-              {
-                const stripped = data.replace(/\x1b\[[0-9;]*[A-Za-z]|\x1b\][^\x07]*\x07/g, "").replace(/\r/g, "");
-                const buf = buildMonitorBuffers.get(id) ?? [];
-                buf.push(...stripped.split("\n"));
-                if (buf.length > BUILD_MONITOR_BUFFER_LINES) {
-                  buf.splice(0, buf.length - BUILD_MONITOR_BUFFER_LINES);
-                }
-                buildMonitorBuffers.set(id, buf);
-                // Debounce: fire detection 600ms after last chunk
-                const existing = buildMonitorDebounce.get(id);
-                if (existing) clearTimeout(existing);
-                buildMonitorDebounce.set(id, setTimeout(() => {
-                  buildMonitorDebounce.delete(id);
-                  void checkBuildMonitor(id, buf);
-                }, BUILD_MONITOR_DEBOUNCE_MS));
-              }
-            },
-            onExit: (id, exitCode, context) => {
-              // Guard: will-quit sets appIsQuitting before killAllPtySessions() —
-              // windows may already be destroyed so push() would crash.
-              if (appIsQuitting) return;
-              if (state.glassDockTerminalId === id) {
-                state.glassDockTerminalId = undefined;
-                // Keep panel open so user sees the exit; new session on next open
-              }
-              // Clean up build monitor state for this session
-              const debounce = buildMonitorDebounce.get(id);
-              if (debounce) { clearTimeout(debounce); buildMonitorDebounce.delete(id); }
-              buildMonitorBuffers.delete(id);
-              buildMonitorLastFingerprint.delete(id);
-              push();
-              // Auto-fix: only trigger when a command actually ran and failed
-              if (exitCode !== 0 && context.lastCommand) {
-                void handleTerminalAutoFix(id, exitCode, context);
-              }
-            },
-          });
-          state.glassDockTerminalId = termId;
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          state.lastError = message;
-          state.glassDockTerminalOpen = false;
-          push();
-          return;
-        }
+      try {
+        ensureGlassTerminalSession();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        state.lastError = message;
+        state.glassDockTerminalOpen = false;
+        push();
+        return;
       }
       state.glassDockTerminalOpen = true;
       push();
@@ -6501,14 +6948,68 @@ async function handleCommand(
       return;
     }
 
-    case "glass-terminal-kill": {
-      if (state.glassDockTerminalId) {
-        killPtySession(state.glassDockTerminalId);
-        state.glassDockTerminalId = undefined;
+    case "glass-terminal-new-tab": {
+      try {
+        spawnGlassDockPtySession();
+        state.glassDockTerminalOpen = true;
+        push();
+        showGlassTerminalWindow();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        state.lastError = message;
+        push();
       }
-      state.glassDockTerminalOpen = false;
+      return;
+    }
+
+    case "glass-terminal-switch-tab": {
+      const { termId } = command;
+      if (termId && getActivePtySessionIds().includes(termId)) {
+        state.glassDockTerminalId = termId;
+        push();
+      }
+      return;
+    }
+
+    case "glass-terminal-close-tab": {
+      const termId = command.termId ?? state.glassDockTerminalId;
+      if (termId) {
+        killGlassDockTerminalTab(termId);
+        if (!pickLiveTerminalTabId()) {
+          clearTerminalContext();
+          state.glassDockTerminalOpen = false;
+          scheduleDismissGlassTerminalWindow();
+        }
+      }
       push();
-      scheduleDismissGlassTerminalWindow();
+      return;
+    }
+
+    case "glass-terminal-action": {
+      const { action } = command;
+      try {
+        ensureGlassTerminalSession();
+        state.glassDockTerminalOpen = true;
+        dispatchTerminalPanelAction(action);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        state.lastError = message;
+        push();
+      }
+      return;
+    }
+
+    case "glass-terminal-kill": {
+      const termId = state.glassDockTerminalId;
+      if (termId) {
+        killGlassDockTerminalTab(termId);
+      }
+      if (!pickLiveTerminalTabId()) {
+        clearTerminalContext();
+        state.glassDockTerminalOpen = false;
+        scheduleDismissGlassTerminalWindow();
+      }
+      push();
       return;
     }
 
@@ -6603,6 +7104,67 @@ async function handleCommand(
       }
       return;
     }
+
+    // ── Sorting Hat TTS + onboarding ─────────────────────────────────────────
+
+    case "glass-tts": {
+      const { text } = command;
+      if (!text?.trim()) return;
+      try {
+        const buf = await fetchGlassTtsBuffer(text);
+        if (!buf) {
+          console.error(
+            "[Glass TTS] glass-tts: no audio (check ELEVENLABS_API_KEY in desktop-glass/.env or repo .env)",
+          );
+          state.ttsAudio = { id: `failed-${Date.now()}`, data: "" };
+          push();
+          setTimeout(() => {
+            state.ttsAudio = undefined;
+            push();
+          }, 500);
+          return;
+        }
+        state.ttsAudio = { id: Date.now().toString(), data: buf.toString("base64") };
+        console.log(`[Glass TTS] glass-tts: sent ${buf.length} bytes to overlay`);
+        push();
+        // Keep in state long enough for overlay to receive + start playback.
+        setTimeout(() => {
+          state.ttsAudio = undefined;
+          push();
+        }, 15_000);
+      } catch (e) {
+        console.error("[Glass TTS] fetch failed", e);
+      }
+      return;
+    }
+
+    case "glass-onboarding-complete": {
+      await finishSortingHatOnboarding(command.persona);
+      return;
+    }
+
+    case "glass-onboarding-skip": {
+      await finishSortingHatOnboarding();
+      return;
+    }
+
+    case "glass-onboarding-recalibrate": {
+      await beginSortingHatRecalibration();
+      return;
+    }
+
+    case "e2e-open-sorting-hat":
+      if (process.env.IIVO_GLASS_E2E === "1") {
+        await beginSortingHatRecalibration();
+      }
+      return;
+
+    case "dev-open-onboarding":
+      if (!app.isPackaged) {
+        await beginSortingHatRecalibration();
+        console.log("[IIVO Glass] Sorting Hat opened (dev-open-onboarding)");
+      }
+      return;
 
     default:
       if (await handleCopilotCommand(command)) return;
@@ -6737,9 +7299,14 @@ async function runDesignGeneration(
   feedItemId: string,
   action: DesignToCodeAction,
   readFile: boolean,
+  opts?: { refinementFeedback?: string },
 ): Promise<void> {
   const capture = state.designCaptures?.[feedItemId];
   if (!capture) return;
+
+  // Snapshot the stack immediately — before any async gaps — so that a user
+  // changing the picker while file-read is in progress doesn't corrupt this run (#163-F).
+  const stack: DesignStack = state.glassSettings.designStack ?? DEFAULT_DESIGN_STACK;
 
   // Phase: reading (if applicable)
   const filePath = capture.detectedFile?.filePath ?? null;
@@ -6790,19 +7357,26 @@ async function runDesignGeneration(
     content: fileContent,
     importedFiles: importedFiles.length > 0 ? importedFiles : undefined,
   };
-  const prompt = buildDesignToCodePrompt(action, ctx);
+
+  const prompt = buildDesignToCodePrompt(action, ctx, stack, opts?.refinementFeedback);
 
   // Inject the captured design image directly — bypasses resolveScreenshotForVisualAsk
   // so the AI receives the design thumbnail rather than a fresh live capture.
+  // match-codebase includes full import graph + file content — use the strongest model.
   await submitCommand(prompt, null, {
     presetImageDataUrl: capture.imageDataUrl,
     codeFilePath: filePath ?? undefined,
+    designAction: action,
+    designStack: stack,
+    designCaptureId: feedItemId,
+    taskComplexity: action === "match-codebase" ? "deep" : "standard",
   });
 
   // Phase: done — mark the card so renderer can show the response link
   if (state.designCaptures?.[feedItemId]) {
     state.designCaptures[feedItemId].phase = "done";
     state.designCaptures[feedItemId].statusLine = undefined;
+    state.designCaptures[feedItemId].pendingRefinementFeedback = undefined;
     push();
   }
 }
@@ -7408,10 +7982,10 @@ async function applyCopilotEffect(
       await runCopilotDiagnosis(resolution);
       break;
     case "summarize-blocker":
-      void submitCommand("Summarize what's blocking me right now and the main friction.");
+      void submitCommand("Summarize what's blocking me right now and the main friction.", undefined, { taskComplexity: "standard" });
       break;
     case "create-fix-plan":
-      void submitCommand("Create a step-by-step fix plan for what I'm stuck on.");
+      void submitCommand("Create a step-by-step fix plan for what I'm stuck on.", undefined, { taskComplexity: "standard" });
       break;
     case "save-issue": {
       const note = resolution.intervention?.body ?? insight?.text ?? "Diagnostic issue saved.";
@@ -7790,12 +8364,660 @@ function registerScreenshotProtocol(): void {
   });
 }
 
+function isOverlayIpcSender(sender: Electron.WebContents): boolean {
+  const overlay = getWindows()?.overlay;
+  if (!overlay || overlay.isDestroyed()) return false;
+  return sender.id === overlay.webContents.id;
+}
+
+function isTerminalIpcSender(sender: Electron.WebContents): boolean {
+  const terminal = getWindows()?.terminal;
+  if (!terminal || terminal.isDestroyed()) return false;
+  return sender.id === terminal.webContents.id;
+}
+
+function isValidPtySessionId(termId: unknown): termId is string {
+  return typeof termId === "string" && getActivePtySessionIds().includes(termId);
+}
+
 function registerIpc(): void {
-  ipcMain.handle(IPC.writeClipboard, (_event, text: string) => {
+  ipcMain.handle(IPC.writeClipboard, (event, text: string) => {
+    if (!isOverlayIpcSender(event.sender) && !isTerminalIpcSender(event.sender)) return false;
     if (typeof text !== "string" || !text.trim()) return false;
     clipboard.writeText(text);
     return true;
   });
+
+  // ── API Key Manager ────────────────────────────────────────────────────────
+  ipcMain.handle(IPC.apiKeyList, (event) => {
+    if (!isOverlayIpcSender(event.sender)) {
+      return { keys: [], error: "Unauthorized" };
+    }
+    try {
+      return {
+        keys: listApiKeys(),
+        encryptionAvailable: isApiKeyEncryptionAvailable(),
+      };
+    } catch (err) {
+      const error = err instanceof Error ? err.message : "List failed";
+      return { keys: [], error, encryptionAvailable: isApiKeyEncryptionAvailable() };
+    }
+  });
+
+  ipcMain.handle(IPC.apiKeyGetValue, (event, id: string) => {
+    if (!isOverlayIpcSender(event.sender)) {
+      return { value: null };
+    }
+    const normalizedId = normalizeApiKeyId(id);
+    if (!normalizedId) return { value: null };
+    try {
+      const value = getApiKeyValue(normalizedId);
+      if (value !== null) touchApiKey(normalizedId);
+      return { value };
+    } catch {
+      return { value: null };
+    }
+  });
+
+  ipcMain.handle(IPC.apiKeySave, (event, payload: ApiKeySaveRequest) => {
+    if (!isOverlayIpcSender(event.sender)) {
+      return { ok: false, error: "Unauthorized" };
+    }
+    const meta = normalizeApiKeyMeta(payload?.meta);
+    const value = normalizeApiKeyValue(payload?.value);
+    if (!meta || !value) {
+      return { ok: false, error: "Invalid key data" };
+    }
+    try {
+      saveApiKey(meta, value);
+      return { ok: true };
+    } catch (err) {
+      const error = err instanceof Error ? err.message : "Save failed";
+      return { ok: false, error };
+    }
+  });
+
+  ipcMain.handle(IPC.apiKeyDelete, (event, id: string) => {
+    if (!isOverlayIpcSender(event.sender)) {
+      return { ok: false, error: "Unauthorized" };
+    }
+    const normalizedId = normalizeApiKeyId(id);
+    if (!normalizedId) {
+      return { ok: false, error: "Invalid key id" };
+    }
+    try {
+      deleteApiKey(normalizedId);
+      return { ok: true };
+    } catch (err) {
+      const error = err instanceof Error ? err.message : "Delete failed";
+      return { ok: false, error };
+    }
+  });
+
+  // ── Power Prompt Generator ─────────────────────────────────────────────────
+  ipcMain.handle(IPC.promptGenerate, async (event, payload: PromptGenerateRequest) => {
+    if (!isOverlayIpcSender(event.sender)) {
+      return { error: "Unauthorized" };
+    }
+    const intent = typeof payload?.intent === "string" ? payload.intent.trim() : "";
+    if (!intent) return { error: "Intent is required" };
+    const target = payload?.target ?? "general";
+    const mode = payload?.mode ?? "build";
+
+    // Prefer user-edited context over auto-detected; fall back to Glass state.
+    const userContextRaw = typeof payload?.userContext === "string" ? payload.userContext.trim() : "";
+    const workingContext = userContextRaw || state.workingContext;
+    const activeApp = state.activeApp;
+
+    const metaPrompt = buildMetaPrompt({ intent, target, mode, workingContext, activeApp });
+
+    try {
+      const response = await askIivoGlass(config, {
+        prompt: metaPrompt,
+        responseStyle: "full",
+      });
+      return {
+        result: response.answer?.trim() ?? "",
+        usedContext: workingContext,
+        usedApp: activeApp,
+      };
+    } catch (err) {
+      const error = err instanceof Error ? err.message : "Prompt generation failed";
+      return { error };
+    }
+  });
+
+  // ── AI Spend Tracker ───────────────────────────────────────────────────────
+  ipcMain.handle(IPC.spendGet, async (event): Promise<SpendSnapshot> => {
+    if (!isOverlayIpcSender(event.sender)) {
+      return { providers: [], totalTodayUSD: 0, totalMonthUSD: 0, refreshedAt: 0 };
+    }
+    return getSpendSnapshot();
+  });
+
+  ipcMain.handle(IPC.spendRefresh, async (event): Promise<SpendSnapshot> => {
+    if (!isOverlayIpcSender(event.sender)) {
+      return { providers: [], totalTodayUSD: 0, totalMonthUSD: 0, refreshedAt: 0 };
+    }
+    return refreshSpendSnapshot();
+  });
+
+  ipcMain.handle(IPC.spendCustomFetch, async (event, payload: SpendCustomFetchRequest): Promise<SpendCustomFetchResponse> => {
+    if (!isOverlayIpcSender(event.sender)) return { ok: false, error: "Unauthorized" };
+
+    const { url, authStyle, customHeaderName, queryParamName, keyId } = payload ?? {};
+    if (!url || !keyId) return { ok: false, error: "url and keyId are required" };
+
+    const apiKey = getApiKeyValue(keyId);
+    if (!apiKey) return { ok: false, error: "Key not found or could not decrypt" };
+
+    try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      let fetchUrl = url;
+
+      if (authStyle === "bearer") {
+        headers["Authorization"] = `Bearer ${apiKey}`;
+      } else if (authStyle === "token") {
+        headers["Authorization"] = `Token ${apiKey}`;
+      } else if (authStyle === "custom-header" && customHeaderName) {
+        headers[customHeaderName] = apiKey;
+      } else if (authStyle === "query-param" && queryParamName) {
+        const sep = url.includes("?") ? "&" : "?";
+        fetchUrl = `${url}${sep}${encodeURIComponent(queryParamName)}=${encodeURIComponent(apiKey)}`;
+      }
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 12_000);
+      let res: Response;
+      try {
+        res = await fetch(fetchUrl, { headers, signal: controller.signal });
+      } finally {
+        clearTimeout(timer);
+      }
+
+      const body = await res.json().catch(() => null);
+      return { ok: res.ok, status: res.status, body };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : "Fetch failed" };
+    }
+  });
+
+  ipcMain.handle(IPC.spendHistoryGet, (event, days?: number) => {
+    if (!isOverlayIpcSender(event.sender)) return { entries: [], allTimeTotal: 0, since: null };
+    const entries = getSpendHistory(typeof days === "number" ? days : 90);
+    const { totalUSD: allTimeTotal, since } = getAllTimeTotal();
+    return { entries, allTimeTotal, since };
+  });
+
+  // ── Terminal AI: Explain Last Error ────────────────────────────────────────
+  ipcMain.handle(IPC.terminalExplain, async (event, payload: TerminalExplainRequest): Promise<TerminalExplainResponse> => {
+    if (!isTerminalIpcSender(event.sender)) return { error: "Unauthorized" };
+
+    const command = typeof payload?.command === "string" ? payload.command.trim() : "";
+    const output = typeof payload?.output === "string" ? payload.output.slice(0, 8000) : "";
+
+    if (!command && !output) return { error: "No command or output provided" };
+
+    const exitInfo = payload?.exitCode != null ? ` (exit code ${payload.exitCode})` : "";
+    const prompt = [
+      `The user ran this shell command${exitInfo}:`,
+      `\`\`\``,
+      command || "(unknown command)",
+      `\`\`\``,
+      "",
+      output ? `It produced this output:\n\`\`\`\n${output}\n\`\`\`` : "It produced no output.",
+      "",
+      "In 2–3 sentences maximum: explain what went wrong and give one specific fix. Be direct and technical. Use inline code backticks for commands and paths. Do NOT restate the question.",
+    ].join("\n");
+
+    try {
+      const response = await askIivoGlass(config, {
+        prompt,
+        responseStyle: "full",
+      });
+      const explanation = response.answer?.trim() ?? "";
+      if (!explanation) return { error: "No explanation returned" };
+      return { explanation };
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : "Explanation failed" };
+    }
+  });
+
+  // ── Screen-Aware Terminal Assistant (Task #45) ──────────────────────────────
+  // ⌘+Shift+E in the terminal: capture the full screen here in main, package it
+  // with terminal context, and analyze via Claude Vision. The renderer sends only
+  // text context — the screenshot never crosses the IPC boundary.
+  ipcMain.handle(
+    IPC.terminalVisionAnalyze,
+    async (event, payload: TerminalVisionRequest): Promise<TerminalVisionResponse> => {
+      const terminalWindow = getWindows()?.terminal;
+      if (!terminalWindow || event.sender !== terminalWindow.webContents) {
+        return { error: "Unauthorized" };
+      }
+
+      const terminalContext =
+        typeof payload?.terminalContext === "string"
+          ? payload.terminalContext.slice(0, 6000)
+          : "";
+      const lastCommand = typeof payload?.lastCommand === "string" ? payload.lastCommand : undefined;
+      const lastOutput = typeof payload?.lastOutput === "string" ? payload.lastOutput : undefined;
+
+      // Capture the user's chosen display at native resolution. Hide overlay chrome
+      // but keep the terminal window visible so Claude can read on-screen errors.
+      let screenshotBase64 = "";
+      try {
+        hideGlassWindowsForCapture(terminalWindow.webContents);
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        const captureTarget = resolveCaptureDisplay(state.glassSettings.displayTarget);
+        const capture = await captureDisplayById(captureTarget.id, captureTarget.label);
+        const dataUrlMatch = capture.imageDataUrl.match(/^data:image\/\w+;base64,(.+)$/);
+        screenshotBase64 = dataUrlMatch?.[1] ?? "";
+        if (!screenshotBase64) {
+          return { error: "Screen capture returned no image data" };
+        }
+      } catch (err) {
+        return { error: err instanceof Error ? `Screen capture failed: ${err.message}` : "Screen capture failed" };
+      } finally {
+        restoreGlassWindowsAfterCapture();
+      }
+
+      const prompt = [
+        "You are an expert terminal debugging assistant with full context of what's on the user's screen.",
+        "",
+        "The user pressed ⌘+Shift+E in their terminal. The attached screenshot shows their current screen state.",
+        "",
+        "Terminal session context (last commands):",
+        terminalContext || "(no recent terminal context)",
+        "",
+        `Last command run: ${lastCommand ?? "unknown"}`,
+        `Last output: ${lastOutput ?? "(see screenshot)"}`,
+        "",
+        "Analyze what's happening — focusing on errors, warnings, or issues visible in the terminal and on screen. Provide a concise explanation of what went wrong and specific steps to fix it. Be direct and actionable.",
+      ].join("\n");
+
+      try {
+        // The IIVO Glass ask API supports native vision via `latestScreenshot`
+        // (imageBase64 + mimeType) combined with visualIntent. Pass the capture
+        // as a proper image block rather than embedding base64 in the text.
+        const response = await askIivoGlass(config, {
+          prompt,
+          latestScreenshot: {
+            imageBase64: screenshotBase64,
+            imageDataUrl: `data:image/png;base64,${screenshotBase64}`,
+            mimeType: "image/png",
+            capturedAt: new Date().toISOString(),
+            sourceTitle: "Glass Terminal — full screen",
+          },
+          visualIntent: true,
+          responseStyle: "full",
+        });
+        const analysis = response.answer?.trim() ?? "";
+        if (!analysis) return { error: "No analysis returned" };
+        return { analysis };
+      } catch (err) {
+        return { error: err instanceof Error ? err.message : "Vision analysis failed" };
+      }
+    },
+  );
+
+  // ── AI Command Suggestions (Task #46) ───────────────────────────────────────
+  // After a command finishes in the built-in terminal, suggest 3 useful next
+  // commands. Non-streaming, same pattern as terminalExplain. Silent failure on
+  // the renderer side — bad JSON or errors just don't surface a bar.
+  ipcMain.handle(
+    IPC.terminalSuggest,
+    async (event, payload: TerminalSuggestRequest): Promise<TerminalSuggestResponse> => {
+      const terminalWindow = getWindows()?.terminal;
+      if (!terminalWindow || event.sender !== terminalWindow.webContents) {
+        return { error: "Unauthorized" };
+      }
+
+      try {
+        const lastCommand = typeof payload?.lastCommand === "string" ? payload.lastCommand.trim() : "";
+        const lastStatus =
+          payload?.lastStatus === "error" || payload?.lastStatus === "success"
+            ? payload.lastStatus
+            : "unknown";
+        const cwd = typeof payload?.cwd === "string" && payload.cwd ? payload.cwd : "~";
+        const recentCommands = Array.isArray(payload?.recentCommands)
+          ? payload.recentCommands.filter((c): c is string => typeof c === "string").slice(-5)
+          : [];
+
+        if (!lastCommand) return { error: "No command provided" };
+
+        const prompt = [
+          "You are a terminal assistant. Based on the last command and working directory, suggest 3 useful next commands the developer might want to run.",
+          "",
+          `Working directory: ${cwd}`,
+          `Last command: ${lastCommand}`,
+          `Status: ${lastStatus === "error" ? "FAILED" : "succeeded"}`,
+          `Recent commands: ${recentCommands.join(", ")}`,
+          "",
+          "Respond with ONLY valid JSON — an array of exactly 3 objects:",
+          `[{"command": "...", "why": "one short sentence"}, ...]`,
+          "",
+          "Rules:",
+          "- Make suggestions specific to the actual command and directory context",
+          "- If the last command FAILED, prioritize debug/fix suggestions",
+          "- Commands must be real, runnable shell commands",
+          `- Keep "why" under 8 words`,
+          "- No markdown, no explanation outside the JSON array",
+        ].join("\n");
+
+        const response = await askIivoGlass(config, { prompt, responseStyle: "full" });
+        let raw = response.answer?.trim() ?? "";
+        if (!raw) return { error: "No suggestions returned" };
+
+        // Strip markdown code fences if the model wrapped the JSON.
+        raw = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(raw);
+        } catch {
+          return { error: "Could not parse suggestions" };
+        }
+
+        if (!Array.isArray(parsed)) return { error: "Could not parse suggestions" };
+
+        const suggestions: TerminalSuggestion[] = parsed
+          .filter(
+            (s): s is { command: unknown; why: unknown } =>
+              !!s && typeof s === "object",
+          )
+          .map((s) => ({
+            command: typeof s.command === "string" ? s.command.trim() : "",
+            why: typeof s.why === "string" ? s.why.trim() : "",
+          }))
+          .filter((s) => s.command.length > 0)
+          .slice(0, 3);
+
+        if (suggestions.length === 0) return { error: "Could not parse suggestions" };
+        return { suggestions };
+      } catch (err) {
+        return { error: err instanceof Error ? err.message : "Suggestion failed" };
+      }
+    },
+  );
+
+  // ── Terminal AI: Natural Language → Shell command (Task #40) ────────────────
+  ipcMain.handle(IPC.nlToShell, async (event, payload: NlToShellRequest): Promise<NlToShellResponse> => {
+    if (!isTerminalIpcSender(event.sender)) return { error: "Unauthorized" };
+    const userPrompt = typeof payload?.prompt === "string" ? payload.prompt.trim() : "";
+    if (!userPrompt) return { error: "No prompt provided" };
+
+    // Build context from recent commands
+    const context = payload.recentCommands?.length
+      ? `\nRecent commands:\n${payload.recentCommands.slice(-5).map((c) => `  ${c}`).join("\n")}`
+      : "";
+
+    const prompt = [
+      "Convert the following natural language description into a single shell command for macOS/zsh.",
+      "Rules:",
+      "- Output ONLY the shell command, nothing else — no explanation, no markdown, no quotes, no backticks",
+      "- If multiple commands are needed, join with && or | as appropriate",
+      "- Prefer standard Unix tools (find, grep, awk, sed, ls, etc.)",
+      "- Make the command safe — no destructive operations unless explicitly requested",
+      context,
+      "",
+      `Task: ${userPrompt}`,
+    ].join("\n");
+
+    try {
+      const response = await askIivoGlass(config, { prompt, responseStyle: "full" });
+      const command = response.answer?.trim().replace(/^`+|`+$/g, "").trim() ?? "";
+      if (!command) return { error: "No command returned" };
+      return { command };
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : "Conversion failed" };
+    }
+  });
+
+  // ── Voice → Shell: Deepgram transcription (Task #44) ────────────────────────
+  // The terminal renderer records mic audio and posts the buffer here; we send
+  // it to Deepgram's pre-recorded REST API and return the transcript. The NL→
+  // shell conversion is handled separately by the existing nlToShell IPC.
+  ipcMain.handle(
+    IPC.voiceShellTranscribe,
+    async (event, payload: VoiceShellTranscribeRequest): Promise<VoiceShellTranscribeResponse> => {
+      if (!isTerminalIpcSender(event.sender)) {
+        return { error: "Unauthorized" };
+      }
+
+      const dgKey = process.env.DEEPGRAM_API_KEY?.trim();
+      if (!dgKey) {
+        return { error: "DEEPGRAM_API_KEY is not configured — add it to desktop-glass/.env and restart." };
+      }
+
+      const rawBuffer = payload?.buffer;
+      const mimeType = typeof payload?.mimeType === "string" ? payload.mimeType : "audio/webm";
+      if (!rawBuffer) {
+        return { error: "No audio buffer provided" };
+      }
+
+      try {
+        // The ArrayBuffer arrives as a plain object after IPC serialization;
+        // Buffer.from(new Uint8Array(...)) handles both ArrayBuffer and Buffer.
+        const audioBuffer = Buffer.isBuffer(rawBuffer)
+          ? rawBuffer
+          : Buffer.from(new Uint8Array(rawBuffer as ArrayBuffer));
+
+        if (audioBuffer.byteLength === 0) {
+          return { error: "No audio captured" };
+        }
+
+        const MAX_VOICE_AUDIO_BYTES = 5 * 1024 * 1024;
+        if (audioBuffer.byteLength > MAX_VOICE_AUDIO_BYTES) {
+          return { error: "Recording too long — try a shorter command." };
+        }
+
+        const dgLang = deepgramLanguageCode(parseUiLocale(state.glassSettings?.uiLocale));
+
+        // Deepgram pre-recorded transcription REST API.
+        // https://developers.deepgram.com/docs/getting-started-with-pre-recorded-audio
+        const url =
+          "https://api.deepgram.com/v1/listen" +
+          `?model=nova-3&smart_format=true&punctuate=true&language=${encodeURIComponent(dgLang)}`;
+
+        const response = await fetch(url, {
+          method: "POST",
+          headers: {
+            Authorization: `Token ${dgKey}`,
+            "Content-Type": mimeType,
+          },
+          body: audioBuffer,
+        });
+
+        if (!response.ok) {
+          const errText = await response.text().catch(() => response.statusText);
+          return { error: `Deepgram API error ${response.status}: ${errText.slice(0, 200)}` };
+        }
+
+        const data = (await response.json()) as {
+          results?: {
+            channels?: Array<{
+              alternatives?: Array<{ transcript?: string }>;
+            }>;
+          };
+        };
+
+        const transcript =
+          data?.results?.channels?.[0]?.alternatives?.[0]?.transcript?.trim() ?? "";
+
+        if (!transcript) {
+          return { error: "No speech detected" };
+        }
+
+        return { transcript };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Transcription failed";
+        return { error: message };
+      }
+    },
+  );
+
+  // ── Built-in terminal AI context (Task #41) ───────────────────────────────
+  // Fire-and-forget: renderer pushes its rolling command blocks; the AI ask
+  // path reads them via getTerminalContextString().
+  ipcMain.on(IPC.terminalContextPush, (event, blocks: TerminalContextBlock[]): void => {
+    if (!isTerminalIpcSender(event.sender)) return;
+    if (!Array.isArray(blocks)) return;
+    if (blocks.length === 0) {
+      clearTerminalContext();
+      return;
+    }
+    const normalized = normalizeTerminalContextBlocks(blocks);
+    if (normalized.length === 0) {
+      clearTerminalContext();
+      return;
+    }
+    pushTerminalContext(normalized);
+  });
+
+  // ── Persistent Smart Scrollback (Task #47) ────────────────────────────────
+  // Fire-and-forget: terminal renderer persists finished command blocks to the
+  // encrypted SQLite store. Command + output are encrypted at rest; a short
+  // plaintext command summary is kept for natural-language search.
+  ipcMain.on(IPC.scrollbackWrite, (event, blocks: ScrollbackWriteBlock[]): void => {
+    const terminalWindow = getWindows()?.terminal;
+    if (!terminalWindow || event.sender !== terminalWindow.webContents) return;
+    if (!Array.isArray(blocks) || blocks.length === 0) return;
+    const normalized = normalizeScrollbackWriteBlocks(blocks);
+    if (normalized.length === 0) return;
+    writeScrollbackBlocks(normalized);
+  });
+
+  // Natural-language search over the encrypted command history. Claude ranks the
+  // recent plaintext summaries by relevance to the query; matching rows are then
+  // decrypted and returned. Bad JSON / no matches degrade gracefully.
+  ipcMain.handle(
+    IPC.scrollbackSearch,
+    async (event, payload: ScrollbackSearchRequest): Promise<ScrollbackSearchResponse> => {
+      const terminalWindow = getWindows()?.terminal;
+      if (!terminalWindow || event.sender !== terminalWindow.webContents) {
+        return { error: "Unauthorized" };
+      }
+
+      const query = typeof payload?.query === "string" ? payload.query.trim() : "";
+      if (!query) return { results: [] };
+
+      // Plaintext command summaries for Claude to rank (output stays encrypted).
+      const summary = getScrollbackRecentSummary(200);
+      if (summary.length === 0) return { results: [] };
+
+      const summaryText = summary
+        .map((row) => {
+          const date = new Date(row.started_at).toISOString().slice(0, 16);
+          const statusMark = row.status === "error" ? "✗" : "✓";
+          return `[id:${row.id}] ${date} ${statusMark} ${row.cwd ?? "~"} $ ${row.command_plain}`;
+        })
+        .join("\n");
+
+      const prompt = [
+        "You are searching a user's terminal command history.",
+        "",
+        "Command history (most recent first):",
+        summaryText,
+        "",
+        `User query: "${query}"`,
+        "",
+        "Return ONLY a JSON array of the IDs (integers) of the commands that best match the query. Return at most 5 IDs, most relevant first. If nothing matches, return [].",
+        "",
+        "Example: [42, 17, 8]",
+      ].join("\n");
+
+      let raw = "";
+      try {
+        const response = await askIivoGlass(config, { prompt, responseStyle: "full" });
+        raw = response.answer?.trim() ?? "";
+      } catch (err) {
+        return { error: err instanceof Error ? err.message : "Search failed" };
+      }
+      if (!raw) return { results: [] };
+
+      let ids: number[] = [];
+      try {
+        const stripped = raw.replace(/```[a-z]*\n?/gi, "").replace(/```/g, "").trim();
+        const parsed = JSON.parse(stripped);
+        ids = parseScrollbackSearchIds(parsed);
+      } catch {
+        return { error: "Could not parse search results" };
+      }
+
+      const rows = getScrollbackByIdsInOrder(ids);
+      return { results: rows };
+    },
+  );
+
+  // ── Extract & Build Mode ───────────────────────────────────────────────────
+  ipcMain.handle(IPC.extractDetect, async (event, payload: ExtractDetectRequest): Promise<ExtractDetectResponse> => {
+    if (!isOverlayIpcSender(event.sender)) return { label: null, error: "Unauthorized" };
+    const transcript = typeof payload?.transcript === "string" ? payload.transcript.trim() : "";
+    if (!transcript) return { label: null };
+    try {
+      const response = await askIivoGlass(config, {
+        prompt: buildDetectionPrompt(transcript),
+        modelPurpose: "default",
+        responseStyle: "full",
+      });
+      const raw = response.answer?.trim() ?? "";
+      const label = parseExtractDetectLabel(raw);
+      return { label };
+    } catch (err) {
+      return { label: null, error: err instanceof Error ? err.message : "Detection failed" };
+    }
+  });
+
+  ipcMain.handle(IPC.extractGenerate, async (event, payload: ExtractGenerateRequest): Promise<ExtractGenerateResponse> => {
+    if (!isOverlayIpcSender(event.sender)) return { error: "Unauthorized" };
+    const transcript = typeof payload?.transcript === "string" ? payload.transcript.trim() : "";
+    if (!transcript) return { error: "Transcript is required" };
+    try {
+      const response = await askIivoGlass(config, {
+        prompt: buildGenerationPrompt(transcript, payload?.detectedLabel),
+        modelPurpose: "diagnostic",
+        responseStyle: "full",
+      });
+      return { prompt: response.answer?.trim() ?? "" };
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : "Generation failed" };
+    }
+  });
+
+  ipcMain.handle(
+    IPC.extractBuildHandoff,
+    async (event, payload: ExtractBuildHandoffRequest): Promise<ExtractBuildHandoffResponse> => {
+      if (!isOverlayIpcSender(event.sender)) {
+        return { ok: false, pasted: false, error: "Unauthorized" };
+      }
+      const target = payload?.target;
+      const prompt = typeof payload?.prompt === "string" ? payload.prompt.trim() : "";
+      const result = await runExtractBuildHandoff(target, prompt);
+      let openedAccessibilitySettings = false;
+      if (result.needsAccessibilitySettings) {
+        const opened = await openGlassSystemSettings("accessibility");
+        openedAccessibilitySettings = opened.ok;
+        state.lastNotice = opened.ok
+          ? `${result.error ?? "Paste blocked."} Opened Accessibility settings — enable IIVO Glass, then try again.`
+          : (result.error ?? EXTRACT_BUILD_MACOS_PERMISSION_EXPLAIN);
+        push();
+      } else if (!result.pasted && result.error && (target === "cursor" || target === "claude")) {
+        state.lastNotice = `${result.error} ${EXTRACT_BUILD_MACOS_PERMISSION_EXPLAIN}`;
+        push();
+      } else if (result.notice ?? result.error) {
+        state.lastNotice = result.notice ?? result.error;
+        push();
+      }
+      return {
+        ok: result.ok,
+        pasted: result.pasted,
+        notice: result.notice,
+        error: result.error,
+        openedAccessibilitySettings,
+      };
+    },
+  );
+
   ipcMain.handle(IPC.getState, () => snapshot());
   ipcMain.handle(IPC.saveGlassMemory, async (_event, input: SaveGlassMemoryRequest) => {
     try {
@@ -7922,6 +9144,18 @@ function registerIpc(): void {
     setOverlayPointerOverNotification(!!over);
   });
 
+  ipcMain.on(IPC.builderStripVisible, (_event, visible: boolean) => {
+    setBuilderStripVisible(!!visible);
+  });
+
+  ipcMain.on(IPC.overlayPointerOverBuilderStrip, (_event, over: boolean) => {
+    setOverlayPointerOverBuilderStrip(!!over);
+  });
+
+  ipcMain.on(IPC.builderStripPanelOpen, (_event, open: boolean) => {
+    setBuilderStripPanelOpen(!!open);
+  });
+
   ipcMain.on(IPC.resizeDock, (_event, width: number, height: number) => {
     if (typeof width === "number" && typeof height === "number") {
       const vertical = glassUserSettings.dockOrientation === "vertical";
@@ -7933,11 +9167,13 @@ function registerIpc(): void {
     }
   });
 
-  ipcMain.on(IPC.resizeTerminal, (_event, width: number, height: number) => {
+  ipcMain.on(IPC.resizeTerminal, (event, width: number, height: number) => {
+    if (!isTerminalIpcSender(event.sender)) return;
     resizeGlassTerminalWindow(width, height);
   });
 
-  ipcMain.on(IPC.dismissTerminalWindow, () => {
+  ipcMain.on(IPC.dismissTerminalWindow, (event) => {
+    if (!isTerminalIpcSender(event.sender)) return;
     dismissGlassTerminalWindow();
   });
 
@@ -7965,14 +9201,28 @@ function registerIpc(): void {
   }
 
   // ── Built-in terminal raw channels (high-frequency, bypasses state) ─────────
-  ipcMain.on(IPC.ptyInput, (_event, termId: string, data: string) => {
+  ipcMain.on(IPC.ptyInput, (event, termId: string, data: string) => {
+    if (!isTerminalIpcSender(event.sender)) return;
+    if (!isValidPtySessionId(termId) || typeof data !== "string") return;
     writePtyInput(termId, data);
   });
-  ipcMain.on(IPC.ptyResize, (_event, termId: string, cols: number, rows: number) => {
+  ipcMain.on(IPC.ptyResize, (event, termId: string, cols: number, rows: number) => {
+    if (!isTerminalIpcSender(event.sender)) return;
+    if (!isValidPtySessionId(termId)) return;
+    if (typeof cols !== "number" || typeof rows !== "number") return;
     resizePty(termId, cols, rows);
   });
-  ipcMain.handle(IPC.ptyReplay, (_event, termId: string) => {
-    return typeof termId === "string" ? getPtyReplayBuffer(termId) : "";
+  ipcMain.handle(IPC.ptyReplay, (event, termId: string, fromByte?: number) => {
+    if (!isTerminalIpcSender(event.sender)) return "";
+    if (!isValidPtySessionId(termId)) return "";
+    if (typeof fromByte === "number" && fromByte >= 0) {
+      return getPtyReplayBufferFrom(termId, fromByte);
+    }
+    return getPtyReplayBuffer(termId);
+  });
+  ipcMain.handle(IPC.ptyReplayLength, (event, termId: string) => {
+    if (!isTerminalIpcSender(event.sender)) return 0;
+    return isValidPtySessionId(termId) ? getPtyReplayBufferLength(termId) : 0;
   });
 }
 
@@ -8048,21 +9298,30 @@ app.whenReady().then(async () => {
   let glassOnboardingState = await loadGlassOnboardingState();
   if (process.env.IIVO_GLASS_E2E === "1") {
     glassOnboardingState = { ...glassOnboardingState, completed: true };
+    glassUserSettings = { ...glassUserSettings, onboardingComplete: true };
+    state.e2eFastOnboarding = true;
   }
-  const needsGlassOnboarding = !glassOnboardingState.completed;
+  // Legacy users who finished the old overlay — skip Sorting Hat on upgrade.
+  if (glassOnboardingState.completed && !glassUserSettings.onboardingComplete) {
+    glassUserSettings = { ...glassUserSettings, onboardingComplete: true };
+    await persistGlassUserSettings(glassUserSettings);
+  }
+  const needsSortingHat = !glassUserSettings.onboardingComplete;
   state.glassUserProfile = glassOnboardingState.profile;
   state.iivoAccountLink = await loadIivoAccountLink();
-  if (needsGlassOnboarding) {
+  if (needsSortingHat) {
     setOnboardingPending(true);
   }
-  // Keep onboarding UI out of the overlay until boot splash fully finishes.
-  state.onboardingOpen = needsGlassOnboarding && !showSplash;
-  if (showSplash && needsGlassOnboarding) {
+  // Keep Sorting Hat out of the overlay until boot splash fully finishes.
+  state.onboardingOpen = false;
+  if (showSplash) {
+    state.glassBootComplete = false;
     setGlassBootSequenceCompleteHandler(() => {
-      state.onboardingOpen = true;
+      state.glassBootComplete = true;
       push();
     });
   } else {
+    state.glassBootComplete = true;
     setGlassBootSequenceCompleteHandler(null);
   }
   glassContextProfile = await loadGlassContextProfile();
@@ -8075,6 +9334,15 @@ app.whenReady().then(async () => {
     glassUserSettings = { ...glassUserSettings, hotkeyPreset: "disabled" };
   }
   state.glassSettings = glassUserSettings;
+  state.onboardingComplete = state.glassSettings.onboardingComplete ?? false;
+  state.persona = state.glassSettings.persona;
+  if (!app.isPackaged && state.onboardingComplete && !state.persona) {
+    state.persona = "developer";
+    glassUserSettings = { ...glassUserSettings, persona: "developer" };
+    state.glassSettings = glassUserSettings;
+    void persistGlassUserSettings(glassUserSettings);
+  }
+  syncBuilderStripLayoutReserve();
   // Apply any persisted server URL overrides to config at boot.
   if (glassUserSettings.iivoApiUrl) config.iivoApiUrl = glassUserSettings.iivoApiUrl;
   if (glassUserSettings.iivoWebUrl) config.iivoWebUrl = glassUserSettings.iivoWebUrl;
@@ -8093,6 +9361,9 @@ app.whenReady().then(async () => {
     void persistGlassUserSettings(glassUserSettings);
   });
   registerIpc();
+
+  // AI Spend Tracker — 15-min background polling (initial fetch delayed 10 s)
+  startSpendPolling();
 
   // Live terminal widget — always-on polling starts at app launch
   startLiveTerminalPolling();
@@ -8135,8 +9406,10 @@ app.whenReady().then(async () => {
   void restoreMacOutputFromSettings(glassUserSettings);
   broadcastStartupAudioRestore();
   registerGlobalHotkeys();
-  if (needsGlassOnboarding) {
-    setOnboardingEmergencyHandler(skipGlassOnboardingEmergency);
+  if (needsSortingHat) {
+    setOnboardingEmergencyHandler(() => {
+      void finishSortingHatOnboarding();
+    });
     registerOnboardingEmergencyShortcut();
   } else {
     setOnboardingEmergencyHandler(null);
@@ -8174,6 +9447,11 @@ app.on("will-quit", () => {
   appIsQuitting = true; // guard PTY onExit callbacks from calling push() on destroyed windows
   unregisterCommandBarHotkeys();
   if (glassUpdateCheckTimer) clearInterval(glassUpdateCheckTimer);
+  // Task #42: clear title-poll intervals before killing sessions.
+  // onExit early-returns when appIsQuitting=true, so we must clear here.
+  for (const id of [...titlePollIntervals.keys()]) stopTitlePolling(id);
+  // Task #47: close the encrypted scrollback SQLite connection cleanly.
+  closeScrollbackDb();
   killAllPtySessions();
   disposeWindows();
 });

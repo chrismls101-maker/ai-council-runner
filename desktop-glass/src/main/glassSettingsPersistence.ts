@@ -20,6 +20,21 @@ import {
   parseGlassServerUrl,
   type GlassUserSettings,
 } from "../shared/glassSettings.ts";
+import {
+  DEFAULT_DESIGN_STACK,
+  DESIGN_STACK_LABELS,
+  type DesignStack,
+} from "../shared/designToCode.ts";
+import { parseUiLocaleSetting } from "../shared/glassLocale.ts";
+
+// Derived from DESIGN_STACK_LABELS so it stays in sync automatically when new stacks are added.
+const VALID_DESIGN_STACKS = new Set<DesignStack>(
+  Object.keys(DESIGN_STACK_LABELS) as DesignStack[],
+);
+
+function parseDesignStack(v: unknown): DesignStack {
+  return VALID_DESIGN_STACKS.has(v as DesignStack) ? (v as DesignStack) : DEFAULT_DESIGN_STACK;
+}
 
 function settingsFilePath(): string {
   return join(app.getPath("userData"), "glass-settings.json");
@@ -57,6 +72,14 @@ function buildSettingsFromParsed(parsed: Partial<GlassUserSettings>): GlassUserS
       copilot: parseCopilotSettings(parsed.copilot),
       iivoApiUrl: parseGlassServerUrl(parsed.iivoApiUrl),
       iivoWebUrl: parseGlassServerUrl(parsed.iivoWebUrl),
+      designStack: parseDesignStack(parsed.designStack),
+      persona: (["developer", "sales", "operator", "writer", "general"] as const).includes(
+        parsed.persona as "developer" | "sales" | "operator" | "writer" | "general",
+      )
+        ? (parsed.persona as "developer" | "sales" | "operator" | "writer" | "general")
+        : undefined,
+      onboardingComplete: parsed.onboardingComplete === true,
+      uiLocale: parseUiLocaleSetting(parsed.uiLocale),
     };
 }
 

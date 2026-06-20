@@ -1,3 +1,5 @@
+@import "../shared/overlayGlassFrame.css";
+
 :root {
   --glass-bg: rgba(8, 10, 16, 0.88);
   --glass-bg-strong: rgba(6, 8, 14, 0.94);
@@ -2095,12 +2097,26 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
   pointer-events: auto;
 }
 
+.overlay-root--language-picker {
+  pointer-events: auto;
+  background: transparent;
+}
+
+.overlay-root--sorting-hat {
+  pointer-events: none;
+  background: transparent;
+}
+
 .overlay-root--update-only,
 .overlay-root--countdown-only {
   pointer-events: auto;
 }
 
 .overlay-root--notice-only {
+  pointer-events: none;
+}
+
+.overlay-root--builder-strip-only {
   pointer-events: none;
 }
 
@@ -2247,6 +2263,10 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
   color: rgba(22, 30, 46, 0.88);
 }
 
+.overlay-root .overlay-glass-border {
+  --overlay-glass-frame-z: 130;
+}
+
 .overlay-glass-sheet {
   position: fixed;
   inset: 0;
@@ -2271,52 +2291,6 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
   background-size: 40px 40px;
   mask-image: radial-gradient(ellipse 92% 88% at 50% 48%, black 35%, transparent 88%);
   -webkit-mask-image: radial-gradient(ellipse 92% 88% at 50% 48%, black 35%, transparent 88%);
-}
-
-/* Screen-edge glass frame — white/silver, matches command bar */
-.overlay-glass-border {
-  position: fixed;
-  inset: 10px 10px var(--overlay-frame-bottom, 10px) 10px;
-  pointer-events: none;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.28),
-    0 0 32px rgba(255, 255, 255, 0.04),
-    inset 0 0 24px rgba(255, 255, 255, 0.02);
-  z-index: 1;
-}
-
-.overlay-glass-border__corner {
-  position: absolute;
-  width: 24px;
-  height: 24px;
-  border-color: rgba(255, 255, 255, 0.85);
-  border-style: solid;
-  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.55));
-}
-
-.overlay-glass-border__corner--tl {
-  top: -1px;
-  left: -1px;
-  border-width: 2px 0 0 2px;
-}
-
-.overlay-glass-border__corner--tr {
-  top: -1px;
-  right: -1px;
-  border-width: 2px 2px 0 0;
-}
-
-.overlay-glass-border__corner--bl {
-  bottom: -1px;
-  left: -1px;
-  border-width: 0 0 2px 2px;
-}
-
-.overlay-glass-border__corner--br {
-  bottom: -1px;
-  right: -1px;
-  border-width: 0 2px 2px 0;
 }
 
 .overlay-glass-glow {
@@ -4230,6 +4204,13 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
   transform: translateX(-50%);
   border: 5px solid transparent;
   border-top-color: rgba(8, 12, 20, 0.94);
+}
+
+.glass-hover-tooltip--below::after {
+  top: auto;
+  bottom: 100%;
+  border-top-color: transparent;
+  border-bottom-color: rgba(8, 12, 20, 0.94);
 }
 
 .command-bar.composer-shell .command-translate-btn {
@@ -6369,6 +6350,32 @@ details[open] .mode-panel__privacy-summary::before {
 .panel-profile-saved {
   font-size: 12px;
   color: rgba(120, 220, 160, 0.9);
+}
+
+.panel-profile-persona {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(56, 225, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.panel-profile-persona-value {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(220, 230, 245, 0.88);
+}
+
+.panel-profile-recalibrate {
+  align-self: flex-start;
+  margin-top: 4px;
+}
+
+.panel-profile-recalibrate-hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 /* ---------- Account tab ---------- */
@@ -9958,6 +9965,47 @@ details[open] .mode-panel__privacy-summary::before {
   white-space: nowrap;
 }
 
+/* Stack picker row — spans the full 2-column grid */
+.overlay-design-card__stack-row {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.overlay-design-card__stack-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+  flex-shrink: 0;
+}
+
+.overlay-design-card__stack-select {
+  flex: 1;
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 5px;
+  color: rgba(255, 255, 255, 0.85);
+  padding: 3px 6px;
+  cursor: pointer;
+  outline: none;
+  appearance: auto;
+  min-width: 0;
+}
+
+.overlay-design-card__stack-select:hover {
+  background: rgba(255, 255, 255, 0.13);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.overlay-design-card__stack-select:focus {
+  border-color: rgba(111, 255, 142, 0.5);
+}
+
 .overlay-design-card__permission {
   display: flex;
   flex-direction: column;
@@ -10054,4 +10102,52 @@ details[open] .mode-panel__privacy-summary::before {
 
 .glass-verify-row__warn {
   color: rgba(255, 200, 80, 0.85);
+}
+
+/* ── Refinement input row (#166) ─────────────────────────────────────────── */
+
+.overlay-feed-card__refine-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  align-items: center;
+}
+
+.overlay-feed-card__refine-input {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 12px;
+  padding: 5px 8px;
+  outline: none;
+}
+
+.overlay-feed-card__refine-input::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.overlay-feed-card__refine-input:focus {
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.overlay-feed-card__refine-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 5px 10px;
+  white-space: nowrap;
+}
+
+.overlay-feed-card__refine-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.overlay-feed-card__refine-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
