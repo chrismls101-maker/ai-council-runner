@@ -12,8 +12,14 @@ import {
   prepareGlassTextContextMenu,
   prepareGlassTextPointerDown,
 } from "../glassTextInteraction.ts";
-import { DESIGN_TO_CODE_ACTION_LABELS } from "../../shared/designToCode.ts";
-import type { DesignToCodeAction } from "../../shared/designToCode.ts";
+import {
+  DESIGN_TO_CODE_ACTION_LABELS,
+  DEFAULT_DESIGN_STACK,
+  DESIGN_STACK_LABELS,
+  DESIGN_STACK_EXTENSIONS,
+  getActionLabel,
+} from "../../shared/designToCode.ts";
+import type { DesignToCodeAction, DesignStack } from "../../shared/designToCode.ts";
 
 export function ShellOutputCard({
   id,
@@ -177,23 +183,40 @@ function DesignCaptureCard({ item }: { item: GlassCommandFeedItem }): JSX.Elemen
             {statusLine ?? "Working…"}
           </p>
         ) : (
-          /* 4 quick-action buttons */
+          /* Stack selector + 4 quick-action buttons */
           <div className="overlay-design-card__actions">
-            {DESIGN_ACTIONS.map((action) => (
-              <button
-                key={action}
-                type="button"
-                className="gbtn gbtn--ghost overlay-design-card__action-btn"
+            <div className="overlay-design-card__stack-row">
+              <label className="overlay-design-card__stack-label" htmlFor="design-stack-select">Stack</label>
+              <select
+                id="design-stack-select"
+                className="overlay-design-card__stack-select"
+                value={(state.glassSettings.designStack ?? DEFAULT_DESIGN_STACK) as DesignStack}
+                onChange={(e) => send({ type: "set-design-stack", stack: e.target.value as DesignStack })}
                 onPointerDown={ensureOverlayInteractive}
-                onClick={() => send({
-                  type: "design-generate",
-                  feedItemId: item.id,
-                  action,
-                })}
               >
-                {DESIGN_TO_CODE_ACTION_LABELS[action]}
-              </button>
-            ))}
+                {(Object.entries(DESIGN_STACK_LABELS) as [DesignStack, string][]).map(([k, label]) => (
+                  <option key={k} value={k}>{label}</option>
+                ))}
+              </select>
+            </div>
+            {DESIGN_ACTIONS.map((action) => {
+              const currentStack = (state.glassSettings.designStack ?? DEFAULT_DESIGN_STACK) as DesignStack;
+              return (
+                <button
+                  key={action}
+                  type="button"
+                  className="gbtn gbtn--ghost overlay-design-card__action-btn"
+                  onPointerDown={ensureOverlayInteractive}
+                  onClick={() => send({
+                    type: "design-generate",
+                    feedItemId: item.id,
+                    action,
+                  })}
+                >
+                  {getActionLabel(action, currentStack)}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
@@ -219,6 +242,7 @@ export function FeedCard({
   const [showActions, setShowActions] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [hasMore, setHasMore] = useState(false);
+  const [refineText, setRefineText] = useState("");
 
   // Memoize the extracted code block so preview and apply use the same string
   const applyCode = useMemo(
@@ -229,6 +253,20 @@ export function FeedCard({
 
   // Pending diff state for this card (set by glass-preview-diff in main process)
   const pendingDiff = state.pendingDiffs?.[item.id];
+
+  const handleRefine = useCallback(() => {
+    if (!refineText.trim()) return;
+    // Use designCaptureId (the capture card's id) because state.designCaptures is
+    // keyed by capture id, not the response card id. Fall back to item.id only if
+    // designCaptureId is somehow absent (shouldn't happen for design-generated cards).
+    send({
+      type: "design-generate",
+      feedItemId: item.designCaptureId ?? item.id,
+      action: item.designAction!,
+      refinementFeedback: refineText.trim(),
+    });
+    setRefineText("");
+  }, [refineText, item.designCaptureId, item.id, item.designAction]);
 
   const checkScrollMore = useCallback(() => {
     const el = scrollRef.current;
@@ -577,6 +615,27 @@ export function FeedCard({
                       </button>
                     )
                   ) : null}
+                  {!item.codeFilePath && item.designAction && item.designAction !== "describe" && hasCodeBlock(item.fullBody ?? item.body ?? "") ? (
+                    <button
+                      type="button"
+                      className="gbtn gbtn--ghost"
+                      data-testid="glass-overlay-save-component"
+                      onPointerDown={ensureOverlayInteractive}
+                      onClick={() => {
+                        // Use the stack snapshotted at generation time, not the live setting.
+                        const ext = DESIGN_STACK_EXTENSIONS[item.designStack ?? state.glassSettings.designStack ?? DEFAULT_DESIGN_STACK] ?? ".tsx";
+                        const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+                        send({
+                          type: "write-file",
+                          path: `~/Desktop/component-${ts}${ext}`,
+                          content: applyCode,
+                          id: item.id + "-save",
+                        });
+                      }}
+                    >
+                      Save component
+                    </button>
+                  ) : null}
                 </>
               ) : null}
               {!isListenInsight ? (
@@ -659,7 +718,7 @@ export function FeedCard({
               ) : null}
             </div>
           ) : null}
-          {state.actionResult && (state.actionResult.id === item.id + "-type" || state.actionResult.id === item.id + "-file" || state.actionResult.id === item.id + "-apply") ? (
+          {state.actionResult && (state.actionResult.id === item.id + "-type" || state.actionResult.id === item.id + "-file" || state.actionResult.id === item.id + "-apply" || state.actionResult.id === item.id + "-save") ? (
             <p className="glass-action-feedback" style={{ fontSize: "11px", opacity: 0.7, marginTop: "4px", color: state.actionResult.status === "ok" ? "#6fff8e" : "#ff6b6b" }}>
               {state.actionResult.status === "ok" ? "✓ " : "✗ "}{state.actionResult.message}
             </p>
@@ -713,6 +772,32 @@ export function FeedCard({
               </div>
             );
           })()}
+          {/* Refinement input (#166) */}
+          {item.designAction && item.designAction !== "describe" && hasCodeBlock(item.fullBody ?? item.body ?? "") ? (
+            <div className="overlay-feed-card__refine-row" onPointerDownCapture={ensureOverlayInteractive}>
+              <input
+                className="overlay-feed-card__refine-input"
+                type="text"
+                placeholder="Refine this component…"
+                value={refineText}
+                onChange={e => setRefineText(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === "Enter" && refineText.trim()) {
+                    handleRefine();
+                  }
+                }}
+              />
+              <button
+                className="overlay-feed-card__refine-btn"
+                type="button"
+                onPointerDown={ensureOverlayInteractive}
+                onClick={handleRefine}
+                disabled={!refineText.trim()}
+              >
+                Refine
+              </button>
+            </div>
+          ) : null}
         </div>
         <span className="glass-answer-shell__led ui-led-line" aria-hidden="true" />
       </article>
