@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { ensureOverlayInteractive } from "../glassTextInteraction.ts";
+import { BuilderStrip } from "../builder/BuilderStrip.tsx";
+import { shouldShowBuilderStrip } from "../../shared/builderStripVisibility.ts";
 import type { GlassState } from "../../shared/ipc.ts";
 import type { OverlayMode } from "../../shared/glassWindowTypes.ts";
 import type { GlassSessionInsight } from "../../shared/sessionTypes.ts";
@@ -11,18 +13,78 @@ import { send, useGlassState } from "../useGlassState.ts";
 import { CopilotOverlay } from "./CopilotOverlay.tsx";
 import { GlassNotificationHost } from "./GlassNotificationHost.tsx";
 import { GlassUpdateOverlay } from "./GlassUpdateOverlay.tsx";
+import { OverlayGlassFrame } from "../shared/OverlayGlassFrame.tsx";
 import { GlassOnboardingOverlay } from "./GlassOnboardingOverlay.tsx";
+import { SortingHatScreen } from "../onboarding/SortingHatScreen.tsx";
+import { LanguagePickerScreen } from "../onboarding/LanguagePickerScreen.tsx";
+import { isUiLocaleChosen, parseUiLocaleSetting } from "../../shared/glassLocale.ts";
 import { LiveTranslateCaptionsOverlay } from "./LiveTranslateCaptionsOverlay.tsx";
 import { useGlassNotification } from "./useGlassNotification.ts";
 import { TerminalFeedWidget } from "./TerminalFeedWidget.tsx";
+import { useExtractModeTranscript, useExtractBuildDetection, useExtractModeMainSync } from "./useExtractModeBridge.ts";
+import { ExtractBuildCard } from "./ExtractBuildCard.tsx";
 import { overlayNotificationBottomPx } from "../../shared/glassLayoutMath.ts";
 import { overlayFeedNotificationActive, overlayNoticeNotificationActive } from "../../shared/overlayPointerPolicy.ts";
 import { isLiveTranslateActive } from "../../shared/liveTranslateState.ts";
 
+// ---------------------------------------------------------------------------
+// Session greeting — plays once per session after Glass fully loads
+// ---------------------------------------------------------------------------
+
+/** Module-level flag — survives re-renders/re-mounts within the same session. */
+let greetingPlayedThisSession = false;
+
+function buildGreeting(name: string): string {
+  const hour = new Date().getHours();
+  const timeOfDay = hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening";
+  const firstName = name.trim().split(/\s+/)[0];
+  return `Good ${timeOfDay}, ${firstName}. Glass is ready.`;
+}
+
+/**
+ * Fires a TTS greeting once when Glass loads with a known user and completed
+ * onboarding. Skips gracefully if there's no name, on first-ever launch, or
+ * shortly after Sorting Hat finishes (avoids overlapping reveal TTS).
+ */
+const GREETING_DELAY_MS = 1_200;
+const GREETING_COOLDOWN_AFTER_ONBOARDING_MS = 14_000;
+
+function useGlassGreeting(state: GlassState): void {
+  const firedRef = useRef(false);
+
+  useEffect(() => {
+    if (firedRef.current || greetingPlayedThisSession) return;
+    if (!state.onboardingComplete) return;
+
+    const name = state.glassUserProfile?.name?.trim();
+    if (!name) return;
+
+    const finishedAt = state.onboardingFinishedAt;
+    const cooldownRemaining =
+      finishedAt != null
+        ? finishedAt + GREETING_COOLDOWN_AFTER_ONBOARDING_MS - Date.now()
+        : 0;
+    const delayMs = Math.max(GREETING_DELAY_MS, cooldownRemaining);
+
+    const t = window.setTimeout(() => {
+      if (firedRef.current || greetingPlayedThisSession) return;
+      firedRef.current = true;
+      greetingPlayedThisSession = true;
+      send({ type: "glass-tts", text: buildGreeting(name) });
+    }, delayMs);
+
+    return () => window.clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.onboardingComplete, state.glassUserProfile?.name, state.onboardingFinishedAt]);
+}
+
+
 const CARD_TTL_MS = 8_000;
 const MAX_CARDS = 4;
 /** Built-in primary display — visual frame inset from overlay window bottom. */
-const PRIMARY_FRAME_BOTTOM_INSET_PX = 10;
+const PRIMARY_FRAME_BOTTOM_INSET_PX = 7;
+/** Horizontal frame inset — slightly tighter than top widens the side brackets. */
+const PRIMARY_FRAME_SIDE_INSET_PX = 7;
 
 function overlayFrameBottomInsetPx(_state: GlassState): number {
   // Decorative frame only — keep near the overlay bottom so the command bar
@@ -38,11 +100,63 @@ function overlayLayoutStyle(state: GlassState): CSSProperties {
   const frameBottom = overlayFrameBottomInsetPx(state);
   return {
     "--overlay-frame-bottom": `${frameBottom}px`,
+    "--overlay-glass-frame-inset-bottom": `${frameBottom}px`,
+    "--overlay-glass-frame-inset-left": `${PRIMARY_FRAME_SIDE_INSET_PX}px`,
+    "--overlay-glass-frame-inset-right": `${PRIMARY_FRAME_SIDE_INSET_PX}px`,
     "--overlay-notification-bottom": `${overlayNotificationBottomPx({
       commandBarOverlayClearancePx: state.commandBarOverlayClearancePx,
       commandBarStackHeightPx: state.commandBarStackHeightPx,
     })}px`,
+    "--extract-card-bottom": `${overlayNotificationBottomPx({
+      commandBarOverlayClearancePx: state.commandBarOverlayClearancePx,
+      commandBarStackHeightPx: state.commandBarStackHeightPx,
+    }) + 52}px`,
   } as CSSProperties;
+}
+
+function builderStripVisibleForState(state: GlassState): boolean {
+  return shouldShowBuilderStrip({
+    onboardingComplete: state.onboardingComplete,
+    persona: state.persona,
+    glassDevMode: state.glassDevMode ?? import.meta.env.DEV,
+  });
+}
+
+function ExtractModeBridge(): null {
+  useExtractModeMainSync();
+  useExtractModeTranscript();
+  useExtractBuildDetection();
+  return null;
+}
+
+function BuilderStripLayer({
+  state,
+  onEnterInteractive,
+  onLeaveInteractive,
+}: {
+  state: GlassState;
+  onEnterInteractive: () => void;
+  onLeaveInteractive: () => void;
+}): JSX.Element | null {
+  const openExtractRef = useRef<(() => void) | null>(null);
+  const handleCardOpen = useCallback(() => {
+    openExtractRef.current?.();
+  }, []);
+
+  if (!builderStripVisibleForState(state)) {
+    return null;
+  }
+  return (
+    <>
+      <ExtractModeBridge />
+      <BuilderStrip
+        onEnterInteractive={onEnterInteractive}
+        onLeaveInteractive={onLeaveInteractive}
+        onOpenExtractRef={openExtractRef}
+      />
+      <ExtractBuildCard onOpen={handleCardOpen} />
+    </>
+  );
 }
 
 type FloatingCard = {
@@ -72,12 +186,7 @@ function OverlayPassiveLayer({
     <>
       <div className="overlay-glass-sheet" aria-hidden="true" />
       <div className="overlay-glass-grid" aria-hidden="true" />
-      <div className="overlay-glass-border" aria-hidden="true">
-        <span className="overlay-glass-border__corner overlay-glass-border__corner--tl" />
-        <span className="overlay-glass-border__corner overlay-glass-border__corner--tr" />
-        <span className="overlay-glass-border__corner overlay-glass-border__corner--bl" />
-        <span className="overlay-glass-border__corner overlay-glass-border__corner--br" />
-      </div>
+      <OverlayGlassFrame />
       <div className="overlay-glass-glow overlay-glass-glow--tl" aria-hidden="true" />
       <div className="overlay-glass-glow overlay-glass-glow--br" aria-hidden="true" />
     </>
@@ -185,6 +294,7 @@ function useOverlayCards(state: GlassState, enabled: boolean): {
 
 export function Overlay(): JSX.Element {
   const state = useGlassState();
+  useGlassGreeting(state);
   const onboardingOpen = state.onboardingOpen;
 
   const overlayMode = state.windows?.overlayMode ?? state.config.overlayMode ?? "passive";
@@ -224,7 +334,44 @@ export function Overlay(): JSX.Element {
       state.liveTranslate.config.captionPosition !== "panel",
   );
 
-  if (onboardingOpen) {
+  // Post-boot language picker — before Sorting Hat manifestation.
+  if (
+    state.onboardingComplete === false &&
+    state.glassBootComplete === true &&
+    !onboardingOpen &&
+    !isUiLocaleChosen(state.glassSettings?.uiLocale)
+  ) {
+    return (
+      <div className="overlay-root overlay-root--language-picker" data-testid="glass-overlay-root">
+        <LanguagePickerScreen />
+      </div>
+    );
+  }
+
+  // Sorting Hat — after language is chosen.
+  const chosenUiLocale = parseUiLocaleSetting(state.glassSettings?.uiLocale);
+  if (
+    state.onboardingComplete === false &&
+    state.glassBootComplete === true &&
+    !onboardingOpen &&
+    chosenUiLocale
+  ) {
+    return (
+      <div className="overlay-root overlay-root--sorting-hat" data-testid="glass-overlay-root">
+        <SortingHatScreen
+          key={chosenUiLocale}
+          locale={chosenUiLocale}
+          afterLanguagePicker
+          onComplete={() => { /* IPC handler writes the result; no renderer action needed */ }}
+        />
+      </div>
+    );
+  }
+
+  // GlassOnboardingOverlay retired — Sorting Hat now handles all first-launch
+  // onboarding including name collection. The onboardingOpen path is kept as a
+  // safety net for any existing sessions that had the old flow in progress.
+  if (onboardingOpen && !state.onboardingComplete) {
     return (
       <div className="overlay-root overlay-root--onboarding" data-testid="glass-overlay-root">
         <GlassOnboardingOverlay />
@@ -239,6 +386,22 @@ export function Overlay(): JSX.Element {
     !translateCaptionsVisible &&
     !notificationVisible
   ) {
+    if (builderStripVisibleForState(state)) {
+      return (
+        <div
+          className="overlay-root overlay-root--builder-strip-only"
+          data-testid="glass-overlay-root"
+          style={overlayLayoutStyle(state)}
+        >
+          <OverlayGlassFrame />
+          <BuilderStripLayer
+            state={state}
+            onEnterInteractive={enterInteractive}
+            onLeaveInteractive={leaveInteractive}
+          />
+        </div>
+      );
+    }
     return <div className="overlay-root overlay-root--hidden" />;
   }
 
@@ -259,6 +422,11 @@ export function Overlay(): JSX.Element {
             leaveInteractive={leaveInteractive}
           />
         ) : null}
+        <BuilderStripLayer
+          state={state}
+          onEnterInteractive={enterInteractive}
+          onLeaveInteractive={leaveInteractive}
+        />
       </div>
     );
   }
@@ -271,6 +439,11 @@ export function Overlay(): JSX.Element {
           enterInteractive={enterInteractive}
           leaveInteractive={leaveInteractive}
         />
+        <BuilderStripLayer
+          state={state}
+          onEnterInteractive={enterInteractive}
+          onLeaveInteractive={leaveInteractive}
+        />
       </div>
     );
   }
@@ -279,6 +452,11 @@ export function Overlay(): JSX.Element {
     return (
       <div className="overlay-root overlay-root--countdown-only" data-testid="glass-overlay-root">
         <ListenCountdownOverlay seconds={state.listenCountdownSeconds!} />
+        <BuilderStripLayer
+          state={state}
+          onEnterInteractive={enterInteractive}
+          onLeaveInteractive={leaveInteractive}
+        />
       </div>
     );
   }
@@ -303,6 +481,11 @@ export function Overlay(): JSX.Element {
           leaveInteractive={leaveInteractive}
           onChatHoverStart={onChatHoverStart}
           onChatHoverEnd={onChatHoverEnd}
+        />
+        <BuilderStripLayer
+          state={state}
+          onEnterInteractive={enterInteractive}
+          onLeaveInteractive={leaveInteractive}
         />
       </div>
     );
@@ -404,6 +587,12 @@ export function Overlay(): JSX.Element {
           onPointerLeave={leaveInteractive}
         />
       ) : null}
+
+      <BuilderStripLayer
+        state={state}
+        onEnterInteractive={enterInteractive}
+        onLeaveInteractive={leaveInteractive}
+      />
     </div>
   );
 }
