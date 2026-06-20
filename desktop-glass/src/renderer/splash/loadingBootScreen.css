@@ -4,9 +4,12 @@
  */
 
 .glass-boot {
-  --boot-glass-inset-top: 12px;
-  --boot-glass-inset-side: 12px;
-  --boot-glass-inset-bottom: 28px;
+  --overlay-glass-frame-inset-top: 10px;
+  --overlay-glass-frame-inset-right: 10px;
+  --overlay-glass-frame-inset-bottom: 10px;
+  --overlay-glass-frame-inset-left: 10px;
+  /* Space reserved for title + progress + subtitle at the bottom */
+  --boot-bottom-reserve: clamp(210px, 29vh, 270px);
 
   position: fixed;
   inset: 0;
@@ -24,6 +27,21 @@
   }
 }
 
+/* Substrate swarm — fills upper screen, stops above the text block */
+.glass-boot__swarm {
+  position: fixed;
+  top: clamp(16px, 3vh, 36px);
+  left: 50%;
+  width: min(92vmin, calc(100vw - 40px));
+  height: min(
+    92vmin,
+    calc(100vh - var(--boot-bottom-reserve) - clamp(16px, 3vh, 36px))
+  );
+  transform: translateX(-50%);
+  z-index: 5;
+  pointer-events: none;
+}
+
 /* Soft center vignette — edges stay clear so transparent window + glass blur read through */
 .glass-boot__center-dim {
   position: fixed;
@@ -31,120 +49,34 @@
   z-index: 1;
   pointer-events: none;
   background: radial-gradient(
-    ellipse 46% 42% at 50% 44%,
+    ellipse 52% 48% at 50% 42%,
     rgba(2, 8, 16, 0.38) 0%,
     rgba(4, 12, 22, 0.14) 42%,
     transparent 68%
   );
 }
 
-/* Lighter glass frame tint (boot splash only — see desktop through blur) */
+/* Lighter glass panel tint (boot splash — desktop reads through blur) */
 .glass-boot .loading-glass-background {
-  inset: var(--boot-glass-inset-top) var(--boot-glass-inset-side) var(--boot-glass-inset-bottom)
-    var(--boot-glass-inset-side);
   --loading-glass-a: rgba(2, 8, 14, 0.38);
   --loading-glass-b: rgba(5, 12, 22, 0.28);
   --loading-glass-c: rgba(0, 0, 0, 0.18);
 }
 
-/* Corner flares on glass frame (approved concept) */
-.glass-boot__pip {
-  position: fixed;
-  z-index: 3;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #b8f4ff;
-  box-shadow: 0 0 12px rgba(56, 225, 255, 0.9), 0 0 24px rgba(0, 170, 255, 0.45);
-  pointer-events: none;
-}
-.glass-boot__pip--tl {
-  top: 20px;
-  left: 20px;
-}
-.glass-boot__pip--tr {
-  top: 20px;
-  right: 20px;
-}
-.glass-boot__pip--bl {
-  bottom: calc(var(--boot-glass-inset-bottom) + 8px);
-  left: calc(var(--boot-glass-inset-side) + 8px);
-}
-.glass-boot__pip--br {
-  bottom: calc(var(--boot-glass-inset-bottom) + 8px);
-  right: calc(var(--boot-glass-inset-side) + 8px);
-}
-
-/* Center content */
+/* Text + progress bar — anchored to bottom, below the swarm */
 .glass-boot__content {
   position: fixed;
-  inset: 0;
-  z-index: 4;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 3;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: clamp(24px, 4vh, 64px) clamp(20px, 3vw, 48px)
-    clamp(36px, 6vh, 72px);
+  justify-content: flex-end;
+  padding-bottom: clamp(36px, 5vh, 72px);
   text-align: center;
   pointer-events: none;
-}
-
-.glass-boot__emblem {
-  position: relative;
-  width: min(52vw, 520px);
-  max-width: 100%;
-  margin-bottom: clamp(20px, 3vh, 36px);
-  animation: glass-boot-emblem-rise 0.85s cubic-bezier(0.2, 0.8, 0.2, 1) both;
-}
-
-@keyframes glass-boot-emblem-rise {
-  from {
-    opacity: 0;
-    transform: translateY(12px) scale(0.97);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-.glass-boot__emblem-glow {
-  position: absolute;
-  left: 50%;
-  top: 52%;
-  width: 72%;
-  height: 58%;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(56, 225, 255, 0.22), transparent 68%);
-  filter: blur(12px);
-  animation: glass-boot-pulse 2.6s ease-in-out infinite;
-  pointer-events: none;
-}
-
-@keyframes glass-boot-pulse {
-  0%, 100% {
-    opacity: 0.5;
-    transform: translate(-50%, -50%) scale(0.94);
-  }
-  50% {
-    opacity: 0.95;
-    transform: translate(-50%, -50%) scale(1.04);
-  }
-}
-
-.glass-boot__emblem-img {
-  position: relative;
-  display: block;
-  width: 100%;
-  height: auto;
-  max-height: min(38vh, 320px);
-  object-fit: contain;
-  object-position: center;
-  filter: drop-shadow(0 8px 32px rgba(56, 225, 255, 0.45));
-  -webkit-font-smoothing: antialiased;
-  image-rendering: auto;
 }
 
 .glass-boot__title {
@@ -156,7 +88,7 @@
   animation: glass-boot-fade 0.9s ease 0.15s both;
 }
 
-/* Brushed chrome logotype — matches eye emblem metal + cyan accent */
+/* Brushed chrome logotype */
 .glass-boot__title-chrome {
   position: relative;
   display: inline-block;
@@ -347,19 +279,8 @@
   }
 }
 
-@media (min-width: 2000px) {
-  .glass-boot__emblem {
-    width: min(40vw, 640px);
-  }
-  .glass-boot__emblem-img {
-    max-height: 380px;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .glass-boot,
-  .glass-boot__emblem,
-  .glass-boot__emblem-glow {
+  .glass-boot {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
   }
