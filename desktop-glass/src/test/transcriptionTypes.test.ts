@@ -98,6 +98,17 @@ test("system audio requires permission allows start attempt", () => {
   assert.match(modeStatusMessage("system_audio", snap), /Screen Recording/i);
 });
 
+test("system audio can start via virtual device without getDisplayMedia", () => {
+  const devices = [{ deviceId: "bh2", label: "BlackHole 2ch", kind: "blackhole" as const, displayName: "BlackHole 2ch" }];
+  const snap = buildProviderSnapshot("system_audio", undefined, {
+    systemAudioStatus: "available",
+    virtualAudioDevices: devices,
+    stt: baseStt,
+  });
+  assert.equal(snap.getDisplayMediaAvailable, false);
+  assert.equal(canStartListening("system_audio", snap), true);
+});
+
 test("manual mode cannot start listening", () => {
   const snap = buildProviderSnapshot("manual", undefined, { stt: baseStt });
   assert.equal(canStartListening("manual", snap), false);

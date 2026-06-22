@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isIivoGlassConnected } from "../renderer/panel/connectIivoGlass.ts";
+import {
+  isIivoGlassConnected,
+  resolveConnectBlockerMessage,
+} from "../renderer/panel/connectIivoGlass.ts";
 import type { GlassCapabilityRow } from "../shared/glassCapabilities.ts";
 
 const readyRows: GlassCapabilityRow[] = [
@@ -37,5 +40,37 @@ test("isIivoGlassConnected requires screen and window capture ready", () => {
       systemAudioStatus: "available",
     }),
     false,
+  );
+});
+
+test("resolveConnectBlockerMessage explains server offline", () => {
+  assert.match(
+    resolveConnectBlockerMessage({
+      setupCheckSummary: "Setup check: server (Offline)",
+      setupCapabilities: [
+        {
+          id: "server",
+          status: "error",
+          label: "Offline",
+          severity: "error",
+          detail: "Could not reach https://iivo.ai",
+        },
+        { id: "screenRecording", status: "ready", label: "Ready", severity: "ok" },
+        { id: "windowCapture", status: "ready", label: "Ready", severity: "ok" },
+      ],
+      systemAudioStatus: "available",
+    }) ?? "",
+    /Could not reach/,
+  );
+});
+
+test("resolveConnectBlockerMessage explains virtual audio on macOS", () => {
+  assert.match(
+    resolveConnectBlockerMessage({
+      setupCheckSummary: "Setup check complete",
+      setupCapabilities: readyRows,
+      systemAudioStatus: "requires_virtual_device",
+    }) ?? "",
+    /BlackHole|screen picker/i,
   );
 });

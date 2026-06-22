@@ -16,6 +16,19 @@ import { callAnthropicVisionWithModelChain } from "../providers/anthropic.js";
 import { getMaxOutputTokens } from "../config/tokenModes.js";
 import { formatGlassDirectAnswer } from "./glassDirectAsk.js";
 import { buildGlassLensContextBlock } from "./glassLensContext.js";
+import {
+  appendCompanionSessionPrompt,
+  buildCompanionVisionAppend,
+  buildCompanionCaptureId,
+  companionSpeechFromGuidance,
+  extractCompanionFence,
+  stripCompanionFence,
+  formatUiMapForVisionPrompt,
+} from "./glassCompanionGuidance.js";
+import {
+  buildRetargetSystemPrompt,
+  buildRetargetUserPrompt,
+} from "./glassCompanionRetarget.js";
 import type { GlassAskLatestScreenshot, GlassAskRequestBody, GlassAskResponseBody } from "./glassAskTypes.js";
 
 const GLASS_VISUAL_SYSTEM = `You are IIVO Glass, a live AI companion rendered on a dark glass overlay. When an image is provided, answer based on what you can see. Be concise, practical, and conversational. If the image is unclear, say so. Do not claim to see anything not visible in the image.
@@ -41,11 +54,21 @@ function buildVisualUserPrompt(
   meta?: GlassAskLatestScreenshot,
   userContext?: string,
   lensContext?: GlassAskRequestBody["lensContext"],
+  companionUiMap?: GlassAskRequestBody["companionUiMap"],
+  companionRoute?: GlassAskRequestBody["companionRoute"],
+  companionMemory?: GlassAskRequestBody["companionMemory"],
 ): string {
-  const lines = [prompt.trim()];
+  const basePrompt =
+    companionRoute === "retarget" && companionMemory
+      ? buildRetargetUserPrompt(prompt, companionMemory)
+      : prompt.trim();
+  const lines = [basePrompt];
   const contextBlock = userContext?.trim();
   if (contextBlock) {
     lines.push("", contextBlock);
+  }
+  if (companionUiMap?.marks?.length) {
+    lines.push(formatUiMapForVisionPrompt(companionUiMap));
   }
   const lensBlock = buildGlassLensContextBlock(lensContext);
   if (lensBlock) {
@@ -61,6 +84,20 @@ function buildVisualUserPrompt(
   return lines.join("\n");
 }
 
+function buildVisualSystemPrompt(
+  companionMode?: boolean,
+  shot?: GlassAskLatestScreenshot,
+  companionRoute?: GlassAskRequestBody["companionRoute"],
+  prompt?: string,
+): string {
+  if (!companionMode) return GLASS_VISUAL_SYSTEM;
+  const sessionBase = appendCompanionSessionPrompt(GLASS_VISUAL_SYSTEM);
+  if (companionRoute === "retarget") {
+    return sessionBase + buildRetargetSystemPrompt(shot);
+  }
+  return sessionBase + buildCompanionVisionAppend(shot, prompt);
+}
+
 async function runVisionFromContextItem(
   prompt: string,
   item: ContextItem,
@@ -68,12 +105,26 @@ async function runVisionFromContextItem(
   purpose: GlassModelPurpose = "default",
   userContext?: string,
   lensContext?: GlassAskRequestBody["lensContext"],
+  companionMode?: boolean,
+  shot?: GlassAskLatestScreenshot,
+  companionUiMap?: GlassAskRequestBody["companionUiMap"],
+  companionRoute?: GlassAskRequestBody["companionRoute"],
+  companionMemory?: GlassAskRequestBody["companionMemory"],
 ): Promise<VisionAnswerResult> {
   return runVisionAnswer({
-    prompt: buildVisualUserPrompt(prompt, undefined, userContext, lensContext),
+    prompt: buildVisualUserPrompt(
+      prompt,
+      shot,
+      userContext,
+      lensContext,
+      companionUiMap,
+      companionRoute,
+      companionMemory,
+    ),
     contextItem: item,
     signal,
     modelPurpose: purpose,
+    systemPrompt: buildVisualSystemPrompt(companionMode, shot, companionRoute, prompt),
   });
 }
 
@@ -85,6 +136,10 @@ async function runVisionFromDataUrl(
   purpose: GlassModelPurpose = "default",
   userContext?: string,
   lensContext?: GlassAskRequestBody["lensContext"],
+  companionMode?: boolean,
+  companionUiMap?: GlassAskRequestBody["companionUiMap"],
+  companionRoute?: GlassAskRequestBody["companionRoute"],
+  companionMemory?: GlassAskRequestBody["companionMemory"],
 ): Promise<VisionAnswerResult> {
   const config = getImageVisionConfig();
   const startedAt = new Date().toISOString();
@@ -112,8 +167,16 @@ async function runVisionFromDataUrl(
     const selected = resolveGlassModelPrimary("vision", purpose);
     const chain = buildGlassModelTryChain(selected);
     const result = await callAnthropicVisionWithModelChain(
-      GLASS_VISUAL_SYSTEM,
-      buildVisualUserPrompt(prompt, meta, userContext, lensContext),
+      buildVisualSystemPrompt(companionMode, meta, companionRoute, prompt),
+      buildVisualUserPrompt(
+        prompt,
+        meta,
+        userContext,
+        lensContext,
+        companionUiMap,
+        companionRoute,
+        companionMemory,
+      ),
       imageDataUrl,
       chain,
       signal,
@@ -183,8 +246,15 @@ function mapVisionToGlassResponse(
   prompt: string,
   vision: VisionAnswerResult,
   contextId?: string,
+  companionMode?: boolean,
+  shot?: GlassAskLatestScreenshot,
 ): GlassAskResponseBody {
-  const raw = vision.output.trim();
+  const rawOutput = vision.output.trim();
+  const captureId = buildCompanionCaptureId(shot);
+  const companionPayload = companionMode
+    ? extractCompanionFence(rawOutput, captureId)
+    : null;
+  const raw = companionPayload ? stripCompanionFence(rawOutput) : rawOutput;
   const visionDisabled =
     !vision.visionTrace.visionEnabled ||
     (!vision.visionTrace.visionConfigured && /not configured|disabled/i.test(raw));
@@ -213,9 +283,10 @@ function mapVisionToGlassResponse(
   }
 
   const formatted = formatGlassDirectAnswer(raw);
+  const guidanceSpeech = companionSpeechFromGuidance(companionPayload?.guidancePlan);
   return {
     answer: formatted.answer,
-    shortAnswer: formatted.shortAnswer,
+    shortAnswer: guidanceSpeech || formatted.shortAnswer,
     model: vision.visionTrace.visionModel,
     modelRequested: vision.visionTrace.visionModelRequested,
     modelUsed: vision.visionTrace.visionModel,
@@ -225,6 +296,7 @@ function mapVisionToGlassResponse(
     contextId,
     title: prompt.length > 60 ? `${prompt.slice(0, 59)}…` : prompt,
     warnings: formatted.warnings,
+    companionGuidance: companionPayload ?? undefined,
   };
 }
 
@@ -236,6 +308,10 @@ export async function runGlassVisualDirectAsk(
   const userContext = body.userContext?.trim() || undefined;
   const shot = body.latestScreenshot;
   const purpose = body.modelPurpose ?? "default";
+  const companionMode = body.companionMode === true;
+  const companionUiMap = body.companionUiMap;
+  const companionRoute = body.companionRoute;
+  const companionMemory = body.companionMemory;
 
   const inlineImage =
     resolveImageDataUrl(shot) ??
@@ -265,6 +341,10 @@ export async function runGlassVisualDirectAsk(
           purpose,
           userContext,
           body.lensContext,
+          companionMode,
+          companionUiMap,
+          companionRoute,
+          companionMemory,
         );
       } else {
         return {
@@ -281,6 +361,11 @@ export async function runGlassVisualDirectAsk(
         purpose,
         userContext,
         body.lensContext,
+        companionMode,
+        shot,
+        companionUiMap,
+        companionRoute,
+        companionMemory,
       );
     }
   } else if (inlineImage) {
@@ -292,6 +377,10 @@ export async function runGlassVisualDirectAsk(
       purpose,
       userContext,
       body.lensContext,
+      companionMode,
+      companionUiMap,
+      companionRoute,
+      companionMemory,
     );
   } else {
     return {
@@ -301,5 +390,5 @@ export async function runGlassVisualDirectAsk(
     };
   }
 
-  return mapVisionToGlassResponse(prompt, vision, contextId);
+  return mapVisionToGlassResponse(prompt, vision, contextId, companionMode, shot);
 }

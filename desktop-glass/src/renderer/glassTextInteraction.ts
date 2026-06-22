@@ -1,4 +1,4 @@
-import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
+import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from "react";
 
 let clickThroughEnabled = true;
 let reroutingContextMenu = false;
@@ -9,6 +9,15 @@ export function syncGlassClickThrough(_enabled: boolean): void {}
 /** Interactive overlay surfaces use CSS pointer-events; no runtime OS toggle. */
 export function ensureOverlayInteractive(): void {
   clickThroughEnabled = false;
+}
+
+/** Reliable wheel scroll inside fixed-height palette lists (Electron overlay). */
+export function handlePaletteListWheel(event: ReactWheelEvent<HTMLElement>): void {
+  event.stopPropagation();
+  const el = event.currentTarget;
+  if (el.scrollHeight <= el.clientHeight) return;
+  el.scrollTop += event.deltaY;
+  event.preventDefault();
 }
 
 /** Pointer down on text surfaces — local state only for context-menu rerouting. */

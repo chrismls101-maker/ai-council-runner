@@ -15,6 +15,7 @@ import { buildGlassLensContextBlock, type GlassAskLensContext } from "./glassLen
 import { formatGlassUserProfileBlock, normalizeGlassUserProfile } from "../userProfile/formatUserProfile.js";
 import { getGlassUserProfile } from "../userProfile/userProfileStore.js";
 import type { GlassUserProfile } from "../userProfile/types.js";
+import { appendCompanionSessionPrompt } from "./glassCompanionGuidance.js";
 
 export const GLASS_DIRECT_SYSTEM_PROMPT = `You are IIVO Glass, a fast conversational AI companion rendered on a dark glass overlay. Answer naturally and directly. Use session context only when relevant. Be concise unless the user asks for depth. Do not invent screen/audio details you were not given.
 
@@ -220,7 +221,7 @@ export type GlassDirectAskCaller = (
   purpose?: GlassModelPurpose,
 ) => Promise<AnthropicCallWithFallbackResult>;
 
-const defaultCaller: GlassDirectAskCaller = async (system, user, signal, purpose = "default") => {
+export const defaultGlassDirectCaller: GlassDirectAskCaller = async (system, user, signal, purpose = "default") => {
   const selected = resolveGlassModelPrimary("text", purpose);
   const chain = buildGlassModelTryChain(selected);
   const result = await callAnthropicWithModelChain(system, user, chain, signal, 900);
@@ -533,7 +534,7 @@ export function validateGlassDirectApiKey(): string[] {
 export async function runGlassDirectAsk(
   body: GlassAskRequestBody,
   signal?: AbortSignal,
-  caller: GlassDirectAskCaller = defaultCaller,
+  caller: GlassDirectAskCaller = defaultGlassDirectCaller,
 ): Promise<GlassAskResponseBody> {
   const prompt = body.prompt?.trim();
   if (!prompt) {
@@ -541,10 +542,11 @@ export async function runGlassDirectAsk(
   }
 
   const purpose = body.modelPurpose ?? "default";
-  const storedProfile = await getGlassUserProfile();
-  const userProfile =
-    normalizeGlassUserProfile(body.userProfile) ?? storedProfile ?? undefined;
-  const userContext = body.userContext?.trim() || undefined;
+  const storedProfile = body.suppressUserProfile ? null : await getGlassUserProfile();
+  const userProfile = body.suppressUserProfile
+    ? undefined
+    : normalizeGlassUserProfile(body.userProfile) ?? storedProfile ?? undefined;
+  const userContext = body.suppressUserProfile ? undefined : body.userContext?.trim() || undefined;
   const userPrompt = buildGlassDirectUserPrompt(
     prompt,
     body.session,
@@ -552,7 +554,10 @@ export async function runGlassDirectAsk(
     userContext,
     body.lensContext,
   );
-  let result = await caller(GLASS_DIRECT_SYSTEM_PROMPT, userPrompt, signal, purpose);
+  const systemPrompt = body.companionMode
+    ? appendCompanionSessionPrompt(GLASS_DIRECT_SYSTEM_PROMPT)
+    : GLASS_DIRECT_SYSTEM_PROMPT;
+  let result = await caller(systemPrompt, userPrompt, signal, purpose);
   let formatted = formatGlassDirectAnswer(result.content, {
     overlayCap: body.responseStyle !== "full",
   });
@@ -563,7 +568,7 @@ export async function runGlassDirectAsk(
     ?.text?.trim();
   if (lastAnswer && answersTooSimilar(formatted.answer, lastAnswer)) {
     result = await caller(
-      GLASS_DIRECT_SYSTEM_PROMPT,
+      systemPrompt,
       buildGlassDirectRetryPrompt(userPrompt),
       signal,
       purpose,
@@ -611,10 +616,11 @@ export async function runGlassDirectAskStream(
   }
 
   const purpose = body.modelPurpose ?? "default";
-  const storedProfile = await getGlassUserProfile();
-  const userProfile =
-    normalizeGlassUserProfile(body.userProfile) ?? storedProfile ?? undefined;
-  const userContext = body.userContext?.trim() || undefined;
+  const storedProfile = body.suppressUserProfile ? null : await getGlassUserProfile();
+  const userProfile = body.suppressUserProfile
+    ? undefined
+    : normalizeGlassUserProfile(body.userProfile) ?? storedProfile ?? undefined;
+  const userContext = body.suppressUserProfile ? undefined : body.userContext?.trim() || undefined;
   const userPrompt = buildGlassDirectUserPrompt(
     prompt,
     body.session,
@@ -622,12 +628,15 @@ export async function runGlassDirectAskStream(
     userContext,
     body.lensContext,
   );
+  const systemPrompt = body.companionMode
+    ? appendCompanionSessionPrompt(GLASS_DIRECT_SYSTEM_PROMPT)
+    : GLASS_DIRECT_SYSTEM_PROMPT;
 
   const selected = resolveGlassModelPrimary("text", purpose);
   const chain = buildGlassModelTryChain(selected);
 
   const result = await callAnthropicStreamingWithModelChain(
-    GLASS_DIRECT_SYSTEM_PROMPT,
+    systemPrompt,
     userPrompt,
     chain,
     onToken,

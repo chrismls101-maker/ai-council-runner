@@ -513,12 +513,21 @@ export function buildDebriefAiPrompt(
     "prospect names, objections, decisions, and concrete next steps — or",
     "differences from this session.",
     "If context is thin, say exactly what is missing instead of producing a generic template.",
+    "The user is the viewer/listener — not the author of media they watched or heard.",
+    "Never attribute video, podcast, or course content to the user. Credit the speaker,",
+    "channel, or title from media context instead (e.g. \"the presenter\", the channel name).",
+    "Do not use the user's personal name anywhere in the debrief unless it appears verbatim",
+    "in the transcript as someone else addressing them.",
   ];
   if (options.sessionType === "video_learning") {
+    const media = options.mediaContext;
     lines.push(
       "",
-      buildListenReportPersonaGuidance({ mediaContext: options.mediaContext ?? undefined }),
+      buildListenReportPersonaGuidance({ mediaContext: media ?? undefined }),
       "Ground every section in transcript-backed moments. Use source-agnostic language.",
+      media?.title
+        ? `Media being consumed: "${media.title}"${media.channelOrSource ? ` (${media.channelOrSource})` : ""}. Attribute ideas to this source — not to the user.`
+        : "Media context: the user was consuming audio/video content; do not treat them as the creator.",
     );
   }
   if (options.sessionType === "meeting_call") {

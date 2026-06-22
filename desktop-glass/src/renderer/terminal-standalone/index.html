@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en" class="glass-terminal-window">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IIVO Terminal</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body, #root {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+    html::-webkit-scrollbar,
+    body::-webkit-scrollbar,
+    #root::-webkit-scrollbar {
+      display: none;
+      width: 0;
+      height: 0;
+    }
+    body {
+      background:
+        radial-gradient(ellipse 90% 70% at 15% 10%, rgba(160, 198, 255, 0.45), transparent 55%),
+        radial-gradient(ellipse 80% 60% at 85% 90%, rgba(140, 230, 200, 0.35), transparent 50%),
+        linear-gradient(155deg, #d4deea 0%, #e8edf4 48%, #dce6f0 100%);
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="./main.tsx"></script>
+</body>
+</html>

@@ -6,7 +6,40 @@
  * captures or sends without an explicit command from the UI.
  */
 
-import { fetchElevenLabsTtsBuffer, glassElevenLabsConfig, describeElevenLabsVoice } from "./glassElevenLabsTts.ts";
+import { fetchElevenLabsTtsBuffer, fetchElevenLabsTtsWithTimestamps, glassElevenLabsConfig, describeElevenLabsVoice } from "./glassElevenLabsTts.ts";
+import { mergeCompanionGuidance } from "../shared/mergeCompanionUiMap.ts";
+import type { UiMap } from "../shared/companionGuidance.ts";
+import { buildSegmentTimings, type TimedTtsPayload } from "../shared/ttsAlignment.ts";
+import { buildCompanionLocalUiMap } from "./companionUiMapBuilder.ts";
+import {
+  allManifestationsFromPlan,
+  buildCaptureCropsForManifestations,
+} from "./companionCaptureCrops.ts";
+import {
+  anchorWatchDrifted,
+  captureAnchorSnapshot,
+  COMPANION_ANCHOR_INVALIDATED_NOTICE,
+  type AnchorWatchSnapshot,
+} from "./companionAnchorWatch.ts";
+import { shouldTryOmniParser, tryOmniParserMarks, warmOmniParserSidecarWithCallbacks } from "./companionOmniParser.ts";
+import {
+  buildOmniParserInstallTerminalCommand,
+  getOmniParserInstallState,
+} from "./omniParserInstall.ts";
+import {
+  clearCompanionSessionMemory,
+  updateCompanionSessionMemory,
+} from "./companionSessionStore.ts";
+import {
+  canReuseCompanionCapture,
+  companionMemoryForAsk,
+  screenshotFromCompanionMemory,
+  type CompanionSessionMemory,
+} from "../shared/companionSessionMemory.ts";
+import {
+  resolveCompanionRoute,
+  type CompanionRoute,
+} from "../shared/companionRetarget.ts";
 import { loadGlassEnv } from "./loadGlassEnv.ts";
 import * as Sentry from "@sentry/electron/main";
 import { installGlassE2eHooks, getE2eExternalUrls, resetE2eExternalUrls } from "./e2eMainHooks.ts";
@@ -66,12 +99,29 @@ import {
   type ExtractGenerateResponse,
   type ExtractBuildHandoffRequest,
   type ExtractBuildHandoffResponse,
+  type TerminalFixRequest,
+  type TerminalFixResponse,
+  type PaletteGetSectionsRequest,
+  type PaletteGetSectionsResponse,
+  type PaletteRecordUseRequest,
 } from "../shared/ipc.ts";
+import { PALETTE_COMMAND_REGISTRY } from "../shared/paletteCommandRegistry.ts";
+import { buildCommandPaletteSections } from "../shared/paletteCommandSections.ts";
+import type {
+  GlassCommandItem,
+  ApiKeyItem,
+  PaletteSection,
+  PaletteFrequencyMap,
+} from "../shared/paletteTypes.ts";
+import { loadPaletteFrequency, recordPaletteUse } from "./paletteFrequencyStore.ts";
 import {
   pushTerminalContext,
   clearTerminalContext,
   getTerminalContextString,
   normalizeTerminalContextBlocks,
+  getLastTerminalErrorBlock,
+  getLastTerminalContextBlock,
+  getRecentTerminalContextBlocks,
 } from "./terminalContext.ts";
 import { saveResponseToMemoryVault } from "../shared/iivoMemoryClient.ts";
 import { waitForMinLookingDuration, waitForMinThinkingDuration, GLASS_ASK_TIMEOUT_MS, VOICE_ASK_STATUS } from "../shared/glassAskTiming.ts";
@@ -130,7 +180,7 @@ import {
   nudgeChromeWindowFromWebContents,
   registerCommandBarHotkeys,
   registerContextAskHotkey,
-  registerPowersPaletteHotkey,
+  registerPowersMenuHotkey,
   resizeDockWindow,
   showGlassTerminalWindow,
   dismissGlassTerminalWindow,
@@ -145,6 +195,7 @@ import {
   prefillCommandBar,
   toggleOverlay,
   togglePanel,
+  closePanel,
   unregisterCommandBarHotkeys,
   setOnboardingPending,
   setGlassBootSequenceCompleteHandler,
@@ -157,10 +208,15 @@ import {
   syncCommandBarWindowToStackHeight,
   setIgnoreMouseFromWindow,
   setOverlayPointerOverNotification,
+  setOverlayPointerOverDebriefPanel,
   setBuilderStripVisible,
   setBuilderStripLayoutReserve,
   setOverlayPointerOverBuilderStrip,
   setBuilderStripPanelOpen,
+  setResponsePanelOpen,
+  setCopilotOverlayCardOpen,
+  setCommandPaletteOpen,
+  setPowersMenuOpen,
   ensureOnboardingOverlayClickThrough,
   syncLanguagePickerOverlayInteractivity,
 } from "./windows.ts";
@@ -199,6 +255,7 @@ import { buildMetaPrompt } from "./powerPromptEngine.ts";
 import { buildDetectionPrompt, buildGenerationPrompt } from "./extractMode.ts";
 import { parseExtractDetectLabel } from "../shared/extractModeLogic.ts";
 import { runExtractBuildHandoff } from "./extractBuildHandoffRunner.ts";
+import { buildTerminalFixPrompt, parseTerminalFixResponse } from "./terminalFixEngine.ts";
 import { EXTRACT_BUILD_MACOS_PERMISSION_EXPLAIN } from "../shared/extractBuildHandoff.ts";
 import { getSpendSnapshot, refreshSpendSnapshot, startSpendPolling } from "./spendTracker.ts";
 import { getSpendHistory, getAllTimeTotal } from "./spendHistory.ts";
@@ -252,6 +309,7 @@ import {
   type GlassCopilotRuntimeState,
 } from "../shared/copilotTypes.ts";
 import { shouldOfferCopilot, withCopilotConfig } from "../shared/copilotConfig.ts";
+import { GLASS_MODE_PRESETS } from "../shared/glassModePresets.ts";
 import {
   buildCurrentMomentContext,
   listenInterruptStatusLabel,
@@ -316,6 +374,7 @@ import {
   LIVE_NOTES_REFRESH_MS,
   LIVE_NOTES_AI_REFRESH_MS,
   LIVE_NOTES_AI_MIN_DELTA_CHARS,
+  mergeListenAiNotes,
   computeLiveNotesRefreshInterval,
   shouldRefreshStreamingLiveNotes,
   type ListenAiNote,
@@ -465,6 +524,8 @@ import {
 } from "../shared/glassScreenshotRetention.ts";
 import { createLatestScreenshotState } from "../shared/glassLatestScreenshotAsk.ts";
 import type { GlassAskSessionPayload, GlassAskStatus, GlassLastAskResponse } from "../shared/glassAskTypes.ts";
+import { isSubstantialResponse } from "../shared/glassAskTypes.ts";
+import { companionPrefersResponsePanel } from "../shared/glassCompanion.ts";
 import {
   buildGlassScreenContextStatus,
   promptRequestsGlassScreenVisual,
@@ -511,7 +572,11 @@ import {
   formatScreenCaptureProbeDebug,
 } from "../shared/screenCaptureProbe.ts";
 import { detectVirtualAudioDevices } from "../shared/virtualAudioDevices.ts";
-import { BLACKHOLE_SETUP_INSTRUCTIONS } from "../shared/virtualAudioCapture.ts";
+import {
+  BLACKHOLE_SETUP_INSTRUCTIONS,
+  pickPreferredVirtualAudioDevice,
+  resolveVirtualAudioDeviceId,
+} from "../shared/virtualAudioCapture.ts";
 import type { VirtualAudioDeviceMatch } from "../shared/virtualAudioDevices.ts";
 import { lookupGlassErrorAnswer } from "../shared/glassErrorFAQ.ts";
 import {
@@ -729,6 +794,15 @@ interface AppState {
   selectedVirtualAudioDeviceId?: string;
   nativeLoopbackTested: boolean;
   voiceModeStartNonce: number;
+  companionModeActive: boolean;
+  companionModeToggleNonce: number;
+  /** OmniParser warm-up phase for Companion toggle TTS. */
+  companionWarmupPhase: "none" | "warming" | "ready";
+  /** Bumped when companionWarmupPhase changes — renderer speaks warm/ready lines. */
+  companionWarmupSpeakNonce: number;
+  companionPresence: import("../shared/companionGuidance.ts").CompanionGuidancePayload | null;
+  /** Phase 4a — multi-turn Companion session memory. */
+  companionMemory: CompanionSessionMemory | null;
   translateSetupRequestId: number;
   mediaContext: MediaContext | null;
   appUpdate: GlassAppUpdateState;
@@ -741,6 +815,7 @@ interface AppState {
   blackHoleInstallStatus?: import("../shared/ipc.ts").GlassState["blackHoleInstallStatus"];
   blackHoleInstallProgress?: string;
   iivoAccountLink: import("../shared/iivoAccountLink.ts").IivoAccountLink | null;
+  omniParserInstall: import("../shared/omniParserInstall.ts").OmniParserInstallState;
   /** Last known clipboard text content (polled every 2 s, silent). */
   clipboardText?: string;
   /** Name of the frontmost app, updated on each app switch. */
@@ -775,7 +850,11 @@ interface AppState {
   /** One-shot action for the terminal renderer (⌘⇧P, etc.). */
   glassTerminalPendingAction?: import("../shared/terminalPanelActions.ts").GlassTerminalPendingAction;
   /** Whether the ⌘⇧P powers quick-launcher palette is visible. */
-  powersPaletteOpen?: boolean;
+  powersMenuOpen?: boolean;
+  /** Whether the ⌘⇧G Command Palette overlay is visible. */
+  commandPaletteOpen?: boolean;
+  /** Bumped when Command Palette requests re-showing the Glass Response Panel. */
+  responsePanelRevealSeq?: number;
   /** Pending diff previews keyed by feed item id. */
   pendingDiffs?: import("../shared/ipc.ts").GlassState["pendingDiffs"];
   /** Active design-to-code capture cards keyed by feed item id (#163). */
@@ -793,7 +872,7 @@ interface AppState {
   /** The persona assigned during Sorting Hat onboarding. */
   persona?: "developer" | "sales" | "operator" | "writer" | "general";
   /** Audio chunk from TTS — base64 encoded mp3, played by renderer then cleared. */
-  ttsAudio?: { id: string; data: string };
+  ttsAudio?: TimedTtsPayload;
   /** Epoch ms when Sorting Hat last finished — suppresses greeting TTS overlap. */
   onboardingFinishedAt?: number;
   /** E2E — shorten Sorting Hat manifest delays. */
@@ -952,6 +1031,10 @@ function dispatchTerminalPanelAction(
 
 let askAbortController: AbortController | null = null;
 let askRequestGeneration = 0;
+/** AX/DOM UiMap captured during companion visual ask — merged into guidance on response. */
+let companionLocalUiMapForAsk: UiMap | null = null;
+let companionAnchorBaseline: AnchorWatchSnapshot | null = null;
+let companionAnchorWatchTimer: ReturnType<typeof setInterval> | null = null;
 let thinkingStartedAtMs: number | null = null;
 let lookingStartedAtMs: number | null = null;
 let glassUserSettings: GlassUserSettings = { ...DEFAULT_GLASS_USER_SETTINGS };
@@ -993,12 +1076,19 @@ const state: AppState = {
   virtualAudioDevices: [],
   nativeLoopbackTested: false,
   voiceModeStartNonce: 0,
+  companionModeActive: false,
+  companionModeToggleNonce: 0,
+  companionWarmupPhase: "none",
+  companionWarmupSpeakNonce: 0,
+  companionPresence: null,
+  companionMemory: null,
   translateSetupRequestId: 0,
   mediaContext: null,
   appUpdate: emptyGlassAppUpdateState(app.getVersion()),
   onboardingOpen: false,
   glassUserProfile: null,
   iivoAccountLink: null,
+  omniParserInstall: getOmniParserInstallState(),
 };
 
 let moments = new SavedMomentsStore();
@@ -1051,10 +1141,54 @@ function completeListenCountdown(): void {
   push();
 }
 
-function beginListenCountdown(): void {
+function beginListenCapture(mode?: TranscriptionMode): void {
   cancelListenCountdown();
-  if (state.privacy.listening) return;
-  broadcastTranscriptionControl({ type: "start" });
+  broadcastTranscriptionControl(mode ? { type: "start", mode } : { type: "start" });
+}
+
+/** Atomically start a Listen-mode session and kick off system-audio capture. */
+function activateListenMode(): void {
+  const preset = GLASS_MODE_PRESETS.listen;
+  if (!sessionIsLive()) {
+    sessions.startSession("Listen");
+    bindCopilotToSession();
+    startCopilotLoop();
+  }
+  const next = withCopilotConfig(copilot.getConfig(), {
+    mode: preset.copilotMode,
+    sessionType: preset.sessionFocus,
+  });
+  persistCopilotConfig(next);
+  if (copilotModeIsActive(next.mode) && sessionIsLive()) {
+    bindCopilotToSession();
+    refreshCopilotLoop();
+  }
+  if (!state.selectedVirtualAudioDeviceId?.trim()) {
+    const preferred = pickPreferredVirtualAudioDevice(state.virtualAudioDevices ?? []);
+    if (preferred?.deviceId) {
+      state.selectedVirtualAudioDeviceId = preferred.deviceId;
+      glassUserSettings = {
+        ...glassUserSettings,
+        selectedVirtualAudioDeviceId: preferred.deviceId,
+      };
+      state.glassSettings = glassUserSettings;
+      void persistGlassUserSettings(glassUserSettings);
+    }
+  }
+  state.transcriptionMode = "system_audio";
+  state.operationDiagnostics = recordOperation(state.operationDiagnostics, "request-start-listening", "pending");
+  syncListenNotesPadVisibility();
+  bootstrapListenNotesPipeline();
+  push();
+  const virtualDeviceId = resolveVirtualAudioDeviceId({
+    selectedVirtualAudioDeviceId: state.selectedVirtualAudioDeviceId,
+    virtualAudioDevices: state.virtualAudioDevices,
+  });
+  console.log(
+    `[Glass Listen] activate-listen-mode session=${sessions.current()?.id ?? "none"} ` +
+      `virtualDevice=${virtualDeviceId ?? "none"} systemAudio=${state.systemAudioStatus}`,
+  );
+  beginListenCapture("system_audio");
 }
 
 function sessionIsLive(): boolean {
@@ -1176,6 +1310,9 @@ let deepgramSession: DeepgramStreamingSession | null = null;
  * Produces diarized transcript chunks tagged [S0]/[S1] for the rolling transcript.
  */
 let listenDeepgramSession: DeepgramStreamingSession | null = null;
+let listenDeepgramReconnectAttempts = 0;
+const LISTEN_DEEPGRAM_RECONNECT_BASE_MS = 1_000;
+const LISTEN_DEEPGRAM_RECONNECT_MAX_MS = 30_000;
 
 /**
  * Push raw interim text directly to captions as a live preview — no translation API call.
@@ -1259,18 +1396,27 @@ function startListenDeepgramSession(): void {
     },
     onClose: () => {
       if (!shouldRunListenNotesPipeline()) return;
-      console.warn("[deepgram:listen] WS closed unexpectedly — reconnecting in 1s…");
+      listenDeepgramReconnectAttempts += 1;
+      const delayMs = Math.min(
+        LISTEN_DEEPGRAM_RECONNECT_BASE_MS * 2 ** (listenDeepgramReconnectAttempts - 1),
+        LISTEN_DEEPGRAM_RECONNECT_MAX_MS,
+      );
+      console.warn(
+        `[deepgram:listen] WS closed unexpectedly — reconnecting in ${Math.round(delayMs / 1000)}s…`,
+      );
       setTimeout(() => {
         if (!shouldRunListenNotesPipeline()) return;
         startListenDeepgramSession();
-      }, 1_000);
+      }, delayMs);
     },
   });
 
   listenDeepgramSession = new DeepgramStreamingSession(dgKey, "auto", makeListenCallbacks());
 
   const attemptListenDeepgramConnect = (attemptsLeft: number) => {
-    listenDeepgramSession?.connect().catch((err: unknown) => {
+    listenDeepgramSession?.connect().then(() => {
+      listenDeepgramReconnectAttempts = 0;
+    }).catch((err: unknown) => {
       const msg = (err as Error).message ?? String(err);
       console.error(`[deepgram:listen] connect failed (${attemptsLeft} retries left):`, msg);
       if (attemptsLeft > 0 && shouldRunListenNotesPipeline()) {
@@ -1295,6 +1441,7 @@ function stopListenDeepgramSession(): void {
   if (listenDeepgramSession) {
     listenDeepgramSession.close();
     listenDeepgramSession = null;
+    listenDeepgramReconnectAttempts = 0;
     console.log("[deepgram:listen] session closed");
   }
 }
@@ -1466,10 +1613,10 @@ async function refreshStreamingListenNotes(nowMs: number, force = false): Promis
     void refreshListenNotesWithAI(config, rolling, currentTopicHint, listenSpeakerNames).then((result) => {
       if (!isListenModeActive()) return; // user stopped listening while AI was thinking
       if (result.notes.length > 0) {
-        listenAiNotes = result.notes;
+        listenAiNotes = mergeListenAiNotes(listenAiNotes, result.notes);
         lastAiNotesRefreshMs = Date.now();
         console.log(
-          `[listenAiNotes] refreshed: ${result.notes.length} notes (model: ${result.model ?? "unknown"})`,
+          `[listenAiNotes] refreshed: ${result.notes.length} new notes (${listenAiNotes.length} total, model: ${result.model ?? "unknown"})`,
         );
         push(); // re-render with AI notes now in sections
       } else {
@@ -1660,6 +1807,13 @@ function isListenModeActive(): boolean {
 function shouldRunListenNotesPipeline(): boolean {
   const config = copilot.getConfig();
   return config.sessionType === "video_learning" && copilotModeIsActive(config.mode);
+}
+
+/** Show the floating notes pad as soon as Listen mode is active — not only after audio starts. */
+function syncListenNotesPadVisibility(): void {
+  if (shouldRunListenNotesPipeline() && sessionIsLive()) {
+    setListenNotesPadVisible(true);
+  }
 }
 
 function ensureListenSession(): void {
@@ -3011,6 +3165,10 @@ function visualAskProbeDiagnostics(
   };
 }
 
+function refreshOmniParserInstall(): void {
+  state.omniParserInstall = getOmniParserInstallState();
+}
+
 function refreshSetupCapabilities(): void {
   state.setupCapabilities = buildGlassSetupCapabilities({
     platform: process.platform,
@@ -3074,6 +3232,7 @@ async function applyGlassSetupCheckResult(
     }
   }
   refreshSetupCapabilities();
+  refreshOmniParserInstall();
   state.setupCheckSummary = formatSetupCheckSummary(state.setupCapabilities);
   if (!options.silent) {
     if (options.noticePrefix) {
@@ -3087,6 +3246,11 @@ async function applyGlassSetupCheckResult(
     !state.privacy.listening &&
     (process.env.IIVO_GLASS_E2E !== "1" || process.env.IIVO_GLASS_LIVE_E2E === "1")
   ) {
+    if (options.showSummaryNotice) {
+      state.lastNotice =
+        "Connecting system audio — if macOS shows a screen picker, choose your display with audio enabled.";
+      push();
+    }
     broadcastTranscriptionControl({ type: "connect-system-audio" });
   }
 }
@@ -3116,12 +3280,21 @@ function refreshCommandBarOverlayClearance(): boolean {
 function scheduleInitialSetupCheck(): void {
   if (process.env.IIVO_GLASS_E2E === "1") return;
   void (async () => {
+    const windows = getWindows();
+    if (windows) {
+      await whenGlassWindowsReady(windows);
+    }
     const result = await runGlassSetupCheck({
       config,
       displayTarget: state.glassSettings.displayTarget,
     });
     await applyGlassSetupCheckResult(result, { silent: true });
-  })();
+  })().catch((err: unknown) => {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[IIVO Glass] initial setup check failed:", message);
+    state.lastNotice = `Setup check failed on launch: ${message}`;
+    push();
+  });
 }
 
 function snapshot(): GlassState {
@@ -3179,6 +3352,12 @@ function snapshot(): GlassState {
     micPermission: state.micPermission,
     copilot: copilotRuntime(),
     voiceModeStartNonce: state.voiceModeStartNonce,
+    companionModeActive: state.companionModeActive,
+    companionModeToggleNonce: state.companionModeToggleNonce,
+    companionWarmupPhase: state.companionWarmupPhase,
+    companionWarmupSpeakNonce: state.companionWarmupSpeakNonce,
+    companionPresence: state.companionPresence,
+    companionMemory: state.companionMemory,
     translateSetupRequestId: state.translateSetupRequestId,
     mediaContext: state.mediaContext,
     appUpdate: state.appUpdate,
@@ -3197,6 +3376,7 @@ function snapshot(): GlassState {
     blackHoleInstallStatus: state.blackHoleInstallStatus,
     blackHoleInstallProgress: state.blackHoleInstallProgress,
     iivoAccountLink: state.iivoAccountLink,
+    omniParserInstall: state.omniParserInstall,
     meetingIntelligence: isMeetingsModeActive() ? meetingIntelState : undefined,
     iivoApiUrl: config.iivoApiUrl,
     iivoWebUrl: config.iivoWebUrl,
@@ -3223,7 +3403,19 @@ function snapshot(): GlassState {
     designCaptures: state.designCaptures,
     pendingDiffs: state.pendingDiffs,
     buildVerifications: state.buildVerifications,
-    powersPaletteOpen: state.powersPaletteOpen,
+    powersMenuOpen: state.powersMenuOpen,
+    commandPaletteOpen: state.commandPaletteOpen,
+    responsePanelRevealSeq: state.responsePanelRevealSeq,
+    paletteTerminalHint: (() => {
+      const block = getLastTerminalContextBlock();
+      if (!block) return null;
+      return {
+        command: block.command,
+        output: block.output,
+        exitCode: block.exitCode ?? null,
+        status: block.status,
+      };
+    })(),
     customCommands: state.customCommands,
     customCommandsWarnings: state.customCommandsWarnings,
     extractBuildModeActive,
@@ -3354,6 +3546,7 @@ function eventContextFields(opts?: { sourceTitle?: string; captureSource?: strin
 
 function push(): void {
   refreshSetupCapabilities();
+  refreshOmniParserInstall();
   const updatePhase = state.appUpdate.phase;
   const appUpdateVisible =
     updatePhase === "available" || updatePhase === "downloading" || updatePhase === "installing";
@@ -3372,6 +3565,7 @@ function push(): void {
       !isUiLocaleChosen(state.glassSettings?.uiLocale),
   );
   ensureOnboardingOverlayClickThrough();
+  syncListenNotesPadVisibility();
   broadcast(IPC.state, snapshot());
 }
 
@@ -4008,6 +4202,63 @@ async function recordGlassContextAfterResponse(prompt: string): Promise<void> {
   await persistGlassContextProfile(glassContextProfile);
 }
 
+function stopCompanionAnchorWatch(): void {
+  if (companionAnchorWatchTimer) {
+    clearInterval(companionAnchorWatchTimer);
+    companionAnchorWatchTimer = null;
+  }
+  companionAnchorBaseline = null;
+}
+
+function startCompanionAnchorWatch(): void {
+  stopCompanionAnchorWatch();
+  const ctx = getCachedWindowContext();
+  companionAnchorBaseline = captureAnchorSnapshot({
+    bounds: ctx.windowBounds,
+    appName: ctx.appName,
+    windowTitle: ctx.windowTitle,
+  });
+  companionAnchorWatchTimer = setInterval(() => {
+    if (!state.companionPresence) {
+      stopCompanionAnchorWatch();
+      return;
+    }
+    void (async () => {
+      await refreshWindowContext();
+      const current = getCachedWindowContext();
+      const snap = captureAnchorSnapshot({
+        bounds: current.windowBounds,
+        appName: current.appName,
+        windowTitle: current.windowTitle,
+      });
+      if (anchorWatchDrifted(companionAnchorBaseline, snap)) {
+        state.companionPresence = null;
+        state.lastNotice = COMPANION_ANCHOR_INVALIDATED_NOTICE;
+        stopCompanionAnchorWatch();
+        push();
+      }
+    })();
+  }, 2000);
+}
+
+function attachCaptureCropsToPresence(
+  presence: import("../shared/companionGuidance.ts").CompanionGuidancePayload | null,
+  imageDataUrl?: string,
+): import("../shared/companionGuidance.ts").CompanionGuidancePayload | null {
+  if (!presence || !imageDataUrl) return presence;
+  const plan = presence.guidancePlan;
+  const allMan = allManifestationsFromPlan(plan.manifestations, plan.steps);
+  const crops = buildCaptureCropsForManifestations({
+    imageDataUrl,
+    uiMap: presence.uiMap,
+    manifestations: allMan,
+    captureWidth: presence.uiMap.width,
+    captureHeight: presence.uiMap.height,
+  });
+  if (!Object.keys(crops).length) return presence;
+  return { ...presence, captureCrops: crops };
+}
+
 async function submitCommand(
   rawText: string,
   lensContext?: import("../shared/glassLensContext.ts").GlassLensContext | null,
@@ -4047,6 +4298,8 @@ async function submitCommand(
      * when the user submits a refinement — state.designCaptures is keyed by capture id.
      */
     designCaptureId?: string;
+    /** Phase 4a — Companion route from renderer auto-submit. */
+    companionRoute?: CompanionRoute;
   },
 ): Promise<void> {
   // Consume any pending context snapshot (set by glass-context-ask hotkey).
@@ -4164,7 +4417,36 @@ async function submitCommand(
   askAbortController = new AbortController();
   const signal = askAbortController.signal;
 
-  const visualIntent = opts?.forceVisual || shouldCaptureScreenForGlassAsk(text);
+  const windowCtx = getCachedWindowContext();
+  const companionMemoryContext = {
+    frontApp: windowCtx.appName,
+    windowTitle: windowCtx.windowTitle,
+  };
+
+  let companionRoute: CompanionRoute | undefined = opts?.companionRoute;
+  if (state.companionModeActive && !companionRoute) {
+    companionRoute = resolveCompanionRoute(text, state.companionMemory, companionMemoryContext);
+  }
+
+  const isCompanionRetarget =
+    state.companionModeActive === true && companionRoute === "retarget";
+  const isCompanionDirectFollowUp =
+    state.companionModeActive === true && companionRoute === "direct_follow_up";
+  const isCompanionScriptContinue =
+    state.companionModeActive === true && companionRoute === "script_continue";
+  const reuseCompanionCapture =
+    isCompanionRetarget &&
+    canReuseCompanionCapture(state.companionMemory, companionMemoryContext);
+
+  let visualIntent = opts?.forceVisual || shouldCaptureScreenForGlassAsk(text);
+  if (state.companionModeActive) {
+    if (companionRoute === "full_visual_ask" || isCompanionRetarget) {
+      visualIntent = true;
+    }
+    if (isCompanionDirectFollowUp || isCompanionScriptContinue) {
+      visualIntent = false;
+    }
+  }
   // Allow callers to thread a file path directly without a pendingContextSnapshot.
   if (opts?.codeFilePath && !askFilePath) {
     askFilePath = opts.codeFilePath;
@@ -4189,11 +4471,17 @@ async function submitCommand(
       label: undefined,
     };
   }
-  const wantsVisualCapture = visualIntent && !lensScreenshotPayload;
+  const wantsVisualCapture = visualIntent && !lensScreenshotPayload && !reuseCompanionCapture;
   clearVisualAskRetentionDismissTimer();
   state.visualAskRetention = null;
   state.askInFlight = true;
   state.askStatus = "pending";
+  const preserveCompanionPresence =
+    reuseCompanionCapture || isCompanionDirectFollowUp || isCompanionScriptContinue;
+  if (!preserveCompanionPresence) {
+    state.companionPresence = null;
+  }
+  companionLocalUiMapForAsk = null;
   state.lastError = undefined;
   state.operationDiagnostics = recordOperation(state.operationDiagnostics, "ask-iivo", "pending");
 
@@ -4413,6 +4701,50 @@ async function submitCommand(
       height: captureOutcome.captureHeight,
     };
 
+    if (state.companionModeActive) {
+      const display = getConnectedDisplays().find(
+        (d) => d.id === (captureOutcome.latestState.displayId ?? captureTarget.id),
+      );
+      const ctx = getCachedWindowContext();
+      companionLocalUiMapForAsk = await buildCompanionLocalUiMap({
+        captureId:
+          captureOutcome.payload.eventId ??
+          captureOutcome.payload.contextId ??
+          `capture-${Date.now()}`,
+        captureWidth: captureOutcome.captureWidth,
+        captureHeight: captureOutcome.captureHeight,
+        displayOrigin: display
+          ? { x: display.bounds.x, y: display.bounds.y }
+          : undefined,
+      });
+      if (
+        captureOutcome.imageDataUrl &&
+        shouldTryOmniParser(companionLocalUiMapForAsk?.marks.length ?? 0, ctx.appName)
+      ) {
+        const omniMarks = await tryOmniParserMarks({
+          imageDataUrl: captureOutcome.imageDataUrl,
+          captureWidth: captureOutcome.captureWidth,
+          captureHeight: captureOutcome.captureHeight,
+        });
+        if (omniMarks.length && companionLocalUiMapForAsk) {
+          companionLocalUiMapForAsk = {
+            ...companionLocalUiMapForAsk,
+            marks: [...companionLocalUiMapForAsk.marks, ...omniMarks].slice(0, 48),
+          };
+        } else if (omniMarks.length) {
+          companionLocalUiMapForAsk = {
+            captureId:
+              captureOutcome.payload.eventId ??
+              captureOutcome.payload.contextId ??
+              `capture-${Date.now()}`,
+            width: captureOutcome.captureWidth,
+            height: captureOutcome.captureHeight,
+            marks: omniMarks.slice(0, 48),
+          };
+        }
+      }
+    }
+
     visualSavedToSession = captureOutcome.savedToSession;
     if (captureOutcome.savedToSession) {
       state.pendingCaptureDataUrl = captureOutcome.imageDataUrl;
@@ -4464,14 +4796,18 @@ async function submitCommand(
   const enrichedUserContext = termCtx
     ? [userContext, termCtx].filter(Boolean).join("\n\n")
     : userContext;
+  const companionDepthAsk =
+    state.companionModeActive === true && companionPrefersResponsePanel(text);
   const askRequest = {
     prompt: text,
     session: buildGlassAskSessionPayload(text),
     latestScreenshot: latestScreenshot ?? lensScreenshotPayload,
     lensContext: lensAttached ?? undefined,
     visualIntent: visualIntent || Boolean(lensScreenshotPayload) || undefined,
-    responseStyle: "overlay" as const,
+    responseStyle: companionDepthAsk ? ("full" as const) : ("overlay" as const),
     modelPurpose: (opts?.taskComplexity === "deep" ? "diagnostic" : "default") as import("../shared/glassAskTypes.ts").GlassAskRequest["modelPurpose"],
+    companionMode: state.companionModeActive || undefined,
+    companionUiMap: companionLocalUiMapForAsk ?? undefined,
     ...(enrichedUserContext ? { userContext: enrichedUserContext } : {}),
   };
 
@@ -4530,6 +4866,47 @@ async function submitCommand(
       routeUsed: result.routeUsed,
       model: result.model,
     };
+    if (
+      state.companionModeActive &&
+      (companionDepthAsk || isSubstantialResponse(fullAnswer))
+    ) {
+      state.responsePanelRevealSeq = (state.responsePanelRevealSeq ?? 0) + 1;
+    }
+    const localUiMapForMerge =
+      companionLocalUiMapForAsk ?? state.companionMemory?.lastUiMap ?? undefined;
+    const mergedPresence = mergeCompanionGuidance(
+      localUiMapForMerge,
+      result.companionGuidance ?? null,
+    );
+    const cropImage =
+      visualCaptureFull?.imageDataUrl ??
+      latestScreenshot?.imageDataUrl ??
+      state.companionMemory?.lastCaptureImageDataUrl;
+    const withCrops = attachCaptureCropsToPresence(mergedPresence, cropImage);
+    state.companionPresence =
+      withCrops ?? (preserveCompanionPresence ? state.companionPresence : null);
+    if (state.companionPresence) {
+      startCompanionAnchorWatch();
+    } else {
+      stopCompanionAnchorWatch();
+    }
+    if (state.companionModeActive && state.companionPresence) {
+      state.companionMemory = updateCompanionSessionMemory(state.companionMemory, {
+        prompt: text,
+        presence: state.companionPresence,
+        frontApp: windowCtx.appName,
+        windowTitle: windowCtx.windowTitle,
+        screenshot: latestScreenshot ?? lensScreenshotPayload,
+        imageDataUrl: visualCaptureFull?.imageDataUrl,
+      });
+    } else if (
+      state.companionModeActive &&
+      state.companionMemory &&
+      (isCompanionDirectFollowUp || isCompanionScriptContinue)
+    ) {
+      state.companionMemory = { ...state.companionMemory, lastPrompt: text };
+    }
+    companionLocalUiMapForAsk = null;
 
     const responseWarnings = [
       ...(visualCaptureWarning ? [visualCaptureWarning] : []),
@@ -4698,6 +5075,22 @@ async function submitCommand(
           routeUsed: retryResult.routeUsed,
           model: retryResult.model,
         };
+        state.companionPresence = mergeCompanionGuidance(
+          companionLocalUiMapForAsk,
+          retryResult.companionGuidance ?? null,
+        );
+        if (state.companionModeActive && state.companionPresence) {
+          const retryCtx = getCachedWindowContext();
+          state.companionMemory = updateCompanionSessionMemory(state.companionMemory, {
+            prompt: text,
+            presence: state.companionPresence,
+            frontApp: retryCtx.appName,
+            windowTitle: retryCtx.windowTitle,
+            screenshot: latestScreenshot ?? lensScreenshotPayload,
+            imageDataUrl: visualCaptureFull?.imageDataUrl,
+          });
+        }
+        companionLocalUiMapForAsk = null;
         pushFeed(
           createCommandFeedItem("response", overlayAnswer, {
             prompt: text,
@@ -4807,6 +5200,26 @@ async function fetchGlassTtsBuffer(text: string): Promise<Buffer | null> {
   return null;
 }
 
+/** Timed TTS for Companion — ElevenLabs character alignment when available. */
+async function fetchGlassTtsTimedBuffer(text: string): Promise<TimedTtsPayload | null> {
+  const payload = text.trim().slice(0, 2000);
+  if (!payload) return null;
+
+  const locale = parseUiLocale(state.glassSettings?.uiLocale);
+  const timed = await fetchElevenLabsTtsWithTimestamps(payload, locale);
+  if (timed) {
+    return {
+      id: Date.now().toString(),
+      data: timed.audio.toString("base64"),
+      alignment: timed.alignment ?? undefined,
+    };
+  }
+
+  const fallback = await fetchGlassTtsBuffer(payload);
+  if (!fallback) return null;
+  return { id: Date.now().toString(), data: fallback.toString("base64") };
+}
+
 async function handleCommand(
   command: GlassCommand,
   sender?: WebContents,
@@ -4832,17 +5245,36 @@ async function handleCommand(
         transcriptionMode: state.transcriptionMode,
         translateActive: isTranslateActive(),
       });
+      const session = sessions.current();
+      if (session?.status === "paused") {
+        sessions.resumeSession();
+      }
+      const listenCapture = shouldRunListenNotesPipeline();
+      if (listenCapture && state.transcriptionMode !== "system_audio") {
+        state.transcriptionMode = "system_audio";
+      }
       state.operationDiagnostics = recordOperation(state.operationDiagnostics, "request-start-listening", "pending");
       push();
-      beginListenCountdown();
+      beginListenCapture(listenCapture ? "system_audio" : undefined);
       return;
     }
+    case "activate-listen-mode":
+      logGlassClickDebug("activate-listen-mode", {
+        transcriptionMode: state.transcriptionMode,
+        translateActive: isTranslateActive(),
+      });
+      activateListenMode();
+      return;
     case "start-listening":
       logGlassClickDebug("start-listening", {
         transcriptionMode: state.transcriptionMode,
         translateActive: isTranslateActive(),
         privacyListening: state.privacy.listening,
       });
+      console.log(
+        `[Glass Listen] start-listening mode=${state.transcriptionMode} ` +
+          `virtualDevice=${state.selectedVirtualAudioDeviceId ?? "none"}`,
+      );
       dispatchPrivacy({ type: "START_LISTENING", at: new Date().toISOString() });
       state.stt = { ...state.stt, listeningElapsedMs: 0, lastError: undefined };
       bootstrapListenNotesPipeline();
@@ -4863,6 +5295,7 @@ async function handleCommand(
       cancelListenCountdown();
       broadcastTranscriptionControl({ type: "stop" });
       dispatchPrivacy({ type: "PAUSE", at: new Date().toISOString() });
+      copilot.dismissSilenceWarning();
       state.stt = { ...state.stt, listeningElapsedMs: 0 };
       resetListeningLimitTracking();
       state.operationDiagnostics = recordOperation(state.operationDiagnostics, "pause", "ok");
@@ -4887,6 +5320,7 @@ async function handleCommand(
       state.operationDiagnostics = stopped.diagnostics;
       state.lastNotice = undefined;
       state.lastError = stopped.lastError;
+      copilot.dismissSilenceWarning();
       stopCopilotLoop();
       stopListenNotesLoop();
       stopMeetingIntelLoop();
@@ -4913,6 +5347,11 @@ async function handleCommand(
         sessions.endSession();
       }
       setListenNotesPadVisible(false);
+      state.companionModeActive = false;
+      state.companionPresence = null;
+      state.companionMemory = clearCompanionSessionMemory();
+      state.companionWarmupPhase = "none";
+      stopCompanionAnchorWatch();
       push();
       return;
     }
@@ -5234,7 +5673,9 @@ async function handleCommand(
       push();
       return;
     case "submit-command":
-      await submitCommand(command.text, command.lensContext);
+      await submitCommand(command.text, command.lensContext, {
+        companionRoute: command.companionRoute,
+      });
       return;
     case "ask-iivo-direct":
       await submitCommand(command.text);
@@ -5462,6 +5903,37 @@ async function handleCommand(
       // Mic only starts after the command-bar hook reacts — never on launch.
       focusCommandBar();
       state.voiceModeStartNonce += 1;
+      push();
+      return;
+    case "toggle-companion-mode": {
+      state.companionModeActive = !state.companionModeActive;
+      state.companionModeToggleNonce += 1;
+      if (!state.companionModeActive) {
+        state.companionPresence = null;
+        state.companionMemory = clearCompanionSessionMemory();
+        state.companionWarmupPhase = "none";
+        stopCompanionAnchorWatch();
+      } else {
+        state.companionWarmupPhase = "none";
+        warmOmniParserSidecarWithCallbacks({
+          onWarming: () => {
+            state.companionWarmupPhase = "warming";
+            state.companionWarmupSpeakNonce += 1;
+            push();
+          },
+          onReady: () => {
+            state.companionWarmupPhase = "ready";
+            state.companionWarmupSpeakNonce += 1;
+            push();
+          },
+        });
+      }
+      push();
+      return;
+    }
+    case "clear-companion-presence":
+      state.companionPresence = null;
+      stopCompanionAnchorWatch();
       push();
       return;
     case "clear-command-feed":
@@ -6837,6 +7309,35 @@ async function handleCommand(
 
     // ── Custom slash commands (#165) ─────────────────────────────────────────
 
+    case "refresh-omniparser-install": {
+      refreshOmniParserInstall();
+      push();
+      return;
+    }
+
+    case "run-omniparser-install": {
+      const installCmd = buildOmniParserInstallTerminalCommand();
+      if (!installCmd) {
+        console.warn("[omniparser] install unavailable — sidecar not found");
+        return;
+      }
+      if (isPanelVisible()) closePanel();
+      await handleCommand({ type: "glass-terminal-run", command: installCmd });
+      return;
+    }
+
+    case "glass-terminal-run": {
+      if (!state.glassDockTerminalOpen || !state.glassDockTerminalId) {
+        await handleCommand({ type: "glass-terminal-open" });
+      }
+      const runCmd = command.command;
+      setTimeout(() => {
+        const termId = state.glassDockTerminalId;
+        if (termId) writePtyInput(termId, `${runCmd}\n`);
+      }, 300);
+      return;
+    }
+
     case "custom-command-run": {
       const { name } = command;
       const cmd = (state.customCommands ?? []).find((c) => c.name === name);
@@ -7013,6 +7514,12 @@ async function handleCommand(
       return;
     }
 
+    case "glass-terminal-pending-action-ack": {
+      state.glassTerminalPendingAction = undefined;
+      push();
+      return;
+    }
+
     // ── Terminal auto-fix accept ───────────────────────────────────────────────
     // User clicked "Fix it" on the overlay card — type the fix into the PTY.
     case "glass-terminal-fix-accept": {
@@ -7083,29 +7590,168 @@ async function handleCommand(
       return;
     }
 
-    // ── Glass Powers palette ──────────────────────────────────────────────────
-    case "toggle-powers-palette": {
-      state.powersPaletteOpen = !state.powersPaletteOpen;
-      push();
-      // If opening, focus the command-bar window so keyboard events land
-      if (state.powersPaletteOpen) {
-        const overlayWin = getWindows()?.overlay;
-        if (overlayWin && !overlayWin.isDestroyed()) {
-          overlayWin.webContents.send(IPC.commandBarFocus);
-        }
+    // ── Glass Powers Menu ──────────────────────────────────────────────────
+    case "toggle-powers-menu": {
+      state.powersMenuOpen = !state.powersMenuOpen;
+      if (state.powersMenuOpen) {
+        state.commandPaletteOpen = false;
+        setCommandPaletteOpen(false);
       }
+      setPowersMenuOpen(state.powersMenuOpen);
+      push();
       return;
     }
 
-    case "dismiss-powers-palette": {
-      if (state.powersPaletteOpen) {
-        state.powersPaletteOpen = false;
+    case "dismiss-powers-menu": {
+      if (state.powersMenuOpen) {
+        state.powersMenuOpen = false;
+        setPowersMenuOpen(false);
         push();
       }
       return;
     }
 
+    // ── Glass Command Palette (Task #66) ─────────────────────────────────────
+    case "toggle-command-palette": {
+      state.commandPaletteOpen = !state.commandPaletteOpen;
+      if (state.commandPaletteOpen) {
+        state.powersMenuOpen = false;
+        setPowersMenuOpen(false);
+      }
+      setCommandPaletteOpen(state.commandPaletteOpen);
+      push();
+      return;
+    }
+
+    case "dismiss-command-palette": {
+      if (state.commandPaletteOpen) {
+        state.commandPaletteOpen = false;
+        setCommandPaletteOpen(false);
+        push();
+      }
+      return;
+    }
+
+    case "open-answer-panel": {
+      if (!state.lastAskResponse) {
+        state.lastNotice = "Ask Glass in the command bar first — then use Answer Panel to reopen long answers.";
+        push();
+        return;
+      }
+      state.responsePanelRevealSeq = (state.responsePanelRevealSeq ?? 0) + 1;
+      push();
+      return;
+    }
+
+    case "open-terminal": {
+      try {
+        ensureGlassTerminalSession();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        state.lastError = message;
+        state.glassDockTerminalOpen = false;
+        push();
+        return;
+      }
+      state.glassDockTerminalOpen = true;
+      push();
+      showGlassTerminalWindow();
+      return;
+    }
+
+    case "terminal-nl-focus": {
+      try {
+        ensureGlassTerminalSession();
+        state.glassDockTerminalOpen = true;
+        dispatchTerminalPanelAction("nl-focus");
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        state.lastError = message;
+        push();
+        return;
+      }
+      push();
+      showGlassTerminalWindow();
+      return;
+    }
+
+    case "terminal-explain-last": {
+      try {
+        ensureGlassTerminalSession();
+        state.glassDockTerminalOpen = true;
+        dispatchTerminalPanelAction("explain");
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        state.lastError = message;
+        push();
+        return;
+      }
+      push();
+      showGlassTerminalWindow();
+      return;
+    }
+
+    case "clear-terminal": {
+      try {
+        ensureGlassTerminalSession();
+        state.glassDockTerminalOpen = true;
+        dispatchTerminalPanelAction("clear");
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        state.lastError = message;
+        push();
+        return;
+      }
+      push();
+      showGlassTerminalWindow();
+      return;
+    }
+
+    case "terminal-fix-last": {
+      void runPaletteTerminalFixLast();
+      return;
+    }
+
+    case "explain-clipboard": {
+      void runPaletteExplainClipboard();
+      return;
+    }
+
     // ── Sorting Hat TTS + onboarding ─────────────────────────────────────────
+
+    case "glass-tts-timed": {
+      const { text } = command;
+      if (!text?.trim()) return;
+      try {
+        const timed = await fetchGlassTtsTimedBuffer(text);
+        if (!timed?.data) {
+          console.error("[Glass TTS] glass-tts-timed: no audio");
+          state.ttsAudio = { id: `failed-${Date.now()}`, data: "" };
+          push();
+          setTimeout(() => {
+            state.ttsAudio = undefined;
+            push();
+          }, 500);
+          return;
+        }
+        const plan = state.companionPresence?.guidancePlan;
+        if (timed.alignment && plan?.speech?.length) {
+          timed.segmentTimings = buildSegmentTimings(plan.speech, timed.alignment);
+        }
+        state.ttsAudio = timed;
+        console.log(
+          `[Glass TTS] glass-tts-timed: sent ${timed.data.length} b64 chars, segments=${timed.segmentTimings?.length ?? 0}`,
+        );
+        push();
+        setTimeout(() => {
+          state.ttsAudio = undefined;
+          push();
+        }, 30_000);
+      } catch (e) {
+        console.error("[Glass TTS] timed fetch failed", e);
+      }
+      return;
+    }
 
     case "glass-tts": {
       const { text } = command;
@@ -7170,6 +7816,110 @@ async function handleCommand(
       if (await handleCopilotCommand(command)) return;
       await handleSessionCommand(command);
       return;
+  }
+}
+
+// ─── Glass Command Palette helpers (Task #66) ───────────────────────────────────
+
+async function runPaletteTerminalFixLast(): Promise<void> {
+  const block = getLastTerminalErrorBlock();
+  if (!block) {
+    state.lastNotice = "No failed terminal command to fix.";
+    push();
+    return;
+  }
+
+  try {
+    ensureGlassTerminalSession();
+    state.glassDockTerminalOpen = true;
+    showGlassTerminalWindow();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    state.lastError = message;
+    push();
+    return;
+  }
+
+  try {
+    const prompt = buildTerminalFixPrompt(
+      block.command,
+      block.output,
+      block.exitCode ?? 1,
+    );
+    const response = await askIivoGlass(config, {
+      prompt,
+      modelPurpose: "default",
+      responseStyle: "full",
+    });
+    const raw = response.answer?.trim() ?? "";
+    if (!raw) {
+      state.lastNotice = "Could not generate a fix.";
+      push();
+      return;
+    }
+    const parsed = parseTerminalFixResponse(raw);
+    const termId = state.glassDockTerminalId;
+    if (parsed.fixedCommand && termId) {
+      pushFeed(
+        createCommandFeedItem("terminal-fix", parsed.diagnosis ?? "Suggested fix", {
+          title: "Glass Terminal",
+          termId,
+          fixCommand: parsed.fixedCommand,
+          failedCommand: block.command,
+          fullBody: [parsed.diagnosis, parsed.whatChanged].filter(Boolean).join("\n\n"),
+        }),
+      );
+    } else {
+      state.lastNotice = parsed.diagnosis ?? "No fix found for the last error.";
+    }
+    push();
+  } catch (err) {
+    state.lastNotice = err instanceof Error ? err.message : "Fix request failed";
+    push();
+  }
+}
+
+async function runPaletteExplainClipboard(): Promise<void> {
+  let text = "";
+  try {
+    text = clipboard.readText().trim();
+  } catch {
+    text = "";
+  }
+  if (!text) {
+    state.lastNotice = "Clipboard is empty.";
+    push();
+    return;
+  }
+
+  state.lastNotice = "Explaining clipboard…";
+  push();
+
+  try {
+    const prompt = [
+      "Explain the following text in plain English. Be concise (2–4 sentences).",
+      "If it looks like code or an error message, say what it means and what to do next.",
+      "",
+      text.slice(0, 4000),
+    ].join("\n");
+    const response = await askIivoGlass(config, { prompt, modelPurpose: "default" });
+    const answer = response.answer?.trim();
+    if (!answer) {
+      state.lastNotice = "Could not explain clipboard contents.";
+      push();
+      return;
+    }
+    pushFeed(
+      createCommandFeedItem("response", answer, {
+        title: "Clipboard explained",
+        fullBody: answer,
+      }),
+    );
+    state.lastNotice = undefined;
+    push();
+  } catch (err) {
+    state.lastNotice = err instanceof Error ? err.message : "Explain failed";
+    push();
   }
 }
 
@@ -7755,6 +8505,7 @@ async function generateCopilotDebrief(): Promise<void> {
         prompt: aiPrompt,
         session: buildGlassAskSessionPayload(),
         responseStyle: "overlay",
+        suppressUserProfile: true,
       });
       if (response.answer?.trim()) {
         debrief.markdown = response.answer.trim();
@@ -7767,6 +8518,7 @@ async function generateCopilotDebrief(): Promise<void> {
 
   copilot.setDebrief(debrief);
   syncCopilotToSession();
+  state.lastNotice = undefined;
 
   // Send meeting report to IIVO as a standalone context item (best-effort, fire-and-forget).
   const meetingIntel = debriefOptions.meetingIntelligence;
@@ -7787,6 +8539,7 @@ async function generateCopilotDebrief(): Promise<void> {
       // never block the debrief
     }
   }
+  push();
 }
 
 async function maybeAutoDebriefOnEnd(): Promise<void> {
@@ -8027,7 +8780,7 @@ async function handleSessionCommand(command: GlassCommand): Promise<void> {
       // switched, or after an explicit session-pause). Without this the Resume button
       // leaves the user in a silent state with the session technically active.
       if (shouldRunListenNotesPipeline() && !state.privacy.listening) {
-        broadcastTranscriptionControl({ type: "start" });
+        broadcastTranscriptionControl({ type: "start", mode: "system_audio" });
       }
       break;
     case "session-end":
@@ -8035,6 +8788,7 @@ async function handleSessionCommand(command: GlassCommand): Promise<void> {
       stopCopilotLoop();
       stopMeetingIntelLoop();
       await maybeAutoDebriefOnEnd();
+      push();
       break;
     case "session-clear": {
       const session = sessions.current();
@@ -8453,6 +9207,133 @@ function registerIpc(): void {
       return { ok: false, error };
     }
   });
+
+  // ── Glass Command Palette (Task #66) ─────────────────────────────────────────
+  ipcMain.handle(
+    IPC.paletteGetSections,
+    (event, _payload: PaletteGetSectionsRequest): PaletteGetSectionsResponse => {
+      if (!isOverlayIpcSender(event.sender)) {
+        return { sections: [], error: "Unauthorized" };
+      }
+      try {
+        const freq: PaletteFrequencyMap = loadPaletteFrequency();
+
+        // ── Built-in Glass commands ────────────────────────────────────────
+        const sectionByCommandId = new Map(
+          PALETTE_COMMAND_REGISTRY.map((entry) => [entry.commandId, entry.section]),
+        );
+
+        const commandItems: GlassCommandItem[] = PALETTE_COMMAND_REGISTRY.map((entry) => ({
+          id: `command:${entry.commandId}`,
+          type: "command",
+          title: entry.title,
+          subtitle:
+            entry.commandId === "open-answer-panel" && !state.lastAskResponse
+              ? "Ask in the command bar first — reopens formatted answers after you ask"
+              : entry.subtitle,
+          icon: entry.icon,
+          badge: entry.badge,
+          shortcutHint: entry.shortcutHint,
+          action: entry.action,
+          secondaryAction: entry.secondaryAction,
+          score: 0,
+          commandId: entry.commandId,
+          contextTags: entry.contextTags,
+          keywords: entry.keywords,
+          useCount: freq[`command:${entry.commandId}`] ?? 0,
+        }));
+
+        // ── Stored API keys ────────────────────────────────────────────────
+        let apiKeyItems: ApiKeyItem[] = [];
+        try {
+          apiKeyItems = listApiKeys().map((meta) => ({
+            id: `api-key:${meta.id}`,
+            type: "api-key",
+            title: meta.label || meta.service,
+            subtitle: `${meta.service} · ${meta.environment}`,
+            icon: "🔑",
+            badge: meta.environment,
+            action: { kind: "copy-api-key", payload: meta.id },
+            score: 0,
+            keyId: meta.id,
+            service: meta.service,
+            label: meta.label,
+            environment: meta.environment,
+            maskedValue: "••••" + meta.id.slice(-4),
+          }));
+        } catch {
+          apiKeyItems = [];
+        }
+
+        const terminalHistoryItems: import("../shared/paletteTypes.ts").TerminalHistoryItem[] =
+          getRecentTerminalContextBlocks()
+            .slice(-12)
+            .reverse()
+            .map((block, idx) => ({
+              id: `terminal-history:${idx}-${block.command.slice(0, 24)}`,
+              type: "terminal-history" as const,
+              title: block.command.slice(0, 80) || "Command",
+              subtitle: block.output.slice(0, 100) || undefined,
+              icon: block.status === "error" ? "✗" : block.status === "success" ? "✓" : "○",
+              score: 0,
+              action: {
+                kind: "inject-pty",
+                payload: block.command,
+              },
+              command: block.command,
+              outputPreview: block.output.slice(0, 200),
+              exitCode: block.exitCode ?? null,
+              status: block.status,
+              finishedAt: Date.now() - idx * 1000,
+              durationLabel: block.durationMs != null
+                ? `${(block.durationMs / 1000).toFixed(1)}s`
+                : undefined,
+              ptySessionId: state.glassDockTerminalId ?? null,
+            }));
+
+        const sections: PaletteSection[] = [
+          {
+            id: "quick-actions",
+            label: "Quick Actions",
+            items: [],
+            maxVisible: 4,
+            order: 0,
+          },
+          ...buildCommandPaletteSections(commandItems, sectionByCommandId),
+          {
+            id: "terminal-history",
+            label: "Terminal History",
+            items: terminalHistoryItems,
+            maxVisible: 5,
+            order: 10,
+          },
+          {
+            id: "api-keys",
+            label: "API Keys",
+            items: apiKeyItems,
+            maxVisible: 5,
+            order: 11,
+          },
+        ];
+
+        return { sections };
+      } catch (err) {
+        const error = err instanceof Error ? err.message : "Failed to build palette";
+        return { sections: [], error };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC.paletteRecordUse,
+    (event, payload: PaletteRecordUseRequest): { ok: boolean } => {
+      if (!isOverlayIpcSender(event.sender)) return { ok: false };
+      const itemId = typeof payload?.itemId === "string" ? payload.itemId : "";
+      if (!itemId) return { ok: false };
+      recordPaletteUse(itemId);
+      return { ok: true };
+    },
+  );
 
   // ── Power Prompt Generator ─────────────────────────────────────────────────
   ipcMain.handle(IPC.promptGenerate, async (event, payload: PromptGenerateRequest) => {
@@ -9018,6 +9899,41 @@ function registerIpc(): void {
     },
   );
 
+  // ── Terminal Auto Fix (Task #65) ──────────────────────────────────────────
+  ipcMain.handle(
+    IPC.terminalFix,
+    async (_event, payload: TerminalFixRequest): Promise<TerminalFixResponse> => {
+      const command = typeof payload?.command === "string" ? payload.command.trim() : "";
+      const output = typeof payload?.output === "string" ? payload.output.trim() : "";
+      const exitCode = typeof payload?.exitCode === "number" ? payload.exitCode : 1;
+      if (!command) return { error: "command is required" };
+      try {
+        const prompt = buildTerminalFixPrompt(command, output, exitCode, payload?.context);
+        const response = await askIivoGlass(config, {
+          prompt,
+          modelPurpose: "default",
+          responseStyle: "full",
+        });
+        const raw = response.answer?.trim() ?? "";
+        if (!raw) return { error: "Empty response from AI" };
+        const parsed = parseTerminalFixResponse(raw);
+        if (!parsed.fixedCommand) {
+          return {
+            error: "No fix found",
+            diagnosis: parsed.diagnosis ?? undefined,
+          };
+        }
+        return {
+          fixedCommand: parsed.fixedCommand,
+          diagnosis: parsed.diagnosis ?? undefined,
+          whatChanged: parsed.whatChanged ?? undefined,
+        };
+      } catch (err) {
+        return { error: err instanceof Error ? err.message : "Terminal fix failed" };
+      }
+    },
+  );
+
   ipcMain.handle(IPC.getState, () => snapshot());
   ipcMain.handle(IPC.saveGlassMemory, async (_event, input: SaveGlassMemoryRequest) => {
     try {
@@ -9144,6 +10060,10 @@ function registerIpc(): void {
     setOverlayPointerOverNotification(!!over);
   });
 
+  ipcMain.on(IPC.overlayPointerOverDebriefPanel, (_event, over: boolean) => {
+    setOverlayPointerOverDebriefPanel(!!over);
+  });
+
   ipcMain.on(IPC.builderStripVisible, (_event, visible: boolean) => {
     setBuilderStripVisible(!!visible);
   });
@@ -9154,6 +10074,14 @@ function registerIpc(): void {
 
   ipcMain.on(IPC.builderStripPanelOpen, (_event, open: boolean) => {
     setBuilderStripPanelOpen(!!open);
+  });
+
+  ipcMain.on(IPC.responsePanelOpen, (_event, open: boolean) => {
+    setResponsePanelOpen(!!open);
+  });
+
+  ipcMain.on(IPC.copilotOverlayCardOpen, (_event, open: boolean) => {
+    setCopilotOverlayCardOpen(!!open);
   });
 
   ipcMain.on(IPC.resizeDock, (_event, width: number, height: number) => {
@@ -9232,13 +10160,13 @@ function registerGlobalHotkeys(): void {
     ...state.operationDiagnostics,
     hotkeyStatus: status,
   };
-  // ⌘⇧G — context assembler: snapshot window + terminal, focus command bar
+  // ⌘⇧G — Glass Command Palette (Task #66)
   registerContextAskHotkey(() => {
-    void handleCommand({ type: "glass-context-ask" });
+    void handleCommand({ type: "toggle-command-palette" });
   });
-  // ⌘⇧P — Glass Powers palette
-  registerPowersPaletteHotkey(() => {
-    void handleCommand({ type: "toggle-powers-palette" });
+  // ⌘⇧P — Glass Powers Menu
+  registerPowersMenuHotkey(() => {
+    void handleCommand({ type: "toggle-powers-menu" });
   });
 
   // #165 — Custom slash commands: load + hot-reload ~/.iivo/glass-commands.json

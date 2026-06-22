@@ -16,6 +16,7 @@ import type { PresenceStateMachine } from './PresenceStateMachine';
 import { SWARM_CONFIG } from './swarmConfig';
 
 import type { SwarmCameraLayout } from './CameraRig';
+import type { AtomTint } from './SubstrateRenderMaterial';
 
 interface SwarmSceneProps {
   controller: ModeController;
@@ -25,6 +26,7 @@ interface SwarmSceneProps {
   transparentOverlay?: boolean;
   /** Camera framing — boot splash uses closer/larger substrate. */
   layout?: SwarmCameraLayout;
+  atomTint?: AtomTint;
 }
 
 export default function SwarmScene({
@@ -33,6 +35,7 @@ export default function SwarmScene({
   presence,
   transparentOverlay = false,
   layout,
+  atomTint = 'sapphire',
 }: SwarmSceneProps): JSX.Element {
   const cameraLayout = layout ?? (transparentOverlay ? "onboarding" : "default");
   const fov = cameraLayout === "boot" ? 33 : transparentOverlay ? 36 : 32;
@@ -58,7 +61,12 @@ export default function SwarmScene({
       <LightingRig transparentBackground={transparentOverlay} />
       <EnvReflections />
       <CameraRig controller={controller} layout={cameraLayout} />
-      <SubstrateParticles controller={controller} voice={voice} presence={presence} />
+      <SubstrateParticles
+        controller={controller}
+        voice={voice}
+        presence={presence}
+        atomTint={atomTint}
+      />
       {!transparentOverlay && <Effects />}
     </Canvas>
   );

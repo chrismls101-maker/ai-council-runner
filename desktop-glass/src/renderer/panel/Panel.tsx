@@ -40,10 +40,12 @@ import { AudioTab } from "./AudioTab.tsx";
 import AccountTab from "./AccountTab.tsx";
 import { LiveNotesTab } from "./LiveNotesTab.tsx";
 import { PowerStackTab } from "./PowerStackTab.tsx";
+import { InstallationsTab } from "./InstallationsTab.tsx";
 
 const ALL_TABS: { id: PanelTab; label: string; devOnly?: boolean; builderOnly?: boolean }[] = [
   { id: "power-stack", label: "POWER STACK", builderOnly: true },
   { id: "setup", label: "Setup" },
+  { id: "installations", label: "Installations" },
   { id: "copilot", label: "Copilot" },
   { id: "live-notes", label: "Notes" },
   { id: "session", label: "Session" },
@@ -1087,6 +1089,12 @@ export function Panel(): JSX.Element {
           {tab === "setup" ? (
             <div className="panel__body">
               <StatusGrid state={state} />
+            </div>
+          ) : null}
+
+          {tab === "installations" ? (
+            <div className="panel__body">
+              <InstallationsTab />
             </div>
           ) : null}
 

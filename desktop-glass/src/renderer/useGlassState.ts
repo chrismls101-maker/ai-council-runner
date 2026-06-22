@@ -24,7 +24,7 @@ const fallbackStt: GlassSttState = {
   autoStopMs: 30 * 60 * 1000,
 };
 
-const fallbackState: GlassState = {
+export const fallbackState: GlassState = {
   privacy: initialPrivacyState,
   transcript: "",
   notes: emptyNotes(),
@@ -104,6 +104,7 @@ const fallbackState: GlassState = {
   glassDockTerminalId: undefined,
   glassDockTerminalTabs: undefined,
   glassTerminalPendingAction: undefined,
+  commandPaletteOpen: false,
 };
 
 export function useGlassState(): GlassState {

@@ -159,8 +159,17 @@ const PANEL_ALWAYS_ON_TOP_RELATIVE = 16;
 
 let overlayRaisedForNotifications = false;
 let overlayPointerOverNotification = false;
+let overlayPointerOverDebriefPanel = false;
 let overlayPointerOverBuilderStrip = false;
 let builderStripPanelOpen = false;
+let commandPaletteOpen = false;
+let powersMenuOpen = false;
+let responsePanelOpen = false;
+let copilotOverlayCardOpen = false;
+
+function overlayPaletteModalActive(): boolean {
+  return commandPaletteOpen || powersMenuOpen || responsePanelOpen || copilotOverlayCardOpen;
+}
 let builderStripBottomReservePx = 0;
 let terminalWindowVisible = false;
 let lastTerminalPanelWidth = GLASS_TERMINAL_DEFAULT_WIDTH;
@@ -199,7 +208,12 @@ export function setOverlayPointerOverNotification(over: boolean): void {
 
 function applyBuilderStripOverlayInteractivity(): void {
   if (!windows?.overlay || windows.overlay.isDestroyed()) return;
-  const interactive = overlayPointerOverBuilderStrip || builderStripPanelOpen;
+  if (overlayPaletteModalActive()) {
+    debugSetIgnoreMouseEvents(windows.overlay, "overlay", false);
+    return;
+  }
+  const interactive =
+    overlayPointerOverBuilderStrip || builderStripPanelOpen || overlayPointerOverDebriefPanel;
   if (!interactive) {
     if (!overlayPointerOverNotification) {
       resetOverlayClickThroughState(windows.overlay);
@@ -207,6 +221,12 @@ function applyBuilderStripOverlayInteractivity(): void {
     return;
   }
   debugSetIgnoreMouseEvents(windows.overlay, "overlay", false);
+}
+
+/** Renderer reports pointer over the debrief side panel — click-through elsewhere. */
+export function setOverlayPointerOverDebriefPanel(over: boolean): void {
+  overlayPointerOverDebriefPanel = over;
+  applyBuilderStripOverlayInteractivity();
 }
 
 /** Renderer reports pointer over the builder strip (Prompts / Keys tabs). */
@@ -219,6 +239,56 @@ export function setOverlayPointerOverBuilderStrip(over: boolean): void {
 export function setBuilderStripPanelOpen(open: boolean): void {
   builderStripPanelOpen = open;
   applyBuilderStripOverlayInteractivity();
+}
+
+function applyOverlayPaletteModalInteractivity(): void {
+  if (!windows?.overlay || windows.overlay.isDestroyed()) return;
+  const overlay = windows.overlay;
+  const cancelPassthrough = (overlay as BrowserWindow & { _cancelPassthroughDebounced?: () => void })
+    ._cancelPassthroughDebounced;
+  if (!commandPaletteOpen && !powersMenuOpen && !responsePanelOpen && !copilotOverlayCardOpen) {
+    overlay.setFocusable(false);
+    if (!overlayPointerOverBuilderStrip && !builderStripPanelOpen && !overlayPointerOverNotification && !overlayPointerOverDebriefPanel) {
+      resetOverlayClickThroughState(overlay);
+    }
+    overlay.showInactive();
+    return;
+  }
+  cancelPassthrough?.();
+  debugSetIgnoreMouseEvents(overlay, "overlay", false);
+  if (commandPaletteOpen || powersMenuOpen) {
+    overlay.setFocusable(true);
+    raiseChromeAboveOverlay(windows);
+    overlay.show();
+    overlay.focus();
+    return;
+  }
+  overlay.setFocusable(false);
+  overlay.showInactive();
+}
+
+/** ⌘⇧G command palette — full-screen modal; overlay must capture pointer + keyboard. */
+export function setCommandPaletteOpen(open: boolean): void {
+  commandPaletteOpen = open;
+  applyOverlayPaletteModalInteractivity();
+}
+
+/** ⌘⇧P powers menu — same overlay modal capture as command palette. */
+export function setPowersMenuOpen(open: boolean): void {
+  powersMenuOpen = open;
+  applyOverlayPaletteModalInteractivity();
+}
+
+/** Glass Response Panel — keep overlay OS-interactive for scroll / copy / dismiss. */
+export function setResponsePanelOpen(open: boolean): void {
+  responsePanelOpen = open;
+  applyOverlayPaletteModalInteractivity();
+}
+
+/** Session Copilot cards (debrief, diagnostic, offer) — keep overlay OS-interactive. */
+export function setCopilotOverlayCardOpen(open: boolean): void {
+  copilotOverlayCardOpen = open;
+  applyOverlayPaletteModalInteractivity();
 }
 
 const CHROME_MOUSE_FORWARD = { forward: true } as const;
@@ -299,6 +369,10 @@ export function syncLanguagePickerOverlayInteractivity(active: boolean): void {
 /** Full-screen overlay — reset to click-through (called after every showInactive). */
 function configureOverlayClickThrough(overlay: BrowserWindow): void {
   if (overlay.isDestroyed()) return;
+  if (overlayPaletteModalActive()) {
+    debugSetIgnoreMouseEvents(overlay, "overlay", false);
+    return;
+  }
   debugSetIgnoreMouseEvents(overlay, "overlay", true, true);
 }
 
@@ -322,10 +396,12 @@ function attachOverlayCursorClickThrough(overlay: BrowserWindow): void {
   let passthroughTimer: ReturnType<typeof setTimeout> | null = null;
 
   const setPassthrough = (): void => {
+    if (overlayPaletteModalActive()) return;
     if (passthroughTimer !== null) return; // already scheduled
     passthroughTimer = setTimeout(() => {
       passthroughTimer = null;
       if (overlay.isDestroyed()) return;
+      if (overlayPaletteModalActive()) return;
       debugSetIgnoreMouseEvents(overlay, "overlay", true, true);
     }, 40);
   };
@@ -340,12 +416,20 @@ function attachOverlayCursorClickThrough(overlay: BrowserWindow): void {
   (overlay as BrowserWindow & { _resetPassthrough?: () => void })._resetPassthrough = () => {
     if (passthroughTimer !== null) { clearTimeout(passthroughTimer); passthroughTimer = null; }
     if (overlay.isDestroyed()) return;
-    if (onboardingOverlayForceInteractive) {
+    if (onboardingOverlayForceInteractive || overlayPaletteModalActive()) {
       debugSetIgnoreMouseEvents(overlay, "overlay", false);
     } else {
       debugSetIgnoreMouseEvents(overlay, "overlay", true, true);
     }
   };
+
+  (overlay as BrowserWindow & { _cancelPassthroughDebounced?: () => void })._cancelPassthroughDebounced =
+    () => {
+      if (passthroughTimer !== null) {
+        clearTimeout(passthroughTimer);
+        passthroughTimer = null;
+      }
+    };
 
   const allowCursorInteractiveToggle = (): boolean => overlayRaisedForNotifications;
 
@@ -365,6 +449,12 @@ function attachOverlayCursorClickThrough(overlay: BrowserWindow): void {
     // unclickable — nothing underneath (Glass dock, commandBar, browser, apps) receives
     // any click. Only toggle interactive when notifications or onboarding UI need it.
     if (!allowCursorInteractiveToggle()) {
+      // Command / powers palette / response panel — keep overlay interactive.
+      if (commandPaletteOpen || powersMenuOpen || responsePanelOpen || copilotOverlayCardOpen) {
+        if (passthroughTimer !== null) { clearTimeout(passthroughTimer); passthroughTimer = null; }
+        debugSetIgnoreMouseEvents(overlay, "overlay", false);
+        return;
+      }
       // Builder strip: stay OS-interactive so CSS cursor:pointer shows on tab buttons.
       if (overlayPointerOverBuilderStrip || builderStripPanelOpen) {
         if (passthroughTimer !== null) { clearTimeout(passthroughTimer); passthroughTimer = null; }
@@ -802,6 +892,8 @@ function logDiagnostics(): void {
     dock: rectFromWindow(windows.dock),
     panel: rectFromWindow(windows.panel),
     panelVisible: windows.panel.isVisible(),
+    notesPad: rectFromWindow(windows.notesPad),
+    notesPadVisible,
     commandBar: commandBarVisible ? rectFromWindow(windows.commandBar) : null,
   });
   logGlassWindowDiagnostics(line);
@@ -1586,6 +1678,8 @@ export function getGlassWindowState() {
     dock: rectFromWindow(windows.dock),
     panel: rectFromWindow(windows.panel),
     panelVisible: windows.panel.isVisible(),
+    notesPad: rectFromWindow(windows.notesPad),
+    notesPadVisible,
     commandBar: commandBarVisible ? rectFromWindow(windows.commandBar) : null,
   });
   return buildWindowState(
@@ -2025,9 +2119,8 @@ export function unregisterCommandBarHotkeys(): void {
   globalShortcut.unregisterAll();
 }
 
-// Context assembler hotkey — ⌘⇧G (Command+Shift+G). Fires the glass-context-ask
-// pipeline: snapshot window + terminal context, then focus the command bar so the
-// user can type their question without any copy-paste or context explaining.
+// Glass Command Palette hotkey — ⌘⇧G (Command+Shift+G). Toggles the Raycast-style
+// command overlay in the always-on-top overlay window (Task #66).
 const CONTEXT_ASK_ACCEL = "CommandOrControl+Shift+G";
 let contextAskCallback: (() => void) | null = null;
 
@@ -2051,26 +2144,26 @@ export function registerContextAskHotkey(callback: () => void): void {
   }
 }
 
-const POWERS_PALETTE_ACCEL = "CommandOrControl+Shift+P";
-let powersPaletteCallback: (() => void) | null = null;
+const POWERS_MENU_ACCEL = "CommandOrControl+Shift+P";
+let powersMenuCallback: (() => void) | null = null;
 
-export function registerPowersPaletteHotkey(callback: () => void): void {
+export function registerPowersMenuHotkey(callback: () => void): void {
   if (process.env.IIVO_GLASS_E2E === "1") return;
-  powersPaletteCallback = callback;
+  powersMenuCallback = callback;
   try {
-    if (globalShortcut.isRegistered(POWERS_PALETTE_ACCEL)) {
-      globalShortcut.unregister(POWERS_PALETTE_ACCEL);
+    if (globalShortcut.isRegistered(POWERS_MENU_ACCEL)) {
+      globalShortcut.unregister(POWERS_MENU_ACCEL);
     }
-    const ok = globalShortcut.register(POWERS_PALETTE_ACCEL, () => {
-      powersPaletteCallback?.();
+    const ok = globalShortcut.register(POWERS_MENU_ACCEL, () => {
+      powersMenuCallback?.();
     });
     if (!ok) {
-      console.warn(`Glass powers-palette hotkey failed to register: ${POWERS_PALETTE_ACCEL}`);
+      console.warn(`Glass powers-menu hotkey failed to register: ${POWERS_MENU_ACCEL}`);
     } else {
-      console.log(`Glass powers-palette hotkey registered: ${POWERS_PALETTE_ACCEL}`);
+      console.log(`Glass powers-menu hotkey registered: ${POWERS_MENU_ACCEL}`);
     }
   } catch (err) {
-    console.warn("Glass powers-palette hotkey registration error:", err);
+    console.warn("Glass powers-menu hotkey registration error:", err);
   }
 }
 

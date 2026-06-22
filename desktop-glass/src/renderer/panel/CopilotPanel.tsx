@@ -115,23 +115,22 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
     // drains), flashing "Error" on the card until the next state push clears it.
     send({ type: "clear-last-error" });
     const plan = planModeActivation(preset, { systemAudioReady });
-    applyModePreset(preset);
     setPendingMeetingChoice(false);
     setPendingTranslateSetup(false);
     setListenNeedsAudio(false);
 
     if (preset.id === "listen") {
       send({ type: "capture-media-context" });
-      tx.setMode("system_audio");
       if (plan.needsSystemAudioSetup) {
         setListenNeedsAudio(true);
-        return;
       }
-      if (plan.startListening) {
-        queueMicrotask(() => tx.startListening());
-      }
+      // Main process applies copilot + session + capture atomically (avoids IPC race).
+      send({ type: "activate-listen-mode" });
+      tx.setMode("system_audio");
       return;
     }
+
+    applyModePreset(preset);
 
     if (preset.id === "meetings") {
       setPendingMeetingChoice(true);
@@ -147,7 +146,7 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
       setListenNeedsAudio(true);
       return;
     }
-    if (tx.canListen) queueMicrotask(() => tx.startListening());
+    if (tx.canListen) send({ type: "request-start-listening" });
   };
 
   const openTranslateSetup = () => {

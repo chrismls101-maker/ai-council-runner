@@ -9,6 +9,10 @@
   --builder-strip-bottom: calc(
     var(--builder-strip-frame-inset) + var(--builder-strip-above-frame-bottom)
   );
+  /* Viewport distance from bottom to strip top — palette panels anchor here. */
+  --builder-strip-top-from-bottom: calc(
+    var(--builder-strip-bottom) + var(--builder-strip-height)
+  );
   --builder-panel-radius: 16px;
   --builder-accent: rgba(255, 255, 255, 0.72);
 }
@@ -86,10 +90,9 @@
   letter-spacing: 0.04em;
   color: var(--glass-text-dim, rgba(255, 255, 255, 0.52));
   background: transparent;
-  border: none;
+  border: 0.5px solid transparent;
   border-radius: 7px;
   cursor: pointer;
-  transition: color 0.18s ease, background 0.18s ease;
   white-space: nowrap;
   pointer-events: auto;
 }
@@ -101,25 +104,14 @@
 
 .builder-tab:hover {
   color: rgba(255, 255, 255, 0.78);
-  background: rgba(255, 255, 255, 0.06);
 }
 
 .builder-tab--active {
   color: rgba(255, 255, 255, 0.92);
-  background: rgba(255, 255, 255, 0.08);
 }
 
 .builder-tab--active::after {
-  content: "";
-  position: absolute;
-  bottom: -1px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 20px;
-  height: 2px;
-  border-radius: 2px;
-  background: var(--glass-led-line, rgba(255, 255, 255, 0.55));
-  opacity: 0.85;
+  display: none;
 }
 
 .builder-tab__icon {
@@ -129,8 +121,63 @@
 
 .builder-strip__divider {
   flex: 1;
+  min-width: 8px;
   position: relative;
   z-index: 1;
+}
+
+.builder-tab--gold {
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.glass-hover-tooltip-wrap .builder-tab--gold,
+.glass-hover-tooltip-wrap .builder-tab {
+  flex-shrink: 0;
+}
+
+.glass-hover-tooltip-wrap .builder-tab.glass-terminal-toggle {
+  flex-shrink: 0;
+}
+
+/* ── Glass Companion toggle ──────────────────────────────────────────────── */
+.builder-tab--companion {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: rgba(186, 230, 253, 0.72);
+}
+
+.builder-tab--companion:hover {
+  color: rgba(224, 242, 254, 0.92);
+}
+
+.builder-tab--companion--active {
+  color: rgba(224, 242, 254, 0.98);
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(125, 211, 252, 0.28);
+}
+
+.builder-companion-toggle__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(148, 163, 184, 0.45);
+  flex-shrink: 0;
+}
+
+.builder-companion-toggle__dot--live {
+  background: rgba(56, 189, 248, 0.95);
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.75);
+  animation: builder-companion-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes builder-companion-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(0.92); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+
+.builder-tab--gold .builder-tab__icon {
+  opacity: 0.95;
 }
 
 /* ── Panel host — sits above the strip ───────────────────────────────────── */

@@ -38,6 +38,26 @@ export function parseOpenAITranscriptionResponse(body: unknown): string {
   return "";
 }
 
+function openAiTranscriptionErrorMessage(status: number, detail: string): string {
+  if (status === 401) return "OpenAI API key rejected.";
+  if (
+    status === 429 ||
+    /quota|rate limit|too many requests|insufficient_quota/i.test(detail)
+  ) {
+    return `OpenAI quota or rate limit exceeded: ${detail}`;
+  }
+  if (status === 402 || /billing|payment required/i.test(detail)) {
+    return `OpenAI billing issue: ${detail}`;
+  }
+  if (
+    status === 415 ||
+    /unsupported.*(audio|format|media)|invalid.*(audio|format|file)/i.test(detail)
+  ) {
+    return `Unsupported audio format: ${detail}`;
+  }
+  return `OpenAI transcription failed (${status}): ${detail}`;
+}
+
 export async function transcribeOpenAI(
   apiKey: string,
   model: string,
@@ -76,11 +96,7 @@ export async function transcribeOpenAI(
 
   if (!res.ok) {
     const detail = body.error?.message ?? res.statusText;
-    if (res.status === 401) throw new Error("OpenAI API key rejected.");
-    if (res.status === 415 || /format|audio/i.test(detail)) {
-      throw new Error(`Unsupported audio format: ${detail}`);
-    }
-    throw new Error(`OpenAI transcription failed (${res.status}): ${detail}`);
+    throw new Error(openAiTranscriptionErrorMessage(res.status, detail));
   }
 
   const text = parseOpenAITranscriptionResponse(body);

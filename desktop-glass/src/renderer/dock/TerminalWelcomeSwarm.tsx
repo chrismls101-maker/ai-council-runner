@@ -4,6 +4,7 @@ import { ModeController } from "../onboarding/swarm/ModeController.ts";
 import { VoiceController } from "../onboarding/swarm/VoiceController.ts";
 import { PresenceStateMachine } from "../onboarding/swarm/PresenceStateMachine.ts";
 import { MODES } from "../onboarding/swarm/manifestations.ts";
+import type { AtomTint } from "../onboarding/swarm/SubstrateRenderMaterial.ts";
 
 /** Fully-formed substrate atom — same resting state as after the boot build completes. */
 function createFormedAtomController(): ModeController {
@@ -16,7 +17,7 @@ function createFormedAtomController(): ModeController {
 }
 
 /** Boot-screen substrate atom, scaled for the terminal welcome overlay. */
-export function TerminalWelcomeSwarm(): JSX.Element {
+export function TerminalWelcomeSwarm({ atomTint = "sapphire" }: { atomTint?: AtomTint }): JSX.Element {
   const controllerRef = useRef<ModeController | null>(null);
   const voiceRef = useRef<VoiceController | null>(null);
   const presenceRef = useRef<PresenceStateMachine | null>(null);
@@ -36,6 +37,7 @@ export function TerminalWelcomeSwarm(): JSX.Element {
         presence={presenceRef.current}
         transparentOverlay
         layout="boot"
+        atomTint={atomTint}
       />
     </div>
   );

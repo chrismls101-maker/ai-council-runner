@@ -1,0 +1,54 @@
+appId: com.iivo.terminal
+productName: IIVO Terminal
+copyright: Copyright © 2026 IIVO
+
+# Override package.json main so the packaged app boots the standalone entry,
+# not the Glass overlay main (out/main/index.js).
+extraMetadata:
+  main: dist-standalone/main/terminalStandalone.js
+
+directories:
+  output: dist-terminal
+  buildResources: build
+
+files:
+  - "dist-standalone/**/*"
+  - "package.json"
+
+# node-pty and better-sqlite3 ship native .node binaries — rebuild + unpack.
+npmRebuild: true
+asar: true
+asarUnpack:
+  - "**/node_modules/node-pty/**"
+  - "**/node_modules/better-sqlite3/**"
+  - "**/node_modules/bindings/**"
+  - "**/node_modules/file-uri-to-path/**"
+
+mac:
+  category: public.app-category.developer-tools
+  icon: build/icon.icns
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+
+dmg:
+  title: "IIVO Terminal"
+  icon: build/icon.icns
+  iconSize: 80
+  contents:
+    - x: 180
+      y: 170
+    - x: 480
+      y: 170
+      type: link
+      path: /Applications
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true

@@ -77,12 +77,18 @@ export const IPC = {
   overlayNotificationActive: "glass:overlay-notification-active",
   /** Renderer → main: pointer entered/left the notification card host. */
   overlayPointerOverNotification: "glass:overlay-pointer-over-notification",
+  /** Renderer → main: pointer over the debrief side panel (text select / scroll). */
+  overlayPointerOverDebriefPanel: "glass:overlay-pointer-over-debrief-panel",
   /** Renderer → main: builder strip mounted/unmounted (guards pointer-over IPC). */
   builderStripVisible: "glass:builder-strip-visible",
   /** Renderer → main: pointer entered/left the builder strip (Prompts / Keys). */
   overlayPointerOverBuilderStrip: "glass:overlay-pointer-over-builder-strip",
   /** Renderer → main: builder strip panel (Prompts/Keys) open — keep overlay interactive. */
   builderStripPanelOpen: "glass:builder-strip-panel-open",
+  /** Renderer → main: Glass Response Panel open — keep overlay interactive. */
+  responsePanelOpen: "glass:response-panel-open",
+  /** Renderer → main: Session Copilot overlay card (debrief, diagnostic, offer) visible. */
+  copilotOverlayCardOpen: "glass:copilot-overlay-card-open",
   resizeDock: "glass:resize-dock",
   resizeTerminal: "glass:resize-terminal",
   dismissTerminalWindow: "glass:dismiss-terminal-window",
@@ -207,6 +213,17 @@ export const IPC = {
   extractBuildHandoff: "glass:extract-build-handoff",
   /** Main → overlay: full extract-mode transcript snapshot (system audio STT). */
   extractModeTranscript: "glass:extract-mode-transcript",
+  // ── Terminal Auto Fix (Task #65) ────────────────────────────────────────────
+  /**
+   * Renderer (terminal window) → main: given a failed command + output, ask Claude
+   * for a corrected command, 1-line diagnosis, and what changed.
+   */
+  terminalFix: "glass:terminal-fix",
+  // ── Glass Command Palette (Task #66) ─────────────────────────────────────────
+  /** Renderer → main: get all palette sections populated with live data. */
+  paletteGetSections: "glass:palette-get-sections",
+  /** Renderer → main (fire-and-forget): record that an item was actioned. */
+  paletteRecordUse: "glass:palette-record-use",
 } as const;
 
 // ── Built-in terminal AI context (Task #41) ──────────────────────────────────
@@ -519,7 +536,7 @@ export interface SaveGlassMemoryResponse {
 }
 
 export type TranscriptionControlCommand =
-  | { type: "start" }
+  | { type: "start"; mode?: TranscriptionMode }
   | { type: "stop" }
   | { type: "probe-microphone" }
   | { type: "probe-virtual-audio-devices" }
@@ -536,6 +553,7 @@ export type GlassCommand =
   | { type: "stop" }
   | { type: "stop-everything" }
   | { type: "request-start-listening" }
+  | { type: "activate-listen-mode" }
   | { type: "append-transcript"; text: string }
   | { type: "add-transcript-chunk"; text: string; tags?: string[]; interim?: boolean; speakerId?: number }
   | { type: "clear-transcript" }
@@ -552,7 +570,13 @@ export type GlassCommand =
   | { type: "send-transcript" }
   | { type: "send-moment"; id: string }
   | { type: "ask-iivo" }
-  | { type: "submit-command"; text: string; lensContext?: import("./glassLensContext.ts").GlassLensContext }
+  | {
+      type: "submit-command";
+      text: string;
+      lensContext?: import("./glassLensContext.ts").GlassLensContext;
+      /** Phase 4a — Companion route hint from renderer auto-submit. */
+      companionRoute?: import("./companionRetarget.ts").CompanionRoute;
+    }
   | { type: "ask-iivo-direct"; text: string }
   | { type: "prefill-command-bar"; text: string }
   | { type: "cancel-glass-ask" }
@@ -740,22 +764,51 @@ export type GlassCommand =
   | { type: "glass-terminal-close-tab"; termId?: string }
   | { type: "glass-terminal-switch-tab"; termId: string }
   | { type: "glass-terminal-action"; action: import("./terminalPanelActions.ts").GlassTerminalPanelAction }
+  | { type: "glass-terminal-pending-action-ack" }
   // ── Context assembler ─────────────────────────────────────────────────────
   /** Hotkey-triggered: snapshot screen + window + terminal context, focus command bar */
   | { type: "glass-context-ask" }
   // ── Terminal auto-fix ─────────────────────────────────────────────────────
   /** User clicked "Fix it" on a terminal-fix overlay card — types fix into PTY */
   | { type: "glass-terminal-fix-accept"; termId: string; command: string }
+  | { type: "glass-terminal-run"; command: string }
+  | { type: "run-omniparser-install" }
+  | { type: "refresh-omniparser-install" }
   // ── Extract & Build Mode ────────────────────────────────────────────────────
   /** Start system-audio capture for Extract & Build Mode. */
   | { type: "extract-mode-start" }
   /** Stop Extract & Build Mode capture (may stop listening if mode started it). */
   | { type: "extract-mode-stop" }
-  // ── Glass Powers palette ──────────────────────────────────────────────────
-  /** ⌘⇧P — open / toggle the Glass Powers quick-launcher palette */
-  | { type: "toggle-powers-palette" }
-  /** Close the palette without invoking a power */
-  | { type: "dismiss-powers-palette" }
+  // ── Glass Powers Menu ──────────────────────────────────────────────────
+  /** ⌘⇧P — open / toggle the Glass Powers Menu overlay. */
+  | { type: "toggle-powers-menu" }
+  /** Close the powers menu without invoking a power */
+  | { type: "dismiss-powers-menu" }
+  // ── Glass Command Palette commands (Task #66) ──────────────────────────────
+  /** Fix the most recent failed terminal command via Claude. */
+  | { type: "terminal-fix-last" }
+  /** Explain the most recent terminal command + its output via Claude. */
+  | { type: "terminal-explain-last" }
+  /** Explain the current clipboard contents via Claude. */
+  | { type: "explain-clipboard" }
+  /** Clear the active terminal scrollback. */
+  | { type: "clear-terminal" }
+  /** Open the built-in Glass terminal. */
+  | { type: "open-terminal" }
+  /** Open terminal and focus the natural-language → shell bar. */
+  | { type: "terminal-nl-focus" }
+  // ── Glass Command Palette (Task #66) ───────────────────────────────────────
+  /** ⌘⇧G — toggle the Raycast-style Glass Command Palette overlay. */
+  | { type: "toggle-command-palette" }
+  /** Close the Glass Command Palette without running a command. */
+  | { type: "dismiss-command-palette" }
+  /** Open or reopen the Glass Answer Panel (formatted side panel for last answer). */
+  | { type: "open-answer-panel" }
+  // ── Glass Companion (strip-toggle voice presence) ─────────────────────────
+  /** Toggle Companion session on/off from the builder strip. */
+  | { type: "toggle-companion-mode" }
+  /** Clear ephemeral Companion overlay manifestations. */
+  | { type: "clear-companion-presence" }
   // ── Fix injection into editor (#160) ─────────────────────────────────────
   /**
    * User confirmed "Apply to file" on an overlay response card.
@@ -803,6 +856,8 @@ export type GlassCommand =
   | { type: "custom-command-run"; name: string }
   /** Renderer requests TTS — main calls ElevenLabs and plays audio back. */
   | { type: "glass-tts"; text: string }
+  /** Companion timed TTS — returns audio + character alignment for presence sync. */
+  | { type: "glass-tts-timed"; text: string; requestId?: string }
   /** Sorting Hat placement complete — write persona + mark onboarding done. */
   | { type: "glass-onboarding-complete"; persona: "developer" | "sales" | "operator" | "writer" | "general" }
   /** User skipped onboarding — just mark complete with no persona set. */
@@ -891,7 +946,7 @@ export interface GlassState {
   /** Unpackaged Electron dev build — unlocks builder strip for local testing. */
   glassDevMode?: boolean;
   /** Audio chunk from TTS — base64 encoded mp3, played by renderer then cleared. */
-  ttsAudio?: { id: string; data: string };
+  ttsAudio?: import("./ttsAlignment.ts").TimedTtsPayload;
   glassUserProfile: import("./glassUserProfile.ts").GlassUserProfile | null;
   /** Progress of the one-click BlackHole + Multi-Output Device install flow. */
   blackHoleInstallStatus?: "idle" | "downloading" | "installing" | "configuring" | "done" | "error";
@@ -1008,14 +1063,34 @@ export interface GlassState {
   glassDockTerminalTabs?: import("./terminalPanelActions.ts").GlassTerminalTab[];
   /** One-shot action for the terminal renderer (⌘⇧P, etc.). */
   glassTerminalPendingAction?: import("./terminalPanelActions.ts").GlassTerminalPendingAction;
-  // ── Glass Powers palette ───────────────────────────────────────────────────
+  // ── Glass Powers Menu ───────────────────────────────────────────────────
   /** Whether the ⌘⇧P powers quick-launcher is currently visible. */
-  powersPaletteOpen?: boolean;
+  powersMenuOpen?: boolean;
+  /** Whether the ⌘⇧G Command Palette overlay is visible. */
+  commandPaletteOpen?: boolean;
+  /** Builder-strip Glass Companion session is active (toggle, not hold-to-talk). */
+  companionModeActive?: boolean;
+  /** Incremented on each Companion toggle — overlay starts/stops the voice loop. */
+  companionModeToggleNonce?: number;
+  /** OmniParser warm-up phase for Aletheia intro TTS on Companion toggle. */
+  companionWarmupPhase?: "none" | "warming" | "ready";
+  /** Bumped when companionWarmupPhase changes — renderer speaks warm/ready lines. */
+  companionWarmupSpeakNonce?: number;
+  /** Active Companion presence — uiMap + guidancePlan for overlay manifestations. */
+  companionPresence?: import("./companionGuidance.ts").CompanionGuidancePayload | null;
+  /** Phase 4a — session memory for multi-turn Companion routing. */
+  companionMemory?: import("./companionSessionMemory.ts").CompanionSessionMemory | null;
+  /** Bumped when Command Palette requests re-showing the Glass Response Panel. */
+  responsePanelRevealSeq?: number;
+  /** Hint for palette quick actions from the built-in terminal context buffer. */
+  paletteTerminalHint?: import("./paletteTypes.ts").PaletteLastTerminalBlock | null;
   // ── Custom commands (#165) ─────────────────────────────────────────────────
   /** User-defined slash commands loaded from ~/.iivo/glass-commands.json. */
   customCommands?: import("../shared/customCommands.ts").CustomCommand[];
   /** Validation warnings from the last custom commands config load. */
   customCommandsWarnings?: string[];
+  /** OmniParser sidecar install status (Companion UI detection). */
+  omniParserInstall?: import("./omniParserInstall.ts").OmniParserInstallState;
   /** True while Extract & Build Mode is capturing system audio in main. */
   extractBuildModeActive?: boolean;
 }
@@ -1106,4 +1181,40 @@ export interface ExtractBuildHandoffResponse {
   error?: string;
   /** True when Accessibility settings were opened to help the user grant paste permission. */
   openedAccessibilitySettings?: boolean;
+}
+
+// ── Terminal Auto Fix (Task #65) ─────────────────────────────────────────────
+
+export interface TerminalFixRequest {
+  /** The command that failed. */
+  command: string;
+  /** ANSI-stripped terminal output (stderr + stdout) from the failed command. Max 6000 chars. */
+  output: string;
+  /** Exit code of the failed command. */
+  exitCode: number;
+  /** Optional rolling context: last N finished commands as a single string. */
+  context?: string;
+}
+
+export interface TerminalFixResponse {
+  /** The corrected command, ready to run. Single line, no explanation. */
+  fixedCommand?: string;
+  /** One-line explanation of what went wrong (e.g. "Missing dependency: ts-node"). */
+  diagnosis?: string;
+  /** One-line explanation of what was changed (e.g. "Added --legacy-peer-deps flag"). */
+  whatChanged?: string;
+  error?: string;
+}
+
+// ── Glass Command Palette (Task #66) ───────────────────────────────────────────
+
+export interface PaletteGetSectionsRequest {
+  context: import("./paletteTypes.ts").PaletteContextSignals;
+}
+export interface PaletteGetSectionsResponse {
+  sections: import("./paletteTypes.ts").PaletteSection[];
+  error?: string;
+}
+export interface PaletteRecordUseRequest {
+  itemId: string;
 }

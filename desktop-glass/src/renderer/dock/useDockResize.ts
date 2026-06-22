@@ -2,6 +2,8 @@ import { useLayoutEffect, type RefObject } from "react";
 
 /** Small bleed so shadows never clip; keeps the Electron window >= content (no outer scrollbar). */
 const DOCK_SIZE_PADDING = 12;
+/** Reserve space above the dock pill so top-placed tooltips are not clipped. */
+export const DOCK_TOOLTIP_TOP_RESERVE = 44;
 
 function measureDock(stack: HTMLElement | null): { width: number; height: number } {
   if (!stack) return { width: 0, height: 0 };
@@ -26,7 +28,8 @@ export function useDockResize(
     const report = (): void => {
       const measured = measureDock(stackRef.current);
       const width = Math.ceil(measured.width) + DOCK_SIZE_PADDING;
-      const height = Math.ceil(measured.height) + DOCK_SIZE_PADDING;
+      const height =
+        Math.ceil(measured.height) + DOCK_SIZE_PADDING + DOCK_TOOLTIP_TOP_RESERVE;
       window.glass.resizeDock(width, height);
     };
 

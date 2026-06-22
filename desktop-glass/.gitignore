@@ -4,6 +4,7 @@ node_modules
 # Build output (electron-vite)
 out
 dist
+dist-standalone
 .vite
 
 # Packaged release artifacts (electron-builder) — never commit these
@@ -29,3 +30,9 @@ playwright-report/
 
 # Overnight QA report (regenerated each run; do not commit unless asked)
 OVERNIGHT_QA_REPORT.md
+
+# OmniParser sidecar local venv + matplotlib cache
+omniparser-sidecar/.venv
+omniparser-sidecar/.matplotlib
+omniparser-sidecar/**/__pycache__
+omniparser-sidecar/**/*.pyc

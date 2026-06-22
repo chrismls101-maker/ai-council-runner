@@ -43,6 +43,11 @@ import {
   type ExtractGenerateResponse,
   type ExtractBuildHandoffRequest,
   type ExtractBuildHandoffResponse,
+  type TerminalFixRequest,
+  type TerminalFixResponse,
+  type PaletteGetSectionsRequest,
+  type PaletteGetSectionsResponse,
+  type PaletteRecordUseRequest,
 } from "../shared/ipc.ts";
 import type { WindowContext } from "../shared/windowContextTypes.ts";
 
@@ -93,6 +98,9 @@ const glassApi = {
   setOverlayPointerOverNotification(over: boolean): void {
     ipcRenderer.send(IPC.overlayPointerOverNotification, over);
   },
+  setOverlayPointerOverDebriefPanel(over: boolean): void {
+    ipcRenderer.send(IPC.overlayPointerOverDebriefPanel, over);
+  },
   setBuilderStripVisible(visible: boolean): void {
     ipcRenderer.send(IPC.builderStripVisible, visible);
   },
@@ -101,6 +109,12 @@ const glassApi = {
   },
   setBuilderStripPanelOpen(open: boolean): void {
     ipcRenderer.send(IPC.builderStripPanelOpen, open);
+  },
+  setResponsePanelOpen(open: boolean): void {
+    ipcRenderer.send(IPC.responsePanelOpen, open);
+  },
+  setCopilotOverlayCardOpen(open: boolean): void {
+    ipcRenderer.send(IPC.copilotOverlayCardOpen, open);
   },
   resizeDock(width: number, height: number): void {
     ipcRenderer.send(IPC.resizeDock, width, height);
@@ -278,6 +292,17 @@ const glassApi = {
     };
     ipcRenderer.on(IPC.extractModeTranscript, listener);
     return () => ipcRenderer.removeListener(IPC.extractModeTranscript, listener);
+  },
+  // ── Terminal Auto Fix (Task #65) ──────────────────────────────────────────
+  terminalFix(payload: TerminalFixRequest): Promise<TerminalFixResponse> {
+    return ipcRenderer.invoke(IPC.terminalFix, payload) as Promise<TerminalFixResponse>;
+  },
+  // ── Glass Command Palette (Task #66) ────────────────────────────────────────
+  paletteGetSections(payload: PaletteGetSectionsRequest): Promise<PaletteGetSectionsResponse> {
+    return ipcRenderer.invoke(IPC.paletteGetSections, payload) as Promise<PaletteGetSectionsResponse>;
+  },
+  paletteRecordUse(payload: PaletteRecordUseRequest): Promise<{ ok: boolean }> {
+    return ipcRenderer.invoke(IPC.paletteRecordUse, payload) as Promise<{ ok: boolean }>;
   },
 };
 

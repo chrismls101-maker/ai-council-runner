@@ -1,6 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { formatOverlayPlainText } from "../../shared/overlayPlainText.ts";
-import { ensureOverlayInteractive } from "../glassTextInteraction.ts";
+import { ensureOverlayInteractive, handlePaletteListWheel } from "../glassTextInteraction.ts";
 import { send } from "../useGlassState.ts";
 import type { GlassState } from "../../shared/ipc.ts";
 import type {
@@ -41,28 +41,31 @@ export function CopilotOverlay({
   const copilot = state.copilot;
   const showOffer = !!copilot.offer;
   const showListeningLimit = copilot.listeningLimitReached;
-  const showSilence = copilot.systemAudioSilenceWarning;
-  const debrief = copilot.debrief ?? null;
-  const debriefHoverRef = useRef(false);
+  const showSilence = copilot.systemAudioSilenceWarning && state.privacy.listening;
   const diagnosticResult = copilot.diagnosticResult ?? null;
   const diagnosticAnalyzing = copilot.diagnosticAnalyzing ?? false;
   const listenMode = isListenModeActive(state);
   const interventions = listenMode ? [] : copilot.pendingInterventions;
 
+  const hasInteractiveCards =
+    showOffer ||
+    showListeningLimit ||
+    showSilence ||
+    !!diagnosticResult ||
+    diagnosticAnalyzing ||
+    interventions.length > 0;
+
   useEffect(() => {
-    if (!debrief) return;
-    const timer = window.setTimeout(() => {
-      if (debriefHoverRef.current) return;
-      send({ type: "copilot-dismiss-debrief" });
-    }, 90_000);
-    return () => window.clearTimeout(timer);
-  }, [debrief?.sessionId]);
+    window.glass.setCopilotOverlayCardOpen?.(hasInteractiveCards);
+    return () => {
+      window.glass.setCopilotOverlayCardOpen?.(false);
+    };
+  }, [hasInteractiveCards]);
 
   if (
     !showOffer &&
     !showListeningLimit &&
     !showSilence &&
-    !debrief &&
     !diagnosticResult &&
     !diagnosticAnalyzing &&
     interventions.length === 0
@@ -191,47 +194,6 @@ export function CopilotOverlay({
         </article>
       ) : null}
 
-      {debrief ? (
-        <article
-          className="overlay-copilot-card overlay-copilot-card--debrief glass-answer-shell glass-answer-shell--auto"
-          data-testid="glass-copilot-debrief"
-          onMouseEnter={() => {
-            debriefHoverRef.current = true;
-          }}
-          onMouseLeave={() => {
-            debriefHoverRef.current = false;
-          }}
-          onPointerDownCapture={ensureOverlayInteractive}
-        >
-          <span className="glass-answer-shell__sheen" aria-hidden="true" />
-          <div className="glass-answer-shell__content">
-            <div className="overlay-copilot-card__eyebrow">Session Debrief</div>
-            <pre className="overlay-copilot-card__debrief-body overlay-copilot-card__debrief-body--auto">
-              {formatOverlayPlainText(debrief.markdown)}
-            </pre>
-            <div className="overlay-copilot-card__actions">
-              <button
-                type="button"
-                className="gbtn gbtn--primary"
-                onClick={() => send({ type: "copilot-open-debrief-in-iivo" })}
-              >
-                Open in IIVO
-              </button>
-              <button
-                type="button"
-                className="gbtn gbtn--ghost"
-                data-testid="glass-copilot-debrief-dismiss"
-                onPointerDown={ensureOverlayInteractive}
-                onClick={() => send({ type: "copilot-dismiss-debrief" })}
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-          <span className="glass-answer-shell__led ui-led-line" aria-hidden="true" />
-        </article>
-      ) : null}
-
       {diagnosticAnalyzing ? (
         <article className="overlay-copilot-card" data-testid="glass-copilot-diagnostic-loading">
           <div className="overlay-copilot-card__eyebrow">Diagnostic</div>
@@ -256,12 +218,17 @@ function DiagnosticResultCard({ result }: { result: GlassCopilotDiagnosticResult
     <article
       className="overlay-copilot-card glass-answer-shell glass-answer-shell--auto"
       data-testid="glass-copilot-diagnostic-result"
+      onMouseEnter={ensureOverlayInteractive}
+      onPointerDownCapture={ensureOverlayInteractive}
     >
       <span className="glass-answer-shell__sheen" aria-hidden="true" />
       <div className="glass-answer-shell__content">
         <div className="overlay-copilot-card__eyebrow">Diagnostic</div>
         <div className="overlay-copilot-card__title">{result.rootCauseSummary}</div>
-        <pre className="overlay-copilot-card__debrief-body overlay-copilot-card__debrief-body--auto">
+        <pre
+          className="overlay-copilot-card__debrief-body overlay-copilot-card__debrief-body--auto"
+          onWheel={handlePaletteListWheel}
+        >
           {formatOverlayPlainText(result.fullMarkdown || result.probableRootCause)}
         </pre>
         <div className="overlay-copilot-card__actions">

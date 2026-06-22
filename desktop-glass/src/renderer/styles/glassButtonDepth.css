@@ -1,0 +1,325 @@
+/* ═══════════════════════════════════════════════════════════════════════════════
+   Glass Button Depth — tiered 3D affordance for dock + builder strip
+   Level 1: flat idle → soft depth on hover (tools, idle tabs)
+   Level 2: soft raised (active tabs, mode pill, secondary actions)
+   Level 3: full raised (terminal, CTAs, gold actions)
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Shared motion ── */
+.glass-btn-depth,
+.dock--v3 .gbtn,
+.builder-tab {
+  transition:
+    color 0.15s ease,
+    background 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.12s ease,
+    filter 0.15s ease;
+}
+
+/* ── Level 1 — hover-only depth ── */
+.glass-btn-depth-1:hover,
+.dock--v3 .gbtn.glass-btn-depth-1:hover,
+.dock--v3 .gbtn:not(.dock__cta):not(.glass-terminal-toggle):hover,
+.builder-tab:not(.glass-terminal-toggle):not(.builder-tab--gold):not(.builder-tab--active):hover {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.08) 0%,
+    rgba(255, 255, 255, 0.03) 52%,
+    rgba(0, 0, 0, 0.04) 100%
+  );
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  border-top-color: rgba(255, 255, 255, 0.2) !important;
+  border-bottom-color: rgba(0, 0, 0, 0.28) !important;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.45),
+    0 2px 5px rgba(0, 0, 0, 0.22),
+    0 0 10px rgba(56, 225, 255, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.14);
+}
+
+.glass-btn-depth-1:active,
+.dock--v3 .gbtn.glass-btn-depth-1:active,
+.dock--v3 .gbtn:not(.dock__cta):not(.glass-terminal-toggle):active,
+.builder-tab:not(.glass-terminal-toggle):not(.builder-tab--gold):not(.builder-tab--active):active {
+  transform: translateY(1px);
+  box-shadow:
+    0 0 2px rgba(0, 0, 0, 0.4),
+    inset 0 2px 4px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* ── Level 2 — soft raised ── */
+.glass-btn-depth-2,
+.dock--v3 .gbtn.glass-btn-depth-2,
+.builder-tab.builder-tab--active {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.1) 0%,
+    rgba(255, 255, 255, 0.04) 52%,
+    rgba(0, 0, 0, 0.07) 100%
+  );
+  border: 0.5px solid rgba(255, 255, 255, 0.14) !important;
+  border-top-color: rgba(255, 255, 255, 0.22) !important;
+  border-bottom-color: rgba(0, 0, 0, 0.32) !important;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.48),
+    0 2px 5px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.16);
+}
+
+.glass-btn-depth-2:hover,
+.dock--v3 .gbtn.glass-btn-depth-2:hover,
+.builder-tab.builder-tab--active:hover {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.13) 0%,
+    rgba(255, 255, 255, 0.06) 52%,
+    rgba(0, 0, 0, 0.05) 100%
+  );
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  border-top-color: rgba(255, 255, 255, 0.28) !important;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.48),
+    0 3px 8px rgba(0, 0, 0, 0.28),
+    0 0 12px rgba(255, 255, 255, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+}
+
+.glass-btn-depth-2:active,
+.dock--v3 .gbtn.glass-btn-depth-2:active,
+.builder-tab.builder-tab--active:active {
+  transform: translateY(1px);
+  box-shadow:
+    0 0 2px rgba(0, 0, 0, 0.4),
+    inset 0 2px 4px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* Mode pill — depth shell on dynamic tint */
+.dock__mode-pill {
+  border-top-color: color-mix(in srgb, var(--pill-border, rgba(255, 255, 255, 0.12)) 70%, white 30%) !important;
+  border-bottom-color: rgba(0, 0, 0, 0.32) !important;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.48),
+    0 2px 5px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.14);
+}
+
+.dock__mode-pill:hover {
+  filter: none;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.48),
+    0 3px 8px rgba(0, 0, 0, 0.28),
+    0 0 14px color-mix(in srgb, var(--pill-text, rgba(255, 255, 255, 0.75)) 35%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+}
+
+.dock__mode-pill:active {
+  transform: translateY(1px);
+  box-shadow:
+    0 0 2px rgba(0, 0, 0, 0.4),
+    inset 0 2px 4px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* ── Level 3 — full raised (base; accent variants below) ── */
+.glass-btn-depth-3,
+.dock--v3 .gbtn.glass-btn-depth-3,
+.dock--v3 .gbtn.dock__cta,
+.builder-tab.builder-tab--gold {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.09) 0%,
+    rgba(255, 255, 255, 0.03) 50%,
+    rgba(0, 0, 0, 0.08) 100%
+  );
+  border: 0.5px solid rgba(255, 255, 255, 0.14) !important;
+  border-top-color: rgba(255, 255, 255, 0.24) !important;
+  border-bottom-color: rgba(0, 0, 0, 0.4) !important;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.55),
+    0 2px 6px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+}
+
+.glass-btn-depth-3:hover,
+.dock--v3 .gbtn.glass-btn-depth-3:hover,
+.dock--v3 .gbtn.dock__cta:hover,
+.builder-tab.builder-tab--gold:hover {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.14) 0%,
+    rgba(255, 255, 255, 0.06) 50%,
+    rgba(0, 0, 0, 0.05) 100%
+  );
+  border-color: var(--glass-border-bright) !important;
+  border-top-color: rgba(255, 255, 255, 0.34) !important;
+  border-bottom-color: rgba(0, 0, 0, 0.35) !important;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.55),
+    0 4px 10px rgba(0, 0, 0, 0.32),
+    0 0 16px var(--glow-cyan),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.14);
+}
+
+.glass-btn-depth-3:active,
+.dock--v3 .gbtn.glass-btn-depth-3:active,
+.dock--v3 .gbtn.dock__cta:active,
+.builder-tab.builder-tab--gold:active {
+  transform: translateY(1px);
+  box-shadow:
+    0 0 2px rgba(0, 0, 0, 0.45),
+    inset 0 2px 5px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* CTA — cyan accent (level 3) */
+.dock--v3 .gbtn.dock__cta {
+  color: rgba(120, 235, 255, 0.92) !important;
+  background: linear-gradient(
+    180deg,
+    rgba(56, 225, 255, 0.16) 0%,
+    rgba(56, 225, 255, 0.07) 50%,
+    rgba(0, 0, 0, 0.1) 100%
+  ) !important;
+  border-color: rgba(120, 235, 255, 0.32) !important;
+  border-top-color: rgba(120, 235, 255, 0.48) !important;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.55),
+    0 2px 6px rgba(0, 0, 0, 0.28),
+    0 0 10px rgba(56, 225, 255, 0.12),
+    inset 0 1px 0 rgba(120, 235, 255, 0.22),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+}
+
+.dock--v3 .gbtn.dock__cta:hover {
+  color: rgba(180, 245, 255, 0.98) !important;
+  background: linear-gradient(
+    180deg,
+    rgba(56, 225, 255, 0.24) 0%,
+    rgba(56, 225, 255, 0.11) 50%,
+    rgba(0, 0, 0, 0.08) 100%
+  ) !important;
+  border-color: rgba(120, 235, 255, 0.45) !important;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.55),
+    0 4px 10px rgba(0, 0, 0, 0.32),
+    0 0 20px rgba(56, 225, 255, 0.32),
+    inset 0 1px 0 rgba(120, 235, 255, 0.28),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.14);
+}
+
+/* Gold actions — level 3 gold accent */
+.builder-tab.builder-tab--gold {
+  color: rgba(245, 197, 66, 0.92);
+  background: linear-gradient(
+    180deg,
+    rgba(245, 197, 66, 0.14) 0%,
+    rgba(245, 197, 66, 0.05) 50%,
+    rgba(0, 0, 0, 0.1) 100%
+  );
+  border: 0.5px solid rgba(245, 197, 66, 0.28) !important;
+  border-top-color: rgba(245, 197, 66, 0.42) !important;
+  border-bottom-color: rgba(0, 0, 0, 0.38) !important;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.55),
+    0 2px 6px rgba(0, 0, 0, 0.28),
+    0 0 10px rgba(245, 197, 66, 0.1),
+    inset 0 1px 0 rgba(245, 197, 66, 0.18),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+}
+
+.builder-tab.builder-tab--gold:hover {
+  color: rgba(255, 220, 120, 0.98);
+  background: linear-gradient(
+    180deg,
+    rgba(245, 197, 66, 0.22) 0%,
+    rgba(245, 197, 66, 0.1) 50%,
+    rgba(0, 0, 0, 0.08) 100%
+  );
+  border-color: rgba(245, 197, 66, 0.4) !important;
+  border-top-color: rgba(255, 220, 120, 0.52) !important;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.55),
+    0 4px 10px rgba(0, 0, 0, 0.32),
+    0 0 18px rgba(245, 197, 66, 0.22),
+    inset 0 1px 0 rgba(245, 197, 66, 0.26),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.14);
+}
+
+/* Secondary dock actions — soft depth with semantic hover */
+.dock--v3 .gbtn.dock__btn-end {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.06) 0%,
+    rgba(255, 255, 255, 0.02) 52%,
+    rgba(0, 0, 0, 0.06) 100%
+  ) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  border-top-color: rgba(255, 255, 255, 0.16) !important;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.45),
+    0 2px 4px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.14);
+}
+
+.dock--v3 .gbtn.dock__btn-end:hover {
+  color: rgba(255, 100, 100, 0.9) !important;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 100, 100, 0.14) 0%,
+    rgba(255, 100, 100, 0.06) 52%,
+    rgba(0, 0, 0, 0.06) 100%
+  ) !important;
+  border-color: rgba(255, 100, 100, 0.28) !important;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.45),
+    0 3px 8px rgba(0, 0, 0, 0.28),
+    0 0 12px rgba(255, 100, 100, 0.15),
+    inset 0 1px 0 rgba(255, 140, 140, 0.18),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+}
+
+.dock--v3 .gbtn.dock__btn-resume:hover {
+  color: rgba(65, 224, 163, 0.95) !important;
+  background: linear-gradient(
+    180deg,
+    rgba(65, 224, 163, 0.14) 0%,
+    rgba(65, 224, 163, 0.06) 52%,
+    rgba(0, 0, 0, 0.04) 100%
+  ) !important;
+  border-color: rgba(65, 224, 163, 0.28) !important;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.45),
+    0 3px 8px rgba(0, 0, 0, 0.28),
+    0 0 12px rgba(65, 224, 163, 0.15),
+    inset 0 1px 0 rgba(65, 224, 163, 0.18),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+}
+
+.dock--v3 .gbtn.dock__btn-stop:hover {
+  color: rgba(255, 100, 100, 0.9) !important;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 100, 100, 0.12) 0%,
+    rgba(255, 100, 100, 0.05) 52%,
+    rgba(0, 0, 0, 0.04) 100%
+  ) !important;
+  border-color: rgba(255, 100, 100, 0.22) !important;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.45),
+    0 3px 8px rgba(0, 0, 0, 0.28),
+    0 0 12px rgba(255, 100, 100, 0.12),
+    inset 0 1px 0 rgba(255, 140, 140, 0.14),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+}

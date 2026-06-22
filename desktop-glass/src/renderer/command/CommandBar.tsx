@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { send, useGlassState } from "../useGlassState.ts";
 import { ChromeRepositionOverlay } from "../ChromeRepositionOverlay.tsx";
 import { ensureCommandBarClickable, useChromeLockToggle } from "../useChromeLockToggle.ts";
-import { GlassPowersPalette } from "./GlassPowersPalette.tsx";
 import { useChromeWindowDrag } from "../useChromeWindowDrag.ts";
 import { useTranscriptionContext } from "../TranscriptionProvider.tsx";
 import { VoiceModePanel } from "./VoiceModePanel.tsx";
@@ -185,6 +184,9 @@ export function CommandBar(): JSX.Element {
   };
 
   const handleMicClick = (): void => {
+    if (state.companionModeActive) {
+      return;
+    }
     if (voice.state.active) {
       voice.stop();
       return;
@@ -346,7 +348,9 @@ export function CommandBar(): JSX.Element {
   const sessionListening = state.privacy.listening || listening;
   const sessionStatus = state.session?.status;
   const sessionLive = sessionStatus === "active" || sessionStatus === "paused";
-  const showSessionPill = sessionLive;
+  const listenNotesHud =
+    listenCopilotActive && (countdownActive || sessionListening);
+  const showSessionPill = sessionLive && !listenNotesHud;
   const showListenPill =
     !translateActive && (countdownActive || listening || state.privacy.listening);
   const showSecondary =
@@ -379,9 +383,6 @@ export function CommandBar(): JSX.Element {
 
   return (
     <div className="command-root">
-      {/* Powers palette — renders above the command stack when ⌘⇧P is pressed */}
-      <GlassPowersPalette />
-
       <div
         ref={stackRef}
         className={`command-bar-stack${!chromeLocked ? " command-bar-stack--unlocked" : ""}`}
@@ -550,7 +551,9 @@ export function CommandBar(): JSX.Element {
                   <span className="command-bar-pill__label">
                     {buildingContext
                       ? "Listening…"
-                      : `${tx.listeningDuration || listenDurationLabel}${tx.transcribing ? " · STT" : ""}`}
+                      : listenNotesHud && !countdownActive
+                        ? "Listening"
+                        : `${tx.listeningDuration || listenDurationLabel}${tx.transcribing ? " · STT" : ""}`}
                   </span>
                   <button
                     type="button"

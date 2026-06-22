@@ -59,6 +59,16 @@ export interface GlassAskRequest {
   modelPurpose?: "default" | "semantic" | "diagnostic";
   /** Derived passive context summary (local Glass context engine). */
   userContext?: string;
+  /** Glass Companion session — structured uiMap + guidancePlan on visual asks. */
+  companionMode?: boolean;
+  /** Local AX/DOM marks captured before vision ask (Phase 2.5). */
+  companionUiMap?: import("./companionGuidance.ts").UiMap;
+  /** Phase 4a — how Companion should handle this turn. */
+  companionRoute?: import("./companionRetarget.ts").CompanionRoute;
+  /** Phase 4a — prior guidance context for retarget / follow-up. */
+  companionMemory?: import("./companionSessionMemory.ts").CompanionMemoryPayload;
+  /** When true, server must not inject stored/user profile (session debriefs, etc.). */
+  suppressUserProfile?: boolean;
 }
 
 export interface GlassAskResponse {
@@ -75,6 +85,8 @@ export interface GlassAskResponse {
   title?: string;
   warnings?: string[];
   usage?: unknown;
+  /** Structured presence payload when companionMode was true on a visual ask. */
+  companionGuidance?: import("./companionGuidance.ts").CompanionGuidancePayload;
 }
 
 export interface GlassLastAskResponse {
@@ -87,6 +99,26 @@ export interface GlassLastAskResponse {
   at: string;
   routeUsed?: "glass_direct" | "glass_visual_direct";
   model?: string;
+}
+
+/** Prefer the complete model output over the overlay/short snippet. */
+export function lastAskResponseBody(response: GlassLastAskResponse | null | undefined): string {
+  if (!response) return "";
+  const full = response.fullAnswer?.trim();
+  if (full) return full;
+  return response.answer.trim();
+}
+
+/** A response is "substantial" enough to auto-open the side panel. */
+export function isSubstantialResponse(answer: string | undefined | null): boolean {
+  if (!answer) return false;
+  return answer.length > 300 || answer.includes("```") || /\n#{1,6}\s/.test(answer);
+}
+
+export function isSubstantialLastAskResponse(
+  response: GlassLastAskResponse | null | undefined,
+): boolean {
+  return isSubstantialResponse(lastAskResponseBody(response));
 }
 
 export type GlassAskStatus = "idle" | "pending" | "streaming" | "done" | "error";

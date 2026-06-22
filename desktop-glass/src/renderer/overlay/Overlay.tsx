@@ -23,9 +23,18 @@ import { useGlassNotification } from "./useGlassNotification.ts";
 import { TerminalFeedWidget } from "./TerminalFeedWidget.tsx";
 import { useExtractModeTranscript, useExtractBuildDetection, useExtractModeMainSync } from "./useExtractModeBridge.ts";
 import { ExtractBuildCard } from "./ExtractBuildCard.tsx";
+import { GlassCommandPalette } from "./GlassCommandPalette.tsx";
+import { isSubstantialLastAskResponse } from "../../shared/glassAskTypes.ts";
+import { GlassResponsePanel } from "./GlassResponsePanel.tsx";
+import { builderStripLayoutReservePx } from "../../shared/glassLayoutMath.ts";
+import { GlassPowersMenu } from "../command/GlassPowersMenu.tsx";
+import { GlassDebriefPanel } from "./GlassDebriefPanel.tsx";
+import type { PaletteLastTerminalBlock } from "../../shared/paletteTypes.ts";
 import { overlayNotificationBottomPx } from "../../shared/glassLayoutMath.ts";
 import { overlayFeedNotificationActive, overlayNoticeNotificationActive } from "../../shared/overlayPointerPolicy.ts";
 import { isLiveTranslateActive } from "../../shared/liveTranslateState.ts";
+import { GlassCompanionPresence } from "../companion/GlassCompanionPresence.tsx";
+import { useGlassCompanion } from "../companion/GlassCompanionProvider.tsx";
 
 // ---------------------------------------------------------------------------
 // Session greeting — plays once per session after Glass fully loads
@@ -111,6 +120,7 @@ function overlayLayoutStyle(state: GlassState): CSSProperties {
       commandBarOverlayClearancePx: state.commandBarOverlayClearancePx,
       commandBarStackHeightPx: state.commandBarStackHeightPx,
     }) + 52}px`,
+    "--grp-bottom-reserve": `${builderStripLayoutReservePx()}px`,
   } as CSSProperties;
 }
 
@@ -122,11 +132,46 @@ function builderStripVisibleForState(state: GlassState): boolean {
   });
 }
 
+function paletteModalOpenForState(state: GlassState): boolean {
+  return !!(state.commandPaletteOpen || state.powersMenuOpen);
+}
+
+function CompanionPresenceLayer({ state }: { state: GlassState }): JSX.Element {
+  const companion = useGlassCompanion();
+  return (
+    <GlassCompanionPresence
+      presence={state.companionPresence ?? null}
+      companionActive={state.companionModeActive === true}
+      activeManifestations={companion.activeManifestations}
+    />
+  );
+}
+
 function ExtractModeBridge(): null {
   useExtractModeMainSync();
   useExtractModeTranscript();
   useExtractBuildDetection();
   return null;
+}
+
+function PaletteLayer({
+  state,
+  lastTerminalBlock,
+}: {
+  state: GlassState;
+  lastTerminalBlock: PaletteLastTerminalBlock | null;
+}): JSX.Element {
+  return (
+    <>
+      <GlassCommandPalette
+        open={state.commandPaletteOpen ?? false}
+        onClose={() => send({ type: "dismiss-command-palette" })}
+        lastTerminalBlock={lastTerminalBlock}
+        activePtyId={state.glassDockTerminalId ?? null}
+      />
+      <GlassPowersMenu />
+    </>
+  );
 }
 
 function BuilderStripLayer({
@@ -297,6 +342,10 @@ export function Overlay(): JSX.Element {
   useGlassGreeting(state);
   const onboardingOpen = state.onboardingOpen;
 
+  // ── Glass Command Palette (Task #66) — ⌘⇧G (state-driven from main hotkey) ───
+  const lastTerminalBlock: PaletteLastTerminalBlock | null =
+    state.paletteTerminalHint ?? null;
+
   const overlayMode = state.windows?.overlayMode ?? state.config.overlayMode ?? "passive";
   const overlayContentVisible =
     (state.windows?.overlayVisible ?? state.config.overlayEnabled) && overlayMode !== "hidden";
@@ -315,6 +364,52 @@ export function Overlay(): JSX.Element {
   const countdownVisible =
     state.listenCountdownSeconds != null && state.listenCountdownSeconds > 0;
   const { cards, dismissCard } = useOverlayCards(state, overlayContentVisible);
+
+  // ── Glass Response Panel — auto-opens for substantial AI answers ──────────
+  const [responsePanelOpen, setResponsePanelOpen] = useState(false);
+  const lastResponseKeyRef = useRef<string | null>(null);
+  const responseRevealSeqRef = useRef(0);
+  const responsePanelInitRef = useRef(false);
+  const lastAskResponse = state.lastAskResponse ?? null;
+
+  useEffect(() => {
+    if (!responsePanelInitRef.current) {
+      responsePanelInitRef.current = true;
+      if (lastAskResponse) {
+        lastResponseKeyRef.current = `${lastAskResponse.runId ?? ""}:${lastAskResponse.at ?? ""}`;
+      }
+      return;
+    }
+    if (!lastAskResponse) return;
+    const key = `${lastAskResponse.runId ?? ""}:${lastAskResponse.at ?? ""}`;
+    if (lastResponseKeyRef.current === key) return;
+    lastResponseKeyRef.current = key;
+    if (isSubstantialLastAskResponse(lastAskResponse)) {
+      setResponsePanelOpen(true);
+    }
+  }, [lastAskResponse]);
+
+  useEffect(() => {
+    const seq = state.responsePanelRevealSeq ?? 0;
+    if (seq <= responseRevealSeqRef.current) return;
+    responseRevealSeqRef.current = seq;
+    if (lastAskResponse) setResponsePanelOpen(true);
+  }, [state.responsePanelRevealSeq, lastAskResponse]);
+
+  useEffect(() => {
+    window.glass.setResponsePanelOpen?.(responsePanelOpen);
+    return () => {
+      window.glass.setResponsePanelOpen?.(false);
+    };
+  }, [responsePanelOpen]);
+
+  const responsePanel = (
+    <GlassResponsePanel
+      open={responsePanelOpen}
+      response={lastAskResponse}
+      onDismiss={() => setResponsePanelOpen(false)}
+    />
+  );
   const feedNotificationActive = overlayFeedNotificationActive(notification);
   const noticeNotificationActive = overlayNoticeNotificationActive(notification);
 
@@ -389,20 +484,33 @@ export function Overlay(): JSX.Element {
     if (builderStripVisibleForState(state)) {
       return (
         <div
-          className="overlay-root overlay-root--builder-strip-only"
+          className={overlayRootClassName(
+            "overlay-root",
+            "overlay-root--builder-strip-only",
+            paletteModalOpenForState(state) && "overlay-root--palette-open",
+          )}
           data-testid="glass-overlay-root"
           style={overlayLayoutStyle(state)}
         >
           <OverlayGlassFrame />
+          <CompanionPresenceLayer state={state} />
           <BuilderStripLayer
             state={state}
             onEnterInteractive={enterInteractive}
             onLeaveInteractive={leaveInteractive}
           />
+          <PaletteLayer state={state} lastTerminalBlock={lastTerminalBlock} />
+          <GlassDebriefPanel />
+          {responsePanel}
         </div>
       );
     }
-    return <div className="overlay-root overlay-root--hidden" />;
+    return (
+      <>
+        <GlassDebriefPanel />
+        <div className="overlay-root overlay-root--hidden" />
+      </>
+    );
   }
 
   if (!overlayContentVisible && !countdownVisible && !updateVisible && translateCaptionsVisible) {
@@ -487,6 +595,7 @@ export function Overlay(): JSX.Element {
           onEnterInteractive={enterInteractive}
           onLeaveInteractive={leaveInteractive}
         />
+        <GlassDebriefPanel />
       </div>
     );
   }
@@ -498,6 +607,7 @@ export function Overlay(): JSX.Element {
       className={overlayRootClassName(
         "overlay-root",
         translateFocusActive && "overlay-root--translate-active",
+        paletteModalOpenForState(state) && "overlay-root--palette-open",
       )}
       data-testid="glass-overlay-root"
       style={overlayLayoutStyle(state)}
@@ -523,6 +633,8 @@ export function Overlay(): JSX.Element {
         enterInteractive={enterInteractive}
         leaveInteractive={leaveInteractive}
       />
+
+      <GlassDebriefPanel />
 
       {updateVisible ? (
         <GlassUpdateOverlay
@@ -588,11 +700,16 @@ export function Overlay(): JSX.Element {
         />
       ) : null}
 
+      <CompanionPresenceLayer state={state} />
+
       <BuilderStripLayer
         state={state}
         onEnterInteractive={enterInteractive}
         onLeaveInteractive={leaveInteractive}
       />
+
+      <PaletteLayer state={state} lastTerminalBlock={lastTerminalBlock} />
+      {responsePanel}
     </div>
   );
 }

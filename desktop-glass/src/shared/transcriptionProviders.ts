@@ -3,6 +3,8 @@
  */
 
 import type { TranscriptionMode, SystemAudioStatus } from "./audioCaptureTypes.ts";
+import type { VirtualAudioDeviceMatch } from "./virtualAudioDevices.ts";
+import { hasVirtualSystemAudioDevice } from "./virtualAudioCapture.ts";
 import {
   MEDIA_RECORDER_NO_TRANSCRIPT_MESSAGE,
   MICROPHONE_UNAVAILABLE_MESSAGE,
@@ -23,6 +25,8 @@ export interface TranscriptionProviderSnapshot {
   systemAudioStatus: SystemAudioStatus;
   systemAudioDetail?: string;
   systemAudioListening?: boolean;
+  selectedVirtualAudioDeviceId?: string;
+  virtualAudioDevices?: VirtualAudioDeviceMatch[];
   stt: GlassSttState;
 }
 
@@ -65,6 +69,8 @@ export function buildProviderSnapshot(
     systemAudioStatus?: SystemAudioStatus;
     systemAudioDetail?: string;
     systemAudioListening?: boolean;
+    selectedVirtualAudioDeviceId?: string;
+    virtualAudioDevices?: VirtualAudioDeviceMatch[];
     stt?: GlassSttState;
   } = {},
 ): TranscriptionProviderSnapshot {
@@ -91,6 +97,8 @@ export function buildProviderSnapshot(
     systemAudioStatus: extras.systemAudioStatus ?? "requires_permission",
     systemAudioDetail: extras.systemAudioDetail,
     systemAudioListening: extras.systemAudioListening,
+    selectedVirtualAudioDeviceId: extras.selectedVirtualAudioDeviceId,
+    virtualAudioDevices: extras.virtualAudioDevices,
     stt: defaultStt,
   };
 }
@@ -133,7 +141,11 @@ export function canStartListening(
 ): boolean {
   if (mode === "manual") return false;
   if (mode === "system_audio") {
-    if (!snapshot.getDisplayMediaAvailable) return false;
+    const hasVirtual = hasVirtualSystemAudioDevice({
+      selectedVirtualAudioDeviceId: snapshot.selectedVirtualAudioDeviceId,
+      virtualAudioDevices: snapshot.virtualAudioDevices,
+    });
+    if (!snapshot.getDisplayMediaAvailable && !hasVirtual) return false;
     return canAttemptSystemAudioCapture(snapshot.systemAudioStatus);
   }
   if (mode === "microphone_web_speech") return snapshot.webSpeechAvailable;
