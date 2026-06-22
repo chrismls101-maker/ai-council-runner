@@ -64,11 +64,18 @@ test("COMPANION_LOOKING_SPEECH is a short visual-ask cue", () => {
 });
 
 test("Aletheia warm-up and ready speech are short intro cues", async () => {
-  const { COMPANION_WARMING_SPEECH, COMPANION_READY_SPEECH, ALETHEIA_IDENTITY_NAME } =
-    await import("../shared/glassCompanion.ts");
+  const {
+    COMPANION_WARMING_SPEECH,
+    COMPANION_READY_SPEECH,
+    COMPANION_THINKING_SPEECH,
+    COMPANION_MACHINE_AUDIO_DISCLOSURE,
+    ALETHEIA_IDENTITY_NAME,
+  } = await import("../shared/glassCompanion.ts");
   assert.equal(ALETHEIA_IDENTITY_NAME, "Aletheia");
   assert.ok(COMPANION_WARMING_SPEECH.length < 80);
   assert.match(COMPANION_READY_SPEECH, /Aletheia/i);
+  assert.ok(COMPANION_THINKING_SPEECH.length < 60);
+  assert.match(COMPANION_MACHINE_AUDIO_DISCLOSURE, /screen audio/i);
 });
 
 test("COMPANION_TTS_MAX_CHARS keeps Phase 1 speech bounded", () => {
@@ -80,6 +87,9 @@ test("companionPrefersResponsePanel detects generative and depth prompts", () =>
   assert.equal(companionPrefersResponsePanel("What is TypeScript?"), false);
   assert.equal(companionUserWantsDepth("Give me the long version"), true);
   assert.equal(companionUserWantsDepth("yes go deep"), true);
+  assert.equal(companionUserWantsDepth("tell me everything"), true);
+  assert.equal(companionUserWantsDepth("break this down"), true);
+  assert.equal(companionPrefersResponsePanel("walk me through this in detail"), true);
 });
 
 test("shouldAutoStartCompanionSystemAudio when virtual device or connected", () => {

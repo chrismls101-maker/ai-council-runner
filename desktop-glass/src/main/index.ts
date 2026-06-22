@@ -5914,6 +5914,8 @@ async function handleCommand(
         state.companionWarmupPhase = "none";
         stopCompanionAnchorWatch();
       } else {
+        // Release command-bar Voice Mode mic before Aletheia listens in overlay.
+        broadcastTranscriptionControl({ type: "stop" });
         state.companionWarmupPhase = "none";
         warmOmniParserSidecarWithCallbacks({
           onWarming: () => {

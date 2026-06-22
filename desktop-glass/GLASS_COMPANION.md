@@ -171,11 +171,13 @@ When Aletheia turns on and OmniParser needs a cold warm (weights installed, side
 | Phase | Spoken line | When |
 |-------|-------------|------|
 | Warming | *"One moment — I'm opening my sight."* | Once per cold start |
-| Ready | *"I'm Aletheia. I'm with you — what do you need?"* | Once after warm completes |
+| Ready | *"I'm Aletheia. I'm with you — what do you need?"* | Once after warm completes **and mic is listening** |
 | Already warm / no OmniParser | *(silent)* | Strip shows `Aletheia · Listening` |
+| Visual thinking bridge | *"Mm — let me think on that."* | After screen capture, before answer TTS |
+| Machine audio disclosure | *"I can hear your screen audio…"* | Once per session when `+ audio` starts |
 
 **State:** `companionWarmupPhase`, `companionWarmupSpeakNonce` on `GlassState`  
-**Constants:** `COMPANION_WARMING_SPEECH`, `COMPANION_READY_SPEECH` in `src/shared/glassCompanion.ts`
+**Constants:** `COMPANION_WARMING_SPEECH`, `COMPANION_READY_SPEECH`, `COMPANION_THINKING_SPEECH`, `COMPANION_MACHINE_AUDIO_DISCLOSURE` in `src/shared/glassCompanion.ts`
 
 ### Dual hearing — microphone + machine audio
 
@@ -210,6 +212,13 @@ When Aletheia is on and the ask looks like depth work (`generate`, `draft`, `out
 She answers depth herself — never mentions Council or Analyze Now.
 
 **Helper:** `companionPrefersResponsePanel()` in `src/shared/glassCompanion.ts`
+
+### UX polish (shipped)
+
+- **Thinking bridge** — after visual capture, speaks `COMPANION_THINKING_SPEECH` while the model answers (fills ElevenLabs latency gap).
+- **Machine-audio disclosure** — once per Aletheia session when parallel loopback starts (`+ audio` on strip).
+- **Listen restart backoff** — exponential delay (400ms → 8s cap) after ask errors before reopening the mic.
+- **Mic ownership** — Aletheia ON releases command-bar Voice Mode mic; Voice Mode stops when Aletheia toggles on.
 
 ---
 

@@ -25,8 +25,12 @@ import {
 } from "../../shared/voiceModeBridge.ts";
 import {
   COMPANION_LOOKING_SPEECH,
+  COMPANION_MACHINE_AUDIO_DISCLOSURE,
   COMPANION_READY_SPEECH,
+  COMPANION_THINKING_SPEECH,
   COMPANION_WARMING_SPEECH,
+  COMPANION_LISTEN_RESTART_BASE_MS,
+  COMPANION_LISTEN_RESTART_MAX_BACKOFF_MS,
   companionSpeechTextFromResponse,
   companionStatusLabel,
 } from "../../shared/glassCompanion.ts";
@@ -78,7 +82,14 @@ function useGlassCompanionSession(): GlassCompanionController {
   const prevCompanionActiveRef = useRef(glass.companionModeActive === true);
   const lastSpokenResponseAtRef = useRef<string | null>(null);
   const lookingSpeechSentRef = useRef(false);
+  const wasVisualAskRef = useRef(false);
+  const thinkingSpeechSentRef = useRef(false);
   const lastWarmupSpeakNonceRef = useRef(0);
+  const machineAudioDisclosureSpokenRef = useRef(false);
+  const pendingMachineAudioDisclosureRef = useRef(false);
+  const prevSystemAudioActiveRef = useRef(false);
+  const listenRestartFailCountRef = useRef(0);
+  const restartTimerRef = useRef<number | null>(null);
   const stoppingRef = useRef(false);
   const companionMemoryRef = useRef(glass.companionMemory);
   companionMemoryRef.current = glass.companionMemory;
@@ -87,10 +98,41 @@ function useGlassCompanionSession(): GlassCompanionController {
 
   const companionActive = glass.companionModeActive === true;
 
+  const clearRestartTimer = useCallback(() => {
+    if (restartTimerRef.current != null) {
+      window.clearTimeout(restartTimerRef.current);
+      restartTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleRestartListening = useCallback(
+    (outcome: "success" | "error" = "success") => {
+      if (!stateRef.current.active || stoppingRef.current) return;
+      if (outcome === "success") {
+        listenRestartFailCountRef.current = 0;
+      } else {
+        listenRestartFailCountRef.current = Math.min(listenRestartFailCountRef.current + 1, 6);
+      }
+      const fails = listenRestartFailCountRef.current;
+      const delay =
+        fails === 0
+          ? 0
+          : Math.min(
+              COMPANION_LISTEN_RESTART_MAX_BACKOFF_MS,
+              COMPANION_LISTEN_RESTART_BASE_MS * 2 ** (fails - 1),
+            );
+      clearRestartTimer();
+      restartTimerRef.current = window.setTimeout(() => {
+        restartTimerRef.current = null;
+        void tx.startCompanionListening();
+      }, delay);
+    },
+    [clearRestartTimer, tx],
+  );
+
   const restartListening = useCallback(() => {
-    if (!stateRef.current.active || stoppingRef.current) return;
-    void tx.startCompanionListening();
-  }, [tx]);
+    scheduleRestartListening("success");
+  }, [scheduleRestartListening]);
 
   const finishGuidanceBeat = useCallback(() => {
     setSpeaking(false);
@@ -114,6 +156,8 @@ function useGlassCompanionSession(): GlassCompanionController {
 
   const stopLocal = useCallback(() => {
     stoppingRef.current = true;
+    clearRestartTimer();
+    listenRestartFailCountRef.current = 0;
     dispatch({ type: "STOP_EVERYTHING" });
     clearVoiceModeAutoSubmit();
     scriptPlayer.stopScript();
@@ -123,9 +167,14 @@ function useGlassCompanionSession(): GlassCompanionController {
     setFlatManifestations(null);
     tx.stopListeningLocal();
     lookingSpeechSentRef.current = false;
+    wasVisualAskRef.current = false;
+    thinkingSpeechSentRef.current = false;
     lastWarmupSpeakNonceRef.current = 0;
+    machineAudioDisclosureSpokenRef.current = false;
+    pendingMachineAudioDisclosureRef.current = false;
+    prevSystemAudioActiveRef.current = false;
     stoppingRef.current = false;
-  }, [tts, timedTts, tx, scriptPlayer]);
+  }, [tts, timedTts, tx, scriptPlayer, clearRestartTimer]);
 
   const start = useCallback(() => {
     dispatch({ type: "START" });
@@ -142,12 +191,12 @@ function useGlassCompanionSession(): GlassCompanionController {
       for (const command of plan.commands) send(command);
       if (plan.route === "debrief") {
         dispatch({ type: "ANSWER_DONE" });
-        setTimeout(restartListening, 0);
+        scheduleRestartListening("success");
       }
       return true;
     });
     void tx.startCompanionListening();
-  }, [tx, restartListening]);
+  }, [tx, scheduleRestartListening]);
 
   const stop = useCallback(() => {
     send(stopEverythingCommand());
@@ -193,7 +242,6 @@ function useGlassCompanionSession(): GlassCompanionController {
     if (!companionActive || !state.active) return;
     const nonce = glass.companionWarmupSpeakNonce ?? 0;
     if (nonce === 0 || nonce === lastWarmupSpeakNonceRef.current) return;
-    lastWarmupSpeakNonceRef.current = nonce;
 
     const phase = glass.companionWarmupPhase ?? "none";
     const line =
@@ -204,6 +252,11 @@ function useGlassCompanionSession(): GlassCompanionController {
           : null;
     if (!line) return;
 
+    // Ready intro waits until mic is live — not only OmniParser warm complete.
+    if (phase === "ready" && state.status !== "listening") return;
+
+    lastWarmupSpeakNonceRef.current = nonce;
+
     setSpeaking(true);
     void tts.speak(line).finally(() => setSpeaking(false));
   }, [
@@ -211,6 +264,7 @@ function useGlassCompanionSession(): GlassCompanionController {
     state.active,
     glass.companionWarmupPhase,
     glass.companionWarmupSpeakNonce,
+    state.status,
     tts,
   ]);
 
@@ -218,6 +272,7 @@ function useGlassCompanionSession(): GlassCompanionController {
     if (!state.active) return;
     if (glass.screenContextStatus?.kind === "looking") {
       dispatch({ type: "LOOKING" });
+      wasVisualAskRef.current = true;
       if (!lookingSpeechSentRef.current) {
         lookingSpeechSentRef.current = true;
         setSpeaking(true);
@@ -227,6 +282,33 @@ function useGlassCompanionSession(): GlassCompanionController {
       lookingSpeechSentRef.current = false;
     }
   }, [glass.screenContextStatus?.kind, state.active, state.status, tts]);
+
+  // Once per session: disclose parallel machine-audio listening (+ audio on strip).
+  useEffect(() => {
+    if (!companionActive || !state.active) return;
+    const now = tx.companionSystemAudioActive;
+    const was = prevSystemAudioActiveRef.current;
+    prevSystemAudioActiveRef.current = now;
+    if (!now || was || machineAudioDisclosureSpokenRef.current) return;
+
+    if (speaking) {
+      pendingMachineAudioDisclosureRef.current = true;
+      return;
+    }
+
+    machineAudioDisclosureSpokenRef.current = true;
+    setSpeaking(true);
+    void tts.speak(COMPANION_MACHINE_AUDIO_DISCLOSURE).finally(() => setSpeaking(false));
+  }, [companionActive, state.active, tx.companionSystemAudioActive, speaking, tts]);
+
+  useEffect(() => {
+    if (speaking || !pendingMachineAudioDisclosureRef.current) return;
+    if (machineAudioDisclosureSpokenRef.current) return;
+    pendingMachineAudioDisclosureRef.current = false;
+    machineAudioDisclosureSpokenRef.current = true;
+    setSpeaking(true);
+    void tts.speak(COMPANION_MACHINE_AUDIO_DISCLOSURE).finally(() => setSpeaking(false));
+  }, [speaking, tts]);
 
   // Restart listening when script is waiting for ack (mic stays hot).
   useEffect(() => {
@@ -246,6 +328,15 @@ function useGlassCompanionSession(): GlassCompanionController {
 
     if (now === "pending" || now === "streaming") {
       dispatch({ type: "THINKING" });
+      if (
+        wasVisualAskRef.current &&
+        !thinkingSpeechSentRef.current &&
+        glass.screenContextStatus?.kind !== "looking"
+      ) {
+        thinkingSpeechSentRef.current = true;
+        setSpeaking(true);
+        void tts.speak(COMPANION_THINKING_SPEECH).finally(() => setSpeaking(false));
+      }
       if (!scriptPlayer.isPlaying) {
         setFlatManifestations(null);
       }
@@ -258,11 +349,13 @@ function useGlassCompanionSession(): GlassCompanionController {
       dispatch({ type: "ERROR", message: glass.lastError ?? "Something went wrong." });
       scriptPlayer.stopScript();
       setFlatManifestations(null);
-      setTimeout(restartListening, 0);
+      scheduleRestartListening("error");
       return;
     }
 
     dispatch({ type: "ANSWER_DONE" });
+    wasVisualAskRef.current = false;
+    thinkingSpeechSentRef.current = false;
 
     const response = glass.lastAskResponse;
     const responseAt = response?.at ?? null;
@@ -271,7 +364,7 @@ function useGlassCompanionSession(): GlassCompanionController {
     const guidanceSpeech = companionSpeechFromGuidance(guidancePlan);
     const speech = guidanceSpeech || companionSpeechTextFromResponse(response);
     if (!speech || responseAt === lastSpokenResponseAtRef.current) {
-      setTimeout(restartListening, 0);
+      scheduleRestartListening("success");
       return;
     }
     lastSpokenResponseAtRef.current = responseAt;
@@ -309,13 +402,17 @@ function useGlassCompanionSession(): GlassCompanionController {
     glass.companionPresence,
     state.active,
     restartListening,
+    scheduleRestartListening,
     tts,
     timedTts,
     scriptPlayer,
     finishGuidanceBeat,
   ]);
 
-  useEffect(() => () => clearVoiceModeAutoSubmit(), []);
+  useEffect(() => () => {
+    clearVoiceModeAutoSubmit();
+    clearRestartTimer();
+  }, [clearRestartTimer]);
 
   const activeManifestations =
     scriptPlayer.activeManifestations ?? flatManifestations;

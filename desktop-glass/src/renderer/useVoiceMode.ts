@@ -40,6 +40,7 @@ export function useVoiceMode(): VoiceModeController {
   const stateRef = useRef(state);
   stateRef.current = state;
   const prevAskStatusRef = useRef(glass.askStatus);
+  const prevCompanionActiveRef = useRef(glass.companionModeActive === true);
 
   const restartListening = useCallback(() => {
     if (!stateRef.current.active) return;
@@ -75,6 +76,17 @@ export function useVoiceMode(): VoiceModeController {
     send(cancelAskCommand());
     setTimeout(restartListening, 0);
   }, [restartListening]);
+
+  // Release Voice Mode when Aletheia toggles on (shared mic; separate renderer windows).
+  useEffect(() => {
+    const wasCompanion = prevCompanionActiveRef.current;
+    const nowCompanion = glass.companionModeActive === true;
+    prevCompanionActiveRef.current = nowCompanion;
+    if (!nowCompanion || wasCompanion || !stateRef.current.active) return;
+    dispatch({ type: "STOP_EVERYTHING" });
+    clearVoiceModeAutoSubmit();
+    tx.stopListeningLocal();
+  }, [glass.companionModeActive, tx]);
 
   // Mirror mic permission failures into the machine.
   useEffect(() => {

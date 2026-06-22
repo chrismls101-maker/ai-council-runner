@@ -27,6 +27,19 @@ export const COMPANION_WARMING_SPEECH = "One moment — I'm opening my sight.";
 export const COMPANION_READY_SPEECH =
   "I'm Aletheia. I'm with you — what do you need?";
 
+/** Bridge between visual capture and answer TTS — fills the thinking gap. */
+export const COMPANION_THINKING_SPEECH = "Mm — let me think on that.";
+
+/** Once per Aletheia session when parallel machine-audio listening starts. */
+export const COMPANION_MACHINE_AUDIO_DISCLOSURE =
+  "I can hear your screen audio — I'll only speak when you ask me something.";
+
+/** Max delay before retrying mic listen after repeated failures. */
+export const COMPANION_LISTEN_RESTART_MAX_BACKOFF_MS = 8000;
+
+/** Base delay for exponential listen restart backoff. */
+export const COMPANION_LISTEN_RESTART_BASE_MS = 400;
+
 /** Default cap for spoken answers — keeps TTS latency reasonable in Phase 1. */
 export const COMPANION_TTS_MAX_CHARS = 600;
 
@@ -95,11 +108,14 @@ export function shouldAutoStartCompanionSystemAudio(input: {
 export function companionUserWantsDepth(prompt: string): boolean {
   const text = prompt.trim();
   if (!text) return false;
-  return (
-    /\b(long|full|detailed|in depth|go deep|more detail|deep dive|the long version|full version)\b/i.test(
+  const explicitDepth =
+    /\b(long|full|detailed|in depth|go deep|more detail|deep dive|the long version|full version|tell me everything|full picture|break this down|break it down)\b/i.test(
       text,
-    ) || /\b(yes|yeah|sure|please|do it|go ahead)\b/i.test(text) && /\b(deep|long|full)\b/i.test(text)
-  );
+    );
+  const affirmsDepth =
+    /\b(yes|yeah|sure|please|do it|go ahead)\b/i.test(text) &&
+    /\b(deep|long|full|detail|everything)\b/i.test(text);
+  return explicitDepth || affirmsDepth;
 }
 
 /** Prompt looks like a generative or planning task that should use the Response Panel. */
@@ -111,7 +127,7 @@ export function companionPrefersResponsePanel(prompt: string): boolean {
     /\b(generate|write me|draft|create a|compose|outline|plan out|design a|build me|produce a|architect|spec out)\b/i.test(
       text,
     ) ||
-    /\b(explain .+ (in detail|thoroughly)|comprehensive|step-by-step guide|full breakdown)\b/i.test(
+    /\b(explain .+ (in detail|thoroughly)|comprehensive|step-by-step guide|full breakdown|walk me through .+ in detail|give me the full)\b/i.test(
       text,
     )
   );
