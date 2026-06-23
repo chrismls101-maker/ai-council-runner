@@ -1,0 +1,2020 @@
+/**
+ * GlassTerminalPanel — supplemental styles for addon-driven UI.
+ * Core terminal chrome (panel, header, viewport, resize handles) lives in glass.css.
+ * This file owns: find bar, icon-only ctrl button variant.
+ */
+
+/* ── Icon-only header buttons ─────────────────────────────────────────────── */
+.glass-terminal-ctrl-btn--icon {
+  padding: 0;
+  width: 28px;
+  height: 24px;
+  justify-content: center;
+  border-color: rgba(255, 255, 255, 0.07);
+  color: rgba(150, 175, 215, 0.55);
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.glass-terminal-ctrl-btn--icon:hover {
+  color: rgba(180, 210, 255, 0.9);
+  border-color: rgba(180, 210, 255, 0.2);
+  background: rgba(180, 210, 255, 0.07);
+}
+
+.glass-terminal-ctrl-btn--icon.glass-terminal-ctrl-btn--active {
+  background: rgba(65, 224, 163, 0.10);
+  border-color: rgba(65, 224, 163, 0.28);
+  color: rgba(65, 224, 163, 0.85);
+}
+
+/* ── Kill / Hide action buttons (icon + text) ─────────────────────────────── */
+.glass-terminal-ctrl-btn--hide {
+  gap: 4px;
+  padding: 2px 8px;
+  border-color: rgba(255, 255, 255, 0.08);
+  color: rgba(150, 175, 210, 0.6);
+}
+
+.glass-terminal-ctrl-btn--hide:hover {
+  color: rgba(200, 220, 245, 0.9);
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* ── Separator between icon group and action buttons ─────────────────────── */
+.glass-terminal-header__sep {
+  display: inline-block;
+  width: 1px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 0 3px;
+  flex-shrink: 0;
+  border-radius: 1px;
+  align-self: center;
+}
+
+/* ── Welcome state (shown when terminal has no commands yet) ─────────────── */
+.glass-terminal-welcome {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  z-index: 2;
+}
+
+.glass-terminal-welcome::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 70% 55% at 50% 38%, rgba(65, 224, 163, 0.07), transparent 68%),
+    radial-gradient(ellipse 40% 30% at 18% 22%, rgba(100, 160, 255, 0.05), transparent 70%);
+}
+
+.glass-terminal-welcome--visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.gtw-inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  width: min(100%, 500px);
+  padding: 12px 14px 10px;
+  box-sizing: border-box;
+  user-select: none;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.04) 0%,
+    rgba(255, 255, 255, 0.015) 100%
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 8px 28px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(10px);
+}
+
+.gtw-brand {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding-bottom: 2px;
+}
+
+.gtw-swarm-wrap {
+  position: relative;
+  flex-shrink: 0;
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+}
+
+.gtw-swarm-wrap::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(56, 225, 255, 0.18) 0%, transparent 72%);
+  pointer-events: none;
+}
+
+.gtw-brand-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  gap: 3px;
+}
+
+.gtw-swarm {
+  position: relative;
+  width: 54px;
+  height: 54px;
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.gtw-logo-text {
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 17px;
+  font-weight: 600;
+  color: rgba(228, 240, 255, 0.96);
+  letter-spacing: 0.01em;
+  line-height: 1.1;
+}
+
+.gtw-tagline {
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 10px;
+  color: rgba(65, 224, 163, 0.55);
+  margin: 0;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.gtw-section-label {
+  margin: 0;
+  padding: 0 2px;
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(140, 170, 210, 0.45);
+}
+
+.gtw-features {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  width: 100%;
+}
+
+.gtw-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 7px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease,
+    transform 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.gtw-row:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+.gtw-row:hover {
+  background: rgba(65, 224, 163, 0.07);
+  border-color: rgba(65, 224, 163, 0.22);
+  box-shadow: 0 0 0 1px rgba(65, 224, 163, 0.08);
+  transform: translateY(-1px);
+}
+
+.gtw-row:active {
+  transform: translateY(0);
+}
+
+.gtw-row:focus-visible {
+  outline: 2px solid rgba(100, 180, 255, 0.55);
+  outline-offset: 2px;
+}
+
+.gtw-keys {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.gtw-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  min-height: 26px;
+  padding: 2px 6px;
+  font-family: "SF Mono", "Fira Code", "Menlo", monospace;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  color: rgba(210, 230, 252, 0.95);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.11) 0%, rgba(255, 255, 255, 0.05) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-bottom-color: rgba(0, 0, 0, 0.35);
+  border-radius: 6px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 2px 0 rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
+}
+
+.gtw-label {
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.25;
+  color: rgba(190, 212, 238, 0.82);
+  text-align: left;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@container (max-height: 200px) {
+  .gtw-inner {
+    padding: 8px 10px 8px;
+    gap: 7px;
+  }
+
+  .gtw-tagline,
+  .gtw-section-label {
+    display: none;
+  }
+
+  .gtw-swarm-wrap {
+    width: 48px;
+    height: 48px;
+  }
+
+  .gtw-swarm {
+    width: 44px;
+    height: 44px;
+  }
+
+  .gtw-logo-text {
+    font-size: 15px;
+  }
+
+  .gtw-kbd {
+    min-width: 24px;
+    min-height: 22px;
+    font-size: 12px;
+    padding: 1px 5px;
+  }
+
+  .gtw-label {
+    font-size: 10px;
+  }
+
+  .gtw-row {
+    padding: 5px 7px;
+    gap: 6px;
+    border-radius: 8px;
+  }
+
+  .gtw-features {
+    gap: 5px;
+  }
+}
+
+/* ── Find bar ─────────────────────────────────────────────────────────────── */
+.gtp-find-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  background: rgba(10, 12, 18, 0.92);
+  border-bottom: 1px solid rgba(65, 224, 163, 0.15);
+  backdrop-filter: blur(8px);
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.gtp-find-input-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.gtp-find-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 5px;
+  color: rgba(220, 235, 250, 0.9);
+  font-family: "SF Mono", "Fira Code", "JetBrains Mono", "Menlo", monospace;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.gtp-find-input:focus {
+  border-color: rgba(65, 224, 163, 0.45);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.gtp-find-input::placeholder {
+  color: rgba(140, 160, 190, 0.35);
+}
+
+.gtp-find-no-results {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  color: rgba(255, 100, 100, 0.7);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* ── Find bar action buttons ──────────────────────────────────────────────── */
+.gtp-find-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.gtp-find-toggle,
+.gtp-find-nav,
+.gtp-find-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  color: rgba(140, 170, 200, 0.55);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 6px;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  white-space: nowrap;
+  font-family: "SF Mono", "Fira Code", monospace;
+}
+
+.gtp-find-toggle:hover,
+.gtp-find-nav:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: rgba(200, 220, 245, 0.85);
+}
+
+.gtp-find-toggle--active {
+  background: rgba(65, 224, 163, 0.12);
+  border-color: rgba(65, 224, 163, 0.35);
+  color: rgba(65, 224, 163, 0.9);
+}
+
+.gtp-find-toggle--active:hover {
+  background: rgba(65, 224, 163, 0.18);
+  border-color: rgba(65, 224, 163, 0.5);
+  color: rgba(65, 224, 163, 1);
+}
+
+.gtp-find-nav {
+  font-size: 13px;
+  font-family: system-ui, sans-serif;
+}
+
+.gtp-find-close {
+  font-size: 12px;
+  font-family: system-ui, sans-serif;
+  margin-left: 2px;
+  border-color: transparent;
+}
+
+.gtp-find-close:hover {
+  background: rgba(255, 80, 80, 0.12);
+  border-color: rgba(255, 80, 80, 0.25);
+  color: rgba(255, 130, 130, 0.85);
+}
+
+/* ── Active state for toggle header buttons ───────────────────────────────── */
+.glass-terminal-ctrl-btn--active {
+  background: rgba(65, 224, 163, 0.10);
+  border-color: rgba(65, 224, 163, 0.30);
+  color: rgba(65, 224, 163, 0.85);
+}
+
+/* ── Content row: viewport + blocks sidebar side by side ─────────────────── */
+.gtp-content-row {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  container-type: size;
+}
+
+/* Override glass.css flex on the viewport when inside the row */
+.gtp-content-row .glass-terminal-viewport {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* ── Inline command blocks (Warp-style, above NL bar) ─────────────────────── */
+.gtp-inline-blocks {
+  flex-shrink: 0;
+  max-height: 140px;
+  border-top: 1px solid rgba(65, 224, 163, 0.12);
+  background: rgba(6, 8, 12, 0.85);
+  backdrop-filter: blur(6px);
+}
+
+.gtp-inline-blocks-scroll {
+  max-height: 140px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px 8px 6px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(65, 224, 163, 0.2) transparent;
+}
+
+.gtp-inline-blocks-scroll::-webkit-scrollbar { width: 3px; }
+.gtp-inline-blocks-scroll::-webkit-scrollbar-thumb {
+  background: rgba(65, 224, 163, 0.2);
+  border-radius: 3px;
+}
+
+.gtp-inline-blocks .gtp-block {
+  margin: 2px 0;
+}
+
+/* ── Terminal tab bar ─────────────────────────────────────────────────────── */
+.glass-terminal-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 0 4px;
+}
+
+.glass-terminal-tabs::-webkit-scrollbar { display: none; }
+
+.glass-terminal-tab {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  max-width: 160px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+  overflow: hidden;
+}
+
+.glass-terminal-tab--active {
+  border-color: rgba(65, 224, 163, 0.35);
+  background: rgba(65, 224, 163, 0.08);
+}
+
+.glass-terminal-tab--new {
+  width: 24px;
+  justify-content: center;
+  cursor: pointer;
+  color: rgba(140, 165, 210, 0.55);
+  font-size: 15px;
+  line-height: 1;
+  padding: 0;
+}
+
+.glass-terminal-tab--new:hover {
+  color: rgba(65, 224, 163, 0.9);
+  border-color: rgba(65, 224, 163, 0.25);
+}
+
+.glass-terminal-tab__select {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  background: none;
+  color: rgba(200, 220, 245, 0.75);
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 11px;
+  padding: 0 6px 0 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.glass-terminal-tab--active .glass-terminal-tab__select {
+  color: rgba(65, 224, 163, 0.95);
+}
+
+.glass-terminal-tab__label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.glass-terminal-tab__close {
+  flex-shrink: 0;
+  width: 20px;
+  height: 100%;
+  border: none;
+  background: none;
+  color: rgba(140, 165, 210, 0.35);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.glass-terminal-tab__close:hover {
+  color: rgba(255, 130, 130, 0.85);
+  background: rgba(255, 80, 80, 0.08);
+}
+
+/* ── Blocks panel (legacy sidebar — kept for styles used by inline blocks) ─ */
+.gtp-blocks-panel {
+  width: 240px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(8, 10, 16, 0.7);
+  backdrop-filter: blur(8px);
+  min-height: 0;
+}
+
+.gtp-blocks-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  flex-shrink: 0;
+}
+
+.gtp-blocks-title {
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+  color: rgba(140, 165, 210, 0.45);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.gtp-blocks-clear {
+  background: none;
+  border: none;
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 9.5px;
+  color: rgba(140, 165, 210, 0.3);
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: 3px;
+  transition: color 0.12s, background 0.12s;
+}
+
+.gtp-blocks-clear:hover {
+  color: rgba(255, 130, 130, 0.7);
+  background: rgba(255, 80, 80, 0.07);
+}
+
+.gtp-blocks-scroll {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(65, 224, 163, 0.2) transparent;
+}
+
+.gtp-blocks-scroll::-webkit-scrollbar { width: 3px; }
+.gtp-blocks-scroll::-webkit-scrollbar-track { background: transparent; }
+.gtp-blocks-scroll::-webkit-scrollbar-thumb { background: rgba(65, 224, 163, 0.2); border-radius: 3px; }
+
+.gtp-blocks-empty {
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 10px;
+  color: rgba(140, 165, 210, 0.25);
+  text-align: center;
+  padding: 20px 12px;
+  line-height: 1.6;
+}
+
+/* ── Individual command block ─────────────────────────────────────────────── */
+.gtp-block {
+  margin: 2px 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+
+.gtp-block:hover {
+  border-color: rgba(255, 255, 255, 0.09);
+}
+
+.gtp-block--success { border-left: 2px solid rgba(65, 224, 163, 0.35); }
+.gtp-block--error   { border-left: 2px solid rgba(255, 107, 107, 0.45); }
+.gtp-block--unknown { border-left: 2px solid rgba(120, 140, 180, 0.2); }
+
+/* Command header row */
+.gtp-block-cmd-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  padding: 5px 7px 4px;
+  min-width: 0;
+}
+
+.gtp-block-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+
+.gtp-block-dot--success { background: rgba(65, 224, 163, 0.65); }
+.gtp-block-dot--error   { background: rgba(255, 107, 107, 0.70); }
+.gtp-block-dot--running {
+  background: rgba(100, 160, 255, 0.55);
+  animation: gtp-dot-pulse 1.2s ease-in-out infinite;
+}
+.gtp-block-dot--unknown { background: rgba(140, 160, 195, 0.3); }
+
+@keyframes gtp-dot-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+.gtp-block-cmd {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: "SF Mono", "Fira Code", "JetBrains Mono", "Menlo", monospace;
+  font-size: 10.5px;
+  color: rgba(210, 225, 245, 0.8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+}
+
+.gtp-block-cmd-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.gtp-block:hover .gtp-block-cmd-actions {
+  opacity: 1;
+}
+
+.gtp-block-duration {
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 9px;
+  color: rgba(120, 145, 185, 0.4);
+  margin-right: 2px;
+}
+
+.gtp-block-exit {
+  font-family: "SF Mono", monospace;
+  font-size: 9px;
+  color: rgba(255, 130, 120, 0.65);
+  margin-right: 2px;
+}
+
+.gtp-block-copy,
+.gtp-block-collapse {
+  background: none;
+  border: none;
+  padding: 1px 4px;
+  font-size: 10px;
+  color: rgba(140, 165, 210, 0.4);
+  cursor: pointer;
+  border-radius: 3px;
+  line-height: 1;
+  transition: color 0.1s, background 0.1s;
+}
+
+.gtp-block-copy:hover,
+.gtp-block-collapse:hover {
+  color: rgba(200, 225, 255, 0.75);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* ── Terminal Fix button (Task #65) ─────────────────────────────────────── */
+.gtp-block-fix-btn {
+  background: none;
+  border: 1px solid rgba(255, 130, 120, 0.25);
+  padding: 1px 6px;
+  font-size: 9px;
+  font-family: "SF Mono", monospace;
+  color: rgba(255, 140, 130, 0.7);
+  cursor: pointer;
+  border-radius: 3px;
+  line-height: 1.4;
+  transition: color 0.1s, background 0.1s, border-color 0.1s;
+  margin-right: 2px;
+}
+
+.gtp-block-fix-btn:hover {
+  color: rgba(255, 180, 170, 0.9);
+  background: rgba(255, 100, 90, 0.1);
+  border-color: rgba(255, 130, 120, 0.5);
+}
+
+.gtp-block-fix-btn--active {
+  color: rgba(65, 224, 163, 0.85);
+  border-color: rgba(65, 224, 163, 0.3);
+  background: rgba(65, 224, 163, 0.07);
+}
+
+.gtp-block-fix-btn--active:hover {
+  color: rgba(65, 224, 163, 1);
+  background: rgba(65, 224, 163, 0.12);
+  border-color: rgba(65, 224, 163, 0.5);
+}
+
+/* ── Terminal Fix Card (Task #65) ────────────────────────────────────────── */
+.gtf-card {
+  margin: 6px 0 4px 14px;
+  background: rgba(10, 13, 22, 0.97);
+  border: 1px solid rgba(65, 224, 163, 0.2);
+  border-radius: 8px;
+  padding: 10px 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  animation: gtf-in 0.14s ease;
+  box-shadow:
+    0 4px 20px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(65, 224, 163, 0.05) inset;
+}
+
+@keyframes gtf-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.gtf-card--loading {
+  border-color: rgba(140, 165, 210, 0.15);
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+}
+
+.gtf-card--error {
+  border-color: rgba(255, 130, 120, 0.2);
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+}
+
+.gtf-spinner {
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid rgba(65, 224, 163, 0.15);
+  border-top-color: rgba(65, 224, 163, 0.7);
+  border-radius: 50%;
+  animation: gtf-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes gtf-spin {
+  to { transform: rotate(360deg); }
+}
+
+.gtf-loading-text {
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 10px;
+  color: rgba(140, 165, 210, 0.5);
+}
+
+.gtf-error-icon {
+  font-size: 10px;
+  color: rgba(255, 130, 120, 0.7);
+  flex-shrink: 0;
+}
+
+.gtf-error-text {
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 10px;
+  color: rgba(255, 160, 150, 0.75);
+  flex: 1;
+}
+
+.gtf-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.gtf-badge {
+  font-family: "SF Mono", monospace;
+  font-size: 9px;
+  font-weight: 600;
+  color: rgba(65, 224, 163, 0.9);
+  background: rgba(65, 224, 163, 0.1);
+  border: 1px solid rgba(65, 224, 163, 0.2);
+  border-radius: 3px;
+  padding: 1px 5px;
+  flex-shrink: 0;
+  letter-spacing: 0.03em;
+}
+
+.gtf-diagnosis {
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 10px;
+  color: rgba(160, 185, 220, 0.6);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gtf-btn-dismiss {
+  background: none;
+  border: none;
+  color: rgba(120, 145, 185, 0.35);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  margin-left: auto;
+  flex-shrink: 0;
+  transition: color 0.1s;
+}
+
+.gtf-btn-dismiss:hover {
+  color: rgba(200, 215, 240, 0.7);
+}
+
+.gtf-command-row {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(65, 224, 163, 0.12);
+  border-radius: 5px;
+  padding: 6px 10px;
+}
+
+.gtf-fixed-command {
+  font-family: "SF Mono", "Fira Code", monospace;
+  font-size: 11px;
+  color: rgba(65, 224, 163, 0.95);
+  white-space: pre-wrap;
+  word-break: break-all;
+  display: block;
+}
+
+.gtf-what-changed {
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 10px;
+  color: rgba(140, 165, 210, 0.5);
+  font-style: italic;
+}
+
+.gtf-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.gtf-btn {
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 10px;
+  border-radius: 5px;
+  padding: 4px 10px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.1s;
+  line-height: 1.3;
+}
+
+.gtf-btn--primary {
+  background: rgba(65, 224, 163, 0.15);
+  border-color: rgba(65, 224, 163, 0.3);
+  color: rgba(65, 224, 163, 0.9);
+}
+
+.gtf-btn--primary:hover:not(:disabled) {
+  background: rgba(65, 224, 163, 0.22);
+  border-color: rgba(65, 224, 163, 0.5);
+  color: rgba(65, 224, 163, 1);
+}
+
+.gtf-btn--primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.gtf-btn--secondary {
+  background: rgba(100, 130, 180, 0.08);
+  border-color: rgba(100, 130, 180, 0.18);
+  color: rgba(140, 165, 210, 0.7);
+}
+
+.gtf-btn--secondary:hover {
+  background: rgba(100, 130, 180, 0.14);
+  border-color: rgba(100, 130, 180, 0.3);
+  color: rgba(180, 200, 235, 0.9);
+}
+
+.gtf-btn--ghost {
+  background: none;
+  border-color: transparent;
+  color: rgba(120, 145, 185, 0.4);
+}
+
+.gtf-btn--ghost:hover {
+  color: rgba(160, 185, 220, 0.7);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* ── Explain Last Error overlay (Task #39) ───────────────────────────────── */
+.gte-overlay {
+  position: absolute;
+  bottom: 44px; /* sit just above the xterm cursor row / bottom of panel */
+  left: 12px;
+  right: 12px;
+  z-index: 200;
+  background: rgba(10, 13, 22, 0.96);
+  border: 1px solid rgba(65, 224, 163, 0.22);
+  border-radius: 10px;
+  backdrop-filter: blur(16px);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(65, 224, 163, 0.06) inset;
+  display: flex;
+  flex-direction: column;
+  max-height: 320px;
+  overflow: hidden;
+  animation: gte-overlay-in 0.15s ease;
+}
+
+@keyframes gte-overlay-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Vision overlay (Task #45) — pinned to the top of the panel so it never
+   overlaps the bottom-anchored Explain overlay if both are visible. */
+.gte-vision-overlay {
+  top: 44px;
+  bottom: auto;
+  border-color: rgba(192, 132, 252, 0.28);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(192, 132, 252, 0.08) inset;
+  animation: gte-vision-overlay-in 0.15s ease;
+}
+
+@keyframes gte-vision-overlay-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.gte-overlay-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 12px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.gte-overlay-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.gte-overlay-title {
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(65, 224, 163, 0.85);
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+
+.gte-overlay-cmd {
+  font-family: "SF Mono", "Fira Code", "Menlo", monospace;
+  font-size: 10px;
+  color: rgba(160, 185, 220, 0.45);
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-left: 4px;
+}
+
+.gte-overlay-close {
+  margin-left: auto;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: rgba(140, 160, 195, 0.35);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  line-height: 1;
+  transition: color 0.1s, background 0.1s;
+}
+
+.gte-overlay-close:hover {
+  color: rgba(255, 130, 130, 0.75);
+  background: rgba(255, 80, 80, 0.1);
+}
+
+.gte-overlay-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 10px 14px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(65, 224, 163, 0.15) transparent;
+}
+
+.gte-overlay-body::-webkit-scrollbar { width: 3px; }
+.gte-overlay-body::-webkit-scrollbar-thumb { background: rgba(65, 224, 163, 0.2); border-radius: 3px; }
+
+.gte-overlay-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: rgba(140, 170, 210, 0.55);
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 12px;
+}
+
+.gte-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(65, 224, 163, 0.15);
+  border-top-color: rgba(65, 224, 163, 0.7);
+  border-radius: 50%;
+  animation: gte-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes gte-spin {
+  to { transform: rotate(360deg); }
+}
+
+.gte-overlay-error {
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 12px;
+  color: rgba(255, 130, 120, 0.75);
+  line-height: 1.55;
+}
+
+.gte-overlay-explanation {
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: rgba(210, 228, 250, 0.82);
+}
+
+.gte-inline-code {
+  font-family: "SF Mono", "Fira Code", "Menlo", monospace;
+  font-size: 11px;
+  color: rgba(65, 224, 163, 0.9);
+  background: rgba(65, 224, 163, 0.08);
+  border: 1px solid rgba(65, 224, 163, 0.15);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+
+.gte-overlay-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 6px 12px 9px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  flex-shrink: 0;
+}
+
+.gte-overlay-copy {
+  background: rgba(65, 224, 163, 0.10);
+  border: 1px solid rgba(65, 224, 163, 0.25);
+  border-radius: 5px;
+  color: rgba(65, 224, 163, 0.8);
+  cursor: pointer;
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 10.5px;
+  font-weight: 500;
+  padding: 4px 10px;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.gte-overlay-copy:hover {
+  background: rgba(65, 224, 163, 0.17);
+  border-color: rgba(65, 224, 163, 0.45);
+}
+
+/* Output pre */
+.gtp-block-output {
+  margin: 0;
+  padding: 4px 8px 6px 18px;
+  font-family: "SF Mono", "Fira Code", "Menlo", monospace;
+  font-size: 10px;
+  line-height: 1.5;
+  color: rgba(170, 195, 225, 0.65);
+  white-space: pre-wrap;
+  word-break: break-all;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  max-height: 120px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+
+/* ── Natural Language → Shell command bar (Task #40) ─────────────────────────── */
+.gtp-nl-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 9px 12px 11px;
+  background: rgba(10, 12, 18, 0.94);
+  border-top: 2px solid rgba(65, 224, 163, 0.42);
+  backdrop-filter: blur(8px);
+  flex-shrink: 0;
+  z-index: 11;
+}
+
+.gtp-nl-label {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(65, 224, 163, 0.85);
+}
+
+.gtp-nl-label-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.gtp-nl-label-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  background: rgba(65, 224, 163, 0.12);
+  border: 1px solid rgba(65, 224, 163, 0.25);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.gtp-nl-label-arrow {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+  color: rgba(65, 224, 163, 0.9);
+}
+
+.gtp-nl-label-hint {
+  margin-left: auto;
+  flex: 1 1 12rem;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.35;
+  color: rgba(140, 170, 210, 0.58);
+  text-align: right;
+  white-space: normal;
+}
+
+.gtp-nl-input-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.gtp-nl-input-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+}
+
+.gtp-nl-mic-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  min-height: 40px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(200, 225, 250, 0.92);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.gtp-nl-mic-btn svg {
+  width: 18px;
+  height: 22px;
+}
+
+.gtp-nl-mic-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.11);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.gtp-nl-mic-btn--active {
+  border-color: rgba(255, 90, 80, 0.55);
+  background: rgba(255, 70, 60, 0.14);
+  color: rgba(255, 150, 140, 0.98);
+  box-shadow: 0 0 12px rgba(255, 80, 70, 0.25);
+}
+
+.gtp-nl-mic-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.gtp-nl-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: rgba(225, 238, 252, 0.92);
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.gtp-nl-input:focus {
+  border-color: rgba(65, 224, 163, 0.5);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.gtp-nl-input::placeholder {
+  color: rgba(140, 160, 190, 0.35);
+}
+
+.gtp-nl-loading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: rgba(140, 170, 210, 0.55);
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 12px;
+}
+
+.gtp-nl-error {
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 11.5px;
+  color: rgba(255, 130, 120, 0.78);
+  line-height: 1.5;
+}
+
+.gtp-nl-preview {
+  background: rgba(6, 9, 14, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-left: 3px solid rgba(65, 224, 163, 0.6);
+  border-radius: 5px;
+  padding: 8px 10px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+
+.gtp-nl-preview-cmd {
+  font-family: "SF Mono", "Fira Code", "Menlo", monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  color: rgba(106, 255, 212, 0.92);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.gtp-nl-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.gtp-nl-btn {
+  cursor: pointer;
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 13px;
+  border-radius: 5px;
+  transition: background 0.12s, border-color 0.12s, opacity 0.12s;
+}
+
+.gtp-nl-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.gtp-nl-btn--run {
+  background: rgba(65, 224, 163, 0.85);
+  border: 1px solid rgba(65, 224, 163, 0.9);
+  color: #06210f;
+}
+
+.gtp-nl-btn--run:not(:disabled):hover {
+  background: rgba(106, 255, 212, 0.95);
+}
+
+.gtp-nl-btn--edit {
+  background: transparent;
+  border: 1px solid rgba(140, 170, 210, 0.3);
+  color: rgba(190, 210, 235, 0.75);
+}
+
+.gtp-nl-btn--edit:hover {
+  border-color: rgba(140, 170, 210, 0.5);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* ── Voice → Shell bar (Task #44) ─────────────────────────────────────────── */
+
+.gtp-voice-bar--embedded {
+  padding: 0;
+  margin: 0 0 2px;
+  background: transparent;
+  border: none;
+  backdrop-filter: none;
+  animation: none;
+  outline: none;
+}
+
+.gtp-voice-header--embedded {
+  color: rgba(255, 130, 120, 0.92);
+  margin-bottom: 2px;
+}
+
+/* Glass IDE — collapsed strip: tab bar + NL shell bar only; viewport slides away */
+.glass-terminal-panel--embedded.glass-terminal-panel--ide-collapsed {
+  min-height: var(--gide-terminal-chrome-h, 158px);
+  height: auto;
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.glass-terminal-panel--embedded.glass-terminal-panel--ide-collapsed .gtp-nl-label-hint {
+  display: none;
+}
+
+.glass-terminal-panel--embedded .gtp-content-row {
+  transition:
+    max-height 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.38s cubic-bezier(0.22, 1, 0.36, 1),
+    padding 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+  max-height: 2400px;
+}
+
+.glass-terminal-panel--embedded.glass-terminal-panel--ide-collapsed .gtp-content-row {
+  max-height: 0;
+  opacity: 0;
+  flex: 0 0 0;
+  min-height: 0;
+  padding: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.glass-terminal-panel--embedded.glass-terminal-panel--ide-collapsed .gtp-inline-blocks,
+.glass-terminal-panel--embedded.glass-terminal-panel--ide-collapsed .gtw-root,
+.glass-terminal-panel--embedded.glass-terminal-panel--ide-collapsed .glass-terminal-ended {
+  display: none;
+}
+
+.glass-terminal-panel--embedded .glass-terminal-viewport {
+  pointer-events: auto;
+  cursor: text;
+}
+
+.glass-terminal-panel--embedded .glass-terminal-viewport .xterm-helper-textarea {
+  pointer-events: auto;
+}
+
+.gtp-voice-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 9px 12px 11px;
+  background: rgba(10, 12, 18, 0.94);
+  border-bottom: 1px solid rgba(255, 80, 80, 0.22);
+  backdrop-filter: blur(8px);
+  flex-shrink: 0;
+  z-index: 11;
+  outline: none;
+  animation: gte-overlay-in 0.15s ease;
+  transition: border-color 0.25s ease;
+}
+
+.gtp-voice-bar--ready {
+  border-bottom-color: rgba(65, 224, 163, 0.3);
+}
+
+.gtp-voice-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 120, 110, 0.9);
+}
+
+.gtp-voice-bar--ready .gtp-voice-header {
+  color: rgba(65, 224, 163, 0.85);
+}
+
+.gtp-voice-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.gtp-voice-timer {
+  margin-left: auto;
+  font-family: "SF Mono", "Menlo", monospace;
+  font-size: 11px;
+  color: rgba(255, 120, 110, 0.75);
+  font-variant-numeric: tabular-nums;
+}
+
+.gtp-voice-status {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 12px;
+  color: rgba(190, 210, 235, 0.7);
+}
+
+.gtp-voice-recording-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: rgba(255, 80, 80, 0.95);
+  box-shadow: 0 0 8px rgba(255, 80, 80, 0.7);
+  animation: gtp-voice-pulse 1s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes gtp-voice-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.75); }
+}
+
+.gtp-voice-waveform {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 18px;
+}
+
+.gtp-voice-waveform span {
+  display: block;
+  width: 3px;
+  border-radius: 2px;
+  background: rgba(255, 100, 90, 0.85);
+  animation: gtp-voice-wave 0.9s ease-in-out infinite;
+}
+
+.gtp-voice-waveform span:nth-child(1) { height: 6px; animation-delay: 0s; }
+.gtp-voice-waveform span:nth-child(2) { height: 14px; animation-delay: 0.15s; }
+.gtp-voice-waveform span:nth-child(3) { height: 18px; animation-delay: 0.3s; }
+.gtp-voice-waveform span:nth-child(4) { height: 11px; animation-delay: 0.45s; }
+.gtp-voice-waveform span:nth-child(5) { height: 7px; animation-delay: 0.6s; }
+
+@keyframes gtp-voice-wave {
+  0%, 100% { transform: scaleY(0.4); }
+  50% { transform: scaleY(1); }
+}
+
+.gtp-voice-transcript {
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 12px;
+  font-style: italic;
+  color: rgba(160, 185, 215, 0.6);
+  line-height: 1.45;
+}
+
+.gtp-voice-preview {
+  background: rgba(6, 9, 14, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-left: 3px solid rgba(65, 224, 163, 0.6);
+  border-radius: 5px;
+  padding: 8px 10px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+
+.gtp-voice-preview-cmd {
+  font-family: "SF Mono", "Fira Code", "Menlo", monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  color: rgba(106, 255, 212, 0.92);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.gtp-voice-error {
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 11.5px;
+  color: rgba(255, 130, 120, 0.82);
+  line-height: 1.5;
+}
+
+.gtp-voice-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.gtp-voice-btn {
+  cursor: pointer;
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 13px;
+  border-radius: 5px;
+  background: transparent;
+  border: 1px solid rgba(140, 170, 210, 0.3);
+  color: rgba(190, 210, 235, 0.75);
+  transition: background 0.12s, border-color 0.12s, opacity 0.12s;
+}
+
+.gtp-voice-btn:hover {
+  border-color: rgba(140, 170, 210, 0.5);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.gtp-voice-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.gtp-voice-btn--stop {
+  background: rgba(255, 80, 80, 0.85);
+  border-color: rgba(255, 80, 80, 0.9);
+  color: #2a0606;
+}
+
+.gtp-voice-btn--stop:hover {
+  background: rgba(255, 110, 110, 0.95);
+  border-color: rgba(255, 110, 110, 0.95);
+}
+
+.gtp-voice-btn--run {
+  background: rgba(65, 224, 163, 0.85);
+  border-color: rgba(65, 224, 163, 0.9);
+  color: #06210f;
+}
+
+.gtp-voice-btn--run:not(:disabled):hover {
+  background: rgba(106, 255, 212, 0.95);
+  border-color: rgba(106, 255, 212, 0.95);
+}
+
+/* ── AI Command Suggestions bar (Task #46) ────────────────────────────────── */
+
+.gtp-suggest-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 50; /* above terminal viewport, below overlays (z 200) */
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: rgba(10, 13, 22, 0.94);
+  border-top: 1px solid rgba(126, 176, 255, 0.2);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.4);
+  animation: gtp-suggest-in 0.18s ease;
+}
+
+@keyframes gtp-suggest-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.gtp-suggest-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(150, 185, 255, 0.85);
+}
+
+.gtp-suggest-label-icon {
+  font-size: 11px;
+}
+
+.gtp-suggest-loading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1;
+  justify-content: center;
+  color: rgba(140, 170, 210, 0.55);
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 12px;
+}
+
+.gtp-suggest-chips {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+
+.gtp-suggest-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 240px;
+  cursor: pointer;
+  text-align: left;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-left: 3px solid rgba(126, 176, 255, 0.55);
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.gtp-suggest-chip:hover {
+  background: rgba(126, 176, 255, 0.1);
+  border-color: rgba(126, 176, 255, 0.45);
+  border-left-color: rgba(126, 176, 255, 0.9);
+}
+
+.gtp-suggest-chip-cmd {
+  font-family: "SF Mono", "Fira Code", "Menlo", monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  color: rgba(153, 197, 255, 0.95);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.gtp-suggest-chip-why {
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 10px;
+  line-height: 1.3;
+  color: rgba(160, 185, 215, 0.6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.gtp-suggest-dismiss {
+  flex-shrink: 0;
+  cursor: pointer;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  background: transparent;
+  border: 1px solid rgba(140, 170, 210, 0.25);
+  color: rgba(190, 210, 235, 0.6);
+  font-size: 11px;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.gtp-suggest-dismiss:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(140, 170, 210, 0.45);
+  color: rgba(220, 235, 255, 0.85);
+}
+
+/* ---------------------------------------------------------------------------
+   Persistent Smart Scrollback search bar (Task #47)
+   Slides up from above the status bar; sits below overlays (z 200).
+--------------------------------------------------------------------------- */
+.gtp-scrollback-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100; /* above suggestions (z 50), below overlays (z 200) */
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 10px 12px 12px;
+  max-height: 70%;
+  background: rgba(9, 12, 20, 0.96);
+  border-top: 1px solid rgba(126, 176, 255, 0.22);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 -8px 26px rgba(0, 0, 0, 0.46);
+  animation: gtp-scrollback-in 0.18s ease;
+}
+
+@keyframes gtp-scrollback-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.gtp-scrollback-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.gtp-scrollback-title {
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: rgba(150, 190, 255, 0.9);
+}
+
+.gtp-scrollback-close {
+  appearance: none;
+  background: transparent;
+  border: 1px solid rgba(140, 170, 210, 0.25);
+  border-radius: 5px;
+  color: rgba(150, 175, 210, 0.7);
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.gtp-scrollback-close:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(220, 235, 255, 0.9);
+}
+
+.gtp-scrollback-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.gtp-scrollback-input {
+  flex: 1 1 auto;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: rgba(225, 238, 252, 0.92);
+  font-family: "SF Mono", "Fira Code", "Menlo", monospace;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.gtp-scrollback-input:focus {
+  border-color: rgba(126, 176, 255, 0.55);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.gtp-scrollback-input::placeholder {
+  color: rgba(140, 160, 190, 0.4);
+}
+
+.gtp-scrollback-search-btn {
+  flex-shrink: 0;
+  appearance: none;
+  padding: 8px 14px;
+  background: rgba(126, 176, 255, 0.16);
+  border: 1px solid rgba(126, 176, 255, 0.4);
+  border-radius: 6px;
+  color: rgba(190, 215, 255, 0.95);
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, opacity 0.12s;
+}
+
+.gtp-scrollback-search-btn:hover:not(:disabled) {
+  background: rgba(126, 176, 255, 0.26);
+}
+
+.gtp-scrollback-search-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.gtp-scrollback-empty {
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 12px;
+  color: rgba(150, 175, 210, 0.55);
+  padding: 6px 2px;
+}
+
+.gtp-scrollback-error {
+  color: rgba(255, 130, 120, 0.82);
+}
+
+.gtp-scrollback-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+  padding-right: 2px;
+}
+
+.gtp-scrollback-result {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 9px 10px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 7px;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.gtp-scrollback-result:hover {
+  background: rgba(126, 176, 255, 0.08);
+  border-color: rgba(126, 176, 255, 0.28);
+}
+
+.gtp-scrollback-result-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 10.5px;
+  color: rgba(150, 175, 210, 0.55);
+}
+
+.gtp-scrollback-status {
+  font-weight: 700;
+}
+
+.gtp-scrollback-status-success {
+  color: rgba(106, 255, 180, 0.85);
+}
+
+.gtp-scrollback-status-error {
+  color: rgba(255, 130, 120, 0.85);
+}
+
+.gtp-scrollback-status-unknown {
+  color: rgba(150, 175, 210, 0.6);
+}
+
+.gtp-scrollback-cwd {
+  font-family: "SF Mono", "Fira Code", "Menlo", monospace;
+  color: rgba(150, 175, 210, 0.45);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+.gtp-scrollback-command {
+  font-family: "SF Mono", "Fira Code", "Menlo", monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: rgba(190, 235, 215, 0.95);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.gtp-scrollback-output {
+  font-family: "SF Mono", "Fira Code", "Menlo", monospace;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: rgba(150, 170, 195, 0.55);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 48px;
+  overflow: hidden;
+}
+
+.gtp-scrollback-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 2px;
+}
+
+.gtp-scrollback-inject,
+.gtp-scrollback-copy {
+  appearance: none;
+  padding: 5px 11px;
+  border-radius: 5px;
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.gtp-scrollback-inject {
+  background: rgba(106, 255, 180, 0.14);
+  border: 1px solid rgba(106, 255, 180, 0.38);
+  color: rgba(150, 255, 210, 0.95);
+}
+
+.gtp-scrollback-inject:hover {
+  background: rgba(106, 255, 180, 0.24);
+}
+
+.gtp-scrollback-copy {
+  background: transparent;
+  border: 1px solid rgba(140, 170, 210, 0.28);
+  color: rgba(170, 195, 225, 0.78);
+}
+
+.gtp-scrollback-copy:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(220, 235, 255, 0.9);
+}

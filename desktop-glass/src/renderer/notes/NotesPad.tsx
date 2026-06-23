@@ -4,6 +4,7 @@ import { useChromeWindowDrag } from "../useChromeWindowDrag.ts";
 import { LiveNotesTab } from "../panel/LiveNotesTab.tsx";
 import { ListenInsightStrip } from "./ListenInsightStrip.tsx";
 import { formatListeningDuration } from "../../shared/audioChunks.ts";
+import { copilotModeIsActive } from "../../shared/copilotTypes.ts";
 
 /** Dedicated floating notepad for Listen mode — separate from the main panel. */
 export function NotesPad(): JSX.Element {
@@ -11,7 +12,16 @@ export function NotesPad(): JSX.Element {
   const dragRef = useRef<HTMLDivElement | null>(null);
   useChromeWindowDrag(true, dragRef);
   const listening = state.privacy.listening;
-  const timerLabel = formatListeningDuration(Math.max(state.stt?.listeningElapsedMs ?? 0, 0));
+  const listenModeActive =
+    state.copilot.config.sessionType === "video_learning" &&
+    copilotModeIsActive(state.copilot.config.mode) &&
+    (state.session?.status === "active" || state.session?.status === "paused");
+  const showTimer = listening || listenModeActive;
+  const timerLabel = listening
+    ? formatListeningDuration(Math.max(state.stt?.listeningElapsedMs ?? 0, 0))
+    : listenModeActive
+      ? "Paused"
+      : "";
 
   return (
     <div className="notes-pad notes-pad--composer" data-testid="glass-notes-pad">
@@ -22,8 +32,11 @@ export function NotesPad(): JSX.Element {
           <div>
             <div className="notes-pad__title-row">
               <div className="notes-pad__title">IIVO Notes</div>
-              {listening ? (
-                <span className="notes-pad__timer" data-testid="glass-notes-pad-timer">
+              {showTimer ? (
+                <span
+                  className={`notes-pad__timer${!listening ? " notes-pad__timer--paused" : ""}`}
+                  data-testid="glass-notes-pad-timer"
+                >
                   {timerLabel}
                 </span>
               ) : null}
@@ -32,13 +45,13 @@ export function NotesPad(): JSX.Element {
           </div>
         </div>
         <div className="notes-pad__header-actions">
-          {listening ? (
+          {listenModeActive ? (
             <button
               type="button"
               className="notes-pad__stop"
               data-testid="glass-notes-pad-stop"
               data-chrome-no-drag
-              title="Stop listening and hide notes"
+              title={listening ? "Stop listening and hide notes" : "Stop listen session"}
               onClick={() => send({ type: "stop-everything" })}
             >
               Stop

@@ -7,6 +7,7 @@ import {
   GLASS_HOTKEY_PRESETS,
   type GlassDisplayTarget,
   type GlassHotkeyPreset,
+  type GlassUserSettings,
 } from "../../shared/glassSettings.ts";
 import { StatusPill } from "../components/StatusPill.tsx";
 import { SessionPill } from "../components/SessionPill.tsx";
@@ -22,6 +23,7 @@ import type {
   GlassSessionInsight,
 } from "../../shared/sessionTypes.ts";
 import { INSIGHT_TYPE_LABELS } from "../../shared/sessionIntelligence.ts";
+import { displayAgentOutputFolder } from "../../shared/agentOutputFolder.ts";
 import { buildScreenshotThumbnailUrl } from "../../shared/sessionScreenshotUrls.ts";
 import {
   buildPanelStatusCards,
@@ -39,9 +41,13 @@ import { CopilotPanel } from "./CopilotPanel.tsx";
 import { AudioTab } from "./AudioTab.tsx";
 import AccountTab from "./AccountTab.tsx";
 import { LiveNotesTab } from "./LiveNotesTab.tsx";
+import { PowerStackTab } from "./PowerStackTab.tsx";
+import { InstallationsTab } from "./InstallationsTab.tsx";
 
-const ALL_TABS: { id: PanelTab; label: string; devOnly?: boolean }[] = [
+const ALL_TABS: { id: PanelTab; label: string; devOnly?: boolean; builderOnly?: boolean }[] = [
+  { id: "power-stack", label: "POWER STACK", builderOnly: true },
   { id: "setup", label: "Setup" },
+  { id: "installations", label: "Installations" },
   { id: "copilot", label: "Copilot" },
   { id: "live-notes", label: "Notes" },
   { id: "session", label: "Session" },
@@ -50,8 +56,6 @@ const ALL_TABS: { id: PanelTab; label: string; devOnly?: boolean }[] = [
   { id: "account", label: "Account" },
   { id: "diagnostics", label: "Diagnostics", devOnly: true },
 ];
-
-const TABS = ALL_TABS.filter((t) => !t.devOnly || IS_DEV);
 
 function NoteList({ items, empty }: { items: string[]; empty: string }): JSX.Element {
   if (items.length === 0) return <p className="empty">{empty}</p>;
@@ -556,8 +560,18 @@ function Transcript({ transcript }: { transcript: string }): JSX.Element {
 
 
 // ---------- Profile editor ----------
+
+const PERSONA_LABELS: Record<NonNullable<GlassState["persona"]>, string> = {
+  developer: "Builder",
+  sales: "Closer",
+  operator: "Operator",
+  writer: "Creator",
+  general: "Explorer",
+};
+
 function ProfileEditor({ state }: { state: GlassState }): JSX.Element {
   const profile = state.glassUserProfile;
+  const persona = state.persona;
   const [draft, setDraft] = useState({
     name: profile?.name ?? "",
     usualWork: profile?.usualWork ?? "",
@@ -645,6 +659,23 @@ function ProfileEditor({ state }: { state: GlassState }): JSX.Element {
           </span>
         ) : null}
       </div>
+      <div className="panel-profile-persona" data-testid="glass-panel-persona-section">
+        <p className="panel-profile-label">Persona</p>
+        <p className="hint panel-profile-persona-value" data-testid="glass-panel-persona-value">
+          {persona ? PERSONA_LABELS[persona] : "Not set — run calibration to load your power stack."}
+        </p>
+        <button
+          type="button"
+          className="gbtn panel-profile-recalibrate"
+          onClick={() => send({ type: "glass-onboarding-recalibrate" })}
+          data-testid="glass-panel-recalibrate-persona"
+        >
+          Recalibrate persona
+        </button>
+        <p className="hint panel-profile-recalibrate-hint">
+          Re-run the Sorting Hat to update your power stack and persona fit.
+        </p>
+      </div>
     </section>
   );
 }
@@ -712,6 +743,7 @@ function StatusGrid({ state }: { state: GlassState }): JSX.Element {
         </button>
       </div>
       <GlassLayoutSettings state={state} />
+      <AgentSettings state={state} />
       {IS_DEV ? <ServerUrlEditor state={state} /> : null}
     </div>
   );
@@ -729,6 +761,189 @@ function StatusGridCell({ card }: { card: PanelStatusCard }): JSX.Element {
       </div>
       <div>{card.status}</div>
       {card.detail ? <div className="status-grid__detail">{card.detail}</div> : null}
+    </div>
+  );
+}
+
+function AgentSettings({ state }: { state: GlassState }): JSX.Element {
+  const outputFolder = displayAgentOutputFolder(state.glassSettings);
+  const workspace = state.glassSettings.agentCodeWorkspaceRoot?.trim();
+  const indexState = state.indexState;
+  const indexLabel = (() => {
+    if (!workspace) return "Set a project folder first";
+    if (indexState?.status === "indexing" && indexState.progress) {
+      const p = indexState.progress;
+      if (p.phase === "pulling") {
+        return p.detail ? `Pulling model — ${p.detail}` : "Pulling embedding model…";
+      }
+      if (p.total > 0) {
+        return `Indexing (${p.indexed}/${p.total} embedded)`;
+      }
+      return "Indexing…";
+    }
+    if (indexState?.status === "ready" && indexState.fileCount != null) {
+      return `Ready — ${indexState.fileCount} files`;
+    }
+    if (indexState?.status === "error") return indexState.error ?? "Index error";
+    if (state.ollamaAvailable === false) return "Ollama not running";
+    return "Not indexed";
+  })();
+
+  const patchCoderSettings = (
+    patch: Partial<Pick<
+      GlassUserSettings,
+      | "indexEnabled"
+      | "indexAutoOnOpen"
+      | "screenContextEnabled"
+      | "voiceCoderEnabled"
+      | "coderAutoVerify"
+      | "coderAutoReview"
+    >>,
+  ): void => {
+    send({ type: "set-glass-coder-settings", patch });
+  };
+
+  const memoryStatus = state.projectMemoryState?.status;
+
+  return (
+    <div className="summary-box panel__settings" data-testid="glass-panel-agent-settings">
+      <p className="section-title">Glass Agents</p>
+      <p className="hint">
+        Agent reports save to your output folder. For Code Analyst, the project folder is where it
+        starts browsing your code (usually your repo root).
+      </p>
+      <label className="panel__settings-row">
+        <span>Output folder</span>
+        <button
+          type="button"
+          className="gbtn gbtn--ghost panel__agent-path-btn"
+          onClick={() => void window.glass.agentPickOutputFolder()}
+        >
+          {outputFolder}
+        </button>
+      </label>
+      <label className="panel__settings-row">
+        <span>Code project folder</span>
+        <button
+          type="button"
+          className="gbtn gbtn--ghost panel__agent-path-btn"
+          onClick={() => void window.glass.agentPickWorkspaceRoot()}
+        >
+          {workspace || "Choose folder…"}
+        </button>
+      </label>
+
+      <p className="section-title panel__settings-subtitle">Codebase index</p>
+      <p className="hint">
+        Uses Ollama ({`nomic-embed-text`}) running locally — free, offline.
+        {state.ollamaAvailable === false
+          ? " Start Ollama to enable semantic search; Glass Coder falls back to file search."
+          : ""}
+      </p>
+      <p className="hint">
+        Screen-aware context captures your display and sends a screenshot to Claude Haiku
+        to detect the active editor file. Requires Screen Recording permission and an Anthropic API key.
+      </p>
+      <label className="panel__settings-row">
+        <span>Index status</span>
+        <span className="panel__settings-value">{indexLabel}</span>
+      </label>
+      <div className="panel__settings-row panel__settings-row--actions">
+        <button
+          type="button"
+          className="gbtn gbtn--ghost"
+          disabled={!workspace || indexState?.status === "indexing"}
+          onClick={() => workspace && void window.glass.indexStart(workspace)}
+        >
+          Index now
+        </button>
+      </div>
+      <div className="panel__settings-row panel__settings-row--actions">
+        <div>
+          <div className="panel__settings-row-label">Project Memory</div>
+          <p className="hint">
+            Generates GLASS_CONTEXT.md — Glass Coder reads this on every run to understand your project.
+            Re-generate any time your architecture changes.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="gbtn gbtn--ghost"
+          disabled={!workspace}
+          onClick={() => {
+            if (memoryStatus === "generating") {
+              window.glass.cancelProjectMemory();
+            } else {
+              void window.glass.generateProjectMemory();
+            }
+          }}
+        >
+          {memoryStatus === "generating"
+            ? "Cancel"
+            : memoryStatus === "done"
+              ? "Regenerate"
+              : "Generate"}
+        </button>
+      </div>
+      {memoryStatus === "generating" ? (
+        <p className="hint">Generating GLASS_CONTEXT.md…</p>
+      ) : null}
+      {memoryStatus === "done" ? (
+        <p className="hint">✓ GLASS_CONTEXT.md saved to your project root</p>
+      ) : null}
+      {memoryStatus === "error" ? (
+        <p className="hint panel__settings-error">
+          ✗ {state.projectMemoryState?.error ?? "Generation failed"}
+        </p>
+      ) : null}
+      <label className="panel__settings-row panel__settings-row--checkbox">
+        <input
+          type="checkbox"
+          checked={state.glassSettings.indexEnabled !== false}
+          onChange={(e) => patchCoderSettings({ indexEnabled: e.target.checked })}
+        />
+        <span>Enable semantic index</span>
+      </label>
+      <label className="panel__settings-row panel__settings-row--checkbox">
+        <input
+          type="checkbox"
+          checked={state.glassSettings.indexAutoOnOpen !== false}
+          onChange={(e) => patchCoderSettings({ indexAutoOnOpen: e.target.checked })}
+        />
+        <span>Auto-index on project open</span>
+      </label>
+      <label className="panel__settings-row panel__settings-row--checkbox">
+        <input
+          type="checkbox"
+          checked={state.glassSettings.screenContextEnabled !== false}
+          onChange={(e) => patchCoderSettings({ screenContextEnabled: e.target.checked })}
+        />
+        <span>Screen-aware context</span>
+      </label>
+      <label className="panel__settings-row panel__settings-row--checkbox">
+        <input
+          type="checkbox"
+          checked={state.glassSettings.voiceCoderEnabled !== false}
+          onChange={(e) => patchCoderSettings({ voiceCoderEnabled: e.target.checked })}
+        />
+        <span>Voice → Glass Coder</span>
+      </label>
+      <label className="panel__settings-row panel__settings-row--checkbox">
+        <input
+          type="checkbox"
+          checked={state.glassSettings.coderAutoVerify !== false}
+          onChange={(e) => patchCoderSettings({ coderAutoVerify: e.target.checked })}
+        />
+        <span>Auto-verify after apply</span>
+      </label>
+      <label className="panel__settings-row panel__settings-row--checkbox">
+        <input
+          type="checkbox"
+          checked={state.glassSettings.coderAutoReview !== false}
+          onChange={(e) => patchCoderSettings({ coderAutoReview: e.target.checked })}
+        />
+        <span>Auto-review after verify</span>
+      </label>
     </div>
   );
 }
@@ -980,11 +1195,18 @@ function MomentCard({ moment }: { moment: SavedMoment }): JSX.Element {
 
 export function Panel(): JSX.Element {
   const state = useGlassState();
-  const [tab, setTab] = useState<PanelTab>("setup");
+  const isBuilder = state.persona === "developer";
+  const [tab, setTab] = useState<PanelTab>(isBuilder ? "power-stack" : "setup");
 
   useEffect(() => {
     setTab(state.panelTab);
   }, [state.panelTab]);
+
+  const TABS = ALL_TABS.filter((t) => {
+    if (t.devOnly && !IS_DEV) return false;
+    if (t.builderOnly && !isBuilder) return false;
+    return true;
+  });
 
   const sessionLive =
     state.session?.status === "active" || state.session?.status === "paused";
@@ -1056,6 +1278,12 @@ export function Panel(): JSX.Element {
             </div>
           ) : null}
 
+          {tab === "installations" ? (
+            <div className="panel__body">
+              <InstallationsTab />
+            </div>
+          ) : null}
+
           {tab === "audio" ? (
             <div className="panel__body">
               <AudioTab state={state} />
@@ -1095,6 +1323,12 @@ export function Panel(): JSX.Element {
           {tab === "live-notes" ? (
             <div className="panel__body panel__body--live-notes" data-testid="glass-panel-notes-tab">
               <LiveNotesTab state={state} />
+            </div>
+          ) : null}
+
+          {tab === "power-stack" ? (
+            <div className="panel__body" style={{ padding: 0, overflow: "hidden", height: "100%" }}>
+              <PowerStackTab />
             </div>
           ) : null}
 

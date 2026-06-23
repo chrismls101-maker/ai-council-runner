@@ -1,0 +1,145 @@
+.glass-debrief-panel-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-start;
+  padding:
+    max(72px, 10vh)
+    16px
+    var(
+      --builder-strip-top-from-bottom,
+      calc(var(--builder-strip-bottom, 8px) + var(--builder-strip-height, 40px))
+    )
+    max(12px, var(--overlay-glass-frame-inset-left, 12px));
+  background: transparent;
+  pointer-events: none;
+  animation: debrief-panel-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes debrief-panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.glass-debrief-panel {
+  width: min(420px, calc(100vw - 32px));
+  max-height: none;
+  margin-bottom: 0;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: linear-gradient(
+    160deg,
+    rgba(16, 16, 20, 0.96) 0%,
+    rgba(10, 10, 14, 0.98) 100%
+  );
+  backdrop-filter: blur(32px) saturate(1.6);
+  -webkit-backdrop-filter: blur(32px) saturate(1.6);
+  box-shadow:
+    0 4px 48px rgba(0, 0, 0, 0.60),
+    0 1px 0 rgba(255, 255, 255, 0.06) inset;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.glass-debrief-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  flex-shrink: 0;
+}
+
+.glass-debrief-panel__eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(65, 224, 163, 0.85);
+}
+
+.glass-debrief-panel__title {
+  margin-top: 4px;
+  font-size: 15px;
+  font-weight: 650;
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.glass-debrief-panel__close {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: rgba(200, 210, 230, 0.75);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 6px 10px;
+  flex-shrink: 0;
+}
+
+.glass-debrief-panel__close:hover {
+  color: rgba(255, 255, 255, 0.95);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.glass-debrief-panel__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px 16px;
+  font-size: 14px;
+  line-height: 1.58;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.92);
+  white-space: pre-wrap;
+  font-family: inherit;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.22) rgba(10, 12, 18, 0.94);
+}
+
+.glass-debrief-panel__body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.glass-debrief-panel__body::-webkit-scrollbar-track {
+  background: rgba(10, 12, 18, 0.94);
+  border-radius: 999px;
+}
+
+.glass-debrief-panel__body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+}
+
+.glass-debrief-panel__loading {
+  padding: 14px 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(200, 210, 230, 0.75);
+}
+
+.glass-debrief-panel__footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 16px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  flex-shrink: 0;
+}

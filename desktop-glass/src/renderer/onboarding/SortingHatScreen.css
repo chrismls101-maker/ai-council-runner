@@ -1,0 +1,317 @@
+/* ─── Sorting Hat — first-launch onboarding overlay ──────────────────────── */
+/* Desktop visible through light blur; swarm upper half; text above input. */
+
+.sorting-hat {
+  --overlay-glass-frame-inset-top: 10px;
+  --overlay-glass-frame-inset-right: 10px;
+  --overlay-glass-frame-inset-bottom: 10px;
+  --overlay-glass-frame-inset-left: 10px;
+  --overlay-glass-frame-z: 5;
+  --sorting-hat-glass-bg: rgba(255, 255, 255, 0.07);
+  --sorting-hat-glass-border: rgba(255, 255, 255, 0.18);
+  --sorting-hat-glass-highlight: rgba(255, 255, 255, 0.12);
+
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: transparent;
+  pointer-events: none;
+  animation: sorting-hat-in 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes sorting-hat-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Subtle frosted veil — slight blur + whisper tint, desktop still reads through */
+.sorting-hat__veil {
+  position: fixed;
+  inset: var(--overlay-glass-frame-inset-top, 10px)
+    var(--overlay-glass-frame-inset-right, 10px)
+    var(--overlay-glass-frame-inset-bottom, 10px)
+    var(--overlay-glass-frame-inset-left, 10px);
+  z-index: 0;
+  pointer-events: none;
+  border-radius: 2px;
+  background: rgba(4, 10, 18, 0.14);
+  backdrop-filter: blur(10px) saturate(125%);
+  -webkit-backdrop-filter: blur(10px) saturate(125%);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .sorting-hat__veil {
+    background: rgba(6, 12, 20, 0.42);
+  }
+}
+
+.sorting-hat__frame {
+  z-index: 5;
+}
+
+/* Swarm canvas — full framed area; text overlays at bottom (no crop) */
+.sorting-hat__swarm {
+  position: fixed;
+  inset: var(--overlay-glass-frame-inset-top, 10px)
+    var(--overlay-glass-frame-inset-right, 10px)
+    var(--overlay-glass-frame-inset-bottom, 10px)
+    var(--overlay-glass-frame-inset-left, 10px);
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* IIVO's spoken text — mid-lower band, above input */
+.sorting-hat__text {
+  position: fixed;
+  left: 50%;
+  bottom: 148px;
+  transform: translateX(-50%);
+  color: #e8eaf0;
+  font-size: 20px;
+  font-weight: 300;
+  letter-spacing: 0.04em;
+  text-align: center;
+  max-width: 640px;
+  padding: 0 24px;
+  line-height: 1.6;
+  text-shadow:
+    0 0 24px rgba(0, 0, 0, 0.85),
+    0 2px 12px rgba(0, 0, 0, 0.65),
+    0 0 40px rgba(120, 160, 255, 0.35);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+  z-index: 4;
+}
+
+.sorting-hat__text--visible {
+  opacity: 1;
+}
+
+/* Q1 prompt card — Apple-style frosted glass, fades in whole after speech */
+.sorting-hat__text--q1 {
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 16px;
+  font-weight: 400;
+  letter-spacing: 0.015em;
+  line-height: 1.75;
+  color: rgba(248, 252, 255, 0.96);
+  max-width: 560px;
+  padding: 24px 30px;
+  text-align: left;
+  text-shadow: none;
+  background:
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.14) 0%,
+      rgba(255, 255, 255, 0.05) 42%,
+      rgba(255, 255, 255, 0.03) 100%
+    ),
+    var(--sorting-hat-glass-bg);
+  backdrop-filter: blur(44px) saturate(190%);
+  -webkit-backdrop-filter: blur(44px) saturate(190%);
+  border: 1px solid var(--sorting-hat-glass-border);
+  border-radius: 18px;
+  box-shadow:
+    inset 0 1px 0 var(--sorting-hat-glass-highlight),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12),
+    0 16px 48px rgba(0, 0, 0, 0.22),
+    0 0 0 0.5px rgba(255, 255, 255, 0.06);
+  bottom: 152px;
+  transition: opacity 0.45s cubic-bezier(0.22, 0.8, 0.22, 1);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .sorting-hat__text--q1 {
+    background: rgba(18, 28, 44, 0.82);
+  }
+}
+
+/* Disclaimer — between main text and input */
+.sorting-hat__disclaimer {
+  position: fixed;
+  left: 50%;
+  bottom: 108px;
+  transform: translateX(-50%);
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.03em;
+  text-align: center;
+  max-width: 480px;
+  padding: 0 24px;
+  line-height: 1.5;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.75);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.55s ease 0.15s;
+  z-index: 4;
+}
+
+.sorting-hat__disclaimer--visible {
+  opacity: 1;
+}
+
+/* Input row — frosted glass tray at bottom */
+.sorting-hat__input-row {
+  position: fixed;
+  bottom: 44px;
+  left: 50%;
+  transform: translateX(calc(-50% + 18px));
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  width: min(596px, 92vw);
+  padding: 10px 12px;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  z-index: 5;
+  pointer-events: auto;
+  border-radius: 20px;
+  background:
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.12) 0%,
+      rgba(255, 255, 255, 0.04) 100%
+    ),
+    var(--sorting-hat-glass-bg);
+  backdrop-filter: blur(44px) saturate(190%);
+  -webkit-backdrop-filter: blur(44px) saturate(190%);
+  border: 1px solid var(--sorting-hat-glass-border);
+  box-shadow:
+    inset 0 1px 0 var(--sorting-hat-glass-highlight),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.1),
+    0 14px 40px rgba(0, 0, 0, 0.2);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .sorting-hat__input-row {
+    background: rgba(16, 24, 38, 0.88);
+  }
+}
+
+.sorting-hat__input-row--visible {
+  opacity: 1;
+}
+
+.sorting-hat__voice-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -22px;
+  margin: 0;
+  text-align: center;
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 300;
+  letter-spacing: 0.04em;
+  color: rgba(56, 225, 255, 0.55);
+  pointer-events: none;
+}
+
+.sorting-hat__input {
+  flex: 1;
+  min-height: 48px;
+  padding: 13px 18px;
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 15px;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  color: rgba(240, 246, 255, 0.96);
+  background:
+    linear-gradient(
+      160deg,
+      rgba(255, 255, 255, 0.10) 0%,
+      rgba(255, 255, 255, 0.04) 100%
+    );
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  outline: none;
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.10),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.08);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease;
+}
+
+.sorting-hat__input::placeholder {
+  color: rgba(200, 220, 245, 0.42);
+}
+
+.sorting-hat__input:focus {
+  border-color: rgba(120, 190, 255, 0.45);
+  background:
+    linear-gradient(
+      160deg,
+      rgba(255, 255, 255, 0.14) 0%,
+      rgba(255, 255, 255, 0.06) 100%
+    );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 0 0 1px rgba(120, 190, 255, 0.18),
+    0 0 24px rgba(56, 140, 220, 0.12);
+}
+
+.sorting-hat__submit {
+  flex-shrink: 0;
+  min-height: 48px;
+  padding: 0 22px;
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: rgba(248, 252, 255, 0.96);
+  cursor: pointer;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.20);
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.08) 100%);
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 4px 16px rgba(0, 0, 0, 0.14);
+  transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+
+.sorting-hat__submit:hover:not(:disabled) {
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.24) 0%, rgba(255, 255, 255, 0.12) 100%);
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
+.sorting-hat__submit:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+
+/* Skip — top right, ghost */
+.sorting-hat__skip {
+  position: fixed;
+  top: 24px;
+  right: 28px;
+  background: rgba(8, 14, 26, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  color: rgba(255, 255, 255, 0.32);
+  padding: 9px 18px;
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+  z-index: 6;
+  pointer-events: auto;
+}
+
+.sorting-hat__skip:hover {
+  color: rgba(255, 255, 255, 0.58);
+  border-color: rgba(255, 255, 255, 0.26);
+  background: rgba(12, 20, 36, 0.48);
+}

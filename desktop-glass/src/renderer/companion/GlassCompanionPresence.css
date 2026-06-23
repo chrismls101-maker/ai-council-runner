@@ -1,0 +1,252 @@
+/* Glass Companion — ephemeral screen presence (Phase 2) */
+
+.companion-presence {
+  position: fixed;
+  inset: 0;
+  z-index: 115;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.companion-presence--spotlight .companion-presence__spotlight-dim {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.52);
+  pointer-events: none;
+}
+
+.companion-presence__spotlight-hole {
+  position: absolute;
+  border-radius: 10px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.52);
+  pointer-events: none;
+  animation: companion-presence-in 0.35s ease-out;
+}
+
+.companion-presence__mark {
+  position: absolute;
+  border-radius: 8px;
+  pointer-events: none;
+  animation: companion-presence-in 0.35s ease-out;
+  transition:
+    left 0.45s ease,
+    top 0.45s ease,
+    width 0.45s ease,
+    height 0.45s ease,
+    opacity 0.35s ease;
+}
+
+.companion-presence--crossfade .companion-presence__mark {
+  animation: companion-crossfade-in 0.45s ease-out;
+}
+
+.companion-presence__mark--glow {
+  border: 2px solid rgba(var(--glass-accent-rgb), 0.92);
+  box-shadow:
+    0 0 0 1px rgba(var(--glass-accent-rgb), 0.35),
+    0 0 24px var(--presence-glow-cyan),
+    inset 0 0 18px rgba(var(--glass-accent-rgb), 0.12);
+  animation: companion-glow-pulse 1.8s ease-in-out infinite;
+}
+
+.companion-presence__mark--callout {
+  border: 1px solid rgba(251, 191, 36, 0.85);
+  background: rgba(15, 18, 28, 0.72);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.companion-presence__mark--arrow,
+.companion-presence__mark--trace,
+.companion-presence__mark--cursor,
+.companion-presence__mark--magnifier,
+.companion-presence__mark--sketch {
+  border: 2px dashed rgba(167, 139, 250, 0.85);
+  box-shadow: 0 0 16px rgba(167, 139, 250, 0.35);
+}
+
+.companion-presence__callout {
+  position: absolute;
+  left: 50%;
+  top: -28px;
+  transform: translateX(-50%);
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: rgba(255, 251, 235, 0.95);
+  background: rgba(180, 83, 9, 0.88);
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.companion-presence__dismiss {
+  position: fixed;
+  top: calc(var(--overlay-glass-frame-inset-top, 12px) + 8px);
+  right: calc(var(--overlay-glass-frame-inset-right, 10px) + 8px);
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(10, 12, 18, 0.82);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+  cursor: pointer;
+  pointer-events: auto;
+  z-index: 2;
+}
+
+.companion-presence__dismiss:hover {
+  color: rgba(255, 255, 255, 0.95);
+  border-color: rgba(125, 211, 252, 0.45);
+}
+
+@keyframes companion-presence-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes companion-crossfade-in {
+  from {
+    opacity: 0.35;
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+@keyframes companion-glow-pulse {
+  0%, 100% { opacity: 0.78; }
+  50% { opacity: 1; }
+}
+
+.companion-presence__arrow,
+.companion-presence__path-track {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.companion-presence__arrow-line {
+  stroke: rgba(56, 189, 248, 0.95);
+  stroke-width: 2.5;
+  fill: none;
+  filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.65));
+  animation: companion-trace-draw 0.7s ease-out forwards;
+}
+
+.companion-presence__path-line {
+  stroke: rgba(167, 139, 250, 0.45);
+  stroke-width: 2;
+  stroke-dasharray: 6 6;
+  fill: none;
+}
+
+.companion-presence__path-dot {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin-left: -7px;
+  margin-top: -7px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fff 0%, rgba(167, 139, 250, 0.95) 40%, rgba(167, 139, 250, 0.35) 75%);
+  box-shadow: 0 0 14px rgba(167, 139, 250, 0.85);
+  pointer-events: none;
+}
+
+.companion-presence__magnifier {
+  position: absolute;
+  border-radius: 50%;
+  overflow: hidden;
+  pointer-events: none;
+  animation: companion-presence-in 0.4s ease-out;
+  box-shadow:
+    0 0 0 3px rgba(56, 189, 248, 0.85),
+    0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+.companion-presence__magnifier-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1.35);
+}
+
+.companion-presence__magnifier-fallback {
+  width: 100%;
+  height: 100%;
+  background: rgba(15, 18, 28, 0.75);
+}
+
+.companion-presence__magnifier-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(125, 211, 252, 0.65);
+  pointer-events: none;
+}
+
+.companion-presence__sketch {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.companion-presence__sketch-path {
+  fill: none;
+  stroke: rgba(251, 191, 36, 0.92);
+  stroke-width: 0.004;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 0.004rem rgba(251, 191, 36, 0.55));
+  animation: companion-trace-draw 1s ease-out forwards;
+}
+
+.companion-presence__ghost-cursor {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  margin-left: -4px;
+  margin-top: -4px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fff 0%, rgba(56, 189, 248, 0.95) 35%, rgba(56, 189, 248, 0.4) 70%);
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.85);
+  pointer-events: none;
+  animation: companion-cursor-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes companion-cursor-pulse {
+  0%, 100% { transform: scale(0.92); opacity: 0.85; }
+  50% { transform: scale(1.05); opacity: 1; }
+}
+
+.companion-presence__trace {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.companion-presence__trace-rect {
+  fill: none;
+  stroke: rgba(167, 139, 250, 0.95);
+  stroke-width: 2.5;
+  filter: drop-shadow(0 0 8px rgba(167, 139, 250, 0.65));
+  animation: companion-trace-draw 0.8s ease-out forwards;
+}
+
+@keyframes companion-trace-draw {
+  to { stroke-dashoffset: 0; }
+}

@@ -18,6 +18,10 @@ test("classifySttFailure distinguishes no-signal vs transcription vs config vs s
   assert.equal(classifySttFailure("IIVO transcription server unavailable."), "server_unavailable");
   assert.equal(classifySttFailure("Network failure contacting OpenAI transcription API."), "server_unavailable");
   assert.equal(classifySttFailure("Set IIVO_GLASS_OPENAI_API_KEY in root .env"), "config_missing");
+  assert.equal(
+    classifySttFailure("OpenAI quota or rate limit exceeded: You exceeded your current quota"),
+    "quota_exceeded",
+  );
   assert.equal(classifySttFailure("OpenAI transcription failed (500): boom"), "transcription_failed");
   assert.equal(classifySttFailure(""), "transcription_failed");
 });
@@ -49,6 +53,16 @@ test("config-missing message references STT configuration", () => {
 test("server-unavailable message references the transcription server", () => {
   const msg = sttSourceErrorMessage("microphone", "server_unavailable");
   assert.match(msg, /server unavailable|transcription server/i);
+});
+
+test("quota exceeded message points at OpenAI billing", () => {
+  const msg = sttSourceErrorMessage(
+    "system_audio",
+    "quota_exceeded",
+    "You exceeded your current quota",
+  );
+  assert.match(msg, /quota or billing/i);
+  assert.match(msg, /platform\.openai\.com/i);
 });
 
 test("retry action is source-specific", () => {

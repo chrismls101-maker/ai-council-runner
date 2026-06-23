@@ -6,6 +6,7 @@ import {
   voiceModeReducer,
   type VoiceModeState,
 } from "../shared/voiceModeState.ts";
+import { matchGlassIdeEditorVoiceIntent } from "../shared/glassIdeEditorContext.ts";
 import {
   cancelAskCommand,
   stopEverythingCommand,
@@ -40,6 +41,7 @@ export function useVoiceMode(): VoiceModeController {
   const stateRef = useRef(state);
   stateRef.current = state;
   const prevAskStatusRef = useRef(glass.askStatus);
+  const prevCompanionActiveRef = useRef(glass.companionModeActive === true);
 
   const restartListening = useCallback(() => {
     if (!stateRef.current.active) return;
@@ -49,7 +51,17 @@ export function useVoiceMode(): VoiceModeController {
   const start = useCallback(() => {
     dispatch({ type: "START" });
     setVoiceModeAutoSubmit((draft) => {
-      const plan = voiceSubmitPlan(draft);
+      if (glass.glassIdeActive && matchGlassIdeEditorVoiceIntent(draft, null)) {
+        dispatch({ type: "SUBMIT", text: draft });
+        send({ type: "glass-ide-voice-command", transcript: draft });
+        dispatch({ type: "ANSWER_DONE" });
+        setTimeout(restartListening, 0);
+        return true;
+      }
+      const plan = voiceSubmitPlan(
+        draft,
+        glass.glassSettings.voiceCoderEnabled !== false,
+      );
       dispatch({ type: "SUBMIT", text: draft });
       for (const command of plan.commands) send(command);
       // The debrief route has no ask-pending lifecycle to observe; cycle back
@@ -61,7 +73,7 @@ export function useVoiceMode(): VoiceModeController {
       return true;
     });
     void tx.startMicrophoneListening("");
-  }, [tx, restartListening]);
+  }, [tx, restartListening, glass.glassSettings.voiceCoderEnabled]);
 
   const stop = useCallback(() => {
     dispatch({ type: "STOP_EVERYTHING" });
@@ -75,6 +87,17 @@ export function useVoiceMode(): VoiceModeController {
     send(cancelAskCommand());
     setTimeout(restartListening, 0);
   }, [restartListening]);
+
+  // Release Voice Mode when Aletheia toggles on (shared mic; separate renderer windows).
+  useEffect(() => {
+    const wasCompanion = prevCompanionActiveRef.current;
+    const nowCompanion = glass.companionModeActive === true;
+    prevCompanionActiveRef.current = nowCompanion;
+    if (!nowCompanion || wasCompanion || !stateRef.current.active) return;
+    dispatch({ type: "STOP_EVERYTHING" });
+    clearVoiceModeAutoSubmit();
+    tx.stopListeningLocal();
+  }, [glass.companionModeActive, tx]);
 
   // Mirror mic permission failures into the machine.
   useEffect(() => {

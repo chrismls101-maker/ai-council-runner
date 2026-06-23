@@ -14,6 +14,7 @@
 import type { GlassCommand } from "./ipc.ts";
 import type { VoiceModeStatus, VoiceRoute } from "./voiceModeState.ts";
 import { resolveVoiceRoute } from "./voiceModeState.ts";
+import { isCoderIntent } from "./voiceCoderIntent.ts";
 
 /** Commands to issue for a finished transcript on a given route. */
 export function voiceRouteToCommands(route: VoiceRoute, transcript: string): GlassCommand[] {
@@ -31,10 +32,22 @@ export function voiceRouteToCommands(route: VoiceRoute, transcript: string): Gla
 }
 
 /** Full submit plan for a transcript: the chosen route plus the commands. */
-export function voiceSubmitPlan(transcript: string): {
-  route: VoiceRoute;
+export function voiceSubmitPlan(
+  transcript: string,
+  voiceCoderEnabled = true,
+): {
+  route: VoiceRoute | "voice_coder";
   commands: GlassCommand[];
 } {
+  if (voiceCoderEnabled && isCoderIntent(transcript)) {
+    return {
+      route: "voice_coder",
+      commands: [{
+        type: "open-coder-with-prompt",
+        prompt: transcript.trim(),
+      }],
+    };
+  }
   const route = resolveVoiceRoute(transcript);
   return { route, commands: voiceRouteToCommands(route, transcript) };
 }

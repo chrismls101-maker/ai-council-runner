@@ -16,9 +16,12 @@ files:
 npmRebuild: true
 asar: true
 
-# node-pty ships a .node binary that cannot be inside an asar archive.
+# node-pty and better-sqlite3 ship .node binaries that cannot be inside an asar archive.
 asarUnpack:
   - "**/node_modules/node-pty/**"
+  - "**/node_modules/better-sqlite3/**"
+  - "**/node_modules/bindings/**"
+  - "**/node_modules/file-uri-to-path/**"
 
 extraResources:
   - from: glass-update-manifest.json

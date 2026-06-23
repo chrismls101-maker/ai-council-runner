@@ -123,8 +123,25 @@ export function evaluateVirtualAudioProbe(input: {
   };
 }
 
+export function resolveVirtualAudioDeviceId(input: {
+  selectedVirtualAudioDeviceId?: string;
+  virtualAudioDevices?: VirtualAudioDeviceMatch[];
+}): string | undefined {
+  const selected = input.selectedVirtualAudioDeviceId?.trim();
+  if (selected) return selected;
+  return pickPreferredVirtualAudioDevice(input.virtualAudioDevices ?? [])?.deviceId;
+}
+
+export function hasVirtualSystemAudioDevice(input: {
+  selectedVirtualAudioDeviceId?: string;
+  virtualAudioDevices?: VirtualAudioDeviceMatch[];
+}): boolean {
+  return !!resolveVirtualAudioDeviceId(input);
+}
+
 export function shouldUseVirtualSystemAudioCapture(input: {
   selectedVirtualAudioDeviceId?: string;
+  virtualAudioDevices?: VirtualAudioDeviceMatch[];
 }): boolean {
-  return !!input.selectedVirtualAudioDeviceId?.trim();
+  return hasVirtualSystemAudioDevice(input);
 }

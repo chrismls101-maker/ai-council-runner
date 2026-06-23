@@ -1,0 +1,173 @@
+/* Post-boot language picker — glass cards before Sorting Hat manifestation */
+
+.language-picker {
+  --overlay-glass-frame-inset-top: 10px;
+  --overlay-glass-frame-inset-right: 10px;
+  --overlay-glass-frame-inset-bottom: 10px;
+  --overlay-glass-frame-inset-left: 10px;
+  --language-picker-glass-bg: rgba(255, 255, 255, 0.07);
+  --language-picker-glass-border: rgba(255, 255, 255, 0.18);
+  --language-picker-glass-highlight: rgba(255, 255, 255, 0.12);
+
+  position: fixed;
+  inset: 0;
+  z-index: 9990;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(24px, 4vh, 48px) clamp(20px, 4vw, 40px);
+  pointer-events: auto;
+  background: transparent;
+  overflow: hidden;
+  animation: language-picker-in 0.85s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes language-picker-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Same frosted veil as Sorting Hat — desktop reads through, no blue wash */
+.language-picker__veil {
+  position: fixed;
+  inset: var(--overlay-glass-frame-inset-top, 10px)
+    var(--overlay-glass-frame-inset-right, 10px)
+    var(--overlay-glass-frame-inset-bottom, 10px)
+    var(--overlay-glass-frame-inset-left, 10px);
+  z-index: 0;
+  pointer-events: none;
+  border-radius: 2px;
+  background: rgba(4, 10, 18, 0.14);
+  backdrop-filter: blur(10px) saturate(125%);
+  -webkit-backdrop-filter: blur(10px) saturate(125%);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .language-picker__veil {
+    background: rgba(6, 12, 20, 0.42);
+  }
+}
+
+.language-picker__header {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  margin-bottom: clamp(28px, 4vh, 40px);
+}
+
+.language-picker__title {
+  margin: 0 0 10px;
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: clamp(22px, 2.4vw, 32px);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-indent: 0.14em;
+  color: rgba(232, 234, 240, 0.96);
+  text-shadow:
+    0 0 24px rgba(0, 0, 0, 0.85),
+    0 2px 12px rgba(0, 0, 0, 0.65);
+}
+
+.language-picker__subtitle {
+  margin: 0;
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: clamp(13px, 1.1vw, 15px);
+  font-weight: 300;
+  color: rgba(180, 190, 210, 0.62);
+  letter-spacing: 0.02em;
+}
+
+.language-picker__grid {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(12px, 1.4vw, 18px);
+  width: min(720px, calc(100vw - 48px));
+  margin-bottom: clamp(24px, 3vh, 36px);
+}
+
+.language-picker__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: clamp(110px, 12vh, 140px);
+  padding: 20px 16px;
+  background: var(--language-picker-glass-bg);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid var(--language-picker-glass-border);
+  border-radius: 14px;
+  cursor: pointer;
+  pointer-events: auto;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 var(--language-picker-glass-highlight),
+    0 8px 32px rgba(0, 0, 0, 0.35);
+}
+
+.language-picker__card:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.28);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 12px 40px rgba(0, 0, 0, 0.4);
+  transform: translateY(-2px);
+}
+
+.language-picker__card--selected {
+  border-color: rgba(255, 255, 255, 0.42);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.language-picker__card:disabled {
+  cursor: default;
+  opacity: 0.92;
+}
+
+.language-picker__flag {
+  font-size: clamp(22px, 2vw, 28px);
+  line-height: 1;
+}
+
+.language-picker__native {
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: clamp(15px, 1.2vw, 18px);
+  font-weight: 500;
+  color: rgba(230, 234, 240, 0.94);
+  letter-spacing: 0.02em;
+}
+
+.language-picker__english {
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: clamp(11px, 0.9vw, 13px);
+  font-weight: 300;
+  color: rgba(160, 170, 190, 0.55);
+}
+
+.language-picker__footer {
+  position: relative;
+  z-index: 2;
+  margin: 0;
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 300;
+  color: rgba(140, 150, 170, 0.42);
+  letter-spacing: 0.03em;
+}
+
+@media (max-width: 640px) {
+  .language-picker__grid {
+    grid-template-columns: 1fr;
+    width: min(320px, calc(100vw - 40px));
+  }
+}

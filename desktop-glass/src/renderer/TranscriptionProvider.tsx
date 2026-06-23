@@ -28,7 +28,7 @@ export function TranscriptionProvider({ children }: { children: ReactNode }): JS
         return;
       }
       if (command.type === "start") {
-        tx.beginListeningCapture();
+        tx.beginListeningCapture(command.mode);
       } else if (command.type === "stop") {
         tx.stopListeningLocal();
       } else if (command.type === "probe-microphone") {

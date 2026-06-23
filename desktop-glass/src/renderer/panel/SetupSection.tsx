@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { send, useGlassState } from "../useGlassState.ts";
 import type { GlassCommand } from "../../shared/ipc.ts";
 import type { GlassCapabilityRow, GlassSetupActionType } from "../../shared/glassCapabilities.ts";
-import { connectIivoGlass, isIivoGlassConnected } from "./connectIivoGlass.ts";
+import { connectIivoGlass, isIivoGlassConnected, resolveConnectBlockerMessage } from "./connectIivoGlass.ts";
 
 function severityClass(severity: GlassCapabilityRow["severity"]): string {
   return `status-dot status-dot--${severity}`;
@@ -20,6 +20,7 @@ export function SetupSection(): JSX.Element {
   const state = useGlassState();
   const rows = (state.setupCapabilities ?? []).filter((row) => row.id !== "systemAudio");
   const [connecting, setConnecting] = useState(false);
+  const [connectHint, setConnectHint] = useState<string | undefined>();
   const connected = isIivoGlassConnected({
     setupCheckSummary: state.setupCheckSummary,
     setupCapabilities: state.setupCapabilities,
@@ -27,16 +28,54 @@ export function SetupSection(): JSX.Element {
   });
 
   useEffect(() => {
-    if (connecting && connected) setConnecting(false);
+    if (connecting && connected) {
+      setConnecting(false);
+      setConnectHint(undefined);
+    }
   }, [connecting, connected]);
 
   useEffect(() => {
+    if (!connecting || connected) return;
+    const blocker = resolveConnectBlockerMessage({
+      setupCheckSummary: state.setupCheckSummary,
+      setupCapabilities: state.setupCapabilities,
+      systemAudioStatus: state.systemAudioStatus,
+    });
+    if (blocker) setConnectHint(blocker);
+  }, [
+    connecting,
+    connected,
+    state.setupCheckSummary,
+    state.setupCapabilities,
+    state.systemAudioStatus,
+  ]);
+
+  useEffect(() => {
     if (!connecting) return;
-    const timer = window.setTimeout(() => setConnecting(false), 12_000);
+    const timer = window.setTimeout(() => {
+      setConnecting(false);
+      if (!connected) {
+        setConnectHint(
+          resolveConnectBlockerMessage({
+            setupCheckSummary: state.setupCheckSummary,
+            setupCapabilities: state.setupCapabilities,
+            systemAudioStatus: state.systemAudioStatus,
+          }) ??
+            "Connect timed out — check Setup rows below for Screen Recording, Server, and System Audio.",
+        );
+      }
+    }, 20_000);
     return () => window.clearTimeout(timer);
-  }, [connecting]);
+  }, [
+    connecting,
+    connected,
+    state.setupCheckSummary,
+    state.setupCapabilities,
+    state.systemAudioStatus,
+  ]);
 
   const handleConnect = useCallback(async () => {
+    setConnectHint(undefined);
     setConnecting(true);
     await connectIivoGlass();
   }, []);
@@ -65,6 +104,11 @@ export function SetupSection(): JSX.Element {
           />
           <span className="connect-glass__label">{connectLabel}</span>
         </button>
+        {connectHint && !connected ? (
+          <p className="hint setup-section__connect-hint" data-testid="glass-connect-blocker-hint">
+            {connectHint}
+          </p>
+        ) : null}
       </div>
       <div className="setup-section__head">
         <p className="section-title">Setup</p>

@@ -1,3 +1,7 @@
+@import "../shared/overlayGlassFrame.css";
+@import "./glassButtonDepth.css";
+@import "./glassPresenceGlow.css";
+
 :root {
   --glass-bg: rgba(8, 10, 16, 0.88);
   --glass-bg-strong: rgba(6, 8, 14, 0.94);
@@ -591,6 +595,14 @@ html.glass-terminal-window .glass-terminal-panel {
   text-shadow: 0 0 18px rgba(65, 224, 163, 0.35);
 }
 
+.notes-pad__timer--paused {
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  color: rgba(200, 210, 225, 0.72);
+  text-shadow: none;
+}
+
 .notes-pad__header-actions {
   display: flex;
   align-items: center;
@@ -832,6 +844,8 @@ html.glass-dock-window #root {
   align-items: flex-start;
   justify-content: flex-start;
   overflow: hidden !important;
+  padding-top: 44px;
+  box-sizing: border-box;
 }
 
 /* ── Outer dock window shell (transparent when terminal dropdown is open) ── */
@@ -1090,7 +1104,7 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
 }
 
 .dock__mode-pill:hover {
-  filter: brightness(1.15);
+  filter: none;
 }
 
 .dock__mode-pill--paused {
@@ -1115,42 +1129,25 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
   border-radius: 7px;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
   -webkit-app-region: no-drag;
   flex-shrink: 0;
   pointer-events: auto;
 }
 
 .dock--v3 .gbtn:hover {
-  background: rgba(255, 255, 255, 0.07);
   color: rgba(255, 255, 255, 0.9);
 }
 
-/* CTA — idle state primary action */
+/* CTA — level 3 cyan (depth in glassButtonDepth.css) */
 .dock__cta {
-  background: rgba(56, 225, 255, 0.07) !important;
-  border-color: rgba(120, 235, 255, 0.22) !important;
-  color: rgba(120, 235, 255, 0.88) !important;
   font-size: 12px !important;
   letter-spacing: 0.01em;
 }
 
-.dock__cta:hover {
-  background: rgba(56, 225, 255, 0.13) !important;
-}
-
-/* End Session */
+/* End Session — level 2 shell (depth in glassButtonDepth.css) */
 .dock__btn-end {
   color: rgba(255, 255, 255, 0.4) !important;
   font-size: 11px !important;
-  border-color: rgba(255, 255, 255, 0.07) !important;
-  background: rgba(255, 255, 255, 0.03) !important;
-}
-
-.dock__btn-end:hover {
-  color: rgba(255, 100, 100, 0.85) !important;
-  border-color: rgba(255, 100, 100, 0.2) !important;
-  background: rgba(255, 100, 100, 0.06) !important;
 }
 
 /* Resume audio */
@@ -1322,7 +1319,6 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
 
 .dock__btn-stop:hover {
   color: rgba(255, 100, 100, 0.85) !important;
-  background: rgba(255, 100, 100, 0.08) !important;
 }
 
 /* ── Vertical orientation ── */
@@ -2095,6 +2091,16 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
   pointer-events: auto;
 }
 
+.overlay-root--language-picker {
+  pointer-events: auto;
+  background: transparent;
+}
+
+.overlay-root--sorting-hat {
+  pointer-events: none;
+  background: transparent;
+}
+
 .overlay-root--update-only,
 .overlay-root--countdown-only {
   pointer-events: auto;
@@ -2102,6 +2108,28 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
 
 .overlay-root--notice-only {
   pointer-events: none;
+}
+
+.overlay-root--builder-strip-only {
+  pointer-events: none;
+}
+
+/* Builder strip + panels above Glass IDE shell (9050) while IDE is active */
+.overlay-root--ide-active .builder-strip {
+  z-index: 9100;
+}
+
+.overlay-root--ide-active .builder-panel-host {
+  z-index: 9200;
+}
+
+.overlay-root--ide-active .companion-presence {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.overlay-root--palette-open {
+  overflow: visible;
 }
 
 /* ---------- System update modal (overlay window) ---------- */
@@ -2247,6 +2275,10 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
   color: rgba(22, 30, 46, 0.88);
 }
 
+.overlay-root .overlay-glass-border {
+  --overlay-glass-frame-z: 130;
+}
+
 .overlay-glass-sheet {
   position: fixed;
   inset: 0;
@@ -2273,52 +2305,6 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
   -webkit-mask-image: radial-gradient(ellipse 92% 88% at 50% 48%, black 35%, transparent 88%);
 }
 
-/* Screen-edge glass frame — white/silver, matches command bar */
-.overlay-glass-border {
-  position: fixed;
-  inset: 10px 10px var(--overlay-frame-bottom, 10px) 10px;
-  pointer-events: none;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.28),
-    0 0 32px rgba(255, 255, 255, 0.04),
-    inset 0 0 24px rgba(255, 255, 255, 0.02);
-  z-index: 1;
-}
-
-.overlay-glass-border__corner {
-  position: absolute;
-  width: 24px;
-  height: 24px;
-  border-color: rgba(255, 255, 255, 0.85);
-  border-style: solid;
-  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.55));
-}
-
-.overlay-glass-border__corner--tl {
-  top: -1px;
-  left: -1px;
-  border-width: 2px 0 0 2px;
-}
-
-.overlay-glass-border__corner--tr {
-  top: -1px;
-  right: -1px;
-  border-width: 2px 2px 0 0;
-}
-
-.overlay-glass-border__corner--bl {
-  bottom: -1px;
-  left: -1px;
-  border-width: 0 0 2px 2px;
-}
-
-.overlay-glass-border__corner--br {
-  bottom: -1px;
-  right: -1px;
-  border-width: 0 2px 2px 0;
-}
-
 .overlay-glass-glow {
   position: fixed;
   width: min(42vw, 520px);
@@ -2332,13 +2318,13 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
 .overlay-glass-glow--tl {
   top: -8%;
   left: -6%;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.18), transparent 68%);
+  background: radial-gradient(circle, rgba(var(--glass-accent-rgb), 0.2), transparent 68%);
 }
 
 .overlay-glass-glow--br {
   right: -4%;
   bottom: -10%;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.12), transparent 68%);
+  background: radial-gradient(circle, rgba(167, 128, 255, 0.14), transparent 68%);
 }
 
 .overlay-badge {
@@ -3169,31 +3155,39 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
 /* ---------- Glass Powers Palette -------------------------------------------------- */
 
 /**
- * The palette is a full-window backdrop that intercepts pointer events so
- * clicking outside the card dismisses it.
+ * Side panel launcher — no full-screen dim/blur so the builder strip stays crisp.
  */
-.glass-powers-palette-backdrop {
+.glass-powers-menu-backdrop {
   position: fixed;
   inset: 0;
   z-index: 9000;
   display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  /* slight darkening so the pill beneath is still visible */
-  background: rgba(0, 0, 0, 0.20);
+  align-items: stretch;
+  justify-content: flex-end;
+  padding:
+    max(72px, 10vh)
+    max(12px, var(--overlay-glass-frame-inset-right, 12px))
+    var(
+      --builder-strip-top-from-bottom,
+      calc(var(--builder-strip-bottom, 8px) + var(--builder-strip-height, 40px))
+    )
+    16px;
+  background: transparent;
+  pointer-events: none;
+  animation: powers-menu-in 140ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes powers-menu-in {
+  from { opacity: 0; transform: translateX(12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.glass-powers-menu {
+  width: min(440px, calc(100vw - 32px));
+  max-height: none;
+  margin-bottom: 0;
   pointer-events: auto;
-  /* slide in from below */
-  animation: powers-palette-in 140ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-@keyframes powers-palette-in {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-.glass-powers-palette {
-  width: min(540px, calc(100vw - 32px));
-  margin-bottom: 88px; /* clear the command pill below */
+  -webkit-app-region: no-drag;
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.10);
   background: linear-gradient(
@@ -3208,24 +3202,27 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
     0 1px 0 rgba(255, 255, 255, 0.06) inset;
   overflow: hidden;
   pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 /* Search row */
-.glass-powers-palette__search-row {
+.glass-powers-menu__search-row {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 12px 16px 10px;
 }
 
-.glass-powers-palette__search-icon {
+.glass-powers-menu__search-icon {
   font-size: 15px;
   color: rgba(255, 255, 255, 0.35);
   flex-shrink: 0;
   line-height: 1;
 }
 
-.glass-powers-palette__input {
+.glass-powers-menu__input {
   flex: 1;
   background: transparent;
   border: none;
@@ -3237,11 +3234,11 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
   letter-spacing: 0.01em;
 }
 
-.glass-powers-palette__input::placeholder {
+.glass-powers-menu__input::placeholder {
   color: rgba(255, 255, 255, 0.28);
 }
 
-.glass-powers-palette__esc-hint {
+.glass-powers-menu__esc-hint {
   font-family: "SF Mono", ui-monospace, monospace;
   font-size: 9.5px;
   color: rgba(255, 255, 255, 0.28);
@@ -3253,88 +3250,138 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
 }
 
 /* Divider */
-.glass-powers-palette__divider {
+.glass-powers-menu__divider {
   height: 1px;
   background: rgba(255, 255, 255, 0.07);
   margin: 0 0 2px;
 }
 
 /* Power list */
-.glass-powers-palette__list {
+.glass-powers-menu__list {
   list-style: none;
   margin: 0;
   padding: 4px 0;
-  max-height: 340px;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255,255,255,0.10) transparent;
+  scrollbar-color: rgba(255, 255, 255, 0.14) rgba(10, 12, 18, 0.97);
 }
 
-.glass-powers-palette__list::-webkit-scrollbar {
-  width: 4px;
+.glass-powers-menu__list::-webkit-scrollbar {
+  width: 6px;
 }
 
-.glass-powers-palette__list::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.10);
-  border-radius: 2px;
+.glass-powers-menu__list::-webkit-scrollbar-track {
+  background: rgba(10, 12, 18, 0.97);
+}
+
+.glass-powers-menu__list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 3px;
+}
+
+.glass-powers-menu__list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.glass-powers-menu__close-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(210, 225, 245, 0.72);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
 }
 
 /* Individual power row */
-.glass-powers-palette__item {
+.glass-powers-menu__item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 11px;
   padding: 8px 14px;
   cursor: pointer;
   user-select: none;
   transition: background 80ms ease;
   border-radius: 0;
+  list-style: none;
 }
 
-.glass-powers-palette__item--active {
+.glass-powers-menu__item--active {
   background: rgba(255, 255, 255, 0.065);
 }
 
-.glass-powers-palette__item--active .glass-powers-palette__item-title {
+.glass-powers-menu__item--active .glass-powers-menu__item-title {
   color: rgba(200, 170, 255, 0.95);
 }
 
-.glass-powers-palette__item-icon {
+.glass-powers-menu__item-icon {
   font-size: 14px;
   color: rgba(180, 150, 255, 0.70);
   flex-shrink: 0;
   width: 18px;
   text-align: center;
   line-height: 1;
+  margin-top: 2px;
 }
 
-.glass-powers-palette__item-body {
+.glass-powers-menu__item-body {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 3px;
 }
 
-.glass-powers-palette__item-title {
+.glass-powers-menu__item-title {
   font-size: 12.5px;
   font-weight: 500;
   color: rgba(255, 255, 255, 0.88);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.35;
   transition: color 80ms ease;
 }
 
-.glass-powers-palette__item-desc {
+.glass-powers-menu__item-desc {
   font-size: 10.5px;
-  color: rgba(255, 255, 255, 0.38);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: rgba(255, 255, 255, 0.42);
+  line-height: 1.45;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
 }
 
-.glass-powers-palette__item-hint {
+.glass-powers-menu__section-header {
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(180, 150, 255, 0.38);
+  padding: 12px 16px 4px;
+  user-select: none;
+}
+
+.glass-powers-menu__section-header:first-child {
+  padding-top: 6px;
+}
+
+.glass-powers-menu__section {
+  margin: 0;
+  padding: 0;
+}
+
+.glass-powers-menu__item-hint {
   font-family: "SF Mono", ui-monospace, monospace;
   font-size: 9.5px;
   color: rgba(255, 255, 255, 0.28);
@@ -3344,10 +3391,11 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
   padding: 2px 5px;
   flex-shrink: 0;
   white-space: nowrap;
+  margin-top: 1px;
 }
 
 /* Empty state */
-.glass-powers-palette__empty {
+.glass-powers-menu__empty {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.35);
   text-align: center;
@@ -3356,7 +3404,7 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
 }
 
 /* Footer hint bar */
-.glass-powers-palette__footer {
+.glass-powers-menu__footer {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3369,12 +3417,12 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
 }
 
 /* Custom commands config warnings notice */
-.glass-powers-palette__warnings {
+.glass-powers-menu__warnings {
   border-bottom: 1px solid rgba(255, 200, 80, 0.12);
   background: rgba(255, 180, 30, 0.05);
 }
 
-.glass-powers-palette__warnings-header {
+.glass-powers-menu__warnings-header {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -3387,35 +3435,35 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
   color: rgba(255, 200, 80, 0.80);
 }
 
-.glass-powers-palette__warnings-header:hover {
+.glass-powers-menu__warnings-header:hover {
   background: rgba(255, 200, 80, 0.06);
 }
 
-.glass-powers-palette__warnings-icon {
+.glass-powers-menu__warnings-icon {
   font-size: 11px;
   flex-shrink: 0;
 }
 
-.glass-powers-palette__warnings-label {
+.glass-powers-menu__warnings-label {
   flex: 1;
   font-size: 10.5px;
   font-weight: 500;
   letter-spacing: 0.01em;
 }
 
-.glass-powers-palette__warnings-chevron {
+.glass-powers-menu__warnings-chevron {
   font-size: 9px;
   color: rgba(255, 200, 80, 0.50);
   flex-shrink: 0;
 }
 
-.glass-powers-palette__warnings-list {
+.glass-powers-menu__warnings-list {
   list-style: none;
   margin: 0;
   padding: 0 14px 8px 30px;
 }
 
-.glass-powers-palette__warnings-item {
+.glass-powers-menu__warnings-item {
   font-size: 10px;
   color: rgba(255, 200, 80, 0.60);
   line-height: 1.5;
@@ -3424,7 +3472,7 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
 }
 
 /* Custom command badge (replaces hint kbd for user-defined powers) */
-.glass-powers-palette__item-badge {
+.glass-powers-menu__item-badge {
   font-family: "SF Mono", ui-monospace, monospace;
   font-size: 9px;
   font-weight: 600;
@@ -4207,6 +4255,9 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
 .glass-hover-tooltip {
   position: fixed;
   z-index: 100000;
+  display: inline-block;
+  width: max-content;
+  max-width: min(360px, calc(100vw - 16px));
   padding: 5px 10px;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.16);
@@ -4219,7 +4270,31 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
   font-weight: 600;
   letter-spacing: 0.03em;
   white-space: nowrap;
+  text-align: center;
+  line-height: 1.35;
   pointer-events: none;
+}
+
+.glass-hover-tooltip--wide {
+  white-space: normal;
+  text-align: left;
+  text-wrap: balance;
+  padding: 7px 11px;
+  line-height: 1.45;
+}
+
+.glass-hover-tooltip__body {
+  display: block;
+}
+
+.glass-hover-tooltip__shortcut {
+  display: block;
+  margin-top: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: rgba(188, 206, 232, 0.82);
+  white-space: nowrap;
 }
 
 .glass-hover-tooltip::after {
@@ -4230,6 +4305,13 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
   transform: translateX(-50%);
   border: 5px solid transparent;
   border-top-color: rgba(8, 12, 20, 0.94);
+}
+
+.glass-hover-tooltip--below::after {
+  top: auto;
+  bottom: 100%;
+  border-top-color: transparent;
+  border-bottom-color: rgba(8, 12, 20, 0.94);
 }
 
 .command-bar.composer-shell .command-translate-btn {
@@ -5015,7 +5097,22 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
 }
 
 .setup-section__connect-row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
   margin-bottom: 14px;
+}
+
+.setup-section__connect-hint {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 180, 100, 0.22);
+  background: rgba(255, 140, 60, 0.08);
+  color: rgba(255, 220, 180, 0.92);
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 .gbtn--connect-glass {
@@ -6369,6 +6466,32 @@ details[open] .mode-panel__privacy-summary::before {
 .panel-profile-saved {
   font-size: 12px;
   color: rgba(120, 220, 160, 0.9);
+}
+
+.panel-profile-persona {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(56, 225, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.panel-profile-persona-value {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(220, 230, 245, 0.88);
+}
+
+.panel-profile-recalibrate {
+  align-self: flex-start;
+  margin-top: 4px;
+}
+
+.panel-profile-recalibrate-hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 /* ---------- Account tab ---------- */
@@ -9404,46 +9527,170 @@ details[open] .mode-panel__privacy-summary::before {
    Dark glass aesthetic — consistent with rest of IIVO Glass chrome.
    ═══════════════════════════════════════════════════════════════════════════════ */
 
-/* ── Dock terminal toggle button ─────────────────────────────────────────── */
+/* ── Terminal toggle — shared dock + builder strip (3D raised button) ── */
 
-.dock__btn-terminal {
+.glass-terminal-toggle,
+.dock--v3 .gbtn.glass-terminal-toggle,
+.builder-tab.glass-terminal-toggle {
   position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-family: "SF Mono", "Fira Code", "JetBrains Mono", monospace;
   font-size: 11px;
   letter-spacing: -0.3px;
   font-weight: 600;
   min-width: 36px;
-  color: rgba(180, 200, 220, 0.8);
-  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  color: rgba(180, 200, 220, 0.88);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.09) 0%,
+    rgba(255, 255, 255, 0.03) 50%,
+    rgba(0, 0, 0, 0.08) 100%
+  );
+  border: 0.5px solid rgba(255, 255, 255, 0.14) !important;
+  border-top-color: rgba(255, 255, 255, 0.24) !important;
+  border-bottom-color: rgba(0, 0, 0, 0.4) !important;
+  border-radius: 7px;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.55),
+    0 2px 6px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+  transition:
+    color 0.15s ease,
+    background 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.12s ease;
 }
 
-.dock__btn-terminal--active {
+.glass-terminal-toggle:hover,
+.dock--v3 .gbtn.glass-terminal-toggle:hover,
+.builder-tab.glass-terminal-toggle:hover {
+  color: rgba(255, 255, 255, 0.92);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.14) 0%,
+    rgba(255, 255, 255, 0.06) 50%,
+    rgba(0, 0, 0, 0.05) 100%
+  );
+  border-color: var(--glass-border-bright) !important;
+  border-top-color: rgba(255, 255, 255, 0.34) !important;
+  border-bottom-color: rgba(0, 0, 0, 0.35) !important;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.55),
+    0 4px 10px rgba(0, 0, 0, 0.32),
+    0 0 16px var(--glow-cyan),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.14);
+}
+
+.glass-terminal-toggle:active,
+.dock--v3 .gbtn.glass-terminal-toggle:active,
+.builder-tab.glass-terminal-toggle:active {
+  transform: translateY(1px);
+  box-shadow:
+    0 0 2px rgba(0, 0, 0, 0.45),
+    inset 0 2px 5px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.glass-terminal-toggle--open,
+.dock--v3 .gbtn.glass-terminal-toggle--open,
+.builder-tab.glass-terminal-toggle--open {
   color: #41e0a3;
-  background: rgba(65, 224, 163, 0.08);
-  border-color: rgba(65, 224, 163, 0.28);
+  background: linear-gradient(
+    180deg,
+    rgba(65, 224, 163, 0.16) 0%,
+    rgba(65, 224, 163, 0.07) 50%,
+    rgba(0, 0, 0, 0.1) 100%
+  );
+  border-color: rgba(65, 224, 163, 0.32) !important;
+  border-top-color: rgba(65, 224, 163, 0.48) !important;
+  border-bottom-color: rgba(0, 0, 0, 0.42) !important;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.55),
+    0 2px 6px rgba(0, 0, 0, 0.3),
+    0 0 10px rgba(65, 224, 163, 0.12),
+    inset 0 1px 0 rgba(65, 224, 163, 0.22),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.22);
 }
 
-.dock__btn-terminal--active:hover {
-  background: rgba(65, 224, 163, 0.14);
+.glass-terminal-toggle--open:hover,
+.dock--v3 .gbtn.glass-terminal-toggle--open:hover,
+.builder-tab.glass-terminal-toggle--open:hover {
+  color: #41e0a3;
+  background: linear-gradient(
+    180deg,
+    rgba(65, 224, 163, 0.22) 0%,
+    rgba(65, 224, 163, 0.11) 50%,
+    rgba(0, 0, 0, 0.08) 100%
+  );
+  border-color: rgba(65, 224, 163, 0.42) !important;
+  border-top-color: rgba(65, 224, 163, 0.58) !important;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.55),
+    0 4px 10px rgba(0, 0, 0, 0.32),
+    0 0 18px rgba(65, 224, 163, 0.28),
+    inset 0 1px 0 rgba(65, 224, 163, 0.28),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.16);
 }
 
-/* Green status dot on the terminal button */
-.dock__terminal-dot {
+.glass-terminal-toggle--open:active,
+.dock--v3 .gbtn.glass-terminal-toggle--open:active,
+.builder-tab.glass-terminal-toggle--open:active {
+  transform: translateY(1px);
+  box-shadow:
+    0 0 2px rgba(0, 0, 0, 0.45),
+    inset 0 2px 5px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(65, 224, 163, 0.12);
+}
+
+.glass-terminal-toggle__dot {
   display: inline-block;
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: rgba(65, 224, 163, 0.45);
-  box-shadow: none;
-  margin-right: 4px;
+  flex-shrink: 0;
+  background: rgba(180, 200, 220, 0.5);
+  box-shadow: inset 0 -1px 1px rgba(0, 0, 0, 0.25);
   position: relative;
   top: -1px;
 }
 
-.dock__terminal-dot--live {
+.glass-terminal-toggle--open .glass-terminal-toggle__dot {
+  background: rgba(65, 224, 163, 0.55);
+  box-shadow: 0 0 3px rgba(65, 224, 163, 0.35);
+}
+
+.glass-terminal-toggle__dot--live {
   background: #41e0a3;
   box-shadow: 0 0 5px rgba(65, 224, 163, 0.7);
   animation: glass-terminal-dot-pulse 2s ease-in-out infinite;
+}
+
+/* Builder strip — layout only; chrome from shared selectors above */
+.builder-tab.glass-terminal-toggle {
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  gap: 5px;
+  min-width: 0;
+  height: 28px;
+  padding: 0 12px;
+}
+
+.builder-tab.glass-terminal-toggle .builder-tab__icon {
+  font-family: "SF Mono", "Fira Code", "JetBrains Mono", monospace;
+  font-size: 11px;
+  letter-spacing: -0.3px;
+  opacity: 1;
+}
+
+.builder-tab.glass-terminal-toggle::after {
+  display: none;
 }
 
 @keyframes glass-terminal-dot-pulse {
@@ -9490,6 +9737,22 @@ details[open] .mode-panel__privacy-summary::before {
   pointer-events: none;
   z-index: 0;
   background: var(--glass-apple-sheen);
+}
+
+/* Docked inside Glass IDE — fills grid cell, no floating resize chrome */
+.glass-terminal-panel--embedded {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.glass-terminal-panel--embedded .gtp-content-row {
+  flex: 1;
+  min-height: 0;
 }
 
 /* ── Terminal header bar ─────────────────────────────────────────────────── */
@@ -9958,6 +10221,47 @@ details[open] .mode-panel__privacy-summary::before {
   white-space: nowrap;
 }
 
+/* Stack picker row — spans the full 2-column grid */
+.overlay-design-card__stack-row {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.overlay-design-card__stack-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+  flex-shrink: 0;
+}
+
+.overlay-design-card__stack-select {
+  flex: 1;
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 5px;
+  color: rgba(255, 255, 255, 0.85);
+  padding: 3px 6px;
+  cursor: pointer;
+  outline: none;
+  appearance: auto;
+  min-width: 0;
+}
+
+.overlay-design-card__stack-select:hover {
+  background: rgba(255, 255, 255, 0.13);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.overlay-design-card__stack-select:focus {
+  border-color: rgba(111, 255, 142, 0.5);
+}
+
 .overlay-design-card__permission {
   display: flex;
   flex-direction: column;
@@ -10054,4 +10358,52 @@ details[open] .mode-panel__privacy-summary::before {
 
 .glass-verify-row__warn {
   color: rgba(255, 200, 80, 0.85);
+}
+
+/* ── Refinement input row (#166) ─────────────────────────────────────────── */
+
+.overlay-feed-card__refine-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  align-items: center;
+}
+
+.overlay-feed-card__refine-input {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 12px;
+  padding: 5px 8px;
+  outline: none;
+}
+
+.overlay-feed-card__refine-input::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.overlay-feed-card__refine-input:focus {
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.overlay-feed-card__refine-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 5px 10px;
+  white-space: nowrap;
+}
+
+.overlay-feed-card__refine-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.overlay-feed-card__refine-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }

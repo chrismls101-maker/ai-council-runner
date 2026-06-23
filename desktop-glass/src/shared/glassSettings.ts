@@ -4,6 +4,7 @@
 
 import { DEFAULT_COPILOT_CONFIG, type GlassCopilotConfig } from "./copilotTypes.ts";
 import { parseCopilotConfig } from "./copilotConfig.ts";
+import { DEFAULT_DESIGN_STACK } from "./designToCode.ts";
 
 export type GlassHotkeyPreset =
   | "cmd-shift-space"
@@ -16,6 +17,9 @@ export type GlassHotkeyPreset =
 export type GlassDisplayTarget = "primary" | "follow_mouse" | "all_displays" | number;
 
 export type DockOrientation = "horizontal" | "vertical";
+
+/** Subfolder name under Desktop when no custom agent output path is set. */
+export const DEFAULT_AGENT_OUTPUT_FOLDER_NAME = "IIVO Research";
 
 export interface ChromeOrigin {
   x: number;
@@ -61,7 +65,63 @@ export interface GlassUserSettings {
    * When set, takes precedence over IIVO_WEB_URL env var.
    */
   iivoWebUrl?: string;
+  /**
+   * Target framework/stack for design-to-code generation (#163-F).
+   * Used when no code file is open to infer stack from context.
+   * Defaults to "react-tsx".
+   */
+  designStack?: import("./designToCode.ts").DesignStack;
+  /** Sorting Hat placement — set during first-launch onboarding. */
+  persona?: "developer" | "sales" | "operator" | "writer" | "general";
+  /** UI + onboarding language chosen on post-boot picker. */
+  uiLocale?: import("./glassLocale.ts").GlassUiLocale;
+  /** True once the onboarding flow has been completed (or skipped). */
+  onboardingComplete?: boolean;
+  /**
+   * Folder where Glass agents save markdown files.
+   * Absolute path or `~/…` — defaults to Desktop/IIVO Research.
+   */
+  agentOutputFolder?: string;
+  /**
+   * Default workspace root for the Code Analyst agent (absolute or `~/…`).
+   */
+  agentCodeWorkspaceRoot?: string;
+  /** Glass Coder side panel width in pixels. */
+  coderPanelWidthPx?: number;
+  /** Glass IDE file tree column width in pixels. */
+  glassIdeTreeWidthPx?: number;
+  /** Glass IDE AI stream column width in pixels. */
+  glassIdeStreamWidthPx?: number;
+  /** Glass IDE editor height ratio within center column (0.35–0.85). */
+  glassIdeEditorSplitRatio?: number;
+  /** Enable Ollama semantic codebase index for Glass Coder. */
+  indexEnabled?: boolean;
+  /** Auto-index project when Glass Coder workspace is set. */
+  indexAutoOnOpen?: boolean;
+  /** Screen-aware file detection when opening Glass Coder. */
+  screenContextEnabled?: boolean;
+  /** Voice commands can trigger Glass Coder. */
+  voiceCoderEnabled?: boolean;
+  /** Auto-run build verify after Glass Coder finishes. */
+  coderAutoVerify?: boolean;
+  /** Auto-run code review after verify passes. */
+  coderAutoReview?: boolean;
+  /** Glass IDE QA Mode — full pipeline after each Coder run (opt-in). */
+  qaModeEnabled?: boolean;
+  /** Auto-trigger Fix all when QA pipeline finds failures. */
+  qaAutoFix?: boolean;
+  /** Aletheia — first IDE error spoken hint already delivered. */
+  glassIdeAletheiaFirstErrorHintShown?: boolean;
 }
+
+export const DEFAULT_GLASS_CODER_INDEX_SETTINGS = {
+  indexEnabled: true,
+  indexAutoOnOpen: true,
+  screenContextEnabled: true,
+  voiceCoderEnabled: true,
+  coderAutoVerify: true,
+  coderAutoReview: true,
+} as const;
 
 export const DEFAULT_GLASS_USER_SETTINGS: GlassUserSettings = {
   hotkeyPreset: "cmd-shift-space",
@@ -76,6 +136,9 @@ export const DEFAULT_GLASS_USER_SETTINGS: GlassUserSettings = {
   micAutoSendAfterSilence: false,
   clipboardIntelligenceEnabled: false,
   copilot: { ...DEFAULT_COPILOT_CONFIG },
+  designStack: DEFAULT_DESIGN_STACK,
+  onboardingComplete: false,
+  ...DEFAULT_GLASS_CODER_INDEX_SETTINGS,
 };
 
 export function parseCopilotSettings(value: unknown): GlassCopilotConfig {
@@ -100,6 +163,30 @@ export function parseMicAutoSendAfterSilence(value: unknown): boolean {
 
 export function parseClipboardIntelligenceEnabled(value: unknown): boolean {
   return value === true;
+}
+
+/** Parse agent output folder — absolute path or ~/… only. */
+export function parseAgentOutputFolder(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.startsWith("~/") || trimmed === "~" || trimmed.startsWith("/")) return trimmed;
+  return undefined;
+}
+
+export function parseBoolDefaultTrue(value: unknown): boolean {
+  return value !== false;
+}
+
+export function parseBoolDefaultFalse(value: unknown): boolean {
+  return value === true;
+}
+
+export function parseCoderPanelWidth(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  const n = Math.round(value);
+  if (n < 380 || n > 2400) return undefined;
+  return n;
 }
 
 /**
