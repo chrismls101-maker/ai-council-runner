@@ -25,9 +25,13 @@ function statusText(status: OmniParserInstallState): string {
   }
 }
 
+const OLLAMA_INSTALL_CMD =
+  'brew install ollama || echo "\\nHomebrew not found. Visit https://ollama.com/download to install Ollama for macOS."';
+
 export function InstallationsTab(): JSX.Element {
   const state = useGlassState();
   const omni = state.omniParserInstall;
+  const ollamaInstalled = state.ollamaAvailable;
 
   useEffect(() => {
     send({ type: "refresh-omniparser-install" });
@@ -90,6 +94,47 @@ export function InstallationsTab(): JSX.Element {
             <code>desktop-glass/omniparser-sidecar</code> exists.
           </p>
         ) : null}
+      </PanelSection>
+
+      <PanelSection
+        title="Ollama — local AI models"
+        description="Runs AI models locally on your machine. Required if you want Glass to use local models instead of cloud APIs."
+        testId="glass-install-ollama-section"
+      >
+        <div className="panel-section__row" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span
+            className={ollamaInstalled ? "status-dot status-dot--ok" : "status-dot status-dot--warn"}
+            aria-hidden
+          />
+          <span data-testid="glass-install-ollama-status">
+            {ollamaInstalled ? "Installed — running" : "Not installed"}
+          </span>
+        </div>
+
+        {ollamaInstalled ? (
+          <p className="hint" style={{ marginTop: 12 }}>
+            Ollama is running. Glass can use local models when configured.
+          </p>
+        ) : (
+          <>
+            <ol className="hint" style={{ marginTop: 12, paddingLeft: 18 }}>
+              <li>Click Install below</li>
+              <li>Glass terminal opens and runs the installer</li>
+              <li>Requires Homebrew — if not installed, the terminal will show the manual download link</li>
+              <li>Once complete, restart Glass to detect Ollama</li>
+            </ol>
+            <button
+              type="button"
+              className="gbtn gbtn--primary"
+              data-testid="glass-install-ollama-button"
+              onClick={() => {
+                send({ type: "glass-terminal-run", command: OLLAMA_INSTALL_CMD });
+              }}
+            >
+              Install Ollama
+            </button>
+          </>
+        )}
       </PanelSection>
     </div>
   );
