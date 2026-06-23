@@ -17,6 +17,16 @@ import { getGlassUserProfile } from "../userProfile/userProfileStore.js";
 import type { GlassUserProfile } from "../userProfile/types.js";
 import { appendCompanionSessionPrompt } from "./glassCompanionGuidance.js";
 
+const GLASS_COMPANION_BARGE_IN_APPEND =
+  "\n\nThe user interrupted you mid-speech. Respond in 1–2 short sentences acknowledging the interruption, then address their point.";
+
+function buildCompanionDirectSystemPrompt(
+  companionRoute?: GlassAskRequestBody["companionRoute"],
+): string {
+  const base = appendCompanionSessionPrompt(GLASS_DIRECT_SYSTEM_PROMPT);
+  return companionRoute === "barge_in" ? base + GLASS_COMPANION_BARGE_IN_APPEND : base;
+}
+
 export const GLASS_DIRECT_SYSTEM_PROMPT = `You are IIVO Glass, a fast conversational AI companion rendered on a dark glass overlay. Answer naturally and directly. Use session context only when relevant. Be concise unless the user asks for depth. Do not invent screen/audio details you were not given.
 
 Do not reuse the same answer structure across similar sessions. Mention specific names, numbers, topics, decisions, objections, owners, dates, metrics, customer names, env vars — or differences from this session. If context is thin, say exactly what is missing instead of producing a generic template.
@@ -555,7 +565,7 @@ export async function runGlassDirectAsk(
     body.lensContext,
   );
   const systemPrompt = body.companionMode
-    ? appendCompanionSessionPrompt(GLASS_DIRECT_SYSTEM_PROMPT)
+    ? buildCompanionDirectSystemPrompt(body.companionRoute)
     : GLASS_DIRECT_SYSTEM_PROMPT;
   let result = await caller(systemPrompt, userPrompt, signal, purpose);
   let formatted = formatGlassDirectAnswer(result.content, {
@@ -629,7 +639,7 @@ export async function runGlassDirectAskStream(
     body.lensContext,
   );
   const systemPrompt = body.companionMode
-    ? appendCompanionSessionPrompt(GLASS_DIRECT_SYSTEM_PROMPT)
+    ? buildCompanionDirectSystemPrompt(body.companionRoute)
     : GLASS_DIRECT_SYSTEM_PROMPT;
 
   const selected = resolveGlassModelPrimary("text", purpose);

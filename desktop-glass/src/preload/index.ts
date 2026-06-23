@@ -202,6 +202,26 @@ const glassApi = {
   sendDeepgramAudioChunk(buffer: ArrayBuffer): void {
     ipcRenderer.send(IPC.deepgramAudioChunk, buffer);
   },
+  onCompanionPrivacyResumed(listener: () => void): () => void {
+    const handler = (): void => listener();
+    ipcRenderer.on(IPC.companionPrivacyResumed, handler);
+    return () => ipcRenderer.removeListener(IPC.companionPrivacyResumed, handler);
+  },
+  onCompanionDeepgramFinal(
+    listener: (payload: { text: string; speakerId?: number }) => void,
+  ): () => void {
+    const handler = (
+      _event: unknown,
+      payload: { text: string; speakerId?: number },
+    ): void => listener(payload);
+    ipcRenderer.on(IPC.companionDeepgramFinal, handler);
+    return () => ipcRenderer.removeListener(IPC.companionDeepgramFinal, handler);
+  },
+  onCompanionDeepgramUnavailable(listener: () => void): () => void {
+    const handler = (): void => listener();
+    ipcRenderer.on(IPC.companionDeepgramUnavailable, handler);
+    return () => ipcRenderer.removeListener(IPC.companionDeepgramUnavailable, handler);
+  },
   setE2eCaptureProbes(payload: {
     screenCaptureProbe?: import("../shared/captureSourceEnumeration.ts").ScreenCaptureProbeStatus;
     screenCaptureDetail?: string;

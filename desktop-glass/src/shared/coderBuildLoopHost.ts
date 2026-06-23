@@ -21,6 +21,8 @@ export interface CoderBuildLoopHost {
   setReviewState: (state: CoderReviewState | null) => void;
   setProjectMemoryState: (state: ProjectMemoryState) => void;
   setLastNotice: (notice: string) => void;
+  /** Spoken TTS cue (overlay narration queue) — independent of lastNotice UI. */
+  narrate?: (text: string) => void;
   push: () => void;
   broadcastOpenCoder: (payload: OpenCoderWithPromptPayload) => void;
   getConfig: () => GlassConfig;

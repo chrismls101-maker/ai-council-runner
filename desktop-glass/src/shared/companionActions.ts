@@ -31,6 +31,17 @@ function coderVoicePlan(
   };
 }
 
+export function companionBargeInSubmitPlan(
+  transcript: string,
+): { route: CompanionRoute; commands: GlassCommand[] } {
+  const text = transcript.trim();
+  if (!text) return { route: "barge_in", commands: [] };
+  return {
+    route: "barge_in",
+    commands: [{ type: "submit-command", text, companionRoute: "barge_in" }],
+  };
+}
+
 export function companionSubmitPlan(
   transcript: string,
   memory: CompanionSessionMemory | null | undefined,

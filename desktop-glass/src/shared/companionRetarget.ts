@@ -15,7 +15,8 @@ export type CompanionRoute =
   | "full_visual_ask"
   | "retarget"
   | "direct_follow_up"
-  | "script_continue";
+  | "script_continue"
+  | "barge_in";
 
 export const COMPANION_RETARGET_PATTERNS: RegExp[] = [
   /\bthat one\b/i,
@@ -91,6 +92,8 @@ export function companionRouteLabel(route: CompanionRoute): string {
       return "Follow-up";
     case "script_continue":
       return "Continue";
+    case "barge_in":
+      return "Barge-in";
     case "full_visual_ask":
     default:
       return "Screen ask";

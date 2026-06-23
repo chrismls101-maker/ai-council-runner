@@ -50,6 +50,8 @@ export interface QaPipelineHost {
   getPipelineState: () => QaPipelineState | null | undefined;
   setPipelineState: (state: QaPipelineState | null) => void;
   setLastNotice: (notice: string) => void;
+  /** Spoken TTS cue (overlay narration queue) — independent of lastNotice UI. */
+  narrate?: (text: string) => void;
   push: () => void;
   isCoderRunCurrent: (runId: string) => boolean;
   requestPreviewProbe: () => Promise<string[] | null>;
@@ -60,6 +62,11 @@ export interface QaPipelineHost {
   onShellCheckStart?: () => void;
   /** IDE chrome — post-run collapse policy. */
   onPipelineComplete?: (hasFail: boolean) => void;
+}
+
+function announcePipeline(host: QaPipelineHost, text: string): void {
+  host.setLastNotice(text);
+  host.narrate?.(text);
 }
 
 function appliedPathsForRun(changeLog: AgentChangeLogEntry[], runId: string): string[] {
@@ -366,7 +373,7 @@ export async function runQaPipeline(
     autoFix: host.getSettings().qaAutoFix === true,
   };
   host.setPipelineState(pipeline);
-  host.setLastNotice(narrateToolStart("qa-mode-enter", {}));
+  announcePipeline(host, narrateToolStart("qa-mode-enter", {}));
   host.push();
 
   const runStep = async (runner: () => Promise<QaCheck>): Promise<boolean> => {
@@ -382,7 +389,7 @@ export async function runQaPipeline(
       host.onShellCheckStart?.();
     }
     const startNarration = qaNarrationKey(runningCheck);
-    if (startNarration) host.setLastNotice(narrateToolStart(startNarration, {}));
+    if (startNarration) announcePipeline(host, narrateToolStart(startNarration, {}));
 
     const result = await runner();
     const afterRun = host.getPipelineState();
@@ -390,7 +397,7 @@ export async function runQaPipeline(
 
     updateCheck(afterRun, result, host);
     const narrationKey = qaNarrationKey(result);
-    if (narrationKey) host.setLastNotice(narrateToolStart(narrationKey, {}));
+    if (narrationKey) announcePipeline(host, narrateToolStart(narrationKey, {}));
 
     return result.status !== "fail";
   };
@@ -409,7 +416,7 @@ export async function runQaPipeline(
     const hasFail = finalState.checks.some((c) => c.status === "fail");
     const hasWarn = finalState.checks.some((c) => c.status === "warn");
     host.setPipelineState({ ...finalState, status: "done" });
-    host.setLastNotice(narrateToolStart(
+    announcePipeline(host, narrateToolStart(
       hasFail ? "qa-issues-found" : hasWarn ? "qa-lint-warn" : "qa-all-pass",
       {},
     ));
@@ -468,7 +475,7 @@ export function triggerQaFixAll(
   host: QaPipelineHost,
 ): boolean {
   if (!canQaLoopFix(host)) {
-    host.setLastNotice(narrateToolStart("coder-loop-cap", {}));
+    announcePipeline(host, narrateToolStart("coder-loop-cap", {}));
     host.push();
     return false;
   }
@@ -478,7 +485,7 @@ export function triggerQaFixAll(
 
   bumpQaLoop(host);
   host.setPipelineState(null);
-  host.setLastNotice(narrateToolStart("qa-fix-trigger", {}));
+  announcePipeline(host, narrateToolStart("qa-fix-trigger", {}));
   host.push();
   host.broadcastOpenCoder({
     prompt,

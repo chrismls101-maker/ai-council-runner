@@ -18,7 +18,19 @@ import {
 import {
   stopEverythingCommand,
 } from "../../shared/voiceModeActions.ts";
-import { companionOrVoiceSubmitPlan } from "../../shared/companionActions.ts";
+import { companionOrVoiceSubmitPlan, companionBargeInSubmitPlan } from "../../shared/companionActions.ts";
+import { isLikelyEcho } from "../../shared/companionEchoDetect.ts";
+import {
+  detectPrivacyIntent,
+  detectResumeIntent,
+  looksLikeDirectQuestion,
+} from "../../shared/companionPrivacyDetect.ts";
+import { detectAmbientConversation } from "../../shared/companionAmbientDetect.ts";
+import {
+  canDrainCompanionNarrationQueue,
+  isCompanionNarrationPrivacyBlocked,
+  shouldEnqueueAgentNarrate,
+} from "../../shared/companionNarrationGate.ts";
 import {
   clearVoiceModeAutoSubmit,
   setVoiceModeAutoSubmit,
@@ -93,8 +105,36 @@ function useGlassCompanionSession(): GlassCompanionController {
   const stoppingRef = useRef(false);
   const companionMemoryRef = useRef(glass.companionMemory);
   companionMemoryRef.current = glass.companionMemory;
+  const companionPrivacyRef = useRef(glass.companionPrivacy);
+  companionPrivacyRef.current = glass.companionPrivacy;
+  const privacyPendingRef = useRef(false);
+  const narrateQueueRef = useRef<string[]>([]);
+  const narrateBusyRef = useRef(false);
   const activeAppRef = useRef(glass.activeApp);
   activeAppRef.current = glass.activeApp;
+  const lastTtsTextRef = useRef("");
+  const lastResponseAtRef = useRef(0);
+  const lastResponseMarkerRef = useRef<string | null>(null);
+  const lastSpeakerIdRef = useRef<number | undefined>(undefined);
+  const speakerChangeCountRef = useRef(0);
+  const bargeInTimerRef = useRef<number | null>(null);
+  const speakingRef = useRef(false);
+  speakingRef.current = speaking;
+
+  const resetAmbientRefs = useCallback(() => {
+    lastSpeakerIdRef.current = undefined;
+    speakerChangeCountRef.current = 0;
+    lastResponseAtRef.current = 0;
+    lastResponseMarkerRef.current = null;
+  }, []);
+
+  const speakTracked = useCallback(
+    (line: string) => {
+      lastTtsTextRef.current = line;
+      return tts.speak(line);
+    },
+    [tts],
+  );
 
   const companionActive = glass.companionModeActive === true;
 
@@ -144,7 +184,9 @@ function useGlassCompanionSession(): GlassCompanionController {
   const scriptPlayer = useCompanionScriptPlayer({
     speakStep: useCallback(
       (text, onSegmentChange) => {
+        lastTtsTextRef.current = text;
         setSpeaking(true);
+        speakingRef.current = true;
         return timedTts.speakTimed(text, (segmentIndex) => {
           onSegmentChange?.(segmentIndex);
         });
@@ -153,6 +195,135 @@ function useGlassCompanionSession(): GlassCompanionController {
     ),
     onScriptComplete: finishGuidanceBeat,
   });
+
+  const stopAllTts = useCallback(() => {
+    tts.stop();
+    timedTts.stop();
+    scriptPlayer.stopScript();
+    narrateBusyRef.current = false;
+    setSpeaking(false);
+    speakingRef.current = false;
+    setFlatManifestations(null);
+  }, [tts, timedTts, scriptPlayer]);
+
+  const triggerPrivacyMode = useCallback(
+    (durationMs?: number) => {
+      const ms = durationMs ?? 10 * 60 * 1000;
+      const minutes = Math.max(1, Math.round(ms / 60_000));
+      const ack = `Of course — going quiet. I'll check back in ${minutes} minutes.`;
+      privacyPendingRef.current = true;
+      narrateQueueRef.current = [];
+      stopAllTts();
+      lastTtsTextRef.current = ack;
+      resetAmbientRefs();
+      setSpeaking(true);
+      speakingRef.current = true;
+      void tts.speak(ack).finally(() => {
+        setSpeaking(false);
+        speakingRef.current = false;
+      });
+      window.setTimeout(() => send({ type: "companion-privacy-start", durationMs: ms }), 600);
+    },
+    [resetAmbientRefs, stopAllTts, tts],
+  );
+
+  const submitCompanionPlan = useCallback(
+    (draft: string, bargeIn: boolean) => {
+      const plan = bargeIn
+        ? companionBargeInSubmitPlan(draft)
+        : companionOrVoiceSubmitPlan(draft, {
+            companionActive: true,
+            memory: companionMemoryRef.current ?? null,
+            memoryContext: {
+              frontApp: activeAppRef.current,
+              windowTitle: undefined,
+            },
+            voiceCoderEnabled: glass.glassSettings.voiceCoderEnabled !== false,
+          });
+      dispatch({ type: "SUBMIT", text: draft });
+      for (const command of plan.commands) send(command);
+      if (plan.route === "debrief") {
+        dispatch({ type: "ANSWER_DONE" });
+        scheduleRestartListening("success");
+      }
+    },
+    [glass.glassSettings.voiceCoderEnabled, scheduleRestartListening],
+  );
+
+  const handleCompanionTranscript = useCallback(
+    (draft: string, meta?: { speakerId?: number }) => {
+      const text = draft.trim();
+      if (!text) return;
+
+      if (isLikelyEcho(text, lastTtsTextRef.current)) return;
+
+      if (companionPrivacyRef.current?.active) {
+        const extendPrivacy = detectPrivacyIntent(text);
+        if (extendPrivacy.isPrivacy) {
+          send({ type: "companion-privacy-end" });
+          triggerPrivacyMode(extendPrivacy.durationMs);
+          return;
+        }
+        if (detectResumeIntent(text) || looksLikeDirectQuestion(text)) {
+          send({ type: "companion-privacy-end" });
+          if (detectResumeIntent(text)) return;
+        } else {
+          return;
+        }
+      }
+
+      const privacyIntent = detectPrivacyIntent(text);
+      if (privacyIntent.isPrivacy) {
+        triggerPrivacyMode(privacyIntent.durationMs);
+        return;
+      }
+
+      let bargeIn = false;
+      if (speakingRef.current) {
+        stopAllTts();
+        bargeIn = true;
+      }
+
+      const runPipeline = () => {
+        const speakerId = meta?.speakerId;
+        const prevSpeakerId = lastSpeakerIdRef.current;
+        if (speakerId !== undefined && speakerId !== prevSpeakerId) {
+          speakerChangeCountRef.current += 1;
+        }
+        if (speakerId !== undefined) {
+          lastSpeakerIdRef.current = speakerId;
+        }
+
+        if (!bargeIn) {
+          const ambient = detectAmbientConversation(
+            text,
+            speakerId,
+            prevSpeakerId,
+            speakerChangeCountRef.current,
+          );
+          const recentConversation = Date.now() - lastResponseAtRef.current < 30_000;
+          if (!ambient.addressedToCompanion && !recentConversation) {
+            return;
+          }
+        }
+
+        submitCompanionPlan(text, bargeIn);
+      };
+
+      if (bargeIn) {
+        if (bargeInTimerRef.current != null) {
+          window.clearTimeout(bargeInTimerRef.current);
+        }
+        bargeInTimerRef.current = window.setTimeout(() => {
+          bargeInTimerRef.current = null;
+          runPipeline();
+        }, 80);
+      } else {
+        runPipeline();
+      }
+    },
+    [submitCompanionPlan, triggerPrivacyMode, stopAllTts],
+  );
 
   const stopLocal = useCallback(() => {
     stoppingRef.current = true;
@@ -179,25 +350,11 @@ function useGlassCompanionSession(): GlassCompanionController {
   const start = useCallback(() => {
     dispatch({ type: "START" });
     setVoiceModeAutoSubmit((draft) => {
-      const plan = companionOrVoiceSubmitPlan(draft, {
-        companionActive: true,
-        memory: companionMemoryRef.current ?? null,
-        memoryContext: {
-          frontApp: activeAppRef.current,
-          windowTitle: undefined,
-        },
-        voiceCoderEnabled: glass.glassSettings.voiceCoderEnabled !== false,
-      });
-      dispatch({ type: "SUBMIT", text: draft });
-      for (const command of plan.commands) send(command);
-      if (plan.route === "debrief") {
-        dispatch({ type: "ANSWER_DONE" });
-        scheduleRestartListening("success");
-      }
+      handleCompanionTranscript(draft);
       return true;
     });
     void tx.startCompanionListening();
-  }, [tx, scheduleRestartListening, glass.glassSettings.voiceCoderEnabled]);
+  }, [tx, handleCompanionTranscript]);
 
   const stop = useCallback(() => {
     send(stopEverythingCommand());
@@ -259,7 +416,8 @@ function useGlassCompanionSession(): GlassCompanionController {
     lastWarmupSpeakNonceRef.current = nonce;
 
     setSpeaking(true);
-    void tts.speak(line).finally(() => setSpeaking(false));
+    lastTtsTextRef.current = line;
+    void speakTracked(line).finally(() => setSpeaking(false));
   }, [
     companionActive,
     state.active,
@@ -267,6 +425,7 @@ function useGlassCompanionSession(): GlassCompanionController {
     glass.companionWarmupSpeakNonce,
     state.status,
     tts,
+    speakTracked,
   ]);
 
   useEffect(() => {
@@ -277,12 +436,13 @@ function useGlassCompanionSession(): GlassCompanionController {
       if (!lookingSpeechSentRef.current) {
         lookingSpeechSentRef.current = true;
         setSpeaking(true);
-        void tts.speak(COMPANION_LOOKING_SPEECH).finally(() => setSpeaking(false));
+        lastTtsTextRef.current = COMPANION_LOOKING_SPEECH;
+        void speakTracked(COMPANION_LOOKING_SPEECH).finally(() => setSpeaking(false));
       }
     } else if (state.status !== "looking") {
       lookingSpeechSentRef.current = false;
     }
-  }, [glass.screenContextStatus?.kind, state.active, state.status, tts]);
+  }, [glass.screenContextStatus?.kind, state.active, state.status, speakTracked]);
 
   // Once per session: disclose parallel machine-audio listening (+ audio on strip).
   useEffect(() => {
@@ -299,8 +459,9 @@ function useGlassCompanionSession(): GlassCompanionController {
 
     machineAudioDisclosureSpokenRef.current = true;
     setSpeaking(true);
-    void tts.speak(COMPANION_MACHINE_AUDIO_DISCLOSURE).finally(() => setSpeaking(false));
-  }, [companionActive, state.active, tx.companionSystemAudioActive, speaking, tts]);
+    lastTtsTextRef.current = COMPANION_MACHINE_AUDIO_DISCLOSURE;
+    void speakTracked(COMPANION_MACHINE_AUDIO_DISCLOSURE).finally(() => setSpeaking(false));
+  }, [companionActive, state.active, tx.companionSystemAudioActive, speaking, speakTracked]);
 
   useEffect(() => {
     if (speaking || !pendingMachineAudioDisclosureRef.current) return;
@@ -308,8 +469,9 @@ function useGlassCompanionSession(): GlassCompanionController {
     pendingMachineAudioDisclosureRef.current = false;
     machineAudioDisclosureSpokenRef.current = true;
     setSpeaking(true);
-    void tts.speak(COMPANION_MACHINE_AUDIO_DISCLOSURE).finally(() => setSpeaking(false));
-  }, [speaking, tts]);
+    lastTtsTextRef.current = COMPANION_MACHINE_AUDIO_DISCLOSURE;
+    void speakTracked(COMPANION_MACHINE_AUDIO_DISCLOSURE).finally(() => setSpeaking(false));
+  }, [speaking, speakTracked]);
 
   // Restart listening when script is waiting for ack (mic stays hot).
   useEffect(() => {
@@ -336,7 +498,8 @@ function useGlassCompanionSession(): GlassCompanionController {
       ) {
         thinkingSpeechSentRef.current = true;
         setSpeaking(true);
-        void tts.speak(COMPANION_THINKING_SPEECH).finally(() => setSpeaking(false));
+        lastTtsTextRef.current = COMPANION_THINKING_SPEECH;
+        void speakTracked(COMPANION_THINKING_SPEECH).finally(() => setSpeaking(false));
       }
       if (!scriptPlayer.isPlaying) {
         setFlatManifestations(null);
@@ -386,6 +549,7 @@ function useGlassCompanionSession(): GlassCompanionController {
     }
 
     setSpeaking(true);
+    lastTtsTextRef.current = speech;
     const speakPromise = useTimed
       ? timedTts.speakTimed(speech, (segmentIndex) => {
           if (!guidancePlan) return;
@@ -413,7 +577,43 @@ function useGlassCompanionSession(): GlassCompanionController {
   useEffect(() => () => {
     clearVoiceModeAutoSubmit();
     clearRestartTimer();
+    if (bargeInTimerRef.current != null) {
+      window.clearTimeout(bargeInTimerRef.current);
+    }
   }, [clearRestartTimer]);
+
+  useEffect(() => {
+    return window.glass.onCompanionPrivacyResumed(() => {
+      if (companionPrivacyRef.current?.active) return;
+      const line = "I'm back when you need me.";
+      lastTtsTextRef.current = line;
+      setSpeaking(true);
+      void tts.speak(line).finally(() => setSpeaking(false));
+    });
+  }, [tts]);
+
+  const handleCompanionTranscriptRef = useRef(handleCompanionTranscript);
+  handleCompanionTranscriptRef.current = handleCompanionTranscript;
+
+  useEffect(() => {
+    return window.glass.onCompanionDeepgramFinal(({ text, speakerId }) => {
+      handleCompanionTranscriptRef.current(text, { speakerId });
+    });
+  }, []);
+
+  useEffect(() => {
+    const at = glass.lastAskResponse?.at;
+    if (!at || !companionActive) return;
+    if (at === lastResponseMarkerRef.current) return;
+    lastResponseMarkerRef.current = at;
+    lastResponseAtRef.current = Date.now();
+  }, [glass.lastAskResponse?.at, companionActive]);
+
+  useEffect(() => {
+    if (!companionActive) {
+      resetAmbientRefs();
+    }
+  }, [companionActive, resetAmbientRefs]);
 
   // ── Agent narration — Aletheia speaks agent progress when active ───────────
   const companionActiveRef = useRef(companionActive);
@@ -422,18 +622,31 @@ function useGlassCompanionSession(): GlassCompanionController {
   companionWarmupRef.current = glass.companionWarmupPhase ?? "none";
   const glassIdeActiveRef = useRef(glass.glassIdeActive === true);
   glassIdeActiveRef.current = glass.glassIdeActive === true;
-  const speakingRef = useRef(speaking);
-  speakingRef.current = speaking;
-  const narrateQueueRef = useRef<string[]>([]);
-  const narrateBusyRef = useRef(false);
+
+  const narrationPrivacyBlocked = useCallback((): boolean => {
+    return isCompanionNarrationPrivacyBlocked(
+      companionPrivacyRef.current?.active === true,
+      privacyPendingRef.current,
+    );
+  }, []);
+
+  const canDrainNarrationQueue = useCallback((): boolean => {
+    return canDrainCompanionNarrationQueue({
+      privacyActive: companionPrivacyRef.current?.active === true,
+      privacyPending: privacyPendingRef.current,
+      companionActive: companionActiveRef.current,
+      queueLength: narrateQueueRef.current.length,
+    });
+  }, []);
 
   const tryDequeueNarration = useCallback(async (): Promise<void> => {
     if (narrateBusyRef.current) return;
-    if (!companionActiveRef.current) {
+    if (narrationPrivacyBlocked()) return;
+    if (!canDrainNarrationQueue()) {
       narrateQueueRef.current = [];
       return;
     }
-    if (companionWarmupRef.current === "warming") return;
+    if (companionActiveRef.current && companionWarmupRef.current === "warming") return;
     if (speakingRef.current) return;
 
     const text = narrateQueueRef.current.shift();
@@ -442,6 +655,7 @@ function useGlassCompanionSession(): GlassCompanionController {
     narrateBusyRef.current = true;
     setSpeaking(true);
     speakingRef.current = true;
+    lastTtsTextRef.current = text;
     try {
       await tts.speak(text);
     } catch {
@@ -454,7 +668,7 @@ function useGlassCompanionSession(): GlassCompanionController {
         void tryDequeueNarration();
       }
     }
-  }, [tts.speak]);
+  }, [canDrainNarrationQueue, tts.speak]);
 
   useEffect(() => {
     const mountedRef = { current: true };
@@ -469,8 +683,15 @@ function useGlassCompanionSession(): GlassCompanionController {
 
     const handleAgentNarrate = (ev: import("../../shared/ipc.ts").AgentEvent): void => {
       if (ev.kind !== "narrate" || !ev.text?.trim()) return;
-      if (!companionActiveRef.current) return;
-      if (glassIdeActiveRef.current) return;
+      if (!shouldEnqueueAgentNarrate({
+        privacyActive: companionPrivacyRef.current?.active === true,
+        privacyPending: privacyPendingRef.current,
+        companionActive: companionActiveRef.current,
+        glassIdeActive: glassIdeActiveRef.current,
+        agentId: ev.agentId,
+      })) {
+        return;
+      }
       enqueueNarration(ev.text.trim());
     };
 
@@ -486,7 +707,29 @@ function useGlassCompanionSession(): GlassCompanionController {
   const ideAdvisorySpokenRef = useRef(0);
 
   useEffect(() => {
+    if (glass.companionPrivacy?.active) {
+      privacyPendingRef.current = false;
+    } else if (!glass.companionPrivacy) {
+      privacyPendingRef.current = false;
+    }
+    if (!glass.companionPrivacy?.active && !privacyPendingRef.current) return;
+    narrateQueueRef.current = [];
+    if (narrateBusyRef.current) {
+      tts.stop();
+      narrateBusyRef.current = false;
+      setSpeaking(false);
+      speakingRef.current = false;
+    }
+  }, [glass.companionPrivacy?.active, glass.companionPrivacy, tts]);
+
+  useEffect(() => {
     if (!glass.glassIdeActive || !companionActive) return;
+    if (isCompanionNarrationPrivacyBlocked(
+      glass.companionPrivacy?.active === true,
+      privacyPendingRef.current,
+    )) {
+      return;
+    }
     const advisory = glass.glassIdeAletheia;
     const text = advisory?.spokenText?.trim();
     if (!text || !advisory?.spokenNonce) return;
@@ -502,15 +745,13 @@ function useGlassCompanionSession(): GlassCompanionController {
     glass.glassIdeAletheia?.spokenNonce,
     glass.glassIdeAletheia?.spokenText,
     companionActive,
+    glass.companionPrivacy?.active,
+    glass.companionPrivacy,
     tryDequeueNarration,
   ]);
 
   // When companion speech finishes or warmup completes, drain queued agent narrations.
   useEffect(() => {
-    if (!companionActive) {
-      narrateQueueRef.current = [];
-      return;
-    }
     if (!speaking && narrateQueueRef.current.length > 0) {
       void tryDequeueNarration();
     }

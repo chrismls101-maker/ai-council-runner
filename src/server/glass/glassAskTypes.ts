@@ -76,7 +76,7 @@ export interface GlassAskRequestBody {
     }>;
   };
   /** Phase 4a — how Companion should handle this turn. */
-  companionRoute?: "full_visual_ask" | "retarget" | "direct_follow_up" | "script_continue";
+  companionRoute?: "full_visual_ask" | "retarget" | "direct_follow_up" | "script_continue" | "barge_in";
   /** Phase 4a — prior guidance context (no inline image blobs). */
   companionMemory?: {
     lastPrompt: string;

@@ -173,6 +173,7 @@ export function useTranscription(): TranscriptionController {
   const isListeningRef = useRef(false);
   const systemAudioProbeInFlightRef = useRef(false);
   const translateListeningIntentRef = useRef(false);
+  const companionDeepgramRef = useRef(false);
 
   const shouldSuppressTranslateError = useCallback(
     (error?: string, translateListeningIntent = translateListeningIntentRef.current): boolean =>
@@ -301,6 +302,7 @@ export function useTranscription(): TranscriptionController {
     }
     companionSystemAudioActiveRef.current = false;
     setCompanionSystemAudioActive(false);
+    companionDeepgramRef.current = false;
   }, []);
 
   const stopListeningRef = useRef<(() => void) | null>(null);
@@ -444,12 +446,21 @@ export function useTranscription(): TranscriptionController {
   stopListeningRef.current = stopListening;
 
   const startChunkRecorder = useCallback(
-    (stream: MediaStream, source: "microphone" | "system_audio", forTranslate = false) => {
+    (
+      stream: MediaStream,
+      source: "microphone" | "system_audio",
+      forTranslate = false,
+      forCompanionDeepgram = false,
+    ) => {
       chunkSourceRef.current = source;
       const mimeType = pickRecorderMime();
       // translateActive: prefer the explicit forTranslate flag (set synchronously by the caller
       // before the IPC state round-trip completes) over the potentially-stale glassState.
       const translateActive = forTranslate || isLiveTranslateActive(glassState.liveTranslate);
+      const companionDeepgramActive =
+        (forCompanionDeepgram || companionDeepgramRef.current)
+        && source === "microphone"
+        && !!glassState.stt.deepgramEnabled;
       const deepgramAvailable =
         source === "system_audio" && !!glassState.stt.deepgramEnabled;
       const listenDiarizationActive =
@@ -460,7 +471,8 @@ export function useTranscription(): TranscriptionController {
       // Listen mode runs a separate Deepgram session for speaker diarization while
       // OpenAI/server STT still handles chunk transcription for live notes.
       const forwardDeepgramForListen = listenDiarizationActive && !useDeepgramStreaming;
-      const forwardDeepgramAudio = useDeepgramStreaming || forwardDeepgramForListen;
+      const forwardDeepgramAudio =
+        useDeepgramStreaming || forwardDeepgramForListen || companionDeepgramActive;
 
       const beginSegment = () => {
         if (mediaStreamRef.current !== stream || !isListeningRef.current) return;
@@ -476,7 +488,7 @@ export function useTranscription(): TranscriptionController {
               window.glass.sendDeepgramAudioChunk(buf);
             });
           }
-          if (useDeepgramStreaming) return;
+          if (useDeepgramStreaming || companionDeepgramActive) return;
           if (event.data.size < 512) return; // silence filter for Whisper/server STT only
           void processBlob(event.data, mimeType, source);
         };
@@ -599,6 +611,33 @@ export function useTranscription(): TranscriptionController {
     send({ type: "start-listening" });
     startTimer();
   }, [snapshot, stopListening, startTimer, appendMicDraft, maybeAutoSendMicDraft, glassState.liveTranslate]);
+
+  const fallbackCompanionToWebSpeech = useCallback(() => {
+    if (!companionDeepgramRef.current) return;
+    companionDeepgramRef.current = false;
+    if (chunkSegmentTimerRef.current != null) {
+      window.clearTimeout(chunkSegmentTimerRef.current);
+      chunkSegmentTimerRef.current = null;
+    }
+    if (mediaRecorderRef.current?.state !== "inactive") {
+      mediaRecorderRef.current?.stop();
+    }
+    mediaRecorderRef.current = null;
+    if (mediaStreamRef.current) {
+      stopMediaStreamState(mediaStreamRef.current.getTracks());
+      mediaStreamRef.current = null;
+    }
+    setSelectedMode("microphone_web_speech");
+    dispatch({ type: "SET_MODE", mode: "microphone_web_speech" });
+    isListeningRef.current = true;
+    startWebSpeech();
+  }, [startWebSpeech, dispatch]);
+
+  useEffect(() => {
+    return window.glass.onCompanionDeepgramUnavailable(() => {
+      fallbackCompanionToWebSpeech();
+    });
+  }, [fallbackCompanionToWebSpeech]);
 
   const startMediaRecorder = useCallback(async () => {
     try {
@@ -938,12 +977,59 @@ export function useTranscription(): TranscriptionController {
     ],
   );
 
+  const startCompanionDeepgramMic = useCallback(async () => {
+    setSelectedMode("microphone_media_recorder");
+    dispatch({ type: "SET_MIC_DRAFT_PREFIX", text: "" });
+    dispatch({ type: "SET_ERROR", message: undefined });
+
+    const permission = await requestMicrophoneAccess();
+    if (permission !== "granted") {
+      companionDeepgramRef.current = false;
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      send({ type: "report-mic-permission", status: "granted" });
+      mediaStreamRef.current = stream;
+      dispatch({ type: "SET_MODE", mode: "microphone_media_recorder" });
+      startChunkRecorder(stream, "microphone", false, true);
+    } catch (err) {
+      companionDeepgramRef.current = false;
+      const denied = mapGetUserMediaErrorToMicPermission(err);
+      if (denied === "denied") {
+        send({ type: "report-mic-permission", status: "denied" });
+        dispatch({
+          type: "SET_ERROR",
+          message: `${MIC_PERMISSION_DENIED_MESSAGE}. ${MIC_PERMISSION_DENIED_DETAIL}`,
+        });
+        return;
+      }
+      dispatch({
+        type: "SET_ERROR",
+        message: modeStatusMessage("microphone_media_recorder", snapshot),
+      });
+    }
+  }, [requestMicrophoneAccess, startChunkRecorder, snapshot]);
+
   const startCompanionListening = useCallback(async () => {
     if (state.status !== "listening") {
-      await startMicrophoneListening("");
+      if (glassState.stt.deepgramEnabled) {
+        companionDeepgramRef.current = true;
+        await startCompanionDeepgramMic();
+      } else {
+        companionDeepgramRef.current = false;
+        await startMicrophoneListening("");
+      }
     }
     void startCompanionSystemAudioAux();
-  }, [state.status, startMicrophoneListening, startCompanionSystemAudioAux]);
+  }, [
+    state.status,
+    glassState.stt.deepgramEnabled,
+    startCompanionDeepgramMic,
+    startMicrophoneListening,
+    startCompanionSystemAudioAux,
+  ]);
 
   const beginListeningCapture = useCallback((modeOverride?: TranscriptionMode) => {
     if (isListeningRef.current && mediaStreamRef.current) return;

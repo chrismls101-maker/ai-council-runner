@@ -40,6 +40,7 @@ import {
   resolveCompanionRoute,
   type CompanionRoute,
 } from "../shared/companionRetarget.ts";
+import { detectAmbientConversation } from "../shared/companionAmbientDetect.ts";
 import { loadGlassEnv } from "./loadGlassEnv.ts";
 import * as Sentry from "@sentry/electron/main";
 import { installGlassE2eHooks, getE2eExternalUrls, resetE2eExternalUrls } from "./e2eMainHooks.ts";
@@ -891,6 +892,11 @@ interface AppState {
   companionPresence: import("../shared/companionGuidance.ts").CompanionGuidancePayload | null;
   /** Phase 4a — multi-turn Companion session memory. */
   companionMemory: CompanionSessionMemory | null;
+  companionPrivacy?: {
+    active: boolean;
+    resumeAt: number;
+    durationMs: number;
+  };
   translateSetupRequestId: number;
   agentRun: GlassAgentRunState | null;
   agentHistory: import("../shared/ipc.ts").AgentHistoryEntry[];
@@ -1197,6 +1203,7 @@ const state: AppState = {
   companionWarmupSpeakNonce: 0,
   companionPresence: null,
   companionMemory: null,
+  companionPrivacy: undefined,
   translateSetupRequestId: 0,
   agentRun: null,
   agentHistory: [],
@@ -1549,6 +1556,36 @@ let listenDeepgramReconnectAttempts = 0;
 const LISTEN_DEEPGRAM_RECONNECT_BASE_MS = 1_000;
 const LISTEN_DEEPGRAM_RECONNECT_MAX_MS = 30_000;
 
+/** Companion mic — Deepgram diarization when DEEPGRAM_API_KEY is set. */
+let companionDeepgramSession: DeepgramStreamingSession | null = null;
+let companionDeepgramReconnectAttempts = 0;
+const COMPANION_DEEPGRAM_MAX_RECONNECT_ATTEMPTS = 3;
+
+/** Safety-net ambient classifier state (renderer is primary). */
+let companionLastSpeakerId: number | undefined;
+let companionSpeakerChangeCount = 0;
+let companionLastResponseAt = 0;
+
+let companionPrivacyTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearCompanionPrivacyTimer(): void {
+  if (companionPrivacyTimer) {
+    clearTimeout(companionPrivacyTimer);
+    companionPrivacyTimer = null;
+  }
+}
+
+function resetCompanionAmbientState(): void {
+  companionLastSpeakerId = undefined;
+  companionSpeakerChangeCount = 0;
+  companionLastResponseAt = 0;
+}
+
+function clearCompanionPrivacyState(): void {
+  clearCompanionPrivacyTimer();
+  state.companionPrivacy = undefined;
+}
+
 /**
  * Push raw interim text directly to captions as a live preview — no translation API call.
  * The translated final will replace this when speech_final fires.
@@ -1678,6 +1715,71 @@ function stopListenDeepgramSession(): void {
     listenDeepgramSession = null;
     listenDeepgramReconnectAttempts = 0;
     console.log("[deepgram:listen] session closed");
+  }
+}
+
+function notifyCompanionDeepgramUnavailable(reason: string): void {
+  console.warn(`[deepgram:companion] unavailable — ${reason}`);
+  stopCompanionDeepgramSession();
+  broadcast(IPC.companionDeepgramUnavailable, {});
+}
+
+/** Start a diarization-enabled Deepgram session for companion mic. */
+function startCompanionDeepgramSession(): void {
+  const dgKey = process.env.DEEPGRAM_API_KEY?.trim();
+  if (!dgKey || !state.companionModeActive) return;
+  stopCompanionDeepgramSession();
+
+  const makeCompanionCallbacks = () => ({
+    onTranscript: ({
+      text,
+      isFinal,
+      speakerId,
+    }: {
+      text: string;
+      isFinal: boolean;
+      speakerId?: number;
+    }) => {
+      if (!isFinal || !text.trim()) return;
+      companionDeepgramReconnectAttempts = 0;
+      broadcast(IPC.companionDeepgramFinal, { text: text.trim(), speakerId });
+    },
+    onError: (err: Error) => {
+      console.error("[deepgram:companion] error:", err.message);
+    },
+    onClose: () => {
+      if (!state.companionModeActive) return;
+      companionDeepgramReconnectAttempts += 1;
+      if (companionDeepgramReconnectAttempts > COMPANION_DEEPGRAM_MAX_RECONNECT_ATTEMPTS) {
+        notifyCompanionDeepgramUnavailable("max reconnect attempts exceeded");
+        return;
+      }
+      const delayMs = Math.min(
+        LISTEN_DEEPGRAM_RECONNECT_BASE_MS * 2 ** (companionDeepgramReconnectAttempts - 1),
+        LISTEN_DEEPGRAM_RECONNECT_MAX_MS,
+      );
+      setTimeout(() => {
+        if (!state.companionModeActive) return;
+        startCompanionDeepgramSession();
+      }, delayMs);
+    },
+  });
+
+  companionDeepgramSession = new DeepgramStreamingSession(dgKey, "auto", makeCompanionCallbacks());
+  companionDeepgramSession.connect().catch((err: unknown) => {
+    console.error("[deepgram:companion] connect failed:", (err as Error).message ?? err);
+    notifyCompanionDeepgramUnavailable("initial connect failed");
+  });
+  console.log("[deepgram:companion] session started (diarization enabled)");
+}
+
+/** Stop the companion Deepgram session. */
+function stopCompanionDeepgramSession(): void {
+  if (companionDeepgramSession) {
+    companionDeepgramSession.close();
+    companionDeepgramSession = null;
+    companionDeepgramReconnectAttempts = 0;
+    console.log("[deepgram:companion] session closed");
   }
 }
 let listenLastChunkMs: number | undefined;
@@ -3593,6 +3695,7 @@ function snapshot(): GlassState {
     companionWarmupSpeakNonce: state.companionWarmupSpeakNonce,
     companionPresence: state.companionPresence,
     companionMemory: state.companionMemory,
+    companionPrivacy: state.companionPrivacy,
     translateSetupRequestId: state.translateSetupRequestId,
     agentRun: state.agentRun,
     agentHistory: state.agentHistory,
@@ -4594,6 +4697,30 @@ async function submitCommand(
 
   const text = (contextPrefix + rawText).trim();
 
+  if (state.companionPrivacy?.active) {
+    return;
+  }
+
+  if (
+    state.companionModeActive
+    && opts?.companionRoute !== "barge_in"
+  ) {
+    const prevSpeakerId = companionLastSpeakerId;
+    const ambient = detectAmbientConversation(
+      text,
+      undefined,
+      prevSpeakerId,
+      companionSpeakerChangeCount,
+    );
+    const recentConversation = Date.now() - companionLastResponseAt < 30_000;
+    if (!ambient.addressedToCompanion && !recentConversation) {
+      console.log(
+        `[companion] ambient suppress: ${ambient.reason} "${text.slice(0, 60)}"`,
+      );
+      return;
+    }
+  }
+
   // ── /run — execute shell command from command bar ─────────────────────────
   // Detected BEFORE askInFlight guard so it works even during a streaming ask.
   if (text.startsWith("/run ") || text === "/run") {
@@ -4694,6 +4821,8 @@ async function submitCommand(
     state.companionModeActive === true && companionRoute === "direct_follow_up";
   const isCompanionScriptContinue =
     state.companionModeActive === true && companionRoute === "script_continue";
+  const isCompanionBargeIn =
+    state.companionModeActive === true && companionRoute === "barge_in";
   const reuseCompanionCapture =
     isCompanionRetarget &&
     canReuseCompanionCapture(state.companionMemory, companionMemoryContext);
@@ -4703,7 +4832,7 @@ async function submitCommand(
     if (companionRoute === "full_visual_ask" || isCompanionRetarget) {
       visualIntent = true;
     }
-    if (isCompanionDirectFollowUp || isCompanionScriptContinue) {
+    if (isCompanionDirectFollowUp || isCompanionScriptContinue || isCompanionBargeIn) {
       visualIntent = false;
     }
   }
@@ -5068,6 +5197,10 @@ async function submitCommand(
     modelPurpose: (opts?.taskComplexity === "deep" ? "diagnostic" : "default") as import("../shared/glassAskTypes.ts").GlassAskRequest["modelPurpose"],
     companionMode: state.companionModeActive || undefined,
     companionUiMap: companionLocalUiMapForAsk ?? undefined,
+    companionRoute,
+    companionMemory: state.companionMemory
+      ? companionMemoryForAsk(state.companionMemory)
+      : undefined,
     ...(enrichedUserContext ? { userContext: enrichedUserContext } : {}),
   };
 
@@ -5165,6 +5298,9 @@ async function submitCommand(
       (isCompanionDirectFollowUp || isCompanionScriptContinue)
     ) {
       state.companionMemory = { ...state.companionMemory, lastPrompt: text };
+    }
+    if (state.companionModeActive) {
+      companionLastResponseAt = Date.now();
     }
     companionLocalUiMapForAsk = null;
 
@@ -5611,6 +5747,9 @@ async function handleCommand(
       state.companionPresence = null;
       state.companionMemory = clearCompanionSessionMemory();
       state.companionWarmupPhase = "none";
+      clearCompanionPrivacyState();
+      resetCompanionAmbientState();
+      stopCompanionDeepgramSession();
       stopCompanionAnchorWatch();
       push();
       return;
@@ -6172,11 +6311,15 @@ async function handleCommand(
         state.companionPresence = null;
         state.companionMemory = clearCompanionSessionMemory();
         state.companionWarmupPhase = "none";
+        clearCompanionPrivacyState();
+        resetCompanionAmbientState();
+        stopCompanionDeepgramSession();
         stopCompanionAnchorWatch();
       } else {
         // Release command-bar Voice Mode mic before Aletheia listens in overlay.
         broadcastTranscriptionControl({ type: "stop" });
         state.companionWarmupPhase = "none";
+        startCompanionDeepgramSession();
         warmOmniParserSidecarWithCallbacks({
           onWarming: () => {
             state.companionWarmupPhase = "warming";
@@ -6190,6 +6333,29 @@ async function handleCommand(
           },
         });
       }
+      push();
+      return;
+    }
+    case "companion-privacy-start": {
+      const durationMs = command.durationMs ?? 10 * 60 * 1000;
+      state.companionPrivacy = {
+        active: true,
+        resumeAt: Date.now() + durationMs,
+        durationMs,
+      };
+      resetCompanionAmbientState();
+      clearCompanionPrivacyTimer();
+      companionPrivacyTimer = setTimeout(() => {
+        if (!state.companionPrivacy?.active) return;
+        state.companionPrivacy = undefined;
+        push();
+        broadcast(IPC.companionPrivacyResumed, {});
+      }, durationMs);
+      push();
+      return;
+    }
+    case "companion-privacy-end": {
+      clearCompanionPrivacyState();
       push();
       return;
     }
@@ -9881,6 +10047,29 @@ function registerIpc(): void {
   const isCoderRunCurrentForPostRun = (runId: string): boolean =>
     isCoderRunEligibleForPostRun(runId, state.agentRun ?? null);
 
+  const resolveCoderNarrateRunId = (): string | undefined =>
+    state.qaPipelineState?.runId
+    ?? state.coderVerifyState?.runId
+    ?? state.coderReviewState?.runId
+    ?? state.agentRun?.runId
+    ?? undefined;
+
+  const broadcastCoderNarrate = (text: string, runId?: string): void => {
+    const trimmed = text.trim();
+    const rid = runId ?? resolveCoderNarrateRunId();
+    if (!trimmed) return;
+    if (!rid) {
+      console.warn("[coder-narrate] dropped — no runId:", trimmed.slice(0, 80));
+      return;
+    }
+    broadcast(IPC.agentEvent, {
+      runId: rid,
+      agentId: "coder",
+      kind: "narrate",
+      text: trimmed,
+    });
+  };
+
   const coderBuildLoopHost: CoderBuildLoopHost = {
     getSettings: () => state.glassSettings,
     getChangeLog: () => state.agentChangeLog ?? [],
@@ -9890,6 +10079,7 @@ function registerIpc(): void {
     setReviewState: (v) => { state.coderReviewState = v; },
     setProjectMemoryState: (v) => { state.projectMemoryState = v; },
     setLastNotice: (notice) => { state.lastNotice = notice; },
+    narrate: (text) => { broadcastCoderNarrate(text); },
     push,
     broadcastOpenCoder: (payload) => {
       state.glassIdeActive = true;
@@ -9921,6 +10111,7 @@ function registerIpc(): void {
     getPipelineState: () => state.qaPipelineState,
     setPipelineState: (pipeline) => { state.qaPipelineState = pipeline; },
     setLastNotice: (notice) => { state.lastNotice = notice; },
+    narrate: (text) => { broadcastCoderNarrate(text); },
     push,
     isCoderRunCurrent: isCoderRunCurrentForPostRun,
     requestPreviewProbe: () => new Promise<string[] | null>((resolve) => {
@@ -10649,7 +10840,9 @@ function registerIpc(): void {
       if (!errorOutput) return { ok: false, error: "No error output" };
 
       if (!canStartLoopFix(coderBuildLoopHost)) {
-        state.lastNotice = narrateToolStart("coder-loop-cap", {});
+        const capLine = narrateToolStart("coder-loop-cap", {});
+        state.lastNotice = capLine;
+        broadcastCoderNarrate(capLine, payload?.runId);
         push();
         return { ok: false, error: `Coder has iterated ${CODER_LOOP_MAX_ITERATIONS} times. Review manually.` };
       }
@@ -10679,7 +10872,9 @@ function registerIpc(): void {
       if (!findings) return { ok: false, error: "No findings" };
 
       if (!canStartLoopFix(coderBuildLoopHost)) {
-        state.lastNotice = narrateToolStart("coder-loop-cap", {});
+        const capLine = narrateToolStart("coder-loop-cap", {});
+        state.lastNotice = capLine;
+        broadcastCoderNarrate(capLine, payload?.runId);
         push();
         return { ok: false, error: `Coder has iterated ${CODER_LOOP_MAX_ITERATIONS} times. Review manually.` };
       }
@@ -11552,9 +11747,10 @@ function registerIpc(): void {
 
   ipcMain.on(IPC.deepgramAudioChunk, (_event, buffer: ArrayBuffer) => {
     const buf = Buffer.from(buffer);
-    // Forward to both active sessions — translate session and listen-mode diarization session.
+    // Forward to translate, listen-mode, and companion diarization sessions.
     deepgramSession?.sendAudio(buf);
     listenDeepgramSession?.sendAudio(buf);
+    companionDeepgramSession?.sendAudio(buf);
   });
 
   ipcMain.on(IPC.command, (event, command: GlassCommand) => {

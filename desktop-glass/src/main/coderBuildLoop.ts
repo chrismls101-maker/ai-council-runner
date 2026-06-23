@@ -40,6 +40,11 @@ const VERIFY_TIMEOUT_MS = 60_000;
 const REVIEW_FILE_MAX = 5;
 const REVIEW_SNIPPET_MAX = 4_096;
 
+function announceBuildLoop(host: CoderBuildLoopHost, text: string): void {
+  host.setLastNotice(text);
+  host.narrate?.(text);
+}
+
 function appliedPathsForRun(changeLog: AgentChangeLogEntry[], runId: string): string[] {
   return changeLog
     .filter((e) => e.runId === runId && e.action === "applied")
@@ -200,7 +205,7 @@ export async function runCoderVerify(
   }
 
   host.setVerifyState({ status: "running", runId, command: buildCmd.cmd });
-  host.setLastNotice(narrateToolStart("coder-verify-start", { command: buildCmd.cmd }));
+  announceBuildLoop(host, narrateToolStart("coder-verify-start", { command: buildCmd.cmd }));
   host.push();
 
   const { ok, output } = await runShellWithTimeout(buildCmd.cmd, buildCmd.cwd, VERIFY_TIMEOUT_MS);
@@ -215,7 +220,7 @@ export async function runCoderVerify(
 
   if (ok) {
     host.setVerifyState({ status: "pass", runId, command: buildCmd.cmd });
-    host.setLastNotice(narrateToolStart("coder-verify-pass", { command: buildCmd.cmd }));
+    announceBuildLoop(host, narrateToolStart("coder-verify-pass", { command: buildCmd.cmd }));
     host.push();
     return { pass: true, skipped: false };
   }
@@ -226,7 +231,7 @@ export async function runCoderVerify(
     command: buildCmd.cmd,
     output: output.slice(0, 4000),
   });
-  host.setLastNotice(narrateToolStart("coder-verify-fail", { command: buildCmd.cmd }));
+  announceBuildLoop(host, narrateToolStart("coder-verify-fail", { command: buildCmd.cmd }));
   host.push();
   return { pass: false, skipped: false };
 }
@@ -240,7 +245,7 @@ export async function runCoderReview(
   if (!changedPaths.length || !host.isCoderRunCurrent(runId)) return;
 
   host.setReviewState({ status: "running", runId });
-  host.setLastNotice(narrateToolStart("coder-review-start", {}));
+  announceBuildLoop(host, narrateToolStart("coder-review-start", {}));
   host.push();
 
   try {
@@ -292,7 +297,8 @@ export async function runCoderReview(
       findings,
       fileCount: changedPaths.length,
     });
-    host.setLastNotice(
+    announceBuildLoop(
+      host,
       narrateToolStart(isClean ? "coder-review-clean" : "coder-review-issues", {}),
     );
     host.push();

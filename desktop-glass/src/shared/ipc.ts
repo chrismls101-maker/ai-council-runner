@@ -120,6 +120,12 @@ export const IPC = {
   hideForCapture: "glass:hide-for-capture",
   restoreAfterCapture: "glass:restore-after-capture",
   deepgramAudioChunk: "glass:deepgram-audio-chunk",
+  /** Main → renderer: companion privacy timer expired — speak resume line. */
+  companionPrivacyResumed: "glass:companion-privacy-resumed",
+  /** Main → renderer: Deepgram final transcript for companion mic (diarized). */
+  companionDeepgramFinal: "glass:companion-deepgram-final",
+  /** Main → renderer: companion Deepgram unavailable — fall back to Web Speech. */
+  companionDeepgramUnavailable: "glass:companion-deepgram-unavailable",
   // ── Built-in terminal (PTY) ────────────────────────────────────────────────
   /** Main → renderer: PTY output data. Payload: { termId, data }. */
   ptyData: "glass:pty-data",
@@ -902,6 +908,10 @@ export type GlassCommand =
   // ── Glass Companion (strip-toggle voice presence) ─────────────────────────
   /** Toggle Companion session on/off from the builder strip. */
   | { type: "toggle-companion-mode" }
+  /** Enter companion privacy mode (timed silence). */
+  | { type: "companion-privacy-start"; durationMs?: number }
+  /** End companion privacy mode early. */
+  | { type: "companion-privacy-end" }
   /** Clear ephemeral Companion overlay manifestations. */
   | { type: "clear-companion-presence" }
   // ── Fix injection into editor (#160) ─────────────────────────────────────
@@ -1238,6 +1248,12 @@ export interface GlassState {
   companionPresence?: import("./companionGuidance.ts").CompanionGuidancePayload | null;
   /** Phase 4a — session memory for multi-turn Companion routing. */
   companionMemory?: import("./companionSessionMemory.ts").CompanionSessionMemory | null;
+  /** Companion privacy mode — Aletheia stays silent until resumeAt. */
+  companionPrivacy?: {
+    active: boolean;
+    resumeAt: number;
+    durationMs: number;
+  };
   /** Bumped when Command Palette requests re-showing the Glass Response Panel. */
   responsePanelRevealSeq?: number;
   /** Hint for palette quick actions from the built-in terminal context buffer. */

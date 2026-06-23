@@ -1,5 +1,20 @@
 # IIVO Glass — Changelog
 
+## v0.8.1 — 2026-06-22
+
+### Aletheia Companion
+- **Barge-in** — interrupt mid-speech; stops TTS and submits with shorter server reply
+- **Echo suppression** — discards mic pickup of Aletheia's own voice (>60% token overlap)
+- **Privacy mode** — "stop listening" triggers timed silence with spoken ack and auto-resume
+- **Ambient awareness** — stays silent on nearby human conversation unless addressed or recent turn
+- Optional **Deepgram diarization** for companion mic when `DEEPGRAM_API_KEY` is set
+
+### Tests & docs
+- Unit tests for echo, privacy, and ambient classifiers
+- `ALETHEIA_PROFILE.md` interruption/privacy/ambient rows
+
+---
+
 ## v0.8.0 — 2026-06-22
 
 ### Glass Agent & Coder

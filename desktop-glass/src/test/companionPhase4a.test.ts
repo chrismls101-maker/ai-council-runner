@@ -14,6 +14,7 @@ import {
   looksLikeRetargetCorrection,
   looksLikeScriptContinue,
   resolveCompanionRoute,
+  companionRouteLabel,
 } from "../shared/companionRetarget.ts";
 import { companionSubmitPlan } from "../shared/companionActions.ts";
 
@@ -111,6 +112,10 @@ test("resolveCompanionRoute picks retarget with valid memory", () => {
     resolveCompanionRoute("what do you see on my screen", null, ctx),
     "full_visual_ask",
   );
+});
+
+test("companionRouteLabel includes barge_in", () => {
+  assert.equal(companionRouteLabel("barge_in"), "Barge-in");
 });
 
 test("companionSubmitPlan attaches companionRoute to submit-command", () => {
