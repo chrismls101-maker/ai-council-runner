@@ -166,6 +166,19 @@ Aletheia is a calm teacher, not a command-line interface. She speaks when she ha
 
 ---
 
+### Interruption, Privacy & Ambient Awareness
+
+| Ability | Description | Status |
+|---------|-------------|--------|
+| Barge-in | Stops TTS immediately when user speaks mid-speech; shorter acknowledgment reply | ✅ |
+| Echo suppression | Discards mic pickup of Aletheia's own voice (>60% token overlap with last TTS) | ✅ |
+| Privacy mode | "Stop listening" → timed silence with spoken ack; auto-resume with soft line | ✅ |
+| Privacy resume | "Come back" / direct question ends privacy early | ✅ |
+| Ambient awareness | Stays silent on human-to-human chatter unless explicitly addressed or recent conversation | ✅ |
+| Deepgram diarization | Companion mic uses Deepgram speaker IDs when `DEEPGRAM_API_KEY` is set | ✅ |
+
+---
+
 ### Visual Presence (Manifestations)
 
 | Ability | Description | Status |
@@ -236,6 +249,37 @@ Aletheia is a calm teacher, not a command-line interface. She speaks when she ha
 
 ---
 
+### Interruption & Presence
+
+| Ability | Description | Status |
+|---------|-------------|--------|
+| Barge-in (interruption) | User speech mid-TTS stops all output instantly — tts, timedTts, scriptPlayer all halted before responding | ✅ |
+| Ambient filter bypass on barge-in | Renderer skips ambient detection when bargeIn flag is true — "wait wait" mid-interruption is never dropped | ✅ |
+| Privacy mode — "stop listening" | Detects stop/quiet/privacy phrases → speaks ack → goes fully silent for N minutes (default 10) | ✅ |
+| Privacy mode — TTS stop before ack | All TTS surfaces stopped before speaking privacy ack — no overlapping speech | ✅ |
+| Privacy mode — timer resume | Speaks one soft line on timer end ("I'm back when you need me") — no question, no recap | ✅ |
+| Privacy mode — early resume | User says "come back", "resume", or just asks a question → exits privacy silently and responds | ✅ |
+| Privacy mode — duration extension | "Come back in N minutes" during active privacy restarts the timer with new duration instead of ending privacy | ✅ |
+| Ambient conversation detection | Detects human-to-human nearby conversation (diarization, social back-and-forth, no device-directed phrasing) → stays silent | ✅ |
+| Deepgram fallback to Web Speech | If Deepgram connect fails or 3 reconnect attempts exhaust, mic falls back to Web Speech — never silent without transcripts | ✅ |
+| Script speech echo tracking | scriptPlayer speakStep sets lastTtsTextRef before each segment — multi-step TTS suppressed from echo loop | ✅ |
+
+---
+
+### Privacy Awareness
+
+| Ability | Description | Status |
+|---------|-------------|--------|
+| Answer privacy questions | Explains honestly what data IIVO collects, where it goes, and what's not stored | ✅ |
+| Audio data disclosure | Tells users mic audio goes to a transcription service only, not stored after | ✅ |
+| Screenshot disclosure | Clarifies screenshots are Visual Ask only, sent for AI processing, not stored by IIVO | ✅ |
+| No-training disclosure | Confirms IIVO and its APIs do not train on user audio, transcripts, or screen content | ✅ |
+| No-sale disclosure | Confirms IIVO does not sell user data to any third party | ✅ |
+| Deletion guidance | Directs users to delete local history in-app or email privacy@iivo.com for server data | ✅ |
+| Honest limits | States facts only — no legal guarantees, no promotional language | ✅ |
+
+---
+
 ### What Aletheia Does NOT Do (explicit decisions)
 
 | Not built | Reason |
@@ -251,4 +295,4 @@ Aletheia is a calm teacher, not a command-line interface. She speaks when she ha
 
 ---
 
-*Updated: June 2026 — reflects Phases 1–4 shipped + Glass Build Loop + QA Mode + IDE chrome orchestrator (B) + Aletheia advisory (C)*
+*Updated: June 2026 — reflects Phases 1–4 + Build Loop + QA Mode + IDE orchestrator (B) + Advisory (C) + Barge-in + Privacy Mode + Ambient Detection*
