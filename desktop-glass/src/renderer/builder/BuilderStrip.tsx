@@ -5,14 +5,19 @@ import { ApiKeyManagerPanel } from "./ApiKeyManagerPanel.tsx";
 import { PowerPromptPanel } from "./PowerPromptPanel.tsx";
 import { SpendTrackerPanel } from "./SpendTrackerPanel.tsx";
 import { ExtractModePanel } from "./ExtractModePanel.tsx";
+import { GlassAgentPanel } from "./GlassAgentPanel.tsx";
 import {
   armBuilderStripInteractive,
   syncBuilderStripPanelOpen,
   useBuilderStripClickThrough,
 } from "./useBuilderStripClickThrough.ts";
+import { send, useGlassState } from "../useGlassState.ts";
+import { useGlassTerminalToggle } from "../useGlassTerminalToggle.ts";
+import { useGlassCompanion } from "../companion/GlassCompanionProvider.tsx";
+import { GlassHoverTooltip } from "../components/GlassHoverTooltip.tsx";
 import "./BuilderStrip.css";
 
-type BuilderTab = "prompts" | "keys" | "power-prompt" | "spend" | "extract";
+type BuilderTab = "prompts" | "keys" | "power-prompt" | "spend" | "extract" | "agents";
 
 interface BuilderStripProps {
   onEnterInteractive: () => void;
@@ -27,6 +32,39 @@ export function BuilderStrip({
   onOpenExtractRef,
 }: BuilderStripProps): JSX.Element {
   const [activeTab, setActiveTab] = useState<BuilderTab | null>(null);
+  const { terminalOpen, terminalActive, label: terminalLabel, toggle: toggleTerminal } =
+    useGlassTerminalToggle();
+  const companion = useGlassCompanion();
+  const glassState = useGlassState();
+  const agentRunning = glassState.agentRun?.status === "running";
+  const [aletheiaSweeping, setAletheiaSweeping] = useState(false);
+  const aletheiaSweepGenRef = useRef(0);
+
+  const replayAletheiaTruthSweep = useCallback((): void => {
+    aletheiaSweepGenRef.current += 1;
+    const gen = aletheiaSweepGenRef.current;
+    setAletheiaSweeping(false);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (gen !== aletheiaSweepGenRef.current) return;
+        setAletheiaSweeping(true);
+      });
+    });
+  }, []);
+
+  const handleAletheiaSweepEnd = useCallback((): void => {
+    setAletheiaSweeping(false);
+  }, []);
+
+  useEffect(() => {
+    if (!aletheiaSweeping) return;
+    const timer = window.setTimeout(handleAletheiaSweepEnd, 2300);
+    return () => window.clearTimeout(timer);
+  }, [aletheiaSweeping, handleAletheiaSweepEnd]);
+
+  const companionTooltip = companion.active
+    ? `${companion.statusLabel} — tap to turn off`
+    : "Aletheia — Glass voice presence · tap to activate";
 
   useBuilderStripClickThrough(activeTab !== null);
 
@@ -58,12 +96,32 @@ export function BuilderStrip({
     });
   }, []);
 
+  const handleAgentsTabClick = useCallback((): void => {
+    armBuilderStripInteractive();
+    if (agentRunning) {
+      window.glass.agentStop();
+      return;
+    }
+    handleTabClick("agents");
+  }, [agentRunning, handleTabClick]);
+
+  const agentsTabTooltip = agentRunning
+    ? "Agent running — tap to stop"
+    : "AI Agents — research, write files, and automate tasks with Claude";
+
   const handleClosePanel = useCallback((): void => {
     syncBuilderStripPanelOpen(false);
     setActiveTab(null);
   }, []);
 
   // Expose extract-tab opener via ref so overlay card can trigger it without prop drilling
+  useEffect(() => {
+    return window.glass.onOpenCoderWithPrompt(() => {
+      syncBuilderStripPanelOpen(true);
+      setActiveTab("agents");
+    });
+  }, []);
+
   useEffect(() => {
     if (onOpenExtractRef) {
       onOpenExtractRef.current = () => handleTabClick("extract");
@@ -73,12 +131,26 @@ export function BuilderStrip({
     };
   }, [onOpenExtractRef, handleTabClick]);
 
+  // Glass Command Palette (Task #66) — open a builder strip tab programmatically.
+  useEffect(() => {
+    const onPaletteOpenTab = (event: Event): void => {
+      const tab = (event as CustomEvent<string>).detail;
+      if (tab === "prompts" || tab === "keys" || tab === "spend" || tab === "extract") {
+        armBuilderStripInteractive();
+        setActiveTab(tab);
+        syncBuilderStripPanelOpen(true);
+      }
+    };
+    window.addEventListener("glass-palette-open-builder-tab", onPaletteOpenTab);
+    return () => window.removeEventListener("glass-palette-open-builder-tab", onPaletteOpenTab);
+  }, []);
+
   return (
     <>
       {/* Panel — floats above the strip, inside the overlay */}
       {activeTab !== null && (
         <div
-          className="builder-panel-host"
+          className={`builder-panel-host${activeTab === "agents" ? " builder-panel-host--agents" : ""}`}
           onPointerEnter={handlePointerEnter}
           onPointerLeave={handlePointerLeave}
           onPointerDownCapture={handlePointerDownCapture}
@@ -99,6 +171,9 @@ export function BuilderStrip({
             {activeTab === "extract" && (
               <ExtractModePanel onClose={handleClosePanel} />
             )}
+            {activeTab === "agents" && (
+              <GlassAgentPanel onClose={handleClosePanel} />
+            )}
           </div>
         </div>
       )}
@@ -111,58 +186,175 @@ export function BuilderStrip({
         onPointerLeave={handlePointerLeave}
         onPointerDownCapture={handlePointerDownCapture}
       >
-        <button
-          type="button"
-          className={`builder-tab${activeTab === "prompts" ? " builder-tab--active" : ""}`}
-          onClick={() => handleTabClick("prompts")}
-          aria-label="Prompt Library"
+        <GlassHoverTooltip
+          label="Prompt Library — browse and run saved prompts"
+          placement="auto"
         >
-          <span className="builder-tab__icon">⌥</span>
-          Prompts
-        </button>
+          <button
+            type="button"
+            className={`builder-tab${activeTab === "prompts" ? " builder-tab--active" : ""}`}
+            onClick={() => handleTabClick("prompts")}
+            aria-label="Prompt Library"
+          >
+            <span className="builder-tab__icon">⌥</span>
+            Prompts
+          </button>
+        </GlassHoverTooltip>
 
-        <button
-          type="button"
-          className={`builder-tab${activeTab === "keys" ? " builder-tab--active" : ""}`}
-          onClick={() => handleTabClick("keys")}
-          aria-label="API Key Manager"
+        <GlassHoverTooltip
+          label="Power Prompt Generator — craft structured prompts"
+          placement="auto"
         >
-          <span className="builder-tab__icon">🗝</span>
-          API Keys
-        </button>
+          <button
+            type="button"
+            className={`builder-tab${activeTab === "power-prompt" ? " builder-tab--active" : ""}`}
+            onClick={() => handleTabClick("power-prompt")}
+            aria-label="Power Prompt Generator"
+          >
+            <span className="builder-tab__icon">⚡</span>
+            Prompt Gen
+          </button>
+        </GlassHoverTooltip>
 
-        <button
-          type="button"
-          className={`builder-tab${activeTab === "power-prompt" ? " builder-tab--active" : ""}`}
-          onClick={() => handleTabClick("power-prompt")}
-          aria-label="Power Prompt Generator"
+        <GlassHoverTooltip
+          label="API Key Manager — store keys for Claude, OpenAI, and more"
+          placement="auto"
         >
-          <span className="builder-tab__icon">⚡</span>
-          Prompt Gen
-        </button>
+          <button
+            type="button"
+            className={`builder-tab${activeTab === "keys" ? " builder-tab--active" : ""}`}
+            onClick={() => handleTabClick("keys")}
+            aria-label="API Key Manager"
+          >
+            <span className="builder-tab__icon">🗝</span>
+            API Keys
+          </button>
+        </GlassHoverTooltip>
 
-        <button
-          type="button"
-          className={`builder-tab${activeTab === "spend" ? " builder-tab--active" : ""}`}
-          onClick={() => handleTabClick("spend")}
-          aria-label="AI Spend Tracker"
+        <GlassHoverTooltip
+          label="AI Spend Tracker — usage and cost across providers"
+          placement="auto"
         >
-          <span className="builder-tab__icon">💸</span>
-          Spend
-        </button>
+          <button
+            type="button"
+            className={`builder-tab${activeTab === "spend" ? " builder-tab--active" : ""}`}
+            onClick={() => handleTabClick("spend")}
+            aria-label="AI Spend Tracker"
+          >
+            <span className="builder-tab__icon">💸</span>
+            Spend
+          </button>
+        </GlassHoverTooltip>
 
-        <button
-          type="button"
-          className={`builder-tab${activeTab === "extract" ? " builder-tab--active" : ""}`}
-          onClick={() => handleTabClick("extract")}
-          aria-label="Extract & Build Mode"
-          title="Extract & Build Mode — open panel; press START inside to begin"
+        <GlassHoverTooltip
+          label="Watch any build video you care about — extract their plan into a launch-ready master prompt · one-click to Glass, Cursor, or Claude"
+          placement="auto"
         >
-          <span className="builder-tab__icon">⬡</span>
-          Extract &amp; Build Mode
-        </button>
+          <button
+            type="button"
+            className={`builder-tab${activeTab === "extract" ? " builder-tab--active" : ""}`}
+            onClick={() => handleTabClick("extract")}
+            aria-label="Extract & Build Mode"
+          >
+            <span className="builder-tab__icon">⬡</span>
+            Extract &amp; Build Mode
+          </button>
+        </GlassHoverTooltip>
 
-        <div className="builder-strip__divider" />
+        <GlassHoverTooltip label={terminalLabel} placement="auto">
+          <button
+            type="button"
+            className={`builder-tab glass-terminal-toggle${terminalOpen ? " glass-terminal-toggle--open" : ""}`}
+            onClick={toggleTerminal}
+            aria-label={terminalLabel}
+          >
+            <span
+              className={`glass-terminal-toggle__dot${terminalActive ? " glass-terminal-toggle__dot--live" : ""}`}
+              aria-hidden="true"
+            />
+            <span className="builder-tab__icon">&gt;_</span>
+            Terminal
+          </button>
+        </GlassHoverTooltip>
+
+        <div className="builder-strip__divider" aria-hidden="true" />
+
+        <GlassHoverTooltip label={companionTooltip} placement="auto">
+          <button
+            type="button"
+            className={`builder-tab builder-tab--aletheia${companion.active ? " builder-tab--companion--active" : ""}${aletheiaSweeping ? " builder-tab--aletheia--revealing" : ""}`}
+            onClick={companion.toggle}
+            onPointerEnter={replayAletheiaTruthSweep}
+            aria-label={companion.active ? "Turn off Aletheia" : "Turn on Aletheia"}
+            aria-pressed={companion.active}
+            data-testid="glass-companion-toggle"
+          >
+            <span
+              className={`builder-tab__glass-sweep${aletheiaSweeping ? " builder-tab__glass-sweep--active" : ""}`}
+              aria-hidden="true"
+            >
+              <span
+                className="builder-tab__glass-sweep-bar"
+                onAnimationEnd={handleAletheiaSweepEnd}
+              />
+            </span>
+            <span
+              className={`builder-companion-toggle__dot${companion.active ? " builder-companion-toggle__dot--live" : ""}`}
+              aria-hidden="true"
+            />
+            <span className="builder-tab__aletheia-label" aria-hidden="true">
+              <span className="builder-tab__aletheia-label-glow">Aletheia</span>
+              <span className="builder-tab__aletheia-label-face">Aletheia</span>
+            </span>
+          </button>
+        </GlassHoverTooltip>
+
+        <GlassHoverTooltip
+          label={agentsTabTooltip}
+          placement="auto"
+        >
+          <button
+            type="button"
+            className={`builder-tab builder-tab--agents${activeTab === "agents" ? " builder-tab--active" : ""}${agentRunning ? " builder-tab--agents-running" : ""}`}
+            onClick={handleAgentsTabClick}
+            aria-label={agentRunning ? "Stop running agent" : "Glass Agents"}
+          >
+            <span className="builder-tab__icon">◈</span>
+            Agents
+          </button>
+        </GlassHoverTooltip>
+
+        <GlassHoverTooltip
+          label="Search Glass powers — ask, terminal, capture, and more · ⌘⇧P"
+          placement="auto"
+        >
+          <button
+            type="button"
+            className="builder-tab builder-tab--powers"
+            onClick={() => send({ type: "toggle-powers-menu" })}
+            aria-label="Glass Powers Menu (Command Shift P)"
+          >
+            <span className="builder-tab__strip-label builder-tab__strip-label--powers" aria-hidden="true">
+              Powers Menu
+            </span>
+          </button>
+        </GlassHoverTooltip>
+
+        <GlassHoverTooltip
+          label="Search keys, terminal history, and quick actions · ⌘⇧G"
+          placement="auto"
+        >
+          <button
+            type="button"
+            className="builder-tab builder-tab--palette"
+            onClick={() => send({ type: "toggle-command-palette" })}
+            aria-label="Glass Command Palette (Command Shift G)"
+          >
+            <span className="builder-tab__strip-label builder-tab__strip-label--palette" aria-hidden="true">
+              Command Palette
+            </span>
+          </button>
+        </GlassHoverTooltip>
       </div>
     </>
   );

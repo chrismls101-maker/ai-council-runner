@@ -56,6 +56,22 @@ export function clearTerminalContext(): void {
   lastUpdated = null;
 }
 
+/** Recent blocks for palette / AI context (newest last). */
+export function getRecentTerminalContextBlocks(): readonly TerminalContextBlock[] {
+  return recentBlocks;
+}
+
+export function getLastTerminalContextBlock(): TerminalContextBlock | null {
+  return recentBlocks.length > 0 ? recentBlocks[recentBlocks.length - 1]! : null;
+}
+
+export function getLastTerminalErrorBlock(): TerminalContextBlock | null {
+  for (let i = recentBlocks.length - 1; i >= 0; i--) {
+    if (recentBlocks[i]!.status === "error") return recentBlocks[i]!;
+  }
+  return null;
+}
+
 /**
  * Returns a human-readable summary of recent terminal activity,
  * suitable for appending to the AI `userContext` field.

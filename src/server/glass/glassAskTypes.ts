@@ -61,6 +61,56 @@ export interface GlassAskRequestBody {
   userProfile?: import("../userProfile/types.js").GlassUserProfile;
   /** Passive context summary from Glass context engine (preferred over raw userProfile). */
   userContext?: string;
+  /** Glass Companion session — request structured uiMap + guidancePlan on visual asks. */
+  companionMode?: boolean;
+  /** Local AX/DOM marks from Glass capture (Set-of-Marks context). */
+  companionUiMap?: {
+    captureId: string;
+    width: number;
+    height: number;
+    marks: Array<{
+      id: string;
+      label?: string;
+      source: string;
+      bounds: { x: number; y: number; w: number; h: number };
+    }>;
+  };
+  /** Phase 4a — how Companion should handle this turn. */
+  companionRoute?: "full_visual_ask" | "retarget" | "direct_follow_up" | "script_continue";
+  /** Phase 4a — prior guidance context (no inline image blobs). */
+  companionMemory?: {
+    lastPrompt: string;
+    lastUiMap: {
+      captureId: string;
+      width: number;
+      height: number;
+      marks: Array<{
+        id: string;
+        label?: string;
+        source: string;
+        bounds: { x: number; y: number; w: number; h: number };
+      }>;
+    };
+    lastGuidancePlan: {
+      captureId: string;
+      speech: Array<{ segmentIndex: number; text: string }>;
+      manifestations: Array<{
+        type: string;
+        targetMarkId: string;
+        enterAtSegment: number;
+        exitAtSegment?: number;
+        label?: string;
+      }>;
+      panel?: string;
+    };
+    lastCaptureId: string;
+    lastCaptureAt: number;
+    activeMarkIds: string[];
+    frontApp?: string;
+    windowTitle?: string;
+  };
+  /** When true, omit stored/user profile from the prompt (e.g. session debrief). */
+  suppressUserProfile?: boolean;
 }
 
 export interface GlassAskResponseBody {
@@ -78,4 +128,6 @@ export interface GlassAskResponseBody {
   title?: string;
   warnings?: string[];
   usage?: unknown;
+  /** Structured presence payload when companionMode was true on a visual ask. */
+  companionGuidance?: import("./glassCompanionGuidance.js").CompanionGuidancePayload;
 }

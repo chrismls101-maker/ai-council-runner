@@ -52,6 +52,14 @@ test("shouldUseVirtualSystemAudioCapture when virtual device selected", () => {
     }),
     false,
   );
+  const devices = detectVirtualAudioDevices([{ deviceId: "bh2", label: "BlackHole 2ch" }]);
+  assert.equal(
+    shouldUseVirtualSystemAudioCapture({
+      selectedVirtualAudioDeviceId: undefined,
+      virtualAudioDevices: devices,
+    }),
+    true,
+  );
 });
 
 test("evaluateVirtualAudioProbe marks track without activity as available with silent guidance", () => {

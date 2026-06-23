@@ -108,6 +108,7 @@ export function sttTranscriptionFailedMessage(audioCaptured: boolean, detail?: s
 export type SttFailureKind =
   | "no_signal"
   | "transcription_failed"
+  | "quota_exceeded"
   | "server_unavailable"
   | "config_missing";
 
@@ -125,6 +126,15 @@ const SERVER_UNAVAILABLE_PATTERNS = [
   /econnrefused/i,
   /failed to reach/i,
   /network failure/i,
+];
+
+const QUOTA_EXCEEDED_PATTERNS = [
+  /quota or rate limit exceeded/i,
+  /exceeded your current quota/i,
+  /insufficient_quota/i,
+  /rate limit/i,
+  /too many requests/i,
+  /billing issue/i,
 ];
 
 const CONFIG_MISSING_PATTERNS = [
@@ -146,6 +156,7 @@ export function classifySttFailure(detail: string | undefined): SttFailureKind {
   if (!text) return "transcription_failed";
   if (CONFIG_MISSING_PATTERNS.some((re) => re.test(text))) return "config_missing";
   if (SERVER_UNAVAILABLE_PATTERNS.some((re) => re.test(text))) return "server_unavailable";
+  if (QUOTA_EXCEEDED_PATTERNS.some((re) => re.test(text))) return "quota_exceeded";
   if (NO_SIGNAL_PATTERNS.some((re) => re.test(text))) return "no_signal";
   return "transcription_failed";
 }
@@ -167,6 +178,8 @@ export function sttSourceErrorMessage(
       return `${STT_SERVER_UNAVAILABLE_MESSAGE}${suffix}`;
     case "config_missing":
       return `${sourceLabel} captured, but transcription is not configured. ${STT_MISSING_KEY_MESSAGE}`;
+    case "quota_exceeded":
+      return `${sourceLabel} captured audio but OpenAI quota or billing limit was reached. Add credit at platform.openai.com or check which API key Glass STT uses in Setup.${suffix}`;
     case "transcription_failed":
     default:
       return `${sourceLabel} captured audio but transcription failed. Try again or check STT settings.${suffix}`;

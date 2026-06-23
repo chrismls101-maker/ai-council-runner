@@ -40,6 +40,29 @@ export const LIVE_NOTES_AI_REFRESH_MS = 15_000;
  */
 export const LIVE_NOTES_AI_MIN_DELTA_CHARS = 150;
 
+/** Max AI notes kept for one listen session (oldest dropped when exceeded). */
+export const MAX_LISTEN_AI_NOTES = 50;
+
+/** Append new AI notes without replacing prior passes; dedupe by note text. */
+export function mergeListenAiNotes(
+  existing: ListenAiNote[],
+  incoming: ListenAiNote[],
+  maxNotes = MAX_LISTEN_AI_NOTES,
+): ListenAiNote[] {
+  if (incoming.length === 0) return existing;
+  const merged = [...existing];
+  for (const note of incoming) {
+    const dup = merged.some(
+      (e) =>
+        e.section === note.section &&
+        (isDuplicateText(e.note, note.note) ||
+          (note.anchor && e.anchor && isDuplicateText(e.anchor, note.anchor))),
+    );
+    if (!dup) merged.push(note);
+  }
+  return merged.length > maxNotes ? merged.slice(-maxNotes) : merged;
+}
+
 /**
  * A single note produced by the AI (GPT-5.5) background quality pass.
  * These are higher-quality than local regex notes and shown first in each section.
@@ -436,21 +459,21 @@ export function buildListenLiveNotes(input: BuildListenLiveNotesInput): ListenLi
   // Only show the insight strip when AI notes have landed — local template notes
   // (both moment-based and streaming) are too low-quality to surface in the gold
   // banner. The strip stays hidden until GPT-5.5 runs (~15s after enough audio).
-  const latestInsight: ListenMeaningNote | undefined =
-    aiNotes.length > 0
-      ? {
-          id: aiNotes[0]!.id,
-          kind: "key_idea",
-          title: "Key idea",
-          note: aiNotes[0]!.note,
-          whyItMatters: aiNotes[0]!.why,
-          transcriptAnchor: aiNotes[0]!.anchor,
-          confidence: "high",
-          status: "mature",
-          createdAt: aiNotes[0]!.generatedAt,
-          updatedAt: aiNotes[0]!.generatedAt,
-        }
-      : undefined;
+  const latestAiNote = aiNotes.length > 0 ? aiNotes[aiNotes.length - 1]! : undefined;
+  const latestInsight: ListenMeaningNote | undefined = latestAiNote
+    ? {
+        id: latestAiNote.id,
+        kind: "key_idea",
+        title: "Key idea",
+        note: latestAiNote.note,
+        whyItMatters: latestAiNote.why,
+        transcriptAnchor: latestAiNote.anchor,
+        confidence: "high",
+        status: "mature",
+        createdAt: latestAiNote.generatedAt,
+        updatedAt: latestAiNote.generatedAt,
+      }
+    : undefined;
   const topicFallback = rollingTranscript.slice(-160).trim();
   const currentTopic =
     pickCurrentTopic(activeMoments) ??

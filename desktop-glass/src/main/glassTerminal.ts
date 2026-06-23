@@ -15,10 +15,11 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
+import { shellLaunchConfig } from "./glassShellIntegration.ts";
 
 const execAsync = promisify(exec);
 
-const require = createRequire(import.meta.url);
+const nodeRequire = createRequire(import.meta.url);
 
 export interface PtySession {
   id: string;
@@ -102,7 +103,7 @@ function makeId(): string {
 function ensurePtySpawnHelperExecutable(): void {
   if (process.platform === "win32") return;
   try {
-    const ptyRoot = path.dirname(require.resolve("node-pty/package.json"));
+    const ptyRoot = path.dirname(nodeRequire.resolve("node-pty/package.json"));
     const candidates = [
       path.join(ptyRoot, "prebuilds", `${process.platform}-${process.arch}`, "spawn-helper"),
       path.join(ptyRoot, "build", "Release", "spawn-helper"),
@@ -169,15 +170,17 @@ export function createPtySession(
   const rows = opts.rows ?? 30;
   const shell = resolveShell();
   const cwd = os.homedir();
+  const launch = shellLaunchConfig(shell);
+  const env = { ...buildEnv(), ...launch.env };
 
   let term: pty.IPty;
   try {
-    term = pty.spawn(shell, [], {
+    term = pty.spawn(shell, launch.args, {
       name: "xterm-256color",
       cols,
       rows,
       cwd,
-      env: buildEnv(),
+      env,
     });
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);

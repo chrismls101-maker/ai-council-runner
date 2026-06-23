@@ -1,4 +1,4 @@
-import { useMemo, useRef, useCallback } from "react";
+import { useMemo, useRef } from "react";
 import { ChromeRepositionOverlay } from "../ChromeRepositionOverlay.tsx";
 import { send, useGlassState } from "../useGlassState.ts";
 import { useChromeLockToggle } from "../useChromeLockToggle.ts";
@@ -13,8 +13,9 @@ import {
 } from "../../shared/glassModePresets.ts";
 import { MEETING_SUB_TYPE_LABELS } from "../../shared/meetingIntelligenceTypes.ts";
 import type { PanelTab } from "../../shared/types.ts";
-import { resolveChromeLockLabel, resolveTerminalLabel } from "./dockLabels.ts";
+import { resolveChromeLockLabel } from "./dockLabels.ts";
 import { GlassHoverTooltip } from "../components/GlassHoverTooltip.tsx";
+import { useGlassTerminalToggle } from "../useGlassTerminalToggle.ts";
 
 // ─── Mode colour tokens ───────────────────────────────────────────────────────
 const MODE_COLORS: Record<
@@ -34,16 +35,8 @@ export function Dock(): JSX.Element {
   const actionsRef = useRef<HTMLDivElement>(null);
   const stackRef = useRef<HTMLDivElement>(null);
 
-  const terminalOpen = state.glassDockTerminalOpen ?? false;
-  const terminalActive = !!state.glassDockTerminalId;
-
-  const handleTerminalToggle = useCallback((): void => {
-    if (terminalOpen) {
-      send({ type: "glass-terminal-close" });
-    } else {
-      send({ type: "glass-terminal-open" });
-    }
-  }, [terminalOpen]);
+  const { terminalOpen, terminalActive, label: terminalLabel, toggle: handleTerminalToggle } =
+    useGlassTerminalToggle();
 
   const chromeLocked = state.glassSettings.chromeLayoutLocked !== false;
   const toggleChromeLock = useChromeLockToggle();
@@ -95,7 +88,7 @@ export function Dock(): JSX.Element {
     if (audioLive) {
       send({ type: "pause" });
     } else if (audioPaused) {
-      tx.startListening();
+      send({ type: "request-start-listening" });
     }
   };
 
@@ -195,7 +188,7 @@ export function Dock(): JSX.Element {
                   type="button"
                   className="gbtn dock__btn-resume"
                   data-testid="glass-dock-resume-audio"
-                  onClick={tx.startListening}
+                  onClick={() => send({ type: "request-start-listening" })}
                 >
                   ▷ Resume
                 </button>
@@ -240,21 +233,18 @@ export function Dock(): JSX.Element {
           </button>
 
           {/* Terminal toggle — always visible */}
-          <GlassHoverTooltip label={resolveTerminalLabel(terminalOpen)}>
+          <GlassHoverTooltip label={terminalLabel} placement="top">
             <button
               type="button"
-              className={`gbtn dock__btn-tool dock__btn-terminal${terminalOpen ? " dock__btn-terminal--active" : ""}`}
+              className={`gbtn dock__btn-tool glass-terminal-toggle${terminalOpen ? " glass-terminal-toggle--open" : ""}`}
               data-testid="glass-dock-terminal-toggle"
-              aria-label={resolveTerminalLabel(terminalOpen)}
+              aria-label={terminalLabel}
               onClick={handleTerminalToggle}
             >
-              {/* Live indicator — visible while open, pulses when the PTY session is active */}
-              {terminalOpen && (
-                <span
-                  className={`dock__terminal-dot${terminalActive ? " dock__terminal-dot--live" : ""}`}
-                  aria-hidden="true"
-                />
-              )}
+              <span
+                className={`glass-terminal-toggle__dot${terminalActive ? " glass-terminal-toggle__dot--live" : ""}`}
+                aria-hidden="true"
+              />
               {">_"}
             </button>
           </GlassHoverTooltip>

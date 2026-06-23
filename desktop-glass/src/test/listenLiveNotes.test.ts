@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import {
   buildListenLiveNotes,
   listenTranscriptChunksFromEvents,
+  mergeListenAiNotes,
   unclearTranscriptNote,
 } from "../shared/listenLiveNotes.ts";
+import type { ListenAiNote } from "../shared/listenLiveNotes.ts";
 import type { ListenMoment } from "../shared/listenMomentTypes.ts";
 import { isActionFirstListenCard } from "../shared/listenInsightQuality.ts";
 import { shouldSurfaceListenMoment } from "../shared/listenMomentTiming.ts";
@@ -205,4 +207,52 @@ test("unclear transcript fragment note does not become action", () => {
   const note = unclearTranscriptNote("continued, is this list");
   assert.match(note, /not enough context/i);
   assert.equal(isActionFirstListenCard(note), false);
+});
+
+test("mergeListenAiNotes accumulates passes without duplicate text", () => {
+  const existing: ListenAiNote[] = [
+    {
+      id: "ai-1",
+      section: "keyIdeas",
+      note: "Compounding interest works in reverse for debt.",
+      generatedAt: new Date().toISOString(),
+    },
+  ];
+  const incoming: ListenAiNote[] = [
+    {
+      id: "ai-2",
+      section: "keyIdeas",
+      note: "Compounding interest works in reverse for debt.",
+      generatedAt: new Date().toISOString(),
+    },
+    {
+      id: "ai-3",
+      section: "frameworks",
+      note: "Distribution beats product quality for most early-stage startups.",
+      generatedAt: new Date().toISOString(),
+    },
+  ];
+  const merged = mergeListenAiNotes(existing, incoming);
+  assert.equal(merged.length, 2);
+  assert.equal(merged[1]!.id, "ai-3");
+});
+
+test("buildListenLiveNotes latestInsight uses newest AI note", () => {
+  const aiNotes: ListenAiNote[] = [
+    {
+      id: "ai-old",
+      section: "keyIdeas",
+      note: "First insight from the session.",
+      generatedAt: "2026-01-01T00:00:00.000Z",
+    },
+    {
+      id: "ai-new",
+      section: "concepts",
+      note: "Latest insight from the session.",
+      generatedAt: "2026-01-01T00:01:00.000Z",
+    },
+  ];
+  const notes = buildListenLiveNotes({ moments: [], aiNotes });
+  assert.equal(notes.latestInsight?.id, "ai-new");
+  assert.match(notes.latestInsight?.note ?? "", /Latest insight/);
 });

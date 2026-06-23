@@ -39,6 +39,7 @@ import {
 import {
   BLACKHOLE_NOT_DETECTED_GUIDANCE,
   pickPreferredVirtualAudioDevice,
+  resolveVirtualAudioDeviceId,
   shouldUseVirtualSystemAudioCapture,
 } from "../shared/virtualAudioCapture.ts";
 import { detectVirtualAudioDevices } from "../shared/virtualAudioDevices.ts";
@@ -71,6 +72,7 @@ import {
 import { LIVE_TRANSLATE_CHUNK_MS } from "../shared/liveTranslateConfig.ts";
 import { shouldSuppressTranslateStartupError } from "../shared/liveTranslateGrace.ts";
 import { isLiveTranslateActive, translateUsesMicrophoneInput } from "../shared/liveTranslateState.ts";
+import { copilotModeIsActive } from "../shared/copilotTypes.ts";
 import type { GlassSpeechRecognition } from "./speech.d.ts";
 
 type SpeechRecognitionCtor = new () => GlassSpeechRecognition;
@@ -123,9 +125,13 @@ export interface TranscriptionController {
   canTranscribeLastChunk: boolean;
   setMode: (mode: TranscriptionMode) => void;
   startMicrophoneListening: (inputPrefix?: string) => Promise<void>;
+  /** Aletheia: mic for user voice + optional parallel system-audio transcription. */
+  startCompanionListening: () => Promise<void>;
+  /** True when companion parallel system-audio capture is active. */
+  companionSystemAudioActive: boolean;
   startSystemAudioListening: (forTranslate?: boolean) => void;
   startListening: () => void;
-  beginListeningCapture: () => void;
+  beginListeningCapture: (modeOverride?: TranscriptionMode) => void;
   stopListening: () => void;
   stopListeningLocal: () => void;
   setMicInputOverride: (text: string) => void;
@@ -154,6 +160,11 @@ export function useTranscription(): TranscriptionController {
   const recognitionRef = useRef<GlassSpeechRecognition | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+  const auxSystemStreamRef = useRef<MediaStream | null>(null);
+  const auxSystemRecorderRef = useRef<MediaRecorder | null>(null);
+  const auxChunkSegmentTimerRef = useRef<number | null>(null);
+  const companionSystemAudioActiveRef = useRef(false);
+  const [companionSystemAudioActive, setCompanionSystemAudioActive] = useState(false);
   const lastBlobRef = useRef<Blob | null>(null);
   const lastMimeRef = useRef<string>("audio/webm");
   const timerRef = useRef<number | null>(null);
@@ -195,9 +206,19 @@ export function useTranscription(): TranscriptionController {
         systemAudioDetail,
         systemAudioListening:
           selectedMode === "system_audio" && state.status === "listening",
+        selectedVirtualAudioDeviceId: glassState.selectedVirtualAudioDeviceId,
+        virtualAudioDevices: glassState.virtualAudioDevices,
         stt: glassState.stt,
       }),
-    [selectedMode, systemAudioStatus, systemAudioDetail, state.status, glassState.stt],
+    [
+      selectedMode,
+      systemAudioStatus,
+      systemAudioDetail,
+      state.status,
+      glassState.stt,
+      glassState.selectedVirtualAudioDeviceId,
+      glassState.virtualAudioDevices,
+    ],
   );
 
   const effectiveMode = useMemo(() => {
@@ -256,16 +277,30 @@ export function useTranscription(): TranscriptionController {
       window.clearTimeout(chunkSegmentTimerRef.current);
       chunkSegmentTimerRef.current = null;
     }
+    if (auxChunkSegmentTimerRef.current != null) {
+      window.clearTimeout(auxChunkSegmentTimerRef.current);
+      auxChunkSegmentTimerRef.current = null;
+    }
     recognitionRef.current?.stop();
     recognitionRef.current = null;
     if (mediaRecorderRef.current?.state !== "inactive") {
       mediaRecorderRef.current?.stop();
     }
     mediaRecorderRef.current = null;
+    if (auxSystemRecorderRef.current?.state !== "inactive") {
+      auxSystemRecorderRef.current?.stop();
+    }
+    auxSystemRecorderRef.current = null;
     if (mediaStreamRef.current) {
       stopMediaStreamState(mediaStreamRef.current.getTracks());
       mediaStreamRef.current = null;
     }
+    if (auxSystemStreamRef.current) {
+      stopMediaStreamState(auxSystemStreamRef.current.getTracks());
+      auxSystemStreamRef.current = null;
+    }
+    companionSystemAudioActiveRef.current = false;
+    setCompanionSystemAudioActive(false);
   }, []);
 
   const stopListeningRef = useRef<(() => void) | null>(null);
@@ -415,8 +450,17 @@ export function useTranscription(): TranscriptionController {
       // translateActive: prefer the explicit forTranslate flag (set synchronously by the caller
       // before the IPC state round-trip completes) over the potentially-stale glassState.
       const translateActive = forTranslate || isLiveTranslateActive(glassState.liveTranslate);
-      const useDeepgramStreaming =
-        translateActive && source === "system_audio" && !!glassState.stt.deepgramEnabled;
+      const deepgramAvailable =
+        source === "system_audio" && !!glassState.stt.deepgramEnabled;
+      const listenDiarizationActive =
+        deepgramAvailable &&
+        glassState.copilot?.config?.sessionType === "video_learning" &&
+        copilotModeIsActive(glassState.copilot?.config?.mode ?? "off");
+      const useDeepgramStreaming = translateActive && deepgramAvailable;
+      // Listen mode runs a separate Deepgram session for speaker diarization while
+      // OpenAI/server STT still handles chunk transcription for live notes.
+      const forwardDeepgramForListen = listenDiarizationActive && !useDeepgramStreaming;
+      const forwardDeepgramAudio = useDeepgramStreaming || forwardDeepgramForListen;
 
       const beginSegment = () => {
         if (mediaStreamRef.current !== stream || !isListeningRef.current) return;
@@ -424,15 +468,15 @@ export function useTranscription(): TranscriptionController {
 
         recorder.ondataavailable = (event) => {
           if (!event.data || event.data.size === 0) return;
-          if (useDeepgramStreaming) {
+          if (forwardDeepgramAudio) {
             // Streaming path: forward raw audio bytes to main → Deepgram WebSocket.
             // Do NOT apply the 512-byte silence filter here — Deepgram needs silence
             // chunks to run its own VAD and detect speech boundaries correctly.
             void event.data.arrayBuffer().then((buf) => {
               window.glass.sendDeepgramAudioChunk(buf);
             });
-            return;
           }
+          if (useDeepgramStreaming) return;
           if (event.data.size < 512) return; // silence filter for Whisper/server STT only
           void processBlob(event.data, mimeType, source);
         };
@@ -447,7 +491,7 @@ export function useTranscription(): TranscriptionController {
         };
         mediaRecorderRef.current = recorder;
         try {
-          if (useDeepgramStreaming) {
+          if (forwardDeepgramAudio) {
             // Timeslice mode: ondataavailable fires every 100 ms for low-latency
             // interim word display. No timer-based stop — runs until stopAllStreams().
             recorder.start(100);
@@ -476,7 +520,14 @@ export function useTranscription(): TranscriptionController {
       startTimer();
       beginSegment();
     },
-    [processBlob, startTimer, glassState.liveTranslate, glassState.stt.deepgramEnabled],
+    [
+      processBlob,
+      startTimer,
+      glassState.liveTranslate,
+      glassState.stt.deepgramEnabled,
+      glassState.copilot?.config?.sessionType,
+      glassState.copilot?.config?.mode,
+    ],
   );
 
   const startWebSpeech = useCallback(() => {
@@ -582,10 +633,10 @@ export function useTranscription(): TranscriptionController {
   );
 
   const resolveVirtualDeviceId = useCallback((): string | undefined => {
-    const selected = glassState.selectedVirtualAudioDeviceId?.trim();
-    if (selected) return selected;
-    const preferred = pickPreferredVirtualAudioDevice(glassState.virtualAudioDevices ?? []);
-    return preferred?.deviceId;
+    return resolveVirtualAudioDeviceId({
+      selectedVirtualAudioDeviceId: glassState.selectedVirtualAudioDeviceId,
+      virtualAudioDevices: glassState.virtualAudioDevices,
+    });
   }, [glassState.selectedVirtualAudioDeviceId, glassState.virtualAudioDevices]);
 
   const captureVirtualSystemAudioStream = useCallback(async (): Promise<MediaStream | null> => {
@@ -608,6 +659,7 @@ export function useTranscription(): TranscriptionController {
   const startSystemAudio = useCallback(async (forTranslate = false) => {
     const useVirtual = shouldUseVirtualSystemAudioCapture({
       selectedVirtualAudioDeviceId: glassState.selectedVirtualAudioDeviceId,
+      virtualAudioDevices: glassState.virtualAudioDevices,
     });
 
     try {
@@ -683,11 +735,76 @@ export function useTranscription(): TranscriptionController {
   }, [
     systemAudioStatus,
     glassState.selectedVirtualAudioDeviceId,
+    glassState.virtualAudioDevices,
     captureVirtualSystemAudioStream,
     applySystemAudioProbeResult,
     snapshot,
     startChunkRecorder,
     dispatchTranslateAwareError,
+  ]);
+
+  const startCompanionSystemAudioAux = useCallback(async () => {
+    if (companionSystemAudioActiveRef.current || !isListeningRef.current) return;
+    if (!glassState.stt.enabled) return;
+    const canAutoStart =
+      systemAudioStatus === "available" ||
+      shouldUseVirtualSystemAudioCapture({
+        selectedVirtualAudioDeviceId: glassState.selectedVirtualAudioDeviceId,
+        virtualAudioDevices: glassState.virtualAudioDevices,
+      });
+    if (!canAutoStart) return;
+
+    try {
+      const stream = await captureVirtualSystemAudioStream();
+      if (!stream || stream.getAudioTracks().length === 0) return;
+
+      auxSystemStreamRef.current = stream;
+      companionSystemAudioActiveRef.current = true;
+      setCompanionSystemAudioActive(true);
+      applySystemAudioProbeResult("available", "Virtual system audio input active.");
+
+      const mimeType = pickRecorderMime();
+      const beginAuxSegment = () => {
+        if (auxSystemStreamRef.current !== stream || !isListeningRef.current) return;
+        const recorder = new MediaRecorder(stream, { mimeType });
+        recorder.ondataavailable = (event) => {
+          if (!event.data || event.data.size === 0) return;
+          if (event.data.size < 512) return;
+          void processBlob(event.data, mimeType, "system_audio");
+        };
+        recorder.onstop = () => {
+          if (auxSystemRecorderRef.current === recorder) {
+            auxSystemRecorderRef.current = null;
+          }
+          if (auxSystemStreamRef.current === stream && isListeningRef.current) {
+            beginAuxSegment();
+          }
+        };
+        auxSystemRecorderRef.current = recorder;
+        try {
+          recorder.start();
+          auxChunkSegmentTimerRef.current = window.setTimeout(() => {
+            auxChunkSegmentTimerRef.current = null;
+            if (recorder.state === "recording") recorder.stop();
+          }, DEFAULT_CHUNK_MS);
+        } catch {
+          companionSystemAudioActiveRef.current = false;
+          setCompanionSystemAudioActive(false);
+        }
+      };
+      beginAuxSegment();
+    } catch {
+      companionSystemAudioActiveRef.current = false;
+      setCompanionSystemAudioActive(false);
+    }
+  }, [
+    glassState.stt.enabled,
+    glassState.selectedVirtualAudioDeviceId,
+    glassState.virtualAudioDevices,
+    systemAudioStatus,
+    captureVirtualSystemAudioStream,
+    applySystemAudioProbeResult,
+    processBlob,
   ]);
 
   const probeVirtualAudioDevices = useCallback(async () => {
@@ -821,38 +938,42 @@ export function useTranscription(): TranscriptionController {
     ],
   );
 
-  const beginListeningCapture = useCallback(() => {
-    if (selectedMode === "manual") {
+  const startCompanionListening = useCallback(async () => {
+    if (state.status !== "listening") {
+      await startMicrophoneListening("");
+    }
+    void startCompanionSystemAudioAux();
+  }, [state.status, startMicrophoneListening, startCompanionSystemAudioAux]);
+
+  const beginListeningCapture = useCallback((modeOverride?: TranscriptionMode) => {
+    if (isListeningRef.current && mediaStreamRef.current) return;
+    if (modeOverride && modeOverride !== selectedMode) {
+      setSelectedMode(modeOverride);
+    }
+    const mode = modeOverride ?? effectiveMode;
+    if (mode === "manual") {
       dispatch({ type: "SET_ERROR", message: "Choose Microphone or System Audio before starting." });
       return;
     }
     if (
-      selectedMode === "microphone_web_speech" ||
-      selectedMode === "microphone_media_recorder"
+      mode === "microphone_web_speech" ||
+      mode === "microphone_media_recorder"
     ) {
       void startMicrophoneListening();
       return;
     }
-    if (!canStartListening(effectiveMode, snapshot)) {
+    if (!canStartListening(mode, snapshot)) {
       dispatch({
         type: "SET_ERROR",
         message:
-          !glassState.stt.enabled && usesSttChunkCapture(effectiveMode)
+          !glassState.stt.enabled && usesSttChunkCapture(mode)
             ? STT_MIC_NOT_CONFIGURED_MESSAGE
-            : modeStatusMessage(effectiveMode, snapshot),
+            : modeStatusMessage(mode, snapshot),
       });
       return;
     }
     dispatch({ type: "SET_ERROR", message: undefined });
-    if (effectiveMode === "microphone_web_speech") {
-      startWebSpeech();
-      return;
-    }
-    if (effectiveMode === "microphone_media_recorder") {
-      void startMediaRecorder();
-      return;
-    }
-    if (effectiveMode === "system_audio") {
+    if (mode === "system_audio") {
       void startSystemAudio();
     }
   }, [
@@ -1024,6 +1145,8 @@ export function useTranscription(): TranscriptionController {
     canTranscribeLastChunk: hasLastChunk && usesSttChunkCapture(effectiveMode),
     setMode,
     startMicrophoneListening,
+    startCompanionListening,
+    companionSystemAudioActive,
     startSystemAudioListening,
     startListening,
     beginListeningCapture,

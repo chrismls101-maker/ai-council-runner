@@ -9,12 +9,26 @@
 import * as THREE from 'three';
 import { SWARM_CONFIG } from './swarmConfig';
 
+export type AtomTint = 'sapphire' | 'emerald';
+
+const ATOM_TINTS: Record<AtomTint, { grade: THREE.Vector3; flash: THREE.Vector3 }> = {
+  sapphire: {
+    grade: new THREE.Vector3(0.34, 0.58, 1.3),
+    flash: new THREE.Vector3(0.3, 0.66, 1.0),
+  },
+  emerald: {
+    grade: new THREE.Vector3(0.28, 1.08, 0.62),
+    flash: new THREE.Vector3(0.35, 1.0, 0.52),
+  },
+};
+
 export interface SubstrateRenderMaterialResult {
   material: THREE.MeshStandardMaterial;
   uniforms: Record<string, THREE.IUniform>;
 }
 
-export function createSubstrateRenderMaterial(): SubstrateRenderMaterialResult {
+export function createSubstrateRenderMaterial(atomTint: AtomTint = 'sapphire'): SubstrateRenderMaterialResult {
+  const tint = ATOM_TINTS[atomTint];
   const uniforms: Record<string, THREE.IUniform> = {
     uPosTex: { value: null },
     uTime:   { value: 0 },
@@ -25,7 +39,9 @@ export function createSubstrateRenderMaterial(): SubstrateRenderMaterialResult {
     uAmber:  { value: 0 },         // status: error / unsure
     uGreen:  { value: 0 },         // status: resolved
     uFlash:  { value: 0 },         // completion crystallization burst (1 -> 0)
-    uBlue:   { value: 1 },         // 1 = atom (holds diamond-blue + flash), 0 = other forms (ice)
+    uBlue:   { value: 1 },         // 1 = atom (holds tint + flash), 0 = other forms (ice)
+    uAtomGrade: { value: tint.grade.clone() },
+    uAtomFlash: { value: tint.flash.clone() },
   };
 
   const material = new THREE.MeshStandardMaterial({
@@ -64,6 +80,7 @@ export function createSubstrateRenderMaterial(): SubstrateRenderMaterialResult {
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', /* glsl */ `#include <common>
         uniform float uTwinkle, uPrism, uRim, uAmber, uGreen, uFlash, uBlue;
+        uniform vec3 uAtomGrade, uAtomFlash;
         varying float vTwinkle, vSeed, vTip, vR, vCore;`)
       .replace('#include <emissivemap_fragment>', /* glsl */ `#include <emissivemap_fragment>
         {
@@ -79,23 +96,20 @@ export function createSubstrateRenderMaterial(): SubstrateRenderMaterialResult {
           // (the atom's resting blue is applied as a colour grade at the end —
           //  the whole crystal is blue, not just a glow.)
 
-          // COMPLETION BURST (atom only): a diamond-blue ring EXPLODES outward from
-          // the core, then fades — leaving the blue diamond behind.
-          vec3 diamondBlue = vec3(0.30, 0.66, 1.0);
+          // COMPLETION BURST (atom only): tinted ring expands from the core, then fades.
           float front = (1.0 - uFlash) * 3.0;               // ring expands as flash fades
           float ring = exp(-abs(vR - front) * 2.6) * uFlash;
-          totalEmissiveRadiance += diamondBlue * (ring * 3.6 + uFlash * 0.55 * (rimF + vTwinkle));
+          totalEmissiveRadiance += uAtomFlash * (ring * 3.6 + uFlash * 0.55 * (rimF + vTwinkle));
 
           // STATUS tint: amber = error/unsure, green = resolved
           float lit = rimF * 0.7 + vTwinkle * 1.0 + vTip * 0.8;
           totalEmissiveRadiance += vec3(1.00, 0.55, 0.12) * uAmber * lit;
           totalEmissiveRadiance += vec3(0.20, 1.00, 0.45) * uGreen * lit;
         }`)
-      // ATOM colour grade: tint the entire crystal — reflections, highlights and
-      // all — toward a perfect sapphire blue. Same diamond material, blue colour.
+      // ATOM colour grade: tint the entire crystal toward sapphire or emerald.
       // uBlue is 1 only for the atom, so the working forms stay neutral ice.
       .replace('#include <opaque_fragment>', /* glsl */ `#include <opaque_fragment>
-        gl_FragColor.rgb *= mix(vec3(1.0), vec3(0.34, 0.58, 1.30), uBlue * vCore);`);
+        gl_FragColor.rgb *= mix(vec3(1.0), uAtomGrade, uBlue * vCore);`);
   };
 
   return { material, uniforms };

@@ -13,7 +13,7 @@ This document is the **source of truth** for what IIVO Glass promises users. Eve
 
 **Numbering warning:** Contract feature numbers (**§1–§18**) are **not** the same as E2E test titles in `glass-critical.spec.ts` (e.g. contract **§5 = Pin**, but `glass-critical` **test 5 = Stop Everything / Listen**; contract **§6 = Auto-dismiss**, but `glass-critical` **test 6 = Council handoff**). Do not conflate them. Pin, auto-dismiss, and Remember this live in **`glass-contract.spec.ts`**, not panel setup.
 
-**Related docs:** `GLASS_QA.md` (manual QA), `LISTEN_MODE_ARCHITECTURE.md`, `GLASS_LIMITATIONS.md`
+**Related docs:** `GLASS_QA.md` (manual QA), `LISTEN_MODE_ARCHITECTURE.md`, `GLASS_LIMITATIONS.md`, `GLASS_COMPANION.md`, `GLASS_COMPANION_PHASE4.md`, `GLASS_COMPANION_OMNIPARSER.md`
 
 ---
 
@@ -734,6 +734,82 @@ Four rule-pairs: UI task → payment/auth config, test task → production deplo
 - `src/test/githubClient.test.ts` — 6 unit tests: HTTP client contract
 - `tests/e2e/glass-wingman.spec.ts` — 14 E2E tests: mode card visibility, default state, wingman-start/end, active/inactive/report panel states, add note via UI and IPC, no audio during session, report generation
 - `scripts/glass-qa-wingman.mjs` — QA script (§1–§14): server reachability, pre/post conditions, start/note/end lifecycle, v0.5.0 session fields, report structure, "never verified" language contract, cross-session memory, post-condition cleanup, GitHub PAT management, verification results shape
+
+---
+
+## 21. Glass Companion (Aletheia)
+
+**Trigger**
+- User taps **Aletheia** on the builder strip (toggle on / toggle off). Not hold-to-talk; not the command bar mic (Voice Mode).
+
+**User sees**
+- Strip status: `Aletheia · Listening`, `Aletheia · Listening · + audio` (when machine audio active), `Looking`, `Thinking`, `Speaking`, or `Step N of M` during multi-step scripts.
+- **Identity:** Aletheia (intelligence of Glass). **Voice:** Matilda via ElevenLabs (`glass-tts` / `glass-tts-timed`).
+- Ephemeral overlay highlights (glow, spotlight, callout, trace, cursor, magnifier, sketch, arrow, path) synced to speech or script beats.
+- **Glass Response Panel** opens for depth asks (generate, draft, plan) and substantial markdown answers.
+- ✕ dismiss on presence layer.
+
+**Session behavior**
+
+| Turn type | Behavior |
+|-----------|----------|
+| Direct ask | Aletheia answers via `GLASS_COMPANION_SESSION_APPEND` + direct ask; short spoken default |
+| Depth ask | `responseStyle: full` + Response Panel + short spoken summary |
+| Visual ask | Capture → AX/DOM/OmniParser UiMap → vision ` ```companion` JSON → overlay + timed TTS |
+| Retarget ("that one") | Reuse recent capture if same app + < 15s; partial replan; crossfade highlight |
+| Multi-step script | Model returns `steps[]`; Matilda plays each beat; "next"/"okay" advances ack gates |
+| Follow-up | Text-only replan with session memory; no fresh capture |
+| Listen-in / setup | User says "listen in on this video" → **one-sentence ack**, then silent until mic question |
+| Machine audio | Transcribed silently into `recentTranscript`; **never** auto-speaks or auto-asks |
+
+**Warm-up (OmniParser cold start)**
+- Warming: *"One moment — I'm opening my sight."*
+- Ready (once): *"I'm Aletheia. I'm with you — what do you need?"*
+- Skip if OmniParser off or already warm.
+
+**IPC**
+
+| Command | Effect |
+|---------|--------|
+| `toggle-companion-mode` | Flip session; warm OmniParser; clear presence + memory when off |
+| `clear-companion-presence` | Remove highlights; stop anchor watch |
+| `glass-tts-timed` | Segment-synced Matilda for guidance plans |
+| `submit-command` + `companionRoute` | Retarget / follow-up routing hint |
+| `stop-everything` | Aletheia off + presence + memory cleared |
+
+**Success**
+- Toggle on → mic listens continuously; optional parallel machine-audio transcription when loopback configured.
+- User speaks on mic → Aletheia responds (never unprompted from machine audio alone).
+- Visual questions produce spoken answer + spatial highlights anchored to screen regions.
+- Retarget corrections move highlight without full "let me look…" when memory is valid.
+- "Walk me through…" can produce multi-step scripts with crossfade between beats.
+- Highlights clear after speech/script end, dismiss, anchor drift, or Aletheia off.
+
+**Failure**
+- Mic permission denied → error status; no silent capture.
+- Screen capture denied → visual ask error card; no fake answer.
+- ElevenLabs unavailable → falls back to untimed TTS; presence may be segment-unsynced.
+- Window moves during guidance → highlights invalidated; user re-asks to re-ground.
+- OmniParser sidecar not installed → AX/DOM + vision only (expected).
+- Machine audio not configured → mic-only; Aletheia still works.
+
+**Distinction**
+- **Voice Mode** — command bar mic entry; same routing primitives, separate session.
+- **Wingman** — long work session, timeline, structured report; not live overlay teacher.
+- **Listen** — passive capture mode; Aletheia uses machine-audio transcript as context but different entry point.
+
+**Tests**
+- `src/test/glassCompanion.test.ts` — speech, status labels, depth/panel helpers, system-audio auto-start
+- `src/test/companionGuidance.test.ts` — parse + resolve
+- `src/test/companionPhase25And3.test.ts` — merge, timed presence
+- `src/test/companionPhase4a.test.ts` — memory + retarget routing
+- `src/test/companionPhase4bcd.test.ts` — scripts, rich types, anchor drift
+- `src/test/companionOmniParser.test.ts` — sidecar adapter + parse response
+- **E2E: UNCOVERED** — manual QA in `GLASS_COMPANION.md` + `GLASS_COMPANION_E2E_REVIEW_PROMPT.md`
+
+**Related**
+- [`GLASS_COMPANION.md`](GLASS_COMPANION.md) — full spec Phases 1–4
+- [`GLASS_COMPANION_OMNIPARSER.md`](GLASS_COMPANION_OMNIPARSER.md) — OmniParser sidecar (Spike 2/3, Installations tab)
 
 ---
 

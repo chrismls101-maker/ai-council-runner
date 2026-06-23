@@ -1,0 +1,536 @@
+/* Full-window frosted white glass — the entire setup view IS the panel. */
+
+:root {
+  /* Extension popup.css LED tokens */
+  --frs-led-white: rgba(255, 255, 255, 0.95);
+  --frs-led-blue: rgba(190, 225, 255, 0.85);
+  --frs-text: rgba(255, 255, 255, 0.96);
+  --frs-text-dim: rgba(255, 255, 255, 0.82);
+  --frs-text-shadow: 0 1px 3px rgba(50, 70, 100, 0.28);
+  --frs-led-text: rgba(95, 135, 185, 0.92);
+  --frs-led-text-shadow: 0 0 4px rgba(205, 235, 255, 0.22);
+  --frs-led-ring: conic-gradient(
+    from 90deg at 50% 50%,
+    rgba(255, 255, 255, 0.18),
+    rgba(205, 235, 255, 0.85) 90deg,
+    rgba(255, 255, 255, 0.65) 180deg,
+    rgba(205, 235, 255, 0.85) 270deg,
+    rgba(255, 255, 255, 0.18) 360deg
+  );
+  --frs-led-glow: 0 0 8px rgba(205, 235, 255, 0.35);
+}
+
+.frs-root {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  --boot-bottom-reserve: clamp(100px, 14vh, 160px);
+  --frs-substrate-size: min(
+    360px,
+    40vw,
+    calc(100vh - var(--boot-bottom-reserve) - 8px),
+    calc(100% - 64px)
+  );
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: safe center;
+  padding: 22px clamp(20px, 4vw, 28px) 56px;
+  box-sizing: border-box;
+  overflow-x: clip;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Sora", system-ui, sans-serif;
+  color: var(--frs-text);
+  text-shadow: var(--frs-text-shadow);
+  background:
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.38) 0%,
+      rgba(255, 255, 255, 0.22) 45%,
+      rgba(255, 255, 255, 0.16) 100%
+    );
+  backdrop-filter: blur(64px) saturate(200%);
+  -webkit-backdrop-filter: blur(64px) saturate(200%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 1px 0 0 rgba(255, 255, 255, 0.14),
+    inset -1px 0 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(120, 170, 220, 0.28);
+}
+
+.frs-root::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.frs-root::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.42) 0%,
+    rgba(255, 255, 255, 0.08) 40%,
+    transparent 72%
+  );
+}
+
+.frs-root > *:not(.frs-panel-led-wrap):not(.frs-substrate-wrap) {
+  position: relative;
+  z-index: 1;
+}
+
+/* Left-edge substrate atom — tucked left so the form stays clear */
+.frs-substrate-wrap {
+  position: absolute;
+  left: max(-56px, calc(var(--frs-substrate-size) * -0.14));
+  top: 50%;
+  transform: translateY(-50%);
+  width: var(--frs-substrate-size);
+  height: var(--frs-substrate-size);
+  max-width: min(40vw, 360px);
+  max-height: calc(100% - 64px);
+  z-index: 1;
+  pointer-events: none;
+  display: grid;
+  place-items: center;
+  overflow: visible;
+}
+
+.frs-substrate-wrap::before {
+  content: "";
+  position: absolute;
+  inset: -10%;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(65, 224, 163, 0.22) 0%,
+    rgba(65, 224, 163, 0.08) 42%,
+    transparent 72%
+  );
+}
+
+.frs-substrate-wrap .gtw-swarm {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+.frs-content {
+  position: relative;
+  z-index: 3;
+  width: 100%;
+  max-width: 360px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Bottom-edge panel LED — extension shell style, boosted for light frost */
+.frs-panel-led-wrap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  pointer-events: none;
+  padding: 0 5%;
+  box-sizing: border-box;
+  overflow: visible;
+}
+
+.frs-panel-led-wrap::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 40px;
+  background: radial-gradient(
+    ellipse 90% 100% at 50% 100%,
+    rgba(205, 235, 255, 0.18),
+    transparent 70%
+  );
+}
+
+.frs-panel-led {
+  display: block;
+  width: 100%;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.65) 38%,
+    rgba(205, 235, 255, 0.85) 50%,
+    rgba(255, 255, 255, 0.65) 62%,
+    transparent
+  );
+  box-shadow: 0 0 8px rgba(205, 235, 255, 0.35);
+}
+
+.frs-panel-led::after {
+  left: 10%;
+  right: 10%;
+  top: 1px;
+  height: 14px;
+  background: radial-gradient(
+    ellipse 75% 100% at 50% 0%,
+    rgba(205, 235, 255, 0.42),
+    transparent 72%
+  );
+}
+
+/* Extension popup.css — shared white LED glow line */
+.ui-led-line {
+  display: block;
+  position: relative;
+  z-index: 1;
+  height: 1px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.55) 38%,
+    rgba(205, 235, 255, 0.75) 50%,
+    rgba(255, 255, 255, 0.55) 62%,
+    transparent
+  );
+  box-shadow: 0 0 5px rgba(205, 235, 255, 0.4);
+}
+
+.ui-led-line::after {
+  content: "";
+  position: absolute;
+  left: 15%;
+  right: 15%;
+  top: 1px;
+  height: 5px;
+  background: radial-gradient(
+    ellipse 80% 100% at 50% 0%,
+    rgba(205, 235, 255, 0.22),
+    transparent 75%
+  );
+  pointer-events: none;
+}
+
+.frs-brand-led.ui-led-line {
+  width: 100%;
+  max-width: 200px;
+  margin: 0 0 16px;
+  text-shadow: none;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.58) 38%,
+    rgba(205, 235, 255, 0.82) 50%,
+    rgba(255, 255, 255, 0.58) 62%,
+    transparent
+  );
+  box-shadow:
+    0 0 5px rgba(205, 235, 255, 0.45),
+    0 0 12px rgba(205, 235, 255, 0.18);
+}
+
+.frs-brand-led.ui-led-line::after {
+  left: 12%;
+  right: 12%;
+  height: 6px;
+  background: radial-gradient(
+    ellipse 80% 100% at 50% 0%,
+    rgba(205, 235, 255, 0.32),
+    transparent 75%
+  );
+}
+
+.frs-logo {
+  font-size: 28px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  margin-bottom: 6px;
+  color: rgba(12, 16, 24, 0.92);
+  text-shadow: none;
+}
+
+.frs-sub {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--frs-text-dim);
+  margin-bottom: 10px;
+}
+
+.frs-why {
+  max-width: 380px;
+  margin: 0 0 16px;
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: center;
+  color: var(--frs-text-dim);
+}
+
+.frs-form {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.frs-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--frs-led-text);
+  text-shadow: var(--frs-led-text-shadow);
+  margin-bottom: 6px;
+  display: block;
+  letter-spacing: 0.1em;
+}
+
+.frs-input-wrap {
+  position: relative;
+  border-radius: 10px;
+  isolation: isolate;
+}
+
+.frs-input-wrap::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--frs-led-ring);
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 2;
+  box-shadow: var(--frs-led-glow);
+}
+
+.frs-input-wrap::after {
+  content: "";
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  bottom: 0;
+  height: 12px;
+  border-radius: 0 0 10px 10px;
+  background: radial-gradient(
+    ellipse 75% 100% at 50% 100%,
+    rgba(205, 235, 255, 0.28),
+    transparent 72%
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+.frs-input-wrap:focus-within::before {
+  box-shadow:
+    var(--frs-led-glow),
+    0 0 14px rgba(205, 235, 255, 0.28);
+}
+
+.frs-input {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  background: #0a0c12;
+  border: none;
+  border-radius: 10px;
+  padding: 11px 14px;
+  font-size: 13px;
+  color: rgba(240, 244, 250, 0.92);
+  font-family: "SF Mono", ui-monospace, monospace;
+  outline: none;
+  text-shadow: none;
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition: box-shadow 0.15s;
+}
+
+.frs-input::placeholder {
+  color: rgba(180, 190, 205, 0.38);
+}
+
+.frs-input:focus {
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.frs-hint {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--frs-text-dim);
+  margin-top: 5px;
+}
+
+.frs-hint--skip {
+  margin-top: 2px;
+  text-align: center;
+  line-height: 1.45;
+  color: var(--frs-text);
+}
+
+.frs-hint--voice {
+  color: var(--frs-text);
+}
+
+.frs-voice-arrow {
+  color: rgba(65, 224, 163, 0.98);
+  text-shadow: 0 0 8px rgba(65, 224, 163, 0.42);
+}
+
+/* macOS hidden-inset title bar — drag the window from the top band */
+.terminal-window-drag {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 52px;
+  z-index: 100;
+  -webkit-app-region: drag;
+  pointer-events: auto;
+}
+
+/* Glass CONNECT CTA */
+.frs-btn {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  margin-top: 2px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.42) 0%,
+    rgba(255, 255, 255, 0.18) 52%,
+    rgba(255, 255, 255, 0.28) 100%
+  );
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  border-bottom-color: rgba(255, 255, 255, 0.28);
+  color: rgba(14, 20, 30, 0.88);
+  border-radius: 12px;
+  padding: 13px 16px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  cursor: pointer;
+  font-family: inherit;
+  text-shadow: none;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.04),
+    0 6px 20px rgba(0, 0, 0, 0.07),
+    0 0 0 1px rgba(255, 255, 255, 0.18);
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    box-shadow 0.15s,
+    transform 0.12s,
+    color 0.15s;
+}
+
+.frs-btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.35) 0%,
+    transparent 48%
+  );
+}
+
+.frs-btn:hover:not(:disabled) {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.52) 0%,
+    rgba(65, 224, 163, 0.12) 48%,
+    rgba(255, 255, 255, 0.32) 100%
+  );
+  border-color: rgba(65, 224, 163, 0.42);
+  color: rgba(8, 14, 22, 0.94);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 8px 24px rgba(65, 224, 163, 0.14),
+    0 0 0 1px rgba(65, 224, 163, 0.1);
+}
+
+.frs-btn:active:not(:disabled) {
+  transform: scale(0.985);
+}
+
+.frs-btn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.frs-skip {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--frs-text);
+  background: none;
+  border: none;
+  cursor: pointer;
+  margin-top: 2px;
+  font-family: inherit;
+  transition: color 0.15s, text-shadow 0.15s;
+}
+
+.frs-skip:hover {
+  color: rgba(255, 255, 255, 1);
+  text-shadow: 0 0 8px rgba(205, 235, 255, 0.45);
+}
+
+.frs-keychain {
+  position: relative;
+  z-index: 6;
+  flex-shrink: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--frs-text);
+  margin-top: 12px;
+  padding-bottom: 6px;
+  text-align: center;
+}
+
+.frs-hint--error {
+  color: rgba(255, 140, 150, 0.96);
+  text-shadow: 0 1px 3px rgba(80, 20, 30, 0.35);
+}
+
+/* Loading shell — matches frosted setup while keys are checked */
+.frs-loading {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background:
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.38) 0%,
+      rgba(255, 255, 255, 0.22) 45%,
+      rgba(255, 255, 255, 0.16) 100%
+    );
+  backdrop-filter: blur(64px) saturate(200%);
+  -webkit-backdrop-filter: blur(64px) saturate(200%);
+}

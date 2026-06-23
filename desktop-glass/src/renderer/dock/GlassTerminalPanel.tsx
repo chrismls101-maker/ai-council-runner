@@ -29,6 +29,7 @@ import type {
   TerminalSuggestion,
   ScrollbackWriteBlock,
   ScrollbackSearchResult,
+  TerminalFixResponse,
 } from "../../shared/ipc.ts";
 import { send, useGlassState } from "../useGlassState.ts";
 import { loadTerminalSize, GLASS_TERMINAL_REVEAL_MS, type GlassTerminalSize } from "./glassTerminalLayout.ts";
@@ -36,8 +37,10 @@ import { useTerminalPanelResize } from "./useTerminalPanelResize.ts";
 import { useTerminalBlockSessions } from "./useTerminalBlocks.ts";
 import type { TerminalBlock } from "./useTerminalBlocks.ts";
 import type { GlassTerminalPanelAction } from "../../shared/terminalPanelActions.ts";
+import { extractOsc7Cwd } from "./terminalOscParse.ts";
 import { TerminalWelcomeSwarm } from "./TerminalWelcomeSwarm.tsx";
 import { GlassHoverTooltip } from "../components/GlassHoverTooltip.tsx";
+import { armIdeOverlayPointer, prepareGlassTextPointerDown } from "../glassTextInteraction.ts";
 
 import "@xterm/xterm/css/xterm.css";
 import "./GlassTerminalPanel.css";
@@ -113,10 +116,6 @@ function fitTerminalToPty(
 // ESC ] 0 ; <title> BEL  or  ESC ] 0 ; <title> ESC \
 // ESC ] 2 ; <title> BEL  or  ESC ] 2 ; <title> ESC \
 const OSC_TITLE_RE = /\x1b\](?:0|2);([^\x07\x1b]*)(?:\x07|\x1b\\)/g;
-
-// OSC 7 reports the current working directory:
-// ESC ] 7 ; file://hostname/path BEL  (or ESC \ terminator)
-const OSC7_CWD_RE = /\x1b\]7;file:\/\/[^/]*([^\x07\x1b]*)(?:\x07|\x1b\\)/g;
 
 // ---------------------------------------------------------------------------
 // Find Bar component
@@ -442,9 +441,10 @@ const NLCommandBar = forwardRef<
     onVoiceStart: () => void;
     onVoiceStop: () => void;
     onVoiceClose: () => void;
+    embedded?: boolean;
   }
 >(function NLCommandBar(
-  { blocks, termId, voiceActive, voiceStopSignal, onVoiceStart, onVoiceStop, onVoiceClose },
+  { blocks, termId, voiceActive, voiceStopSignal, onVoiceStart, onVoiceStop, onVoiceClose, embedded = false },
   ref,
 ) {
   const [query, setQuery] = useState("");
@@ -550,6 +550,7 @@ const NLCommandBar = forwardRef<
       role="region"
       aria-label="Natural language to shell command"
       onKeyDown={handlePreviewKey}
+      onPointerDownCapture={embedded ? armIdeOverlayPointer : undefined}
     >
       <div className="gtp-nl-label">
         <div className="gtp-nl-label-main">
@@ -581,6 +582,7 @@ const NLCommandBar = forwardRef<
             if (voiceActive) onVoiceStop();
             else onVoiceStart();
           }}
+          onPointerDown={embedded ? armIdeOverlayPointer : undefined}
           disabled={!termId}
           aria-label={voiceActive ? "Stop voice input" : "Voice to shell"}
           title={voiceActive ? "Stop voice (⌘⇧V)" : "Voice to shell (⌘⇧V)"}
@@ -596,6 +598,7 @@ const NLCommandBar = forwardRef<
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleInputKey}
+            onPointerDown={embedded ? prepareGlassTextPointerDown : undefined}
             spellCheck={false}
             autoComplete="off"
             disabled={voiceActive}
@@ -1224,6 +1227,117 @@ function ScrollbackSearchBar({ onInject, onClose }: ScrollbackSearchBarProps): J
 }
 
 // ---------------------------------------------------------------------------
+// TerminalFixCard — inline AI fix card shown below a failed command block (Task #65)
+// ---------------------------------------------------------------------------
+
+type FixCardPhase = "loading" | "ready" | "running" | "done" | "error";
+
+function TerminalFixCard({
+  result,
+  phase,
+  termId,
+  onDismiss,
+}: {
+  result: TerminalFixResponse | null;
+  phase: FixCardPhase;
+  termId: string | undefined;
+  onDismiss: () => void;
+}): JSX.Element {
+  const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
+
+  const handleCopy = (): void => {
+    if (!result?.fixedCommand) return;
+    window.glass.writeClipboard(result.fixedCommand).catch(() => {});
+    setCopied(true);
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(() => setCopied(false), 1500);
+  };
+
+  const handleRun = (): void => {
+    if (!result?.fixedCommand || !termId) return;
+    window.glass.sendPtyInput(termId, result.fixedCommand + "\n");
+    onDismiss();
+  };
+
+  if (phase === "loading") {
+    return (
+      <div className="gtf-card gtf-card--loading">
+        <span className="gtf-spinner" />
+        <span className="gtf-loading-text">Analyzing fix…</span>
+      </div>
+    );
+  }
+
+  if (phase === "error" || (phase === "ready" && !result?.fixedCommand)) {
+    return (
+      <div className="gtf-card gtf-card--error">
+        <span className="gtf-error-icon">⚠</span>
+        <span className="gtf-error-text">
+          {result?.diagnosis ?? result?.error ?? "No fix found"}
+        </span>
+        <button type="button" className="gtf-btn-dismiss" onClick={onDismiss} title="Dismiss">
+          ×
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="gtf-card">
+      <div className="gtf-card-header">
+        <span className="gtf-badge">Fix ↗</span>
+        {result?.diagnosis && (
+          <span className="gtf-diagnosis">{result.diagnosis}</span>
+        )}
+        <button type="button" className="gtf-btn-dismiss" onClick={onDismiss} title="Dismiss">
+          ×
+        </button>
+      </div>
+
+      {result?.fixedCommand && (
+        <div className="gtf-command-row">
+          <code className="gtf-fixed-command">{result.fixedCommand}</code>
+        </div>
+      )}
+
+      {result?.whatChanged && (
+        <div className="gtf-what-changed">{result.whatChanged}</div>
+      )}
+
+      <div className="gtf-actions">
+        <button
+          type="button"
+          className="gtf-btn gtf-btn--primary"
+          onClick={handleRun}
+          disabled={!termId || phase === "running" || phase === "done"}
+          title={termId ? "Inject command into terminal" : "No active terminal session"}
+        >
+          {phase === "done" ? "✓ Sent" : "Run Fix"}
+        </button>
+        <button
+          type="button"
+          className="gtf-btn gtf-btn--secondary"
+          onClick={handleCopy}
+          title="Copy fixed command"
+        >
+          {copied ? "✓ Copied" : "Copy"}
+        </button>
+        <button type="button" className="gtf-btn gtf-btn--ghost" onClick={onDismiss}>
+          Dismiss
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // CommandBlock — a single parsed command + output block (Tasks #36, #37)
 // ---------------------------------------------------------------------------
 
@@ -1234,10 +1348,20 @@ function fmtDuration(startedAt: number, finishedAt?: number): string {
   return `${Math.floor(ms / 60_000)}m ${Math.floor((ms % 60_000) / 1000)}s`;
 }
 
-function CommandBlock({ block }: { block: TerminalBlock }): JSX.Element {
+function CommandBlock({
+  block,
+  termId,
+}: {
+  block: TerminalBlock;
+  termId?: string;
+}): JSX.Element {
   const [copied, setCopied] = useState<"cmd" | "out" | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Terminal Auto Fix state (Task #65)
+  const [fixPhase, setFixPhase] = useState<FixCardPhase | "idle">("idle");
+  const [fixResult, setFixResult] = useState<TerminalFixResponse | null>(null);
 
   useEffect(() => {
     return () => {
@@ -1252,6 +1376,36 @@ function CommandBlock({ block }: { block: TerminalBlock }): JSX.Element {
     copyTimerRef.current = setTimeout(() => setCopied(null), 1500);
   };
 
+  const handleFix = (): void => {
+    if (fixPhase !== "idle") {
+      // Toggle dismiss if card already open
+      setFixPhase("idle");
+      setFixResult(null);
+      return;
+    }
+    setFixPhase("loading");
+    setFixResult(null);
+    window.glass
+      .terminalFix({
+        command: block.command,
+        output: block.output ?? "",
+        exitCode: block.exitCode ?? 1,
+      })
+      .then((res) => {
+        setFixResult(res);
+        setFixPhase(res.error && !res.fixedCommand ? "error" : "ready");
+      })
+      .catch((err: unknown) => {
+        setFixResult({ error: err instanceof Error ? err.message : "Fix failed" });
+        setFixPhase("error");
+      });
+  };
+
+  const handleFixDismiss = (): void => {
+    setFixPhase("idle");
+    setFixResult(null);
+  };
+
   const statusClass =
     block.status === "success" ? "gtp-block--success"
     : block.status === "error" ? "gtp-block--error"
@@ -1262,6 +1416,9 @@ function CommandBlock({ block }: { block: TerminalBlock }): JSX.Element {
     : block.status === "error" ? "gtp-block-dot--error"
     : block.status === "running" ? "gtp-block-dot--running"
     : "gtp-block-dot--unknown";
+
+  const isError = block.status === "error";
+  const showFixCard = isError && fixPhase !== "idle";
 
   return (
     <div className={`gtp-block ${statusClass}`}>
@@ -1275,6 +1432,16 @@ function CommandBlock({ block }: { block: TerminalBlock }): JSX.Element {
           )}
           {block.exitCode != null && block.exitCode !== 0 && (
             <span className="gtp-block-exit">exit {block.exitCode}</span>
+          )}
+          {isError && (
+            <button
+              type="button"
+              className={`gtp-block-fix-btn${fixPhase !== "idle" ? " gtp-block-fix-btn--active" : ""}`}
+              onClick={handleFix}
+              title="Ask Glass to fix this error"
+            >
+              Fix ↗
+            </button>
           )}
           <button
             type="button"
@@ -1305,6 +1472,16 @@ function CommandBlock({ block }: { block: TerminalBlock }): JSX.Element {
       {!collapsed && block.output && (
         <pre className="gtp-block-output">{block.output}</pre>
       )}
+
+      {/* Terminal Fix Card (Task #65) */}
+      {showFixCard && (
+        <TerminalFixCard
+          result={fixResult}
+          phase={fixPhase as FixCardPhase}
+          termId={termId}
+          onDismiss={handleFixDismiss}
+        />
+      )}
     </div>
   );
 }
@@ -1315,15 +1492,24 @@ function CommandBlock({ block }: { block: TerminalBlock }): JSX.Element {
 
 function InlineBlocksStrip({
   blocks,
+  termId,
 }: {
   blocks: TerminalBlock[];
+  termId?: string;
 }): JSX.Element | null {
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const pinnedRef = useRef(true);
 
   const finished = blocks.filter((b) => b.status !== "running");
-  const visible = finished.slice(-4);
+  const runningBlock = (() => {
+    for (let i = blocks.length - 1; i >= 0; i -= 1) {
+      if (blocks[i].status === "running") return blocks[i];
+    }
+    return null;
+  })();
+  const visibleFinished = finished.slice(runningBlock ? -3 : -4);
+  const visible = runningBlock ? [...visibleFinished, runningBlock] : finished.slice(-4);
 
   const handleScroll = useCallback((): void => {
     const el = scrollRef.current;
@@ -1335,7 +1521,7 @@ function InlineBlocksStrip({
     if (pinnedRef.current) {
       bottomRef.current?.scrollIntoView({ behavior: "instant" });
     }
-  }, [visible.length]);
+  }, [visible.length, runningBlock?.id, runningBlock?.command]);
 
   if (visible.length === 0) return null;
 
@@ -1343,7 +1529,7 @@ function InlineBlocksStrip({
     <div className="gtp-inline-blocks">
       <div className="gtp-inline-blocks-scroll" ref={scrollRef} onScroll={handleScroll}>
         {visible.map((b) => (
-          <CommandBlock key={b.id} block={b} />
+          <CommandBlock key={b.id} block={b} termId={termId} />
         ))}
         <div ref={bottomRef} />
       </div>
@@ -1458,6 +1644,13 @@ function IconChevronDown(): JSX.Element {
     </svg>
   );
 }
+function IconChevronUp(): JSX.Element {
+  return (
+    <svg width="12" height="8" viewBox="0 0 12 8" fill="none" aria-hidden="true" style={{ transform: "rotate(180deg)" }}>
+      <path d="M1 1.5L6 6.5L11 1.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
 
 // ── Welcome state — shown when the terminal is fresh (no commands yet) ─────
 
@@ -1520,8 +1713,24 @@ function TerminalWelcome({
   );
 }
 
-export function GlassTerminalPanel(): JSX.Element {
+export interface GlassTerminalPanelProps {
+  variant?: "window" | "embedded";
+  /** IDE dock strip — viewport hidden, tab bar + NL shell bar stay visible. */
+  ideCollapsed?: boolean;
+  onIdeToggleCollapse?: () => void;
+}
+
+export function GlassTerminalPanel({
+  variant = "window",
+  ideCollapsed = false,
+  onIdeToggleCollapse,
+}: GlassTerminalPanelProps = {}): JSX.Element {
+  const embedded = variant === "embedded";
   const state = useGlassState();
+  const reportIdeTerminalInteraction = useCallback((): void => {
+    if (!embedded) return;
+    send({ type: "glass-ide-terminal-interaction" });
+  }, [embedded]);
   const [panelSize, setPanelSize] = useState<GlassTerminalSize>(loadTerminalSize);
   const [showFind, setShowFind] = useState(false);
   // Voice → Shell (Task #44). stopSignal is bumped on a repeat ⌘⇧V press.
@@ -1535,8 +1744,8 @@ export function GlassTerminalPanel(): JSX.Element {
   const [visionState, setVisionState] = useState<ExplainState>({ phase: "idle" });
   // Task #42 — tab titles keyed by PTY session id.
   const [tabTitles, setTabTitles] = useState<Map<string, string | null>>(() => new Map());
-  // Task #46 — current working directory (parsed from OSC 7) + AI suggestions.
-  const [cwd, setCwd] = useState<string>("");
+  // Task #46 — cwd per PTY tab (OSC 7), used for scrollback + AI suggestions.
+  const [cwdByTab, setCwdByTab] = useState<Map<string, string>>(() => new Map());
   const [suggestState, setSuggestState] = useState<SuggestState>({ phase: "idle" });
   const suggestDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Task #47 — Persistent Smart Scrollback search bar (⌘⇧F).
@@ -1546,6 +1755,7 @@ export function GlassTerminalPanel(): JSX.Element {
   const writtenBlockIdsRef = useRef<Map<string, Set<string>>>(new Map());
   const { blocksFor, feedChunk, clearFor } = useTerminalBlockSessions();
   const termId = state.glassDockTerminalId;
+  const cwd = termId ? (cwdByTab.get(termId) ?? "") : "";
   const blocks = blocksFor(termId);
   const tabs = state.glassDockTerminalTabs ?? (termId ? [{ id: termId }] : []);
 
@@ -1567,15 +1777,20 @@ export function GlassTerminalPanel(): JSX.Element {
   const attachGenRef = useRef(0);
   /** Panel hidden with session still alive — re-open only rewires listeners. */
   const detachedTermRef = useRef<string | null>(null);
+  /** Skip reveal animation wait when switching tabs on an already-visible panel. */
+  const terminalRevealReadyRef = useRef(false);
+  /** Prevents duplicate palette actions when pending action stays in state. */
+  const consumedActionNonceRef = useRef(0);
   /** Skip duplicate post-reveal resize when attach already fit the PTY. */
   const attachFitTermRef = useRef<string | null>(null);
 
   const startResize = useTerminalPanelResize(panelSize, setPanelSize);
 
-  // Sync panel size → Electron window
+  // Sync panel size → Electron window (floating terminal only)
   useEffect(() => {
+    if (embedded) return;
     window.glass.resizeTerminal(panelSize.width, panelSize.height);
-  }, [panelSize.width, panelSize.height]);
+  }, [panelSize.width, panelSize.height, embedded]);
 
   // ── Terminal initialisation ────────────────────────────────────────────────
   useEffect(() => {
@@ -1793,16 +2008,32 @@ export function GlassTerminalPanel(): JSX.Element {
     };
   }, []);
 
-  // ── Reset suggestions + cwd on session switch (Task #46) ───────────────────
+  // ── Reset suggestions on session switch (Task #46) ───────────────────────
   useEffect(() => {
     setSuggestState({ phase: "idle" });
-    setCwd("");
     suggestGenRef.current += 1;
     if (suggestDebounceRef.current) {
       clearTimeout(suggestDebounceRef.current);
       suggestDebounceRef.current = null;
     }
   }, [termId]);
+
+  // Drop cwd entries for closed tabs.
+  useEffect(() => {
+    const live = new Set(tabs.map((t) => t.id));
+    setCwdByTab((prev) => {
+      let stale = false;
+      for (const id of prev.keys()) {
+        if (!live.has(id)) { stale = true; break; }
+      }
+      if (!stale) return prev;
+      const next = new Map<string, string>();
+      for (const [id, p] of prev) {
+        if (live.has(id)) next.set(id, p);
+      }
+      return next;
+    });
+  }, [tabs]);
 
   // Inject a suggested command into the PTY. Unlike NLCommandBar (which appends
   // "\n" to auto-run), suggestions are speculative/auto-shown, so we inject the
@@ -1991,15 +2222,22 @@ export function GlassTerminalPanel(): JSX.Element {
         case "nl-focus":
           nlBarRef.current?.focusInput();
           break;
+        case "clear":
+          termRef.current?.clear();
+          clearTerminalHistory();
+          break;
       }
     },
-    [triggerExplain, triggerVisionAnalyze, startVoiceShell],
+    [triggerExplain, triggerVisionAnalyze, startVoiceShell, clearTerminalHistory],
   );
 
   useEffect(() => {
     const pending = state.glassTerminalPendingAction;
     if (!pending) return;
+    if (consumedActionNonceRef.current === pending.nonce) return;
+    consumedActionNonceRef.current = pending.nonce;
     runTerminalPanelAction(pending.action);
+    send({ type: "glass-terminal-pending-action-ack" });
   }, [state.glassTerminalPendingAction, runTerminalPanelAction]);
 
   const handleSwitchTab = useCallback((id: string): void => {
@@ -2121,12 +2359,28 @@ export function GlassTerminalPanel(): JSX.Element {
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [triggerExplain, triggerVisionAnalyze, clearTerminalHistory, showVoiceShell, startVoiceShell, stopVoiceShell, handleNewTab, handleCloseTab, termId]);
 
-  // Parse command blocks for every PTY tab — including background sessions.
+  // Parse command blocks + cwd for every PTY tab — including background sessions.
   useEffect(() => {
     return window.glass.onPtyData((id, data) => {
       feedChunk(id, data);
+      const path = extractOsc7Cwd(data);
+      if (path) {
+        setCwdByTab((prev) => {
+          if (prev.get(id) === path) return prev;
+          const next = new Map(prev);
+          next.set(id, path);
+          return next;
+        });
+      }
     });
   }, [feedChunk]);
+
+  // Reset reveal timing when the panel is fully hidden.
+  useEffect(() => {
+    if (!state.glassDockTerminalOpen) {
+      terminalRevealReadyRef.current = false;
+    }
+  }, [state.glassDockTerminalOpen]);
 
   // ── Attach / detach PTY session ───────────────────────────────────────────
   useEffect(() => {
@@ -2157,22 +2411,12 @@ export function GlassTerminalPanel(): JSX.Element {
               return next;
             });
           }
-          // Task #46: extract OSC 7 cwd reports.
-          OSC7_CWD_RE.lastIndex = 0;
-          let osc7Match: RegExpExecArray | null;
-          while ((osc7Match = OSC7_CWD_RE.exec(data)) !== null) {
-            try {
-              const path = decodeURIComponent(osc7Match[1]);
-              if (path) setCwd(path);
-            } catch {
-              /* malformed percent-encoding — ignore */
-            }
-          }
           term.write(data);
         }
       });
 
       const dataDispose = term.onData((data: string) => {
+        reportIdeTerminalInteraction();
         window.glass.sendPtyInput(termId, data);
       });
 
@@ -2188,6 +2432,7 @@ export function GlassTerminalPanel(): JSX.Element {
         detachedTermRef.current = null;
         if (!active || attachGen !== attachGenRef.current) return;
         wirePtyListeners();
+        terminalRevealReadyRef.current = true;
         return;
       }
 
@@ -2195,9 +2440,12 @@ export function GlassTerminalPanel(): JSX.Element {
       const fromByte = await window.glass.replayPtyByteLength(termId);
       if (!active || attachGen !== attachGenRef.current) return;
 
-      // Wait for reveal animation + real container dimensions before the one resize.
-      await sleep(GLASS_TERMINAL_REVEAL_MS + 24);
-      if (!active || attachGen !== attachGenRef.current) return;
+      const skipRevealWait = terminalRevealReadyRef.current || embedded;
+      if (!skipRevealWait) {
+        // Wait for reveal animation + real container dimensions before the one resize.
+        await sleep(GLASS_TERMINAL_REVEAL_MS + 24);
+        if (!active || attachGen !== attachGenRef.current) return;
+      }
 
       const fit = fitAddonRef.current;
       const container = containerRef.current;
@@ -2217,6 +2465,7 @@ export function GlassTerminalPanel(): JSX.Element {
       term.clear();
       if (replay) term.write(replay);
       wirePtyListeners();
+      terminalRevealReadyRef.current = true;
     };
 
     void attach();
@@ -2227,7 +2476,7 @@ export function GlassTerminalPanel(): JSX.Element {
       cleanupRef.current = null;
       if (termId) detachedTermRef.current = termId;
     };
-  }, [termId, state.glassDockTerminalOpen]);
+  }, [termId, state.glassDockTerminalOpen, embedded, reportIdeTerminalInteraction]);
 
   // ── Task #42: poll-based title updates for all tabs ───────────────────────
   useEffect(() => {
@@ -2280,7 +2529,7 @@ export function GlassTerminalPanel(): JSX.Element {
       } catch { /* ignore */ }
     }, 0);
     return () => window.clearTimeout(t);
-  }, [panelSize.width, panelSize.height, state.glassDockTerminalId]);
+  }, [panelSize.width, panelSize.height, state.glassDockTerminalId, embedded, ideCollapsed]);
 
   // ── ResizeObserver for container dimension changes ────────────────────────
   useEffect(() => {
@@ -2300,9 +2549,9 @@ export function GlassTerminalPanel(): JSX.Element {
     return () => ro.disconnect();
   }, [state.glassDockTerminalId]);
 
-  const handleKill = useCallback((): void => {
-    send({ type: "glass-terminal-kill" });
-  }, []);
+  const handleCloseTabActive = useCallback((): void => {
+    if (termId) send({ type: "glass-terminal-close-tab", termId });
+  }, [termId]);
 
   const handleClose = useCallback((): void => {
     send({ type: "glass-terminal-close" });
@@ -2319,9 +2568,18 @@ export function GlassTerminalPanel(): JSX.Element {
 
   return (
     <div
-      className="glass-terminal-panel"
+      className={[
+        "glass-terminal-panel",
+        embedded ? "glass-terminal-panel--embedded" : "",
+        embedded && ideCollapsed ? "glass-terminal-panel--ide-collapsed" : "",
+      ].filter(Boolean).join(" ")}
       data-testid="glass-terminal-panel"
-      style={{ width: panelSize.width, height: panelSize.height }}
+      style={embedded ? { width: "100%", height: "100%" } : { width: panelSize.width, height: panelSize.height }}
+      onPointerDownCapture={embedded ? () => {
+        armIdeOverlayPointer();
+        reportIdeTerminalInteraction();
+      } : undefined}
+      onPointerEnter={embedded ? armIdeOverlayPointer : undefined}
     >
       {/* Header — tabs + minimal chrome (actions live in ⌘⇧P) */}
       <div className="glass-terminal-header">
@@ -2346,27 +2604,45 @@ export function GlassTerminalPanel(): JSX.Element {
         )}
         <div className="glass-terminal-header__controls">
           {terminalActive && (
-            <GlassHoverTooltip label="Close tab (⌘W)" placement="bottom">
+            <GlassHoverTooltip label="Close tab (⌘W)" placement="top">
               <button
                 type="button"
                 className="glass-terminal-ctrl-btn glass-terminal-ctrl-btn--kill"
-                onClick={handleKill}
+                onClick={handleCloseTabActive}
               >
                 <IconX />
-                <span>Kill</span>
+                <span>Close</span>
               </button>
             </GlassHoverTooltip>
           )}
-          <GlassHoverTooltip label="Hide terminal panel" placement="bottom">
-            <button
-              type="button"
-              className="glass-terminal-ctrl-btn glass-terminal-ctrl-btn--hide"
-              onClick={handleClose}
+          {!embedded ? (
+            <GlassHoverTooltip label="Hide terminal panel" placement="top">
+              <button
+                type="button"
+                className="glass-terminal-ctrl-btn glass-terminal-ctrl-btn--hide"
+                onClick={handleClose}
+              >
+                <IconChevronDown />
+                <span>Hide</span>
+              </button>
+            </GlassHoverTooltip>
+          ) : onIdeToggleCollapse ? (
+            <GlassHoverTooltip
+              label={ideCollapsed ? "Expand terminal panel" : "Collapse terminal panel"}
+              placement="top"
             >
-              <IconChevronDown />
-              <span>Hide</span>
-            </button>
-          </GlassHoverTooltip>
+              <button
+                type="button"
+                className="glass-terminal-ctrl-btn glass-terminal-ctrl-btn--hide"
+                onClick={onIdeToggleCollapse}
+                onPointerDown={armIdeOverlayPointer}
+                aria-label={ideCollapsed ? "Expand terminal" : "Collapse terminal"}
+              >
+                {ideCollapsed ? <IconChevronUp /> : <IconChevronDown />}
+                <span>{ideCollapsed ? "Expand" : "Collapse"}</span>
+              </button>
+            </GlassHoverTooltip>
+          ) : null}
         </div>
       </div>
 
@@ -2408,6 +2684,11 @@ export function GlassTerminalPanel(): JSX.Element {
           className="glass-terminal-viewport"
           ref={containerRef}
           data-testid="glass-terminal-viewport"
+          onPointerDown={embedded ? () => {
+            armIdeOverlayPointer();
+            reportIdeTerminalInteraction();
+          } : undefined}
+          onWheel={embedded ? reportIdeTerminalInteraction : undefined}
         />
         <TerminalWelcome
           visible={blocks.length === 0 && terminalReady && terminalActive}
@@ -2415,7 +2696,7 @@ export function GlassTerminalPanel(): JSX.Element {
         />
       </div>
 
-      <InlineBlocksStrip blocks={blocks} />
+      <InlineBlocksStrip blocks={blocks} termId={termId} />
 
       {/* Natural language → shell command bar — always pinned at bottom (Task #40) */}
       {terminalActive && (
@@ -2428,6 +2709,7 @@ export function GlassTerminalPanel(): JSX.Element {
           onVoiceStart={startVoiceShell}
           onVoiceStop={stopVoiceShell}
           onVoiceClose={closeVoiceShell}
+          embedded={embedded}
         />
       )}
 
@@ -2457,27 +2739,30 @@ export function GlassTerminalPanel(): JSX.Element {
         </div>
       )}
 
-      {/* Resize handles */}
-      <div
-        className="glass-terminal-resize glass-terminal-resize--east"
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize terminal width"
-        onPointerDown={startResize("e")}
-      />
-      <div
-        className="glass-terminal-resize glass-terminal-resize--south"
-        role="separator"
-        aria-orientation="horizontal"
-        aria-label="Resize terminal height"
-        onPointerDown={startResize("s")}
-      />
-      <div
-        className="glass-terminal-resize glass-terminal-resize--south-east"
-        role="presentation"
-        aria-hidden="true"
-        onPointerDown={startResize("se")}
-      />
+      {!embedded ? (
+        <>
+          <div
+            className="glass-terminal-resize glass-terminal-resize--east"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize terminal width"
+            onPointerDown={startResize("e")}
+          />
+          <div
+            className="glass-terminal-resize glass-terminal-resize--south"
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label="Resize terminal height"
+            onPointerDown={startResize("s")}
+          />
+          <div
+            className="glass-terminal-resize glass-terminal-resize--south-east"
+            role="presentation"
+            aria-hidden="true"
+            onPointerDown={startResize("se")}
+          />
+        </>
+      ) : null}
     </div>
   );
 }

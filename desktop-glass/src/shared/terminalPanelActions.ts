@@ -5,7 +5,8 @@ export type GlassTerminalPanelAction =
   | "find"
   | "scrollback"
   | "voice"
-  | "nl-focus";
+  | "nl-focus"
+  | "clear";
 
 export interface GlassTerminalPendingAction {
   action: GlassTerminalPanelAction;

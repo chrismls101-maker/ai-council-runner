@@ -21,12 +21,16 @@ export function formatGlassWindowDiagnostics(opts: {
   panel: LayoutRect | null;
   panelVisible: boolean;
   commandBar?: LayoutRect | null;
+  notesPad?: LayoutRect | null;
+  notesPadVisible?: boolean;
 }): string {
   const overlayExtra = opts.overlayVisible
     ? opts.overlayClickThrough
       ? "clickThrough=true"
       : "clickThrough=false"
     : "visible=false";
+  const notesPadExtra =
+    opts.notesPadVisible === false ? "visible=false" : opts.notesPad ? "visible=true" : "";
   return [
     `display=id${opts.display.id}`,
     `scale=${opts.display.scaleFactor}`,
@@ -35,6 +39,11 @@ export function formatGlassWindowDiagnostics(opts: {
     formatRect("overlay", opts.overlay, overlayExtra),
     formatRect("dock", opts.dock),
     formatRect("panel", opts.panelVisible ? opts.panel : null),
+    formatRect(
+      "notesPad",
+      opts.notesPadVisible ? opts.notesPad ?? null : null,
+      notesPadExtra,
+    ),
     formatRect("commandBar", opts.commandBar ?? null, opts.commandBar ? "clickThrough=false" : ""),
   ].join(" ");
 }

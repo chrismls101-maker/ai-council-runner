@@ -79,3 +79,60 @@ export async function fetchElevenLabsTtsBuffer(
   );
   return buf;
 }
+
+export interface ElevenLabsCharacterAlignment {
+  characters: string[];
+  character_start_times_seconds: number[];
+  character_end_times_seconds: number[];
+}
+
+export interface ElevenLabsTimedTtsResult {
+  audio: Buffer;
+  alignment: ElevenLabsCharacterAlignment | null;
+}
+
+/** ElevenLabs with character timestamps — Phase 3 Companion sync. */
+export async function fetchElevenLabsTtsWithTimestamps(
+  text: string,
+  locale?: GlassUiLocale,
+): Promise<ElevenLabsTimedTtsResult | null> {
+  ensureGlassEnv();
+  const { apiKey, voiceId, model } = glassElevenLabsConfig(locale);
+  if (!apiKey) {
+    console.warn("[Glass TTS] ELEVENLABS_API_KEY missing for timed TTS");
+    return null;
+  }
+
+  const res = await fetch(
+    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/with-timestamps`,
+    {
+      method: "POST",
+      headers: {
+        "xi-api-key": apiKey,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        text,
+        model_id: model,
+        voice_settings: IIVO_ELEVENLABS_VOICE_SETTINGS,
+      }),
+    },
+  );
+  if (!res.ok) {
+    console.error("[Glass TTS] ElevenLabs timed error", res.status, "voice=", voiceId);
+    return null;
+  }
+  const body = (await res.json()) as {
+    audio_base64?: string;
+    alignment?: ElevenLabsCharacterAlignment | null;
+    normalized_alignment?: ElevenLabsCharacterAlignment | null;
+  };
+  if (!body.audio_base64) return null;
+  const audio = Buffer.from(body.audio_base64, "base64");
+  const alignment = body.alignment ?? body.normalized_alignment ?? null;
+  console.log(
+    `[Glass TTS] ElevenLabs timed ok — ${describeIivoVoice(voiceId)} bytes=${audio.length} chars=${alignment?.characters?.length ?? 0}`,
+  );
+  return { audio, alignment };
+}

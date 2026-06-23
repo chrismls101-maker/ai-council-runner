@@ -408,18 +408,18 @@ export function FeedCard({
             <button
               type="button"
               className="gbtn gbtn--primary"
-              data-testid="glass-build-fix-ai-btn"
+              data-testid="glass-build-fix-glass-btn"
               onPointerDown={ensureOverlayInteractive}
               onClick={() => {
                 send({
-                  type: "glass-build-fix-ai",
+                  type: "glass-build-fix-glass",
                   feedItemId: item.id,
                   errorText: item.errorText ?? item.body,
                   errorFilePaths: item.errorFilePaths ?? [],
                 });
               }}
             >
-              Fix with AI
+              Fix with Glass
             </button>
             <button
               type="button"

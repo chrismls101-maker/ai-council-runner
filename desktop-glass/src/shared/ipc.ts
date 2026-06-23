@@ -77,12 +77,20 @@ export const IPC = {
   overlayNotificationActive: "glass:overlay-notification-active",
   /** Renderer → main: pointer entered/left the notification card host. */
   overlayPointerOverNotification: "glass:overlay-pointer-over-notification",
+  /** Renderer → main: pointer over the debrief side panel (text select / scroll). */
+  overlayPointerOverDebriefPanel: "glass:overlay-pointer-over-debrief-panel",
   /** Renderer → main: builder strip mounted/unmounted (guards pointer-over IPC). */
   builderStripVisible: "glass:builder-strip-visible",
   /** Renderer → main: pointer entered/left the builder strip (Prompts / Keys). */
   overlayPointerOverBuilderStrip: "glass:overlay-pointer-over-builder-strip",
+  /** Renderer → main: pointer entered/left the Glass IDE shell (splits, tree, composer). */
+  overlayPointerOverIde: "glass:overlay-pointer-over-ide",
   /** Renderer → main: builder strip panel (Prompts/Keys) open — keep overlay interactive. */
   builderStripPanelOpen: "glass:builder-strip-panel-open",
+  /** Renderer → main: Glass Response Panel open — keep overlay interactive. */
+  responsePanelOpen: "glass:response-panel-open",
+  /** Renderer → main: Session Copilot overlay card (debrief, diagnostic, offer) visible. */
+  copilotOverlayCardOpen: "glass:copilot-overlay-card-open",
   resizeDock: "glass:resize-dock",
   resizeTerminal: "glass:resize-terminal",
   dismissTerminalWindow: "glass:dismiss-terminal-window",
@@ -207,6 +215,105 @@ export const IPC = {
   extractBuildHandoff: "glass:extract-build-handoff",
   /** Main → overlay: full extract-mode transcript snapshot (system audio STT). */
   extractModeTranscript: "glass:extract-mode-transcript",
+  // ── Terminal Auto Fix (Task #65) ────────────────────────────────────────────
+  /**
+   * Renderer (terminal window) → main: given a failed command + output, ask Claude
+   * for a corrected command, 1-line diagnosis, and what changed.
+   */
+  terminalFix: "glass:terminal-fix",
+  // ── Glass Command Palette (Task #66) ─────────────────────────────────────────
+  /** Renderer → main: get all palette sections populated with live data. */
+  paletteGetSections: "glass:palette-get-sections",
+  /** Renderer → main (fire-and-forget): record that an item was actioned. */
+  paletteRecordUse: "glass:palette-record-use",
+
+  // ── Glass Agents ─────────────────────────────────────────────────────────────
+  /** Renderer → main: start an agent loop. Returns AgentRunResponse. */
+  agentRun: "glass:agent-run",
+  /** Renderer → main (fire-and-forget): abort the active agent loop. */
+  agentStop: "glass:agent-stop",
+  /** Main → renderer (broadcast): streaming event from the active agent. */
+  agentEvent: "glass:agent-event",
+  /** Renderer → main: open a folder picker for the agent output directory. */
+  agentPickOutputFolder: "glass:agent-pick-output-folder",
+  /** Renderer → main: open a folder picker for the code-agent workspace root. */
+  agentPickWorkspaceRoot: "glass:agent-pick-workspace-root",
+  /** Renderer → main: open a file with the default app. */
+  agentOpenPath: "glass:agent-open-path",
+  /** Renderer → main: reveal a file or folder in Finder. */
+  agentRevealPath: "glass:agent-reveal-path",
+  /** Renderer → main: approve or skip a pending Glass Coder write. */
+  agentApprove: "glass:agent-approve",
+  /** Renderer → main: close Coder workspace (restore dock + command bar). */
+  coderWorkspaceClose: "glass:coder-workspace-close",
+  /** Renderer → main: open Glass IDE shell (Glass Coder transform). */
+  glassIdeOpen: "glass:ide-open",
+  /** Renderer → main: exit Glass IDE shell. */
+  glassIdeClose: "glass:ide-close",
+  /** Renderer → main: set IDE live preview URL (localhost only). */
+  glassIdePreviewSetUrl: "glass:ide-preview-set-url",
+  /** Renderer → main: reload IDE live preview. */
+  glassIdePreviewReload: "glass:ide-preview-reload",
+  /** Renderer → main: list project files for IDE file browser. */
+  glassIdeListProject: "glass:ide-list-project",
+  /** Renderer → main: read a project file for IDE viewer. */
+  glassIdeReadProjectFile: "glass:ide-read-project-file",
+  /** Renderer → main: write an existing project file from IDE editor. */
+  glassIdeWriteProjectFile: "glass:ide-write-project-file",
+  /** Renderer → main: read tsconfig/jsconfig for IDE TypeScript intelligence. */
+  glassIdeReadTsConfig: "glass:ide-read-tsconfig",
+  /** Renderer → main: sync active Monaco editor context for voice/agents. */
+  glassIdeEditorContextUpdate: "glass:ide-editor-context-update",
+  /** Main → overlay: open a project file in the IDE editor. */
+  glassIdeOpenFile: "glass:ide-open-file",
+  /** Renderer → main: persist Glass IDE layout split sizes. */
+  glassIdeLayoutSet: "glass:ide-layout-set",
+  /** Renderer → main: persist Glass Coder panel width. */
+  coderPanelSetWidth: "glass:coder-panel-set-width",
+  /** Renderer → main: restore the latest Glass backup for a file. */
+  agentRestoreBackup: "glass:agent-restore-backup",
+  /** Renderer → main: start indexing a project root. */
+  indexStart: "glass:index-start",
+  /** Main → renderer: indexing progress. */
+  indexProgress: "glass:index-progress",
+  /** Main → renderer: indexing complete. */
+  indexDone: "glass:index-done",
+  /** Main → renderer: indexing error. */
+  indexError: "glass:index-error",
+  /** Renderer → main: get index status. */
+  indexStatus: "glass:index-status",
+  /** Renderer → main: screenshot + detect active editor file. */
+  detectScreenFile: "glass:detect-screen-file",
+  /** Main → renderer: screen file detection result. */
+  screenFileResult: "glass:screen-file-result",
+  /** Main → renderer: open Glass Coder with pre-filled prompt. */
+  openCoderWithPrompt: "glass:open-coder-with-prompt",
+  /** Renderer → main: generate GLASS_CONTEXT.md via Code Analyst. */
+  generateProjectMemory: "glass:generate-project-memory",
+  /** Renderer → main: cancel in-progress project memory generation. */
+  cancelProjectMemory: "glass:cancel-project-memory",
+  /** Renderer → main: re-run Coder with typecheck errors. */
+  coderVerifyFix: "glass:coder-verify-fix",
+  /** Renderer → main: re-run Coder with review findings. */
+  coderReviewFix: "glass:coder-review-fix",
+  /** Renderer → main: dismiss code review card. */
+  coderReviewDismiss: "glass:coder-review-dismiss",
+  /** Renderer → main: toggle QA Mode. */
+  qaModeToggle: "glass:qa-mode-toggle",
+  /** Renderer → main: toggle QA auto-fix. */
+  qaAutoFixToggle: "glass:qa-auto-fix-toggle",
+  /** Main → overlay: show QA Mode entry notification (first toggle per session). */
+  showQaModeNotification: "glass:show-qa-notification",
+  /** Renderer → main: dismiss QA Mode notification. */
+  dismissQaModeNotification: "glass:dismiss-qa-notification",
+  /** Main → renderer: QA pipeline check updates. */
+  qaPipelineUpdate: "glass:qa-pipeline-update",
+  /** Renderer → main: fix all QA failures with Glass Coder. */
+  qaPipelineFixAll: "glass:qa-pipeline-fix-all",
+  /** Main → overlay: probe preview webview for console errors. */
+  idePreviewProbe: "glass:ide-preview-probe",
+  /** Overlay → main: preview probe result. */
+  idePreviewProbeResult: "glass:ide-preview-probe-result",
 } as const;
 
 // ── Built-in terminal AI context (Task #41) ──────────────────────────────────
@@ -519,7 +626,7 @@ export interface SaveGlassMemoryResponse {
 }
 
 export type TranscriptionControlCommand =
-  | { type: "start" }
+  | { type: "start"; mode?: TranscriptionMode }
   | { type: "stop" }
   | { type: "probe-microphone" }
   | { type: "probe-virtual-audio-devices" }
@@ -536,6 +643,7 @@ export type GlassCommand =
   | { type: "stop" }
   | { type: "stop-everything" }
   | { type: "request-start-listening" }
+  | { type: "activate-listen-mode" }
   | { type: "append-transcript"; text: string }
   | { type: "add-transcript-chunk"; text: string; tags?: string[]; interim?: boolean; speakerId?: number }
   | { type: "clear-transcript" }
@@ -552,7 +660,13 @@ export type GlassCommand =
   | { type: "send-transcript" }
   | { type: "send-moment"; id: string }
   | { type: "ask-iivo" }
-  | { type: "submit-command"; text: string; lensContext?: import("./glassLensContext.ts").GlassLensContext }
+  | {
+      type: "submit-command";
+      text: string;
+      lensContext?: import("./glassLensContext.ts").GlassLensContext;
+      /** Phase 4a — Companion route hint from renderer auto-submit. */
+      companionRoute?: import("./companionRetarget.ts").CompanionRoute;
+    }
   | { type: "ask-iivo-direct"; text: string }
   | { type: "prefill-command-bar"; text: string }
   | { type: "cancel-glass-ask" }
@@ -682,6 +796,7 @@ export type GlassCommand =
   | { type: "copilot-dismiss-diagnostic-result" }
   | { type: "copilot-open-diagnostic-in-iivo" }
   | { type: "copilot-save-diagnostic-result" }
+  | { type: "glass-quit" }
   | { type: "glass-update-check" }
   | { type: "glass-update-apply" }
   | { type: "glass-update-dismiss" }
@@ -740,22 +855,55 @@ export type GlassCommand =
   | { type: "glass-terminal-close-tab"; termId?: string }
   | { type: "glass-terminal-switch-tab"; termId: string }
   | { type: "glass-terminal-action"; action: import("./terminalPanelActions.ts").GlassTerminalPanelAction }
+  | { type: "glass-terminal-pending-action-ack" }
   // ── Context assembler ─────────────────────────────────────────────────────
   /** Hotkey-triggered: snapshot screen + window + terminal context, focus command bar */
   | { type: "glass-context-ask" }
   // ── Terminal auto-fix ─────────────────────────────────────────────────────
   /** User clicked "Fix it" on a terminal-fix overlay card — types fix into PTY */
   | { type: "glass-terminal-fix-accept"; termId: string; command: string }
+  | { type: "glass-terminal-run"; command: string }
+  /** IDE embedded terminal — expand/collapse chrome (orchestrator + builder strip sync). */
+  | { type: "glass-ide-terminal-set-expanded"; expanded: boolean; manual?: boolean }
+  /** IDE embedded terminal — user scrolled, focused, or typed in terminal. */
+  | { type: "glass-ide-terminal-interaction" }
+  | { type: "run-omniparser-install" }
+  | { type: "refresh-omniparser-install" }
   // ── Extract & Build Mode ────────────────────────────────────────────────────
   /** Start system-audio capture for Extract & Build Mode. */
   | { type: "extract-mode-start" }
   /** Stop Extract & Build Mode capture (may stop listening if mode started it). */
   | { type: "extract-mode-stop" }
-  // ── Glass Powers palette ──────────────────────────────────────────────────
-  /** ⌘⇧P — open / toggle the Glass Powers quick-launcher palette */
-  | { type: "toggle-powers-palette" }
-  /** Close the palette without invoking a power */
-  | { type: "dismiss-powers-palette" }
+  // ── Glass Powers Menu ──────────────────────────────────────────────────
+  /** ⌘⇧P — open / toggle the Glass Powers Menu overlay. */
+  | { type: "toggle-powers-menu" }
+  /** Close the powers menu without invoking a power */
+  | { type: "dismiss-powers-menu" }
+  // ── Glass Command Palette commands (Task #66) ──────────────────────────────
+  /** Fix the most recent failed terminal command via Claude. */
+  | { type: "terminal-fix-last" }
+  /** Explain the most recent terminal command + its output via Claude. */
+  | { type: "terminal-explain-last" }
+  /** Explain the current clipboard contents via Claude. */
+  | { type: "explain-clipboard" }
+  /** Clear the active terminal scrollback. */
+  | { type: "clear-terminal" }
+  /** Open the built-in Glass terminal. */
+  | { type: "open-terminal" }
+  /** Open terminal and focus the natural-language → shell bar. */
+  | { type: "terminal-nl-focus" }
+  // ── Glass Command Palette (Task #66) ───────────────────────────────────────
+  /** ⌘⇧G — toggle the Raycast-style Glass Command Palette overlay. */
+  | { type: "toggle-command-palette" }
+  /** Close the Glass Command Palette without running a command. */
+  | { type: "dismiss-command-palette" }
+  /** Open or reopen the Glass Answer Panel (formatted side panel for last answer). */
+  | { type: "open-answer-panel" }
+  // ── Glass Companion (strip-toggle voice presence) ─────────────────────────
+  /** Toggle Companion session on/off from the builder strip. */
+  | { type: "toggle-companion-mode" }
+  /** Clear ephemeral Companion overlay manifestations. */
+  | { type: "clear-companion-presence" }
   // ── Fix injection into editor (#160) ─────────────────────────────────────
   /**
    * User confirmed "Apply to file" on an overlay response card.
@@ -778,11 +926,11 @@ export type GlassCommand =
   | { type: "glass-dismiss-diff"; feedItemId: string }
   // ── Build monitor (#162) ──────────────────────────────────────────────────
   /**
-   * "Fix with AI" on a build-error card — reads the referenced source files,
+   * "Fix with Glass" on a build-error card — opens Glass Coder with terminal error context.
    * builds a code-fix prompt, and submits through the normal AI ask flow.
    * The resulting response card has codeFilePath set so Apply to file works.
    */
-  | { type: "glass-build-fix-ai"; feedItemId: string; errorText: string; errorFilePaths: string[] }
+  | { type: "glass-build-fix-glass"; feedItemId: string; errorText: string; errorFilePaths: string[] }
   // ── Design-to-Code Bridge (#163) ─────────────────────────────────────────
   /** One-click button in command bar: capture screen, detect editor, show design card. */
   | { type: "design-capture" }
@@ -801,8 +949,30 @@ export type GlassCommand =
   // ── Custom slash commands (#165) ──────────────────────────────────────────
   /** User invoked a custom command from the powers palette. */
   | { type: "custom-command-run"; name: string }
+  /** Open Glass Coder with a pre-filled prompt (voice or automation). */
+  | {
+      type: "open-coder-with-prompt";
+      prompt: string;
+      autoRun?: boolean;
+      screenContext?: AgentScreenContext;
+    }
+  /** Open a file in Glass IDE (voice or automation). */
+  | { type: "glass-ide-open-file"; relativePath: string }
+  /** Route an IDE-aware voice phrase (open file, explain selection, etc.). */
+  | { type: "glass-ide-voice-command"; transcript: string }
+  /** Update Glass Coder index / screen / voice settings. */
+  | {
+      type: "set-glass-coder-settings";
+      patch: Partial<Pick<
+        import("./glassSettings.ts").GlassUserSettings,
+        "indexEnabled" | "indexAutoOnOpen" | "screenContextEnabled" | "voiceCoderEnabled"
+        | "coderAutoVerify" | "coderAutoReview"
+      >>;
+    }
   /** Renderer requests TTS — main calls ElevenLabs and plays audio back. */
   | { type: "glass-tts"; text: string }
+  /** Companion timed TTS — returns audio + character alignment for presence sync. */
+  | { type: "glass-tts-timed"; text: string; requestId?: string }
   /** Sorting Hat placement complete — write persona + mark onboarding done. */
   | { type: "glass-onboarding-complete"; persona: "developer" | "sales" | "operator" | "writer" | "general" }
   /** User skipped onboarding — just mark complete with no persona set. */
@@ -867,6 +1037,49 @@ export interface GlassState {
   voiceModeStartNonce?: number;
   /** Incremented to open Live Translate setup in the Copilot panel (command bar parity). */
   translateSetupRequestId?: number;
+  /** Active Glass agent run — updated by main while an agent loop is live. */
+  agentRun?: GlassAgentRunState | null;
+  /** Recent Glass agent runs (newest first). */
+  agentHistory?: AgentHistoryEntry[];
+  /** Glass Coder — pending write awaiting Apply/Skip. */
+  agentPendingApproval?: {
+    runId: string;
+    agentId: GlassAgentId;
+    pendingToolId: string;
+    pendingToolName: string;
+  } & AgentPendingApprovalPayload | null;
+  /** Glass Coder — files applied/skipped/failed in the active or last run. */
+  agentChangeLog?: AgentChangeLogEntry[];
+  /** Glass Coder workspace — dock + command bar hidden. */
+  coderWorkspaceActive?: boolean;
+  /** Glass IDE shell — full overlay coding layout. */
+  glassIdeActive?: boolean;
+  /** IDE live preview — auto-detected or user-set localhost URL. */
+  glassIdePreviewUrl?: string | null;
+  /** Bumped after Coder Apply to reload the preview webview. */
+  glassIdePreviewReloadNonce?: number;
+  /** IDE embedded terminal expanded (false = collapsed chrome strip). */
+  glassIdeTerminalExpanded?: boolean;
+  /** Aletheia advisory — subtle IDE chip, feed line, optional speech. */
+  glassIdeAletheia?: import("./glassIdeAletheiaAdvisory.ts").GlassIdeAletheiaSnapshot;
+  /** Glass Coder — Ollama embedding index state. */
+  indexState?: GlassIndexState;
+  /** Ollama reachable for semantic index (updated on index ops). */
+  ollamaAvailable?: boolean;
+  /** GLASS_CONTEXT.md generation state. */
+  projectMemoryState?: ProjectMemoryState | null;
+  /** Glass IDE QA pipeline state (when QA Mode enabled). */
+  qaPipelineState?: import("./glassQaPipeline.ts").QaPipelineState | null;
+  /** QA Mode entry notification visible in IDE stream pane. */
+  qaNotificationVisible?: boolean;
+  /** Post-Coder typecheck / build verify. */
+  coderVerifyState?: CoderVerifyState | null;
+  /** Post-verify Code Analyst review. */
+  coderReviewState?: CoderReviewState | null;
+  /** Auto-fix loop — current iteration (1 = user-initiated). */
+  coderLoopIteration?: number;
+  /** Ties verify, review, and fix runs in one session. */
+  coderLoopSessionId?: string;
   /** Latest media/page context for Listen mode (text metadata only). */
   mediaContext?: import("./mediaContextTypes.ts").MediaContext | null;
   appUpdate: import("./glassAppUpdate.ts").GlassAppUpdateState;
@@ -891,7 +1104,7 @@ export interface GlassState {
   /** Unpackaged Electron dev build — unlocks builder strip for local testing. */
   glassDevMode?: boolean;
   /** Audio chunk from TTS — base64 encoded mp3, played by renderer then cleared. */
-  ttsAudio?: { id: string; data: string };
+  ttsAudio?: import("./ttsAlignment.ts").TimedTtsPayload;
   glassUserProfile: import("./glassUserProfile.ts").GlassUserProfile | null;
   /** Progress of the one-click BlackHole + Multi-Output Device install flow. */
   blackHoleInstallStatus?: "idle" | "downloading" | "installing" | "configuring" | "done" | "error";
@@ -1008,14 +1221,34 @@ export interface GlassState {
   glassDockTerminalTabs?: import("./terminalPanelActions.ts").GlassTerminalTab[];
   /** One-shot action for the terminal renderer (⌘⇧P, etc.). */
   glassTerminalPendingAction?: import("./terminalPanelActions.ts").GlassTerminalPendingAction;
-  // ── Glass Powers palette ───────────────────────────────────────────────────
+  // ── Glass Powers Menu ───────────────────────────────────────────────────
   /** Whether the ⌘⇧P powers quick-launcher is currently visible. */
-  powersPaletteOpen?: boolean;
+  powersMenuOpen?: boolean;
+  /** Whether the ⌘⇧G Command Palette overlay is visible. */
+  commandPaletteOpen?: boolean;
+  /** Builder-strip Glass Companion session is active (toggle, not hold-to-talk). */
+  companionModeActive?: boolean;
+  /** Incremented on each Companion toggle — overlay starts/stops the voice loop. */
+  companionModeToggleNonce?: number;
+  /** OmniParser warm-up phase for Aletheia intro TTS on Companion toggle. */
+  companionWarmupPhase?: "none" | "warming" | "ready";
+  /** Bumped when companionWarmupPhase changes — renderer speaks warm/ready lines. */
+  companionWarmupSpeakNonce?: number;
+  /** Active Companion presence — uiMap + guidancePlan for overlay manifestations. */
+  companionPresence?: import("./companionGuidance.ts").CompanionGuidancePayload | null;
+  /** Phase 4a — session memory for multi-turn Companion routing. */
+  companionMemory?: import("./companionSessionMemory.ts").CompanionSessionMemory | null;
+  /** Bumped when Command Palette requests re-showing the Glass Response Panel. */
+  responsePanelRevealSeq?: number;
+  /** Hint for palette quick actions from the built-in terminal context buffer. */
+  paletteTerminalHint?: import("./paletteTypes.ts").PaletteLastTerminalBlock | null;
   // ── Custom commands (#165) ─────────────────────────────────────────────────
   /** User-defined slash commands loaded from ~/.iivo/glass-commands.json. */
   customCommands?: import("../shared/customCommands.ts").CustomCommand[];
   /** Validation warnings from the last custom commands config load. */
   customCommandsWarnings?: string[];
+  /** OmniParser sidecar install status (Companion UI detection). */
+  omniParserInstall?: import("./omniParserInstall.ts").OmniParserInstallState;
   /** True while Extract & Build Mode is capturing system audio in main. */
   extractBuildModeActive?: boolean;
 }
@@ -1107,3 +1340,236 @@ export interface ExtractBuildHandoffResponse {
   /** True when Accessibility settings were opened to help the user grant paste permission. */
   openedAccessibilitySettings?: boolean;
 }
+
+// ── Terminal Auto Fix (Task #65) ─────────────────────────────────────────────
+
+export interface TerminalFixRequest {
+  /** The command that failed. */
+  command: string;
+  /** ANSI-stripped terminal output (stderr + stdout) from the failed command. Max 6000 chars. */
+  output: string;
+  /** Exit code of the failed command. */
+  exitCode: number;
+  /** Optional rolling context: last N finished commands as a single string. */
+  context?: string;
+}
+
+export interface TerminalFixResponse {
+  /** The corrected command, ready to run. Single line, no explanation. */
+  fixedCommand?: string;
+  /** One-line explanation of what went wrong (e.g. "Missing dependency: ts-node"). */
+  diagnosis?: string;
+  /** One-line explanation of what was changed (e.g. "Added --legacy-peer-deps flag"). */
+  whatChanged?: string;
+  error?: string;
+}
+
+// ── Glass Command Palette (Task #66) ───────────────────────────────────────────
+
+export interface PaletteGetSectionsRequest {
+  context: import("./paletteTypes.ts").PaletteContextSignals;
+}
+export interface PaletteGetSectionsResponse {
+  sections: import("./paletteTypes.ts").PaletteSection[];
+  error?: string;
+}
+export interface PaletteRecordUseRequest {
+  itemId: string;
+}
+
+// ── Glass Agents ─────────────────────────────────────────────────────────────
+
+export const GLASS_AGENT_IDS = ["research", "code", "writing", "coder"] as const;
+export type GlassAgentId = (typeof GLASS_AGENT_IDS)[number];
+
+export function isGlassAgentId(value: unknown): value is GlassAgentId {
+  return typeof value === "string" && (GLASS_AGENT_IDS as readonly string[]).includes(value);
+}
+
+export interface AgentScreenContext {
+  detectedFilePath?: string;
+  visibleErrors?: string[];
+  editorName?: string;
+  confidence?: "high" | "low";
+  /** Set when screen detection fails (e.g. missing Screen Recording permission). */
+  detectError?: string;
+}
+
+export interface OpenCoderWithPromptPayload {
+  prompt: string;
+  autoRun?: boolean;
+  screenContext?: AgentScreenContext | null;
+  loopAutoTrigger?: boolean;
+  /** Unique per broadcast — avoids launch de-dupe blocking loop fix runs. */
+  launchNonce?: number;
+}
+
+export interface GlassIndexState {
+  projectRoot: string;
+  status: "idle" | "indexing" | "ready" | "error";
+  fileCount?: number;
+  progress?: {
+    processed: number;
+    indexed: number;
+    total: number;
+    phase?: "pulling" | "embedding";
+    detail?: string;
+  };
+  lastIndexedAt?: number;
+  error?: string;
+}
+
+export interface ProjectMemoryState {
+  status: "idle" | "generating" | "done" | "error";
+  error?: string;
+}
+
+export interface CoderVerifyState {
+  status: "idle" | "running" | "pass" | "fail";
+  output?: string;
+  runId: string;
+  /** Shell command that was run (e.g. npm run typecheck). */
+  command?: string;
+}
+
+export interface CoderReviewState {
+  status: "idle" | "running" | "done" | "dismissed";
+  runId: string;
+  findings?: string;
+  fileCount?: number;
+}
+
+export interface AgentRunRequest {
+  /** Which agent to run. */
+  agentId: GlassAgentId;
+  /** User's plain-language task description. */
+  prompt: string;
+  /** Client-generated id — echoed on every AgentEvent so stale runs can be ignored. */
+  runId: string;
+  /** Screen-aware context from OmniParser / vision detection. */
+  agentScreenContext?: AgentScreenContext;
+  /** Continuation of auto-fix loop — do not reset session. */
+  loopAutoTrigger?: boolean;
+}
+
+export interface AgentRunResponse {
+  started: boolean;
+  runId?: string;
+  error?: string;
+}
+
+export type AgentEventKind =
+  | "text-delta"   // streaming token from Claude
+  | "tool-start"   // agent is about to call a tool
+  | "tool-done"    // tool call finished
+  | "narrate"      // short Aletheia spoken cue
+  | "done"         // agent loop complete
+  | "cancelled"    // user stopped the run
+  | "approval-required" // Glass Coder waiting for user to apply/skip a write
+  | "error";       // unrecoverable error
+
+export type GlassAgentRunStatus = "running" | "done" | "error" | "cancelled";
+
+export interface GlassAgentRunState {
+  runId: string;
+  agentId: GlassAgentId;
+  status: GlassAgentRunStatus;
+  updatedAt: number;
+  prompt?: string;
+  savedFilePath?: string;
+}
+
+export interface AgentPickOutputFolderResponse {
+  ok: boolean;
+  folder?: string;
+  cancelled?: boolean;
+  error?: string;
+}
+
+export interface AgentPendingApprovalPayload {
+  filePath: string;
+  relativePath: string;
+  description: string;
+  displayLines: import("./diff.ts").DiffLine[];
+  diff: import("./diff.ts").UnifiedDiff;
+  contentHash: string;
+  proposedContent: string;
+  fileExisted: boolean;
+  /** delete_file approval — show destructive warning UI. */
+  isDelete?: boolean;
+}
+
+export interface AgentApproveRequest {
+  runId: string;
+  pendingToolId: string;
+  approved: boolean;
+}
+
+export interface AgentApproveResponse {
+  ok: boolean;
+  error?: string;
+}
+
+export interface AgentChangeLogEntry {
+  runId: string;
+  path: string;
+  relativePath: string;
+  action: "applied" | "skipped" | "failed" | "deleted";
+  description: string;
+  at: number;
+  error?: string;
+  /** Set when applyCodeToFile created a backup (restore via agentRestoreBackup). */
+  backupPath?: string;
+}
+
+export interface AgentEvent {
+  /** Matches the runId in the run request. */
+  runId: string;
+  /** Matches the agentId in the run request. */
+  agentId: GlassAgentId;
+  kind: AgentEventKind;
+  /** Incremental text token (text-delta only). */
+  text?: string;
+  /** Tool name (tool-start / tool-done). */
+  toolName?: string;
+  /** Tool input as parsed JSON (tool-start only). */
+  toolInput?: unknown;
+  /** Short human-readable result summary (tool-done only). */
+  toolResult?: string;
+  /** Absolute path written (write_file tool-done only). */
+  savedFilePath?: string;
+  /** Error message (error only). */
+  error?: string;
+  /** Glass Coder — tool awaiting user approval. */
+  pendingToolId?: string;
+  pendingToolName?: string;
+  pendingToolInput?: unknown;
+  pendingApproval?: AgentPendingApprovalPayload;
+  /** Glass Coder — change log entry (tool-done for write tools). */
+  changeLogEntry?: AgentChangeLogEntry;
+}
+
+export interface AgentHistoryEntry {
+  runId: string;
+  agentId: GlassAgentId;
+  prompt: string;
+  startedAt: number;
+  finishedAt?: number;
+  status: GlassAgentRunStatus;
+  savedFilePath?: string;
+  error?: string;
+  changedFiles?: string[];
+}
+
+export interface AgentPathResponse {
+  ok: boolean;
+  error?: string;
+}
+
+export type {
+  QaCheck,
+  QaCheckId,
+  QaCheckStatus,
+  QaPipelineState,
+  QaPipelineStatus,
+} from "./glassQaPipeline.ts";

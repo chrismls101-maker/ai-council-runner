@@ -9,7 +9,7 @@ import { useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { createSubstrateField } from './SubstrateField';
-import { createSubstrateRenderMaterial } from './SubstrateRenderMaterial';
+import { createSubstrateRenderMaterial, type AtomTint } from './SubstrateRenderMaterial';
 import { MODES } from './manifestations';
 import { SWARM_CONFIG } from './swarmConfig';
 import type { ModeController } from './ModeController';
@@ -24,12 +24,14 @@ interface SubstrateParticlesProps {
   controller: ModeController;
   voice: VoiceController;
   presence: PresenceStateMachine;
+  atomTint?: AtomTint;
 }
 
 export default function SubstrateParticles({
   controller,
   voice,
   presence,
+  atomTint = 'sapphire',
 }: SubstrateParticlesProps): JSX.Element {
   const { gl } = useThree();
 
@@ -45,9 +47,9 @@ export default function SubstrateParticles({
     geo.setAttribute('aId', new THREE.InstancedBufferAttribute(sim.ids, 1));
     geo.instanceCount = N;
     geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 10);
-    const { material, uniforms } = createSubstrateRenderMaterial();
+    const { material, uniforms } = createSubstrateRenderMaterial(atomTint);
     return { sim, geo, material, uniforms };
-  }, [gl]);
+  }, [gl, atomTint]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   useFrame((state: any, delta: number) => {

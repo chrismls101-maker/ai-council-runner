@@ -12,6 +12,7 @@ import {
 } from "./glassDirectAsk.js";
 import { resolveGlassAskUsesVisual } from "./glassScreenVisualPrompt.js";
 import { runGlassVisualDirectAsk } from "./glassVisualDirectAsk.js";
+import { runGlassCompanionDirectFollowUp } from "./glassCompanionRetarget.js";
 
 export {
   buildGlassDirectUserPrompt,
@@ -41,6 +42,14 @@ export async function handleGlassAsk(
   }
 
   try {
+    if (
+      body.companionMode &&
+      (body.companionRoute === "direct_follow_up" || body.companionRoute === "script_continue") &&
+      body.companionMemory
+    ) {
+      return await runGlassCompanionDirectFollowUp(body, signal, caller);
+    }
+
     const hasScreenshot = Boolean(
       body.latestScreenshot?.imageDataUrl ||
         body.latestScreenshot?.imageBase64 ||

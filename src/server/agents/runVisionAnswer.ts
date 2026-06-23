@@ -100,6 +100,8 @@ export async function runVisionAnswer(input: {
   tokenMode?: unknown;
   signal?: AbortSignal;
   modelPurpose?: GlassModelPurpose;
+  /** Override default vision system prompt (e.g. Glass Companion presence mode). */
+  systemPrompt?: string;
 }): Promise<VisionAnswerResult> {
   const startedAt = new Date().toISOString();
   const config = getImageVisionConfig();
@@ -151,7 +153,7 @@ export async function runVisionAnswer(input: {
     const selected = resolveGlassModelPrimary("vision", purpose);
     const chain = buildGlassModelTryChain(selected);
     const result = await callAnthropicVisionWithModelChain(
-      VISION_ANSWER_SYSTEM,
+      input.systemPrompt ?? VISION_ANSWER_SYSTEM,
       userText,
       screenshot.imageDataUrl,
       chain,
