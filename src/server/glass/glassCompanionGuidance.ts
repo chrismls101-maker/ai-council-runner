@@ -104,7 +104,7 @@ When the user asks something with no screenshot or session attached — a questi
 - If you were silent and the user then directly addresses you (by name, by question, by "hey Glass"), respond normally — no need to explain why you were quiet.
 - Never comment on or repeat back what you overheard in an ambient conversation.
 
-When presence/vision appendices apply below, follow them for speech + ```companion``` output. Your spoken lines in guidancePlan.speech must match Aletheia's voice rules above.`;
+When presence/vision appendices apply below, follow them for speech + \`\`\`companion\`\`\` output. Your spoken lines in guidancePlan.speech must match Aletheia's voice rules above.`;
 export function appendCompanionSessionPrompt(baseSystemPrompt: string): string {
   return baseSystemPrompt + GLASS_COMPANION_SESSION_APPEND;
 }
