@@ -7,6 +7,10 @@ import {
 import { parseOverlayMode } from "../shared/glassWindowTypes.ts";
 import {
   builderStripLayoutReservePx,
+  builderStripTopFromBottomPx,
+  glassIdeBottomReservePx,
+  BUILDER_STRIP_ABOVE_COMMAND_BAR_GAP_PX,
+  GLASS_IDE_ABOVE_STRIP_GAP_PX,
   commandBarLayoutFromDisplay,
   commandBarLayoutForStack,
   clampCommandBarWindowBounds,
@@ -180,6 +184,9 @@ test("commandBarLayoutForStack bottom-anchors tall stacks with custom X", () => 
 
 test("builder strip reserve lifts command bar above strip band", () => {
   const reserve = builderStripLayoutReservePx();
+  const stripTop = builderStripTopFromBottomPx();
+  assert.equal(reserve, stripTop + BUILDER_STRIP_ABOVE_COMMAND_BAR_GAP_PX);
+  assert.equal(glassIdeBottomReservePx(), stripTop + GLASS_IDE_ABOVE_STRIP_GAP_PX);
   const base = commandBarLayoutFromDisplay(primaryDisplay);
   const lifted = commandBarLayoutForStack(
     primaryDisplay,

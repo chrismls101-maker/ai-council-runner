@@ -7,6 +7,7 @@ import {
   GLASS_HOTKEY_PRESETS,
   type GlassDisplayTarget,
   type GlassHotkeyPreset,
+  type GlassUserSettings,
 } from "../../shared/glassSettings.ts";
 import { StatusPill } from "../components/StatusPill.tsx";
 import { SessionPill } from "../components/SessionPill.tsx";
@@ -22,6 +23,7 @@ import type {
   GlassSessionInsight,
 } from "../../shared/sessionTypes.ts";
 import { INSIGHT_TYPE_LABELS } from "../../shared/sessionIntelligence.ts";
+import { displayAgentOutputFolder } from "../../shared/agentOutputFolder.ts";
 import { buildScreenshotThumbnailUrl } from "../../shared/sessionScreenshotUrls.ts";
 import {
   buildPanelStatusCards,
@@ -741,6 +743,7 @@ function StatusGrid({ state }: { state: GlassState }): JSX.Element {
         </button>
       </div>
       <GlassLayoutSettings state={state} />
+      <AgentSettings state={state} />
       {IS_DEV ? <ServerUrlEditor state={state} /> : null}
     </div>
   );
@@ -758,6 +761,189 @@ function StatusGridCell({ card }: { card: PanelStatusCard }): JSX.Element {
       </div>
       <div>{card.status}</div>
       {card.detail ? <div className="status-grid__detail">{card.detail}</div> : null}
+    </div>
+  );
+}
+
+function AgentSettings({ state }: { state: GlassState }): JSX.Element {
+  const outputFolder = displayAgentOutputFolder(state.glassSettings);
+  const workspace = state.glassSettings.agentCodeWorkspaceRoot?.trim();
+  const indexState = state.indexState;
+  const indexLabel = (() => {
+    if (!workspace) return "Set a project folder first";
+    if (indexState?.status === "indexing" && indexState.progress) {
+      const p = indexState.progress;
+      if (p.phase === "pulling") {
+        return p.detail ? `Pulling model — ${p.detail}` : "Pulling embedding model…";
+      }
+      if (p.total > 0) {
+        return `Indexing (${p.indexed}/${p.total} embedded)`;
+      }
+      return "Indexing…";
+    }
+    if (indexState?.status === "ready" && indexState.fileCount != null) {
+      return `Ready — ${indexState.fileCount} files`;
+    }
+    if (indexState?.status === "error") return indexState.error ?? "Index error";
+    if (state.ollamaAvailable === false) return "Ollama not running";
+    return "Not indexed";
+  })();
+
+  const patchCoderSettings = (
+    patch: Partial<Pick<
+      GlassUserSettings,
+      | "indexEnabled"
+      | "indexAutoOnOpen"
+      | "screenContextEnabled"
+      | "voiceCoderEnabled"
+      | "coderAutoVerify"
+      | "coderAutoReview"
+    >>,
+  ): void => {
+    send({ type: "set-glass-coder-settings", patch });
+  };
+
+  const memoryStatus = state.projectMemoryState?.status;
+
+  return (
+    <div className="summary-box panel__settings" data-testid="glass-panel-agent-settings">
+      <p className="section-title">Glass Agents</p>
+      <p className="hint">
+        Agent reports save to your output folder. For Code Analyst, the project folder is where it
+        starts browsing your code (usually your repo root).
+      </p>
+      <label className="panel__settings-row">
+        <span>Output folder</span>
+        <button
+          type="button"
+          className="gbtn gbtn--ghost panel__agent-path-btn"
+          onClick={() => void window.glass.agentPickOutputFolder()}
+        >
+          {outputFolder}
+        </button>
+      </label>
+      <label className="panel__settings-row">
+        <span>Code project folder</span>
+        <button
+          type="button"
+          className="gbtn gbtn--ghost panel__agent-path-btn"
+          onClick={() => void window.glass.agentPickWorkspaceRoot()}
+        >
+          {workspace || "Choose folder…"}
+        </button>
+      </label>
+
+      <p className="section-title panel__settings-subtitle">Codebase index</p>
+      <p className="hint">
+        Uses Ollama ({`nomic-embed-text`}) running locally — free, offline.
+        {state.ollamaAvailable === false
+          ? " Start Ollama to enable semantic search; Glass Coder falls back to file search."
+          : ""}
+      </p>
+      <p className="hint">
+        Screen-aware context captures your display and sends a screenshot to Claude Haiku
+        to detect the active editor file. Requires Screen Recording permission and an Anthropic API key.
+      </p>
+      <label className="panel__settings-row">
+        <span>Index status</span>
+        <span className="panel__settings-value">{indexLabel}</span>
+      </label>
+      <div className="panel__settings-row panel__settings-row--actions">
+        <button
+          type="button"
+          className="gbtn gbtn--ghost"
+          disabled={!workspace || indexState?.status === "indexing"}
+          onClick={() => workspace && void window.glass.indexStart(workspace)}
+        >
+          Index now
+        </button>
+      </div>
+      <div className="panel__settings-row panel__settings-row--actions">
+        <div>
+          <div className="panel__settings-row-label">Project Memory</div>
+          <p className="hint">
+            Generates GLASS_CONTEXT.md — Glass Coder reads this on every run to understand your project.
+            Re-generate any time your architecture changes.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="gbtn gbtn--ghost"
+          disabled={!workspace}
+          onClick={() => {
+            if (memoryStatus === "generating") {
+              window.glass.cancelProjectMemory();
+            } else {
+              void window.glass.generateProjectMemory();
+            }
+          }}
+        >
+          {memoryStatus === "generating"
+            ? "Cancel"
+            : memoryStatus === "done"
+              ? "Regenerate"
+              : "Generate"}
+        </button>
+      </div>
+      {memoryStatus === "generating" ? (
+        <p className="hint">Generating GLASS_CONTEXT.md…</p>
+      ) : null}
+      {memoryStatus === "done" ? (
+        <p className="hint">✓ GLASS_CONTEXT.md saved to your project root</p>
+      ) : null}
+      {memoryStatus === "error" ? (
+        <p className="hint panel__settings-error">
+          ✗ {state.projectMemoryState?.error ?? "Generation failed"}
+        </p>
+      ) : null}
+      <label className="panel__settings-row panel__settings-row--checkbox">
+        <input
+          type="checkbox"
+          checked={state.glassSettings.indexEnabled !== false}
+          onChange={(e) => patchCoderSettings({ indexEnabled: e.target.checked })}
+        />
+        <span>Enable semantic index</span>
+      </label>
+      <label className="panel__settings-row panel__settings-row--checkbox">
+        <input
+          type="checkbox"
+          checked={state.glassSettings.indexAutoOnOpen !== false}
+          onChange={(e) => patchCoderSettings({ indexAutoOnOpen: e.target.checked })}
+        />
+        <span>Auto-index on project open</span>
+      </label>
+      <label className="panel__settings-row panel__settings-row--checkbox">
+        <input
+          type="checkbox"
+          checked={state.glassSettings.screenContextEnabled !== false}
+          onChange={(e) => patchCoderSettings({ screenContextEnabled: e.target.checked })}
+        />
+        <span>Screen-aware context</span>
+      </label>
+      <label className="panel__settings-row panel__settings-row--checkbox">
+        <input
+          type="checkbox"
+          checked={state.glassSettings.voiceCoderEnabled !== false}
+          onChange={(e) => patchCoderSettings({ voiceCoderEnabled: e.target.checked })}
+        />
+        <span>Voice → Glass Coder</span>
+      </label>
+      <label className="panel__settings-row panel__settings-row--checkbox">
+        <input
+          type="checkbox"
+          checked={state.glassSettings.coderAutoVerify !== false}
+          onChange={(e) => patchCoderSettings({ coderAutoVerify: e.target.checked })}
+        />
+        <span>Auto-verify after apply</span>
+      </label>
+      <label className="panel__settings-row panel__settings-row--checkbox">
+        <input
+          type="checkbox"
+          checked={state.glassSettings.coderAutoReview !== false}
+          onChange={(e) => patchCoderSettings({ coderAutoReview: e.target.checked })}
+        />
+        <span>Auto-review after verify</span>
+      </label>
     </div>
   );
 }

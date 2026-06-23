@@ -18,6 +18,10 @@ import {
   parseSaveVisualAsksToSession,
   parseCopilotSettings,
   parseGlassServerUrl,
+  parseAgentOutputFolder,
+  parseCoderPanelWidth,
+  parseBoolDefaultTrue,
+  parseBoolDefaultFalse,
   type GlassUserSettings,
 } from "../shared/glassSettings.ts";
 import {
@@ -80,6 +84,17 @@ function buildSettingsFromParsed(parsed: Partial<GlassUserSettings>): GlassUserS
         : undefined,
       onboardingComplete: parsed.onboardingComplete === true,
       uiLocale: parseUiLocaleSetting(parsed.uiLocale),
+      agentOutputFolder: parseAgentOutputFolder(parsed.agentOutputFolder),
+      agentCodeWorkspaceRoot: parseAgentOutputFolder(parsed.agentCodeWorkspaceRoot),
+      coderPanelWidthPx: parseCoderPanelWidth(parsed.coderPanelWidthPx),
+      indexEnabled: parseBoolDefaultTrue(parsed.indexEnabled),
+      indexAutoOnOpen: parseBoolDefaultTrue(parsed.indexAutoOnOpen),
+      screenContextEnabled: parseBoolDefaultTrue(parsed.screenContextEnabled),
+      voiceCoderEnabled: parseBoolDefaultTrue(parsed.voiceCoderEnabled),
+      coderAutoVerify: parseBoolDefaultTrue(parsed.coderAutoVerify),
+      coderAutoReview: parseBoolDefaultTrue(parsed.coderAutoReview),
+      qaModeEnabled: parseBoolDefaultFalse(parsed.qaModeEnabled),
+      qaAutoFix: parseBoolDefaultFalse(parsed.qaAutoFix),
     };
 }
 

@@ -124,7 +124,7 @@ export async function applyCodeToFile(
   filePath: string,
   code: string,
   expectedHash?: string,
-): Promise<{ ok: boolean; message: string; driftDetected?: boolean }> {
+): Promise<{ ok: boolean; message: string; driftDetected?: boolean; backupPath?: string }> {
   const expandedPath = filePath.startsWith('~/')
     ? path.join(os.homedir(), filePath.slice(2))
     : filePath;
@@ -155,18 +155,26 @@ export async function applyCodeToFile(
     }
   }
 
-  const backupPath = `${resolved}.glass-backup-${Date.now()}.bak`;
   const tmpPath = `${resolved}.glass-tmp`;
+  let backupPath: string | undefined;
   try {
-    // Backup the current file before touching it (best-effort for new files)
-    await fs.copyFile(resolved, backupPath).catch(() => undefined);
+    try {
+      await fs.access(resolved);
+      backupPath = `${resolved}.glass-backup-${Date.now()}.bak`;
+      await fs.copyFile(resolved, backupPath);
+    } catch {
+      backupPath = undefined;
+    }
     // Atomic write: write to a temp path, then rename into place
     await fs.mkdir(path.dirname(resolved), { recursive: true });
     await fs.writeFile(tmpPath, code, 'utf8');
     await fs.rename(tmpPath, resolved);
     return {
       ok: true,
-      message: `Applied (backup: ${path.basename(backupPath)})`,
+      message: backupPath
+        ? `Applied (backup: ${path.basename(backupPath)})`
+        : "Applied",
+      backupPath,
     };
   } catch (e: unknown) {
     // Clean up temp file on failure (best-effort)

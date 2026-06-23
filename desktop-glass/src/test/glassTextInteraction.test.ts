@@ -21,12 +21,19 @@ test("command bar wires native text context menu helpers", () => {
 
   assert.match(interaction, /prepareGlassTextContextMenu/);
   assert.match(interaction, /prepareGlassTextPointerDown/);
-  assert.match(interaction, /ensureOverlayInteractive/);
+  assert.match(interaction, /armIdeOverlayPointer/);
   assert.doesNotMatch(interaction, /setIgnoreMouse/);
   assert.match(commandBar, /onContextMenu=\{prepareGlassTextContextMenu\}/);
   assert.match(notificationHost, /onPointerDownCapture=\{handlePointerDownCapture\}/);
   assert.match(notificationHost, /ensureOverlayInteractive/);
   assert.match(windows, /configureOverlayClickThrough/);
+  assert.match(windows, /overlayIdeInteractive/);
+  assert.match(windows, /setOverlayIdeActive/);
+  const ideShell = readFileSync(join(ROOT, "renderer", "overlay", "GlassIdeShell.tsx"), "utf8");
+  assert.match(ideShell, /gide-tree-toggle/);
+  assert.match(ideShell, /glassIdeClose/);
+  assert.match(ideShell, /ideCollapsed/);
+  assert.match(ideShell, /toggleTerminalExpanded/);
   assert.match(windows, /ensureChromeWindowInteractive/);
   assert.doesNotMatch(windows, /configureChromeClickThrough/);
   assert.doesNotMatch(windows, /reapplyClickThrough/);

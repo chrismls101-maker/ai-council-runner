@@ -1,5 +1,31 @@
 # IIVO Glass — Changelog
 
+## v0.8.0 — 2026-06-22
+
+### Glass Agent & Coder
+- Multi-agent panel (Research, Writing, Code Analyst, Glass Coder) with run correlation and stop control
+- Agent runner with client/server tools, approval gate, and change log
+- Post-run verify, code review, and QA Mode pipeline (types, tests, lint, preview, review passes)
+- Auto-fix loop with iteration cap; project memory (`GLASS_CONTEXT.md`) and semantic index hooks
+
+### Glass IDE (Tier B)
+- Full IDE shell: file tree, Monaco editor, embedded terminal, live preview, AI stream column
+- Timeline stream feed and in-field composer (Phase A)
+- Server-driven terminal chrome orchestrator — auto expand/collapse with builder-strip sync (Phase B)
+- Aletheia IDE advisory — subtle chip, rare feed lines, flow suppression, stuck-error hints (Phase C)
+- Overlay IDE interactivity fixes (click-through, splits, presence)
+
+### UX & polish
+- Exit Glass control with native quit confirmation
+- Aletheia narration suppressed in IDE except rare advisory speech
+- Builder strip agent-running indicator from shared state
+
+### Tests & docs
+- Unit tests for IDE layout, stream feed, chrome orchestrator, Aletheia advisory, agent/coder/QA modules
+- `ALETHEIA_PROFILE.md`, `GLASS_BUILD_IDE.md`, `GLASS_BUILD_IDE_TIER_B.md`
+
+---
+
 ## v0.7.0 — 2025-06-19
 
 ### Glass Terminal (complete rebuild)

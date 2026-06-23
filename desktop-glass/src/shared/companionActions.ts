@@ -15,6 +15,21 @@ import {
 } from "./companionSessionMemory.ts";
 import { voiceSubmitPlan } from "./voiceModeActions.ts";
 import { tryCompanionScriptAck } from "./companionScriptBridge.ts";
+import { isCoderIntent } from "./voiceCoderIntent.ts";
+
+function coderVoicePlan(
+  transcript: string,
+  enabled: boolean,
+): { route: string; commands: GlassCommand[] } | null {
+  if (!enabled || !isCoderIntent(transcript)) return null;
+  return {
+    route: "voice_coder",
+    commands: [{
+      type: "open-coder-with-prompt",
+      prompt: transcript.trim(),
+    }],
+  };
+}
 
 export function companionSubmitPlan(
   transcript: string,
@@ -46,8 +61,13 @@ export function companionOrVoiceSubmitPlan(
     companionActive: boolean;
     memory?: CompanionSessionMemory | null;
     memoryContext?: CompanionMemoryContext;
+    voiceCoderEnabled?: boolean;
   },
 ): { route: string; commands: GlassCommand[] } {
+  const coderEnabled = options.voiceCoderEnabled !== false;
+  const coderPlan = coderVoicePlan(transcript, coderEnabled);
+  if (coderPlan) return coderPlan;
+
   if (options.companionActive) {
     if (tryCompanionScriptAck(transcript)) {
       return { route: "script_continue", commands: [] };
@@ -55,6 +75,6 @@ export function companionOrVoiceSubmitPlan(
     const plan = companionSubmitPlan(transcript, options.memory, options.memoryContext);
     return { route: plan.route, commands: plan.commands };
   }
-  const voice = voiceSubmitPlan(transcript);
+  const voice = voiceSubmitPlan(transcript, coderEnabled);
   return { route: voice.route, commands: voice.commands };
 }

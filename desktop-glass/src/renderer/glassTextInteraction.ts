@@ -11,6 +11,12 @@ export function ensureOverlayInteractive(): void {
   clickThroughEnabled = false;
 }
 
+/** Glass IDE + embedded terminal — keep the full-screen overlay OS-interactive. */
+export function armIdeOverlayPointer(): void {
+  ensureOverlayInteractive();
+  window.glass?.setOverlayPointerOverIde?.(true);
+}
+
 /** Reliable wheel scroll inside fixed-height palette lists (Electron overlay). */
 export function handlePaletteListWheel(event: ReactWheelEvent<HTMLElement>): void {
   event.stopPropagation();

@@ -1,22 +1,23 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
 import { PromptLibraryPanel } from "./PromptLibraryPanel.tsx";
 import { ApiKeyManagerPanel } from "./ApiKeyManagerPanel.tsx";
 import { PowerPromptPanel } from "./PowerPromptPanel.tsx";
 import { SpendTrackerPanel } from "./SpendTrackerPanel.tsx";
 import { ExtractModePanel } from "./ExtractModePanel.tsx";
+import { GlassAgentPanel } from "./GlassAgentPanel.tsx";
 import {
   armBuilderStripInteractive,
   syncBuilderStripPanelOpen,
   useBuilderStripClickThrough,
 } from "./useBuilderStripClickThrough.ts";
-import { send } from "../useGlassState.ts";
+import { send, useGlassState } from "../useGlassState.ts";
 import { useGlassTerminalToggle } from "../useGlassTerminalToggle.ts";
 import { useGlassCompanion } from "../companion/GlassCompanionProvider.tsx";
 import { GlassHoverTooltip } from "../components/GlassHoverTooltip.tsx";
 import "./BuilderStrip.css";
 
-type BuilderTab = "prompts" | "keys" | "power-prompt" | "spend" | "extract";
+type BuilderTab = "prompts" | "keys" | "power-prompt" | "spend" | "extract" | "agents";
 
 interface BuilderStripProps {
   onEnterInteractive: () => void;
@@ -34,6 +35,32 @@ export function BuilderStrip({
   const { terminalOpen, terminalActive, label: terminalLabel, toggle: toggleTerminal } =
     useGlassTerminalToggle();
   const companion = useGlassCompanion();
+  const glassState = useGlassState();
+  const agentRunning = glassState.agentRun?.status === "running";
+  const [aletheiaSweeping, setAletheiaSweeping] = useState(false);
+  const aletheiaSweepGenRef = useRef(0);
+
+  const replayAletheiaTruthSweep = useCallback((): void => {
+    aletheiaSweepGenRef.current += 1;
+    const gen = aletheiaSweepGenRef.current;
+    setAletheiaSweeping(false);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (gen !== aletheiaSweepGenRef.current) return;
+        setAletheiaSweeping(true);
+      });
+    });
+  }, []);
+
+  const handleAletheiaSweepEnd = useCallback((): void => {
+    setAletheiaSweeping(false);
+  }, []);
+
+  useEffect(() => {
+    if (!aletheiaSweeping) return;
+    const timer = window.setTimeout(handleAletheiaSweepEnd, 2300);
+    return () => window.clearTimeout(timer);
+  }, [aletheiaSweeping, handleAletheiaSweepEnd]);
 
   const companionTooltip = companion.active
     ? `${companion.statusLabel} — tap to turn off`
@@ -69,12 +96,32 @@ export function BuilderStrip({
     });
   }, []);
 
+  const handleAgentsTabClick = useCallback((): void => {
+    armBuilderStripInteractive();
+    if (agentRunning) {
+      window.glass.agentStop();
+      return;
+    }
+    handleTabClick("agents");
+  }, [agentRunning, handleTabClick]);
+
+  const agentsTabTooltip = agentRunning
+    ? "Agent running — tap to stop"
+    : "AI Agents — research, write files, and automate tasks with Claude";
+
   const handleClosePanel = useCallback((): void => {
     syncBuilderStripPanelOpen(false);
     setActiveTab(null);
   }, []);
 
   // Expose extract-tab opener via ref so overlay card can trigger it without prop drilling
+  useEffect(() => {
+    return window.glass.onOpenCoderWithPrompt(() => {
+      syncBuilderStripPanelOpen(true);
+      setActiveTab("agents");
+    });
+  }, []);
+
   useEffect(() => {
     if (onOpenExtractRef) {
       onOpenExtractRef.current = () => handleTabClick("extract");
@@ -103,7 +150,7 @@ export function BuilderStrip({
       {/* Panel — floats above the strip, inside the overlay */}
       {activeTab !== null && (
         <div
-          className="builder-panel-host"
+          className={`builder-panel-host${activeTab === "agents" ? " builder-panel-host--agents" : ""}`}
           onPointerEnter={handlePointerEnter}
           onPointerLeave={handlePointerLeave}
           onPointerDownCapture={handlePointerDownCapture}
@@ -123,6 +170,9 @@ export function BuilderStrip({
             )}
             {activeTab === "extract" && (
               <ExtractModePanel onClose={handleClosePanel} />
+            )}
+            {activeTab === "agents" && (
+              <GlassAgentPanel onClose={handleClosePanel} />
             )}
           </div>
         </div>
@@ -232,18 +282,45 @@ export function BuilderStrip({
         <GlassHoverTooltip label={companionTooltip} placement="auto">
           <button
             type="button"
-            className={`builder-tab builder-tab--companion${companion.active ? " builder-tab--companion--active" : ""}`}
+            className={`builder-tab builder-tab--aletheia${companion.active ? " builder-tab--companion--active" : ""}${aletheiaSweeping ? " builder-tab--aletheia--revealing" : ""}`}
             onClick={companion.toggle}
+            onPointerEnter={replayAletheiaTruthSweep}
             aria-label={companion.active ? "Turn off Aletheia" : "Turn on Aletheia"}
             aria-pressed={companion.active}
             data-testid="glass-companion-toggle"
           >
             <span
+              className={`builder-tab__glass-sweep${aletheiaSweeping ? " builder-tab__glass-sweep--active" : ""}`}
+              aria-hidden="true"
+            >
+              <span
+                className="builder-tab__glass-sweep-bar"
+                onAnimationEnd={handleAletheiaSweepEnd}
+              />
+            </span>
+            <span
               className={`builder-companion-toggle__dot${companion.active ? " builder-companion-toggle__dot--live" : ""}`}
               aria-hidden="true"
             />
-            <span className="builder-tab__icon">◉</span>
-            Aletheia
+            <span className="builder-tab__aletheia-label" aria-hidden="true">
+              <span className="builder-tab__aletheia-label-glow">Aletheia</span>
+              <span className="builder-tab__aletheia-label-face">Aletheia</span>
+            </span>
+          </button>
+        </GlassHoverTooltip>
+
+        <GlassHoverTooltip
+          label={agentsTabTooltip}
+          placement="auto"
+        >
+          <button
+            type="button"
+            className={`builder-tab builder-tab--agents${activeTab === "agents" ? " builder-tab--active" : ""}${agentRunning ? " builder-tab--agents-running" : ""}`}
+            onClick={handleAgentsTabClick}
+            aria-label={agentRunning ? "Stop running agent" : "Glass Agents"}
+          >
+            <span className="builder-tab__icon">◈</span>
+            Agents
           </button>
         </GlassHoverTooltip>
 
@@ -253,11 +330,13 @@ export function BuilderStrip({
         >
           <button
             type="button"
-            className="builder-tab builder-tab--gold"
+            className="builder-tab builder-tab--powers"
             onClick={() => send({ type: "toggle-powers-menu" })}
             aria-label="Glass Powers Menu (Command Shift P)"
           >
-            Powers Menu
+            <span className="builder-tab__strip-label builder-tab__strip-label--powers" aria-hidden="true">
+              Powers Menu
+            </span>
           </button>
         </GlassHoverTooltip>
 
@@ -267,11 +346,13 @@ export function BuilderStrip({
         >
           <button
             type="button"
-            className="builder-tab builder-tab--gold"
+            className="builder-tab builder-tab--palette"
             onClick={() => send({ type: "toggle-command-palette" })}
             aria-label="Glass Command Palette (Command Shift G)"
           >
-            Command Palette
+            <span className="builder-tab__strip-label builder-tab__strip-label--palette" aria-hidden="true">
+              Command Palette
+            </span>
           </button>
         </GlassHoverTooltip>
       </div>

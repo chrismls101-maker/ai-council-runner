@@ -41,11 +41,11 @@
 }
 
 .companion-presence__mark--glow {
-  border: 2px solid rgba(56, 189, 248, 0.95);
+  border: 2px solid rgba(var(--glass-accent-rgb), 0.92);
   box-shadow:
-    0 0 0 1px rgba(125, 211, 252, 0.35),
-    0 0 24px rgba(56, 189, 248, 0.55),
-    inset 0 0 18px rgba(56, 189, 248, 0.12);
+    0 0 0 1px rgba(var(--glass-accent-rgb), 0.35),
+    0 0 24px var(--presence-glow-cyan),
+    inset 0 0 18px rgba(var(--glass-accent-rgb), 0.12);
   animation: companion-glow-pulse 1.8s ease-in-out infinite;
 }
 

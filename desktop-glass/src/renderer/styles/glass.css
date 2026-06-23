@@ -1,5 +1,6 @@
 @import "../shared/overlayGlassFrame.css";
 @import "./glassButtonDepth.css";
+@import "./glassPresenceGlow.css";
 
 :root {
   --glass-bg: rgba(8, 10, 16, 0.88);
@@ -2113,6 +2114,20 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
   pointer-events: none;
 }
 
+/* Builder strip + panels above Glass IDE shell (9050) while IDE is active */
+.overlay-root--ide-active .builder-strip {
+  z-index: 9100;
+}
+
+.overlay-root--ide-active .builder-panel-host {
+  z-index: 9200;
+}
+
+.overlay-root--ide-active .companion-presence {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .overlay-root--palette-open {
   overflow: visible;
 }
@@ -2303,13 +2318,13 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
 .overlay-glass-glow--tl {
   top: -8%;
   left: -6%;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.18), transparent 68%);
+  background: radial-gradient(circle, rgba(var(--glass-accent-rgb), 0.2), transparent 68%);
 }
 
 .overlay-glass-glow--br {
   right: -4%;
   bottom: -10%;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.12), transparent 68%);
+  background: radial-gradient(circle, rgba(167, 128, 255, 0.14), transparent 68%);
 }
 
 .overlay-badge {
@@ -9722,6 +9737,22 @@ details[open] .mode-panel__privacy-summary::before {
   pointer-events: none;
   z-index: 0;
   background: var(--glass-apple-sheen);
+}
+
+/* Docked inside Glass IDE — fills grid cell, no floating resize chrome */
+.glass-terminal-panel--embedded {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.glass-terminal-panel--embedded .gtp-content-row {
+  flex: 1;
+  min-height: 0;
 }
 
 /* ── Terminal header bar ─────────────────────────────────────────────────── */

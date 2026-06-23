@@ -101,6 +101,13 @@ export const fallbackState: GlassState = {
   terminalWidgetVisible: false,
   terminalWidgetPos: { x: 20, y: 60 },
   glassDockTerminalOpen: false,
+  glassIdeTerminalExpanded: false,
+  glassIdeAletheia: {
+    chip: null,
+    feedLine: null,
+    spokenText: null,
+    spokenNonce: 0,
+  },
   glassDockTerminalId: undefined,
   glassDockTerminalTabs: undefined,
   glassTerminalPendingAction: undefined,

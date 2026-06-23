@@ -99,6 +99,18 @@ export interface GlassLastAskResponse {
   at: string;
   routeUsed?: "glass_direct" | "glass_visual_direct";
   model?: string;
+  /** Present when this response was produced by a Glass Agent run. */
+  agentMeta?: GlassAgentResponseMeta;
+}
+
+/** Metadata for agent runs shown in the Response Panel. */
+export interface GlassAgentResponseMeta {
+  agentId: import("./ipc.ts").GlassAgentId;
+  /** Client-generated run id (matches AgentRunRequest.runId). */
+  clientRunId: string;
+  originalPrompt: string;
+  savedFilePath?: string;
+  status?: import("./ipc.ts").GlassAgentRunStatus;
 }
 
 /** Prefer the complete model output over the overlay/short snippet. */

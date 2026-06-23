@@ -1,0 +1,61 @@
+/* Glass — unified ambient presence glow tokens and animations */
+
+:root {
+  --presence-glow-cyan: rgba(56, 225, 255, 0.42);
+  --presence-glow-cyan-soft: rgba(56, 225, 255, 0.16);
+  --presence-glow-purple: rgba(167, 128, 255, 0.32);
+  --presence-glow-amber: rgba(255, 196, 100, 0.34);
+  --presence-glow-amber-soft: rgba(255, 196, 100, 0.14);
+  --glass-accent-rgb: 56, 225, 255;
+  --glass-accent-muted-rgb: 56, 225, 255;
+}
+
+@keyframes glass-presence-breathe {
+  0%, 100% {
+    opacity: 0.72;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes glass-presence-edge {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px rgba(var(--glass-accent-rgb), 0.14),
+      0 0 18px var(--presence-glow-cyan-soft),
+      inset 0 0 24px rgba(var(--glass-accent-rgb), 0.04);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(var(--glass-accent-rgb), 0.28),
+      0 0 32px var(--presence-glow-cyan),
+      inset 0 0 36px rgba(var(--glass-accent-rgb), 0.08);
+  }
+}
+
+@keyframes gide-line-pulse-keyframes {
+  0% {
+    background-color: rgba(var(--glass-accent-rgb), 0.02);
+  }
+  35% {
+    background-color: rgba(var(--glass-accent-rgb), 0.18);
+  }
+  100% {
+    background-color: rgba(var(--glass-accent-rgb), 0.02);
+  }
+}
+
+/* Dim passive overlay orbs when IDE owns the canvas */
+.overlay-root--ide-active .overlay-glass-glow {
+  opacity: 0.035;
+  filter: blur(96px);
+}
+
+.overlay-root--ide-active .overlay-glass-glow--tl {
+  background: radial-gradient(circle, rgba(var(--glass-accent-rgb), 0.22), transparent 68%);
+}
+
+.overlay-root--ide-active .overlay-glass-glow--br {
+  background: radial-gradient(circle, rgba(167, 128, 255, 0.14), transparent 68%);
+}

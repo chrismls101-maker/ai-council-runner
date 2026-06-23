@@ -45,12 +45,13 @@ import * as Sentry from "@sentry/electron/main";
 import { installGlassE2eHooks, getE2eExternalUrls, resetE2eExternalUrls } from "./e2eMainHooks.ts";
 import { installDefaultGlassHandoffOpener, openGlassHandoffUrl } from "./glassBrowserHandoff.ts";
 import { getGlassE2eWindowMetadata } from "./e2eWindowMetadata.ts";
-import { join } from "node:path";
-import { appendFile, readFile } from "node:fs";
+import { dirname, join, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { appendFile, existsSync, readFile } from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
-import { app, BrowserWindow, clipboard, ipcMain, protocol, shell, type WebContents } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, protocol, screen, shell, type WebContents } from "electron";
 import { GLASS_BOOT_DURATION_MS } from "../shared/bootTiming.ts";
 import { isBootSplashBundlePresent } from "../shared/bootSplash.ts";
 import { DOCK_MIN_WIDTH_VERTICAL } from "../shared/glassLayoutMath.ts";
@@ -104,6 +105,17 @@ import {
   type PaletteGetSectionsRequest,
   type PaletteGetSectionsResponse,
   type PaletteRecordUseRequest,
+  isGlassAgentId,
+  type GlassAgentId,
+  type AgentEvent,
+  type AgentRunRequest,
+  type AgentRunResponse,
+  type AgentPickOutputFolderResponse,
+  type AgentPathResponse,
+  type AgentApproveRequest,
+  type AgentApproveResponse,
+  type AgentChangeLogEntry,
+  type GlassAgentRunState,
 } from "../shared/ipc.ts";
 import { PALETTE_COMMAND_REGISTRY } from "../shared/paletteCommandRegistry.ts";
 import { buildCommandPaletteSections } from "../shared/paletteCommandSections.ts";
@@ -212,11 +224,15 @@ import {
   setBuilderStripVisible,
   setBuilderStripLayoutReserve,
   setOverlayPointerOverBuilderStrip,
+  setOverlayPointerOverIde,
+  setOverlayIdeActive,
   setBuilderStripPanelOpen,
   setResponsePanelOpen,
   setCopilotOverlayCardOpen,
   setCommandPaletteOpen,
   setPowersMenuOpen,
+  setCoderWorkspaceActive,
+  setIdeChromeSuppressed,
   ensureOnboardingOverlayClickThrough,
   syncLanguagePickerOverlayInteractivity,
 } from "./windows.ts";
@@ -231,6 +247,18 @@ import {
   touchApiKey,
   isApiKeyEncryptionAvailable,
 } from "./apiKeyStore.ts";
+import { IdeChromeOrchestrator } from "./glassIdeChromeOrchestrator.ts";
+import { isPtyErrorLine } from "../shared/glassIdeChromeOrchestrator.ts";
+import { IdeAletheiaAdvisory } from "./ideAletheiaAdvisory.ts";
+import { emptyGlassIdeAletheiaSnapshot } from "../shared/glassIdeAletheiaAdvisory.ts";
+import type { IdeChromeSignal } from "../shared/glassIdeChromeOrchestrator.ts";
+import { runAgent, type ApprovalGateRequest } from "./agentRunner.ts";
+import {
+  appendAgentHistory,
+  loadAgentHistory,
+  updateAgentHistoryRun,
+} from "./agentHistoryStore.ts";
+import { resolveAgentOutputFolder } from "./agents/paths.ts";
 import {
   completeGlassOnboardingStore,
   loadGlassOnboardingState,
@@ -629,6 +657,64 @@ import {
   parseFileNameFromTitle,
   detectLanguage,
 } from "./codeContextReader.ts";
+import { buildCoderBootstrapContext } from "./agentCoderBootstrap.ts";
+import {
+  buildReviewFixPrompt,
+  buildVerifyFixPrompt,
+  canStartLoopFix,
+  CODER_LOOP_MAX_ITERATIONS,
+  generateProjectMemory,
+  incrementLoopForFix,
+  orchestrateAfterCoderDone,
+} from "./coderBuildLoop.ts";
+import { runQaPipeline, triggerQaFixAll } from "./coderQaPipeline.ts";
+import type { QaPipelineHost } from "./coderQaPipeline.ts";
+import { CoderPostRunScheduler } from "./coderPostRunOrchestration.ts";
+import type { CoderPostRunOrchestrationHost } from "./coderPostRunOrchestration.ts";
+import { isCoderRunEligibleForPostRun } from "../shared/coderPostRunOrchestration.ts";
+import type { CoderBuildLoopHost } from "../shared/coderBuildLoopHost.ts";
+import { narrateToolStart } from "../shared/agentNarration.ts";
+import {
+  checkOllamaAvailable,
+  closeAllIndexDbs,
+  getIndexFileCount,
+  hasIndex,
+  indexFile,
+  indexProject,
+  reindexProject,
+  searchIndex,
+  startWatching,
+  stopAllWatchers,
+  stopWatching,
+} from "./glassIndex.ts";
+import { detectAgentScreenContextFromCapture } from "./screenContext.ts";
+import { expandTildePath, resolveProjectFilePath, filterExistingRelPaths, sanitizeAgentScreenContext } from "../shared/agentProjectPaths.ts";
+import { isAllowedPreviewUrl, normalizePreviewUrl, parseDevServerUrl } from "../shared/glassIdePreview.ts";
+import {
+  listGlassIdeProjectFiles,
+  readGlassIdeProjectFile,
+  writeGlassIdeProjectFile,
+} from "./glassIdeProject.ts";
+import {
+  maybeStartStaticIdePreview,
+  stopStaticPreviewServer,
+} from "./glassIdeStaticServer.ts";
+import { readGlassIdeTsConfig } from "./glassIdeTsConfig.ts";
+import {
+  clearGlassIdeEditorContext,
+  enrichAgentPromptForIde,
+  getGlassIdeEditorContext,
+  resolveGlassIdeVoiceFileQuery,
+  setGlassIdeEditorContext,
+} from "./glassIdeEditorContext.ts";
+import { matchGlassIdeEditorVoiceIntent } from "../shared/glassIdeEditorContext.ts";
+import {
+  clampGlassIdeEditorSplitRatio,
+  clampGlassIdeStreamWidthPx,
+  clampGlassIdeTreeWidthPx,
+  type GlassIdeLayoutSettings,
+} from "../shared/glassIdeLayout.ts";
+import { SCREEN_DETECT_TIMEOUT_MS } from "../shared/screenDetect.ts";
 import { readImportGraph } from "./importGraphReader.ts";
 import { watchCustomCommands } from "./customCommandsLoader.ts";
 import { buildShellThenPromptText } from "../shared/customCommands.ts";
@@ -640,6 +726,8 @@ import {
 } from "./clipboardIntelligence.ts";
 
 loadGlassEnv();
+
+const mainDir = dirname(fileURLToPath(import.meta.url));
 
 {
   const { apiKey, voiceId, model } = glassElevenLabsConfig();
@@ -804,6 +892,25 @@ interface AppState {
   /** Phase 4a — multi-turn Companion session memory. */
   companionMemory: CompanionSessionMemory | null;
   translateSetupRequestId: number;
+  agentRun: GlassAgentRunState | null;
+  agentHistory: import("../shared/ipc.ts").AgentHistoryEntry[];
+  agentPendingApproval: import("../shared/ipc.ts").GlassState["agentPendingApproval"];
+  agentChangeLog: import("../shared/ipc.ts").AgentChangeLogEntry[];
+  coderWorkspaceActive: boolean;
+  glassIdeActive: boolean;
+  glassIdePreviewUrl: string | null;
+  glassIdePreviewReloadNonce: number;
+  glassIdeTerminalExpanded: boolean;
+  glassIdeAletheia: import("../shared/glassIdeAletheiaAdvisory.ts").GlassIdeAletheiaSnapshot;
+  indexState: import("../shared/ipc.ts").GlassIndexState;
+  ollamaAvailable: boolean;
+  projectMemoryState: import("../shared/ipc.ts").ProjectMemoryState | null;
+  coderVerifyState: import("../shared/ipc.ts").CoderVerifyState | null;
+  coderReviewState: import("../shared/ipc.ts").CoderReviewState | null;
+  qaPipelineState: import("../shared/glassQaPipeline.ts").QaPipelineState | null;
+  qaNotificationVisible: boolean;
+  coderLoopIteration?: number;
+  coderLoopSessionId?: string;
   mediaContext: MediaContext | null;
   appUpdate: GlassAppUpdateState;
   listenCountdownSeconds?: number;
@@ -958,6 +1065,14 @@ function handlePtySessionData(id: string, data: string): void {
   if (terminal && !terminal.isDestroyed()) {
     terminal.webContents.send(IPC.ptyData, id, data);
   }
+  if (state.glassIdeActive) {
+    const overlay = getWindows()?.overlay;
+    if (overlay && !overlay.isDestroyed()) {
+      overlay.webContents.send(IPC.ptyData, id, data);
+    }
+  }
+  maybeSetIdePreviewUrlFromTerminal(data);
+  notifyIdeChromePtyOutput(id, data);
   const stripped = data.replace(/\x1b\[[0-9;]*[A-Za-z]|\x1b\][^\x07]*\x07/g, "").replace(/\r/g, "");
   const buf = buildMonitorBuffers.get(id) ?? [];
   buf.push(...stripped.split("\n"));
@@ -1026,7 +1141,7 @@ function dispatchTerminalPanelAction(
 ): void {
   state.glassTerminalPendingAction = { action, nonce: ++terminalActionNonce };
   push();
-  showGlassTerminalWindow();
+  showGlassTerminalWindowUnlessIde();
 }
 
 let askAbortController: AbortController | null = null;
@@ -1083,6 +1198,23 @@ const state: AppState = {
   companionPresence: null,
   companionMemory: null,
   translateSetupRequestId: 0,
+  agentRun: null,
+  agentHistory: [],
+  agentPendingApproval: null,
+  agentChangeLog: [],
+  coderWorkspaceActive: false,
+  glassIdeActive: false,
+  glassIdePreviewUrl: null,
+  glassIdePreviewReloadNonce: 0,
+  glassIdeTerminalExpanded: false,
+  glassIdeAletheia: emptyGlassIdeAletheiaSnapshot(),
+  indexState: { projectRoot: "", status: "idle" },
+  ollamaAvailable: false,
+  projectMemoryState: null,
+  coderVerifyState: null,
+  coderReviewState: null,
+  qaPipelineState: null,
+  qaNotificationVisible: false,
   mediaContext: null,
   appUpdate: emptyGlassAppUpdateState(app.getVersion()),
   onboardingOpen: false,
@@ -1090,6 +1222,109 @@ const state: AppState = {
   iivoAccountLink: null,
   omniParserInstall: getOmniParserInstallState(),
 };
+
+const ideChromeOrchestrator = new IdeChromeOrchestrator({
+  isIdeActive: () => state.glassIdeActive === true,
+  getExpanded: () => state.glassIdeTerminalExpanded,
+  setExpanded: (expanded) => {
+    state.glassIdeTerminalExpanded = expanded;
+  },
+  push,
+});
+
+const ideAletheiaAdvisory = new IdeAletheiaAdvisory({
+  isIdeActive: () => state.glassIdeActive === true,
+  getEditorContext: getGlassIdeEditorContext,
+  getSettings: () => state.glassSettings,
+  persistSettings: async (settings) => {
+    state.glassSettings = settings;
+    glassUserSettings = settings;
+    await persistGlassUserSettings(settings);
+  },
+  getTerminalInteractionAt: () => ideChromeOrchestrator.getLastTerminalInteractionAt(),
+  getLoopIteration: () => state.coderLoopIteration,
+  getAdvisorySnapshot: () => state.glassIdeAletheia,
+  setAdvisorySnapshot: (snapshot) => {
+    state.glassIdeAletheia = snapshot;
+  },
+  push,
+  getRunSignals: () => {
+    const agentRun = state.agentRun?.agentId === "coder" ? state.agentRun : null;
+    const qa = state.qaPipelineState;
+    const verify = state.coderVerifyState;
+    const qaHasFail = Boolean(qa?.checks.some((c) => c.status === "fail"));
+    const qaRunning = qa?.status === "running"
+      || Boolean(qa?.checks.some((c) => c.status === "running"));
+    const verifyFailed = verify?.status === "fail";
+    const failedCheck = qa?.checks.find((c) => c.status === "fail");
+    const errorHint =
+      state.lastError
+      ?? verify?.output?.slice(0, 240)
+      ?? failedCheck?.detail
+      ?? failedCheck?.label
+      ?? null;
+    return {
+      agentRunning: agentRun?.status === "running",
+      agentFailed: agentRun?.status === "error",
+      agentDone: agentRun?.status === "done",
+      qaHasFail,
+      qaRunning,
+      verifyFailed,
+      errorHint,
+    };
+  },
+});
+
+function applyIdeChromeSignal(signal: IdeChromeSignal): void {
+  ideChromeOrchestrator.onSignal(signal);
+  if (state.glassIdeActive) {
+    ideAletheiaAdvisory.onRunPhaseChange();
+  }
+}
+
+function dispatchIdeChromeSignal(signal: IdeChromeSignal): void {
+  if (!state.glassIdeActive) {
+    applyIdeChromeSignal(signal);
+    return;
+  }
+  const bypassGate =
+    signal.kind === "user-set-expanded"
+    || signal.kind === "terminal-interaction"
+    || signal.kind === "ide-opened"
+    || signal.kind === "ide-closed";
+  if (bypassGate) {
+    applyIdeChromeSignal(signal);
+    return;
+  }
+  const gate = ideAletheiaAdvisory.beforeChromeSignal(signal);
+  if (!gate.proceed) return;
+  if (gate.deferMs > 0) {
+    ideAletheiaAdvisory.scheduleDeferredChromeSignal(signal, gate.deferMs, applyIdeChromeSignal);
+    return;
+  }
+  applyIdeChromeSignal(signal);
+}
+
+const ideChromePtyErrorDebounce = new Map<string, ReturnType<typeof setTimeout>>();
+
+function notifyIdeChromePtyOutput(termId: string, data: string): void {
+  if (!state.glassIdeActive) return;
+  const stripped = data
+    .replace(/\x1b\[[0-9;]*[A-Za-z]|\x1b\][^\x07]*\x07/g, "")
+    .replace(/\r/g, "");
+  const lines = stripped.split("\n").map((l) => l.trim()).filter(Boolean);
+  const tail = lines.slice(-4);
+  if (!tail.some(isPtyErrorLine)) return;
+  const existing = ideChromePtyErrorDebounce.get(termId);
+  if (existing) clearTimeout(existing);
+  ideChromePtyErrorDebounce.set(
+    termId,
+    setTimeout(() => {
+      ideChromePtyErrorDebounce.delete(termId);
+      dispatchIdeChromeSignal({ kind: "pty-error" });
+    }, 400),
+  );
+}
 
 let moments = new SavedMomentsStore();
 let sessions = new GlassSessionStore();
@@ -3359,6 +3594,25 @@ function snapshot(): GlassState {
     companionPresence: state.companionPresence,
     companionMemory: state.companionMemory,
     translateSetupRequestId: state.translateSetupRequestId,
+    agentRun: state.agentRun,
+    agentHistory: state.agentHistory,
+    agentPendingApproval: state.agentPendingApproval,
+    agentChangeLog: state.agentChangeLog,
+    coderWorkspaceActive: state.coderWorkspaceActive,
+    glassIdeActive: state.glassIdeActive,
+    glassIdePreviewUrl: state.glassIdePreviewUrl,
+    glassIdePreviewReloadNonce: state.glassIdePreviewReloadNonce,
+    glassIdeTerminalExpanded: state.glassIdeTerminalExpanded,
+    glassIdeAletheia: state.glassIdeAletheia,
+    indexState: state.indexState,
+    ollamaAvailable: state.ollamaAvailable,
+    projectMemoryState: state.projectMemoryState,
+    coderVerifyState: state.coderVerifyState,
+    coderReviewState: state.coderReviewState,
+    qaPipelineState: state.qaPipelineState,
+    qaNotificationVisible: state.qaNotificationVisible,
+    coderLoopIteration: state.coderLoopIteration,
+    coderLoopSessionId: state.coderLoopSessionId,
     mediaContext: state.mediaContext,
     appUpdate: state.appUpdate,
     listenCountdownSeconds: state.listenCountdownSeconds,
@@ -3544,6 +3798,11 @@ function eventContextFields(opts?: { sourceTitle?: string; captureSource?: strin
   };
 }
 
+function syncIdeChromeFromState(): void {
+  setIdeChromeSuppressed(state.glassIdeActive || state.coderWorkspaceActive);
+  setOverlayIdeActive(state.glassIdeActive === true);
+}
+
 function push(): void {
   refreshSetupCapabilities();
   refreshOmniParserInstall();
@@ -3558,6 +3817,7 @@ function push(): void {
       appUpdateVisible,
     }),
   );
+  syncIdeChromeFromState();
   syncLanguagePickerOverlayInteractivity(
     state.onboardingComplete === false &&
       state.glassBootComplete === true &&
@@ -6689,6 +6949,24 @@ async function handleCommand(
       state.lastNotice = "Connecting system audio…";
       push();
       return;
+    case "glass-quit": {
+      const overlay = getWindows()?.overlay;
+      const parent = overlay && !overlay.isDestroyed() ? overlay : null;
+      const quitDialog = {
+        type: "warning" as const,
+        buttons: ["Cancel", "Quit Glass"],
+        defaultId: 0,
+        cancelId: 0,
+        title: "Quit Glass",
+        message: "Quit Glass?",
+        detail: "This will close the app. Unsaved IDE edits will be lost.",
+      };
+      const { response } = parent
+        ? await dialog.showMessageBox(parent, quitDialog)
+        : await dialog.showMessageBox(quitDialog);
+      if (response === 1) app.quit();
+      return;
+    }
     case "glass-update-check":
       void runGlassUpdateCheck();
       return;
@@ -7036,70 +7314,106 @@ async function handleCommand(
       return;
     }
 
-    // ── Build monitor: "Fix with AI" (#162) ──────────────────────────────────
-    case "glass-build-fix-ai": {
-      const { errorText, errorFilePaths } = command;
+    // ── Build monitor: "Fix with Glass" ──────────────────────────────────────
+    case "glass-build-fix-glass": {
+      const { errorText, errorFilePaths, feedItemId } = command;
 
-      // Read referenced source files (up to 3, max 4KB each)
-      const fileSections: string[] = [];
-      let primaryFilePath: string | null = null;
-      for (const rawPath of errorFilePaths.slice(0, 3)) {
-        const result = await readFileForDiff(rawPath);
-        if (result.ok && result.existed && result.content) {
-          const snippet = result.content.length > 4096
-            ? result.content.slice(0, 4096) + "\n…(truncated)"
-            : result.content;
-          fileSections.push(`\`\`\`\n// ${rawPath}\n${snippet}\n\`\`\``);
-          if (!primaryFilePath) {
-            // readFileForDiff resolves ~/ paths internally; store the raw path
-            // and let pendingContextSnapshot carry it for Apply-to-file wiring
-            primaryFilePath = rawPath.startsWith("~/")
-              ? join(process.env.HOME ?? "", rawPath.slice(2))
-              : rawPath;
+      const workspaceRoot = state.glassSettings.agentCodeWorkspaceRoot?.trim();
+
+      // Graceful fallback: if no project root set, fall back to old AI response path
+      if (!workspaceRoot) {
+        const fileSections: string[] = [];
+        let primaryFilePath: string | null = null;
+        for (const rawPath of errorFilePaths.slice(0, 3)) {
+          const result = await readFileForDiff(rawPath);
+          if (result.ok && result.existed && result.content) {
+            const snippet = result.content.length > 4096
+              ? result.content.slice(0, 4096) + "\n…(truncated)"
+              : result.content;
+            fileSections.push(`\`\`\`\n// ${rawPath}\n${snippet}\n\`\`\``);
+            if (!primaryFilePath) {
+              primaryFilePath = rawPath.startsWith("~/")
+                ? join(process.env.HOME ?? "", rawPath.slice(2))
+                : rawPath;
+            }
           }
         }
+        const fileContext = fileSections.length > 0
+          ? `\nReferenced source files:\n${fileSections.join("\n\n")}`
+          : "";
+        const fallbackPrompt = [
+          "The Glass dock terminal produced the following build error:",
+          "",
+          "```",
+          errorText.slice(0, 2000),
+          "```",
+          fileContext,
+          "",
+          "Identify the root cause and provide the corrected code for the file that needs to be changed.",
+          "Return a single fenced code block with the complete corrected file content.",
+        ].join("\n");
+        if (primaryFilePath) {
+          pendingContextSnapshot = {
+            appName: null,
+            windowTitle: null,
+            terminalErrors: [],
+            lastCommand: null,
+            capturedAt: Date.now(),
+            codeContext: {
+              fileName: primaryFilePath.split("/").pop() ?? "",
+              language: "TypeScript",
+              filePath: primaryFilePath,
+              content: null,
+              fileSizeBytes: null,
+            },
+          };
+        }
+        state.commandFeed = state.commandFeed.filter((f) => f.id !== feedItemId);
+        void submitCommand(fallbackPrompt, undefined, { taskComplexity: "deep" });
+        return;
       }
 
-      const fileContext = fileSections.length > 0
-        ? `\nReferenced source files:\n${fileSections.join("\n\n")}`
+      state.commandFeed = state.commandFeed.filter((f) => f.id !== feedItemId);
+      push();
+
+      const fileList = errorFilePaths.length > 0
+        ? `\nFiles referenced in the error:\n${errorFilePaths.map((p) => `- ${p}`).join("\n")}`
         : "";
 
-      const prompt = [
-        "The Glass dock terminal produced the following build error:",
+      const coderPrompt = [
+        "Fix this build error from the Glass terminal:",
         "",
         "```",
-        errorText.slice(0, 2000),
+        errorText.slice(0, 3000),
         "```",
-        fileContext,
-        "",
-        "Identify the root cause and provide the corrected code for the file that needs to be changed.",
-        "Return a single fenced code block with the complete corrected file content.",
+        fileList,
       ].join("\n");
 
-      // Inject file path so the response card gets "Apply to file" wiring.
-      // submitCommand reads pendingContextSnapshot.codeContext?.filePath and
-      // sets it on the response feed item as codeFilePath.
-      if (primaryFilePath) {
-        pendingContextSnapshot = {
-          appName: null,
-          windowTitle: null,
-          terminalErrors: [],
-          lastCommand: null,
-          capturedAt: Date.now(),
-          codeContext: {
-            fileName: primaryFilePath.split("/").pop() ?? "",
-            language: "TypeScript",
-            filePath: primaryFilePath,
-            content: null,
-            fileSizeBytes: null,
-          },
-        };
+      const screenCtx = errorFilePaths.length > 0
+        ? sanitizeAgentScreenContext({
+            detectedFilePath: errorFilePaths[0],
+            visibleErrors: [errorText.slice(0, 500)],
+            confidence: "high",
+          }, workspaceRoot)
+        : undefined;
+
+      state.lastNotice = narrateToolStart("terminal-coder-trigger", {});
+      state.glassIdeActive = true;
+      syncIdeChromeFromState();
+      try {
+        ensureIdeTerminalSession();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        state.lastError = message;
+        state.glassDockTerminalOpen = false;
       }
-
-      // Remove the build-error card so it doesn't linger next to the thinking card
-      state.commandFeed = state.commandFeed.filter((f) => f.id !== command.feedItemId);
-
-      void submitCommand(prompt, undefined, { taskComplexity: "deep" });
+      push();
+      broadcast(IPC.openCoderWithPrompt, {
+        prompt: coderPrompt,
+        autoRun: true,
+        screenContext: screenCtx,
+        launchNonce: ++coderLaunchNonce,
+      });
       return;
     }
 
@@ -7332,11 +7646,91 @@ async function handleCommand(
       if (!state.glassDockTerminalOpen || !state.glassDockTerminalId) {
         await handleCommand({ type: "glass-terminal-open" });
       }
+      if (state.glassIdeActive) {
+        dispatchIdeChromeSignal({ kind: "terminal-run" });
+      }
       const runCmd = command.command;
       setTimeout(() => {
         const termId = state.glassDockTerminalId;
         if (termId) writePtyInput(termId, `${runCmd}\n`);
       }, 300);
+      return;
+    }
+
+    case "glass-ide-open-file": {
+      const rel = typeof command.relativePath === "string"
+        ? command.relativePath.trim().replace(/\\/g, "/")
+        : "";
+      if (!rel || !state.glassIdeActive) return;
+      broadcast(IPC.glassIdeOpenFile, { relativePath: rel });
+      return;
+    }
+
+    case "glass-ide-voice-command": {
+      const transcript = typeof command.transcript === "string" ? command.transcript.trim() : "";
+      if (!transcript || !state.glassIdeActive) return;
+      void (async () => {
+        const ctx = getGlassIdeEditorContext();
+        const intent = matchGlassIdeEditorVoiceIntent(transcript, ctx);
+        if (!intent) return;
+        const workspaceRoot = state.glassSettings.agentCodeWorkspaceRoot?.trim() ?? "";
+        if (intent.kind === "open_file") {
+          if (!workspaceRoot) return;
+          const rel = await resolveGlassIdeVoiceFileQuery(workspaceRoot, intent.query);
+          if (rel) broadcast(IPC.glassIdeOpenFile, { relativePath: rel });
+          return;
+        }
+        if (intent.kind === "explain_selection" || intent.kind === "what_changed") {
+          await handleCommand({
+            type: "open-coder-with-prompt",
+            prompt: intent.prompt,
+            autoRun: true,
+          });
+        }
+      })();
+      return;
+    }
+
+    case "open-coder-with-prompt": {
+      const { prompt, autoRun, screenContext } = command;
+      const enrichedPrompt = enrichAgentPromptForIde(prompt, state.glassIdeActive === true);
+      void (async () => {
+        let ctx = screenContext;
+        const workspaceRoot = state.glassSettings.agentCodeWorkspaceRoot?.trim();
+        if (!ctx && state.glassSettings.screenContextEnabled !== false) {
+          ctx = await detectAgentScreenContextFromCapture(async () => {
+            const display = screen.getPrimaryDisplay();
+            return captureDisplayById(display.id, "Primary Display");
+          }, SCREEN_DETECT_TIMEOUT_MS);
+        }
+        if (ctx && workspaceRoot) {
+          ctx = sanitizeAgentScreenContext(ctx, workspaceRoot);
+        }
+        state.glassIdeActive = true;
+        syncIdeChromeFromState();
+        try {
+          ensureIdeTerminalSession();
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          state.lastError = message;
+          state.glassDockTerminalOpen = false;
+        }
+        push();
+        broadcast(IPC.openCoderWithPrompt, {
+          prompt: enrichedPrompt,
+          autoRun: autoRun !== false && ctx?.confidence === "high",
+          screenContext: ctx,
+          launchNonce: ++coderLaunchNonce,
+        });
+      })();
+      return;
+    }
+
+    case "set-glass-coder-settings": {
+      state.glassSettings = { ...state.glassSettings, ...command.patch };
+      glassUserSettings = state.glassSettings;
+      void persistGlassUserSettings(state.glassSettings);
+      push();
       return;
     }
 
@@ -7423,6 +7817,23 @@ async function handleCommand(
     // ── Glass built-in terminal (PTY) ────────────────────────────────────────
 
     case "glass-terminal-open": {
+      if (state.glassIdeActive) {
+        try {
+          ensureIdeTerminalSession();
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          state.lastError = message;
+          state.glassDockTerminalOpen = false;
+          push();
+          return;
+        }
+        dispatchIdeChromeSignal({
+          kind: "user-set-expanded",
+          expanded: true,
+          manual: true,
+        });
+        return;
+      }
       try {
         ensureGlassTerminalSession();
       } catch (err) {
@@ -7434,7 +7845,7 @@ async function handleCommand(
       }
       state.glassDockTerminalOpen = true;
       push();
-      showGlassTerminalWindow();
+      showGlassTerminalWindowUnlessIde();
       if (process.env.ELECTRON_RENDERER_URL) {
         console.info("[IIVO Glass] glass-terminal-open", {
           termId: state.glassDockTerminalId,
@@ -7445,6 +7856,14 @@ async function handleCommand(
     }
 
     case "glass-terminal-close": {
+      if (state.glassIdeActive) {
+        dispatchIdeChromeSignal({
+          kind: "user-set-expanded",
+          expanded: false,
+          manual: true,
+        });
+        return;
+      }
       state.glassDockTerminalOpen = false;
       push();
       scheduleDismissGlassTerminalWindow();
@@ -7456,7 +7875,7 @@ async function handleCommand(
         spawnGlassDockPtySession();
         state.glassDockTerminalOpen = true;
         push();
-        showGlassTerminalWindow();
+        showGlassTerminalWindowUnlessIde();
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         state.lastError = message;
@@ -7522,6 +7941,22 @@ async function handleCommand(
       return;
     }
 
+    case "glass-ide-terminal-set-expanded": {
+      if (!state.glassIdeActive) return;
+      dispatchIdeChromeSignal({
+        kind: "user-set-expanded",
+        expanded: command.expanded,
+        manual: command.manual,
+      });
+      return;
+    }
+
+    case "glass-ide-terminal-interaction": {
+      if (!state.glassIdeActive) return;
+      dispatchIdeChromeSignal({ kind: "terminal-interaction" });
+      return;
+    }
+
     // ── Terminal auto-fix accept ───────────────────────────────────────────────
     // User clicked "Fix it" on the overlay card — type the fix into the PTY.
     case "glass-terminal-fix-accept": {
@@ -7531,7 +7966,7 @@ async function handleCommand(
         if (!state.glassDockTerminalOpen) {
           state.glassDockTerminalOpen = true;
           push();
-          showGlassTerminalWindow();
+          showGlassTerminalWindowUnlessIde();
         }
         // Write the fix command + Enter to the PTY
         writePtyInput(termId, `${fixCmd}\r`);
@@ -7657,7 +8092,7 @@ async function handleCommand(
       }
       state.glassDockTerminalOpen = true;
       push();
-      showGlassTerminalWindow();
+      showGlassTerminalWindowUnlessIde();
       return;
     }
 
@@ -7673,7 +8108,7 @@ async function handleCommand(
         return;
       }
       push();
-      showGlassTerminalWindow();
+      showGlassTerminalWindowUnlessIde();
       return;
     }
 
@@ -7689,7 +8124,7 @@ async function handleCommand(
         return;
       }
       push();
-      showGlassTerminalWindow();
+      showGlassTerminalWindowUnlessIde();
       return;
     }
 
@@ -7705,7 +8140,7 @@ async function handleCommand(
         return;
       }
       push();
-      showGlassTerminalWindow();
+      showGlassTerminalWindowUnlessIde();
       return;
     }
 
@@ -7834,7 +8269,7 @@ async function runPaletteTerminalFixLast(): Promise<void> {
   try {
     ensureGlassTerminalSession();
     state.glassDockTerminalOpen = true;
-    showGlassTerminalWindow();
+    showGlassTerminalWindowUnlessIde();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     state.lastError = message;
@@ -9132,8 +9567,107 @@ function isTerminalIpcSender(sender: Electron.WebContents): boolean {
   return sender.id === terminal.webContents.id;
 }
 
+/** Floating terminal window or Glass IDE embedded terminal in the overlay. */
+function isTerminalPanelSender(sender: Electron.WebContents): boolean {
+  if (isTerminalIpcSender(sender)) return true;
+  return isOverlayIpcSender(sender) && state.glassIdeActive;
+}
+
+function showGlassTerminalWindowUnlessIde(): void {
+  if (state.glassIdeActive) return;
+  showGlassTerminalWindow();
+}
+
+let ideTerminalCwdRoot: string | null = null;
+
+function cdPtyToDirectory(termId: string, dir: string): void {
+  const q = dir.replace(/'/g, "'\\''");
+  writePtyInput(termId, `cd '${q}'\n`);
+}
+
+function ensureIdeTerminalSession(): void {
+  dismissGlassTerminalWindow();
+  const termId = ensureGlassTerminalSession();
+  state.glassDockTerminalOpen = true;
+  const root = state.glassSettings.agentCodeWorkspaceRoot?.trim();
+  if (root && ideTerminalCwdRoot !== root) {
+    cdPtyToDirectory(termId, expandTildePath(root));
+    ideTerminalCwdRoot = root;
+  }
+}
+
+function bumpIdePreviewReload(): void {
+  state.glassIdePreviewReloadNonce = (state.glassIdePreviewReloadNonce ?? 0) + 1;
+}
+
+function maybeSetIdePreviewUrlFromTerminal(data: string): void {
+  if (!state.glassIdeActive) return;
+  const detected = parseDevServerUrl(data);
+  if (!detected || detected === state.glassIdePreviewUrl) return;
+  void stopStaticPreviewServer();
+  state.glassIdePreviewUrl = detected;
+  dispatchIdeChromeSignal({ kind: "dev-server-detected" });
+  push();
+}
+
+let coderLaunchNonce = 0;
+
 function isValidPtySessionId(termId: unknown): termId is string {
   return typeof termId === "string" && getActivePtySessionIds().includes(termId);
+}
+
+function enableCompanionModeForAgent(): void {
+  if (state.companionModeActive) return;
+  state.companionModeActive = true;
+  state.companionModeToggleNonce += 1;
+  broadcastTranscriptionControl({ type: "stop" });
+  state.companionWarmupPhase = "none";
+  warmOmniParserSidecarWithCallbacks({
+    onWarming: () => {
+      state.companionWarmupPhase = "warming";
+      state.companionWarmupSpeakNonce += 1;
+      push();
+    },
+    onReady: () => {
+      state.companionWarmupPhase = "ready";
+      state.companionWarmupSpeakNonce += 1;
+      push();
+    },
+  });
+  push();
+}
+
+function syncAgentRunFromEvent(ev: AgentEvent): boolean {
+  const status =
+    ev.kind === "done" ? "done"
+    : ev.kind === "error" ? "error"
+    : ev.kind === "cancelled" ? "cancelled"
+    : "running";
+  const prev = state.agentRun;
+  const savedFilePath = ev.savedFilePath ?? prev?.savedFilePath;
+  const changed =
+    !prev ||
+    prev.runId !== ev.runId ||
+    prev.agentId !== ev.agentId ||
+    prev.status !== status ||
+    prev.savedFilePath !== savedFilePath;
+  state.agentRun = {
+    runId: ev.runId,
+    agentId: ev.agentId,
+    status,
+    updatedAt: Date.now(),
+    prompt: prev?.prompt,
+    savedFilePath,
+  };
+  return changed;
+}
+
+function agentCompletionNotice(savedFilePath?: string): string {
+  if (savedFilePath) {
+    const name = savedFilePath.split(/[/\\]/).pop() ?? "file";
+    return `Agent finished — saved ${name}. Open from the Answer Panel or Finder.`;
+  }
+  return "Agent finished — check the Answer Panel.";
 }
 
 function registerIpc(): void {
@@ -9337,6 +9871,1003 @@ function registerIpc(): void {
     },
   );
 
+  // ── Glass Agents ───────────────────────────────────────────────────────────
+  let activeAgentRun: { controller: AbortController; runId: string; agentId: GlassAgentId } | null = null;
+  let projectMemoryRunning = false;
+  let projectMemoryAbort: AbortController | null = null;
+  const approvalResolvers = new Map<string, (approved: boolean) => void>();
+  const coderPostRunScheduler = new CoderPostRunScheduler();
+
+  const isCoderRunCurrentForPostRun = (runId: string): boolean =>
+    isCoderRunEligibleForPostRun(runId, state.agentRun ?? null);
+
+  const coderBuildLoopHost: CoderBuildLoopHost = {
+    getSettings: () => state.glassSettings,
+    getChangeLog: () => state.agentChangeLog ?? [],
+    getVerifyState: () => state.coderVerifyState,
+    setVerifyState: (v) => { state.coderVerifyState = v; },
+    getReviewState: () => state.coderReviewState,
+    setReviewState: (v) => { state.coderReviewState = v; },
+    setProjectMemoryState: (v) => { state.projectMemoryState = v; },
+    setLastNotice: (notice) => { state.lastNotice = notice; },
+    push,
+    broadcastOpenCoder: (payload) => {
+      state.glassIdeActive = true;
+      syncIdeChromeFromState();
+      try {
+        ensureIdeTerminalSession();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        state.lastError = message;
+        state.glassDockTerminalOpen = false;
+      }
+      push();
+      broadcast(IPC.openCoderWithPrompt, { ...payload, launchNonce: ++coderLaunchNonce });
+    },
+    getConfig: () => config,
+    isAgentActive: () => Boolean(activeAgentRun) || projectMemoryRunning,
+    getLoopIteration: () => state.coderLoopIteration,
+    setLoopIteration: (iteration) => { state.coderLoopIteration = iteration; },
+    isCoderRunCurrent: isCoderRunCurrentForPostRun,
+  };
+
+  let qaNotificationShownThisSession = false;
+  let previewProbeResolve: ((errors: string[] | null) => void) | null = null;
+
+  const qaPipelineHost: QaPipelineHost = {
+    getSettings: () => state.glassSettings,
+    getChangeLog: () => state.agentChangeLog ?? [],
+    getConfig: () => config,
+    getPipelineState: () => state.qaPipelineState,
+    setPipelineState: (pipeline) => { state.qaPipelineState = pipeline; },
+    setLastNotice: (notice) => { state.lastNotice = notice; },
+    push,
+    isCoderRunCurrent: isCoderRunCurrentForPostRun,
+    requestPreviewProbe: () => new Promise<string[] | null>((resolve) => {
+      if (!state.glassIdePreviewUrl?.trim()) {
+        resolve(null);
+        return;
+      }
+      const overlay = getWindows()?.overlay;
+      if (!overlay || overlay.isDestroyed()) {
+        resolve(null);
+        return;
+      }
+      const timer = setTimeout(() => {
+        if (previewProbeResolve) {
+          previewProbeResolve = null;
+          resolve(null);
+        }
+      }, 8000);
+      previewProbeResolve = (errors) => {
+        clearTimeout(timer);
+        previewProbeResolve = null;
+        resolve(errors);
+      };
+      overlay.webContents.send(IPC.idePreviewProbe);
+    }),
+    broadcastOpenCoder: (payload) => {
+      state.glassIdeActive = true;
+      syncIdeChromeFromState();
+      push();
+      broadcast(IPC.openCoderWithPrompt, { ...payload, launchNonce: ++coderLaunchNonce });
+    },
+    getLoopIteration: () => state.coderLoopIteration,
+    setLoopIteration: (iteration) => { state.coderLoopIteration = iteration; },
+    onShellCheckStart: () => {
+      if (state.glassIdeActive) {
+        dispatchIdeChromeSignal({ kind: "qa-shell-check-start" });
+      }
+    },
+    onPipelineComplete: (hasFail) => {
+      if (state.glassIdeActive) {
+        dispatchIdeChromeSignal({
+          kind: "post-run-complete",
+          success: !hasFail,
+        });
+      }
+    },
+  };
+
+  const coderPostRunHost: CoderPostRunOrchestrationHost = {
+    getPendingApproval: () => state.agentPendingApproval,
+    getApprovalKeys: () => approvalResolvers.keys(),
+    getAgentRun: () => state.agentRun ?? null,
+    getAgentHistory: () => state.agentHistory ?? [],
+    getProjectRoot: () => state.glassSettings.agentCodeWorkspaceRoot?.trim() || null,
+    isQaModeEnabled: () => state.glassSettings.qaModeEnabled === true,
+    runQaPipeline: (runId, projectRoot) => runQaPipeline(runId, projectRoot, qaPipelineHost),
+    orchestrateAfterCoderDone: async (runId, projectRoot) => {
+      await orchestrateAfterCoderDone(runId, projectRoot, coderBuildLoopHost);
+      if (!state.glassIdeActive) return;
+      const verifyFailed =
+        state.coderVerifyState?.runId === runId
+        && state.coderVerifyState?.status === "fail";
+      dispatchIdeChromeSignal({
+        kind: "post-run-complete",
+        success: !verifyFailed,
+      });
+    },
+  };
+
+  const rejectApprovalsForRun = (runId: string): void => {
+    coderPostRunScheduler.clear(runId);
+    for (const [key, resolve] of approvalResolvers.entries()) {
+      if (key.startsWith(`${runId}:`)) {
+        resolve(false);
+        approvalResolvers.delete(key);
+      }
+    }
+    if (state.agentPendingApproval?.runId === runId) {
+      state.agentPendingApproval = null;
+    }
+  };
+
+  const deactivateCoderWorkspace = (): void => {
+    if (!state.coderWorkspaceActive) return;
+    state.coderWorkspaceActive = false;
+    syncIdeChromeFromState();
+  };
+
+  const ensureIndexWatcher = (projectRoot: string): void => {
+    if (!hasIndex(projectRoot)) return;
+    startWatching(projectRoot, (changedPath) => {
+      void indexFile(projectRoot, changedPath);
+    });
+  };
+
+  const runProjectIndex = (projectRoot: string, reindex = false): void => {
+    const root = projectRoot.trim();
+    if (!root) return;
+    if (state.indexState.status === "indexing" && state.indexState.projectRoot === root) return;
+
+    void (async () => {
+      state.ollamaAvailable = await checkOllamaAvailable();
+      const startedAt = Date.now();
+      stopWatching(root);
+
+      state.indexState = {
+        projectRoot: root,
+        status: "indexing",
+        progress: { processed: 0, indexed: 0, total: 0, phase: "embedding" },
+      };
+      push();
+      broadcast(IPC.indexProgress, state.indexState.progress);
+
+      const onProgress = (progress: import("./glassIndex.ts").GlassIndexProgress): void => {
+        state.indexState = {
+          ...state.indexState,
+          status: "indexing",
+          progress,
+        };
+        push();
+        broadcast(IPC.indexProgress, progress);
+      };
+
+      const result = reindex
+        ? await reindexProject(root, onProgress)
+        : await indexProject(root, onProgress);
+
+      if (result.error) {
+        state.indexState = {
+          projectRoot: root,
+          status: "error",
+          error: result.error,
+        };
+        push();
+        broadcast(IPC.indexError, { error: result.error });
+        if (hasIndex(root)) ensureIndexWatcher(root);
+        return;
+      }
+
+      const fileCount = getIndexFileCount(root);
+      state.indexState = {
+        projectRoot: root,
+        status: "ready",
+        fileCount,
+        lastIndexedAt: Date.now(),
+      };
+      push();
+      broadcast(IPC.indexDone, {
+        fileCount,
+        durationMs: Date.now() - startedAt,
+      });
+      ensureIndexWatcher(root);
+    })();
+  };
+
+  const createApprovalGate = (runId: string, agentId: GlassAgentId) => {
+    return async (request: ApprovalGateRequest): Promise<boolean> => {
+      return new Promise((resolve) => {
+        const key = `${runId}:${request.toolUseId}`;
+        approvalResolvers.set(key, (approved) => {
+          approvalResolvers.delete(key);
+          if (state.agentPendingApproval?.runId === runId) {
+            state.agentPendingApproval = null;
+          }
+          push();
+          resolve(approved);
+          coderPostRunScheduler.notifyRunProgress(runId, coderPostRunHost);
+        });
+        state.agentPendingApproval = {
+          runId,
+          agentId,
+          pendingToolId: request.toolUseId,
+          pendingToolName: request.toolName,
+          ...request.approval,
+        };
+        push();
+        relayAgentEvent({
+          runId,
+          agentId,
+          kind: "approval-required",
+          pendingToolId: request.toolUseId,
+          pendingToolName: request.toolName,
+          pendingToolInput: request.toolInput,
+          pendingApproval: request.approval,
+        });
+        relayAgentEvent({
+          runId,
+          agentId,
+          kind: "narrate",
+          text: "Review the change.",
+        });
+      });
+    };
+  };
+
+  const relayAgentEvent = (ev: AgentEvent): void => {
+    if (activeAgentRun?.runId !== ev.runId) return;
+    const stateChanged = syncAgentRunFromEvent(ev);
+    let shouldPush = stateChanged;
+
+    if (ev.kind === "tool-done" && ev.savedFilePath) {
+      state.agentHistory = updateAgentHistoryRun(ev.runId, {
+        savedFilePath: ev.savedFilePath,
+      });
+      shouldPush = true;
+    }
+
+    if (ev.kind === "tool-done" && ev.changeLogEntry) {
+      const entry = ev.changeLogEntry;
+      state.agentChangeLog = [...(state.agentChangeLog ?? []), entry];
+      if (entry.action === "applied" && state.glassIdeActive) {
+        bumpIdePreviewReload();
+      }
+      const paths = state.agentHistory
+        .find((h) => h.runId === ev.runId)
+        ?.changedFiles ?? [];
+      const nextPaths = entry.action === "applied" || entry.action === "deleted"
+        ? [...paths, entry.path]
+        : paths;
+      state.agentHistory = updateAgentHistoryRun(ev.runId, {
+        changedFiles: nextPaths.length > 0 ? nextPaths : undefined,
+      });
+      shouldPush = true;
+    }
+
+    if (ev.kind === "tool-done" && ev.agentId === "coder" && ev.changeLogEntry) {
+      coderPostRunScheduler.notifyRunProgress(ev.runId, coderPostRunHost);
+    }
+
+    if (state.glassIdeActive && ev.agentId === "coder") {
+      if (ev.kind === "tool-start") {
+        dispatchIdeChromeSignal({
+          kind: "agent-tool-start",
+          toolName: ev.toolName ?? "",
+        });
+      } else if (ev.kind === "error") {
+        dispatchIdeChromeSignal({ kind: "agent-error" });
+      } else if (ev.kind === "done" || ev.kind === "cancelled") {
+        ideAletheiaAdvisory.onRunPhaseChange();
+      }
+    }
+
+    if (ev.kind === "approval-required") {
+      shouldPush = true;
+    }
+
+    if (ev.kind === "done") {
+      const path = state.agentRun?.savedFilePath;
+      if (ev.agentId === "coder") {
+        state.lastNotice = "Glass Coder finished — review changes in the Coder panel.";
+      } else {
+        state.lastNotice = agentCompletionNotice(path);
+      }
+      state.agentHistory = updateAgentHistoryRun(ev.runId, {
+        status: "done",
+        finishedAt: Date.now(),
+        savedFilePath: path,
+      });
+      shouldPush = true;
+      if (ev.agentId === "coder") {
+        coderPostRunScheduler.requestPostRun(ev.runId, coderPostRunHost);
+      }
+    } else if (ev.kind === "error") {
+      state.lastNotice = ev.error ?? "Agent failed.";
+      if (ev.agentId === "coder") {
+        coderPostRunScheduler.clear(ev.runId);
+      }
+      state.agentHistory = updateAgentHistoryRun(ev.runId, {
+        status: "error",
+        finishedAt: Date.now(),
+        error: ev.error,
+      });
+      shouldPush = true;
+    } else if (ev.kind === "cancelled") {
+      state.lastNotice = "Agent stopped.";
+      rejectApprovalsForRun(ev.runId);
+      if (ev.agentId === "coder") {
+        deactivateCoderWorkspace();
+      }
+      state.agentHistory = updateAgentHistoryRun(ev.runId, {
+        status: "cancelled",
+        finishedAt: Date.now(),
+      });
+      shouldPush = true;
+    }
+
+    if (shouldPush) push();
+    broadcast(IPC.agentEvent, ev);
+  };
+
+  ipcMain.handle(
+    IPC.agentRun,
+    async (event, payload: AgentRunRequest): Promise<AgentRunResponse> => {
+      if (!isOverlayIpcSender(event.sender)) return { started: false, error: "Unauthorized" };
+
+      const agentId = payload?.agentId;
+      const prompt = typeof payload?.prompt === "string" ? payload.prompt.trim() : "";
+      const runId = typeof payload?.runId === "string" ? payload.runId.trim() : "";
+      const loopAutoTrigger = payload?.loopAutoTrigger === true;
+      const enrichedPrompt = enrichAgentPromptForIde(prompt, state.glassIdeActive === true);
+      if (!isGlassAgentId(agentId)) return { started: false, error: "Invalid agentId" };
+      if (!prompt) return { started: false, error: "prompt is required" };
+      if (!runId) return { started: false, error: "runId is required" };
+
+      if (agentId === "coder" && !state.glassSettings.agentCodeWorkspaceRoot?.trim()) {
+        return { started: false, error: "Set a project folder before running Glass Coder." };
+      }
+
+      if (projectMemoryRunning) {
+        return { started: false, error: "Project memory generation is in progress." };
+      }
+
+      activeAgentRun?.controller.abort();
+      rejectApprovalsForRun(activeAgentRun?.runId ?? "");
+      if (activeAgentRun?.runId) {
+        coderPostRunScheduler.clear(activeAgentRun.runId);
+      }
+      const controller = new AbortController();
+      activeAgentRun = { controller, runId, agentId };
+
+      enableCompanionModeForAgent();
+
+      const outputDir = resolveAgentOutputFolder(state.glassSettings);
+      const codeWorkspaceRoot = state.glassSettings.agentCodeWorkspaceRoot?.trim() || undefined;
+      const screenContext = sanitizeAgentScreenContext(
+        payload?.agentScreenContext,
+        codeWorkspaceRoot ?? "",
+      );
+
+      if (agentId === "coder") {
+        state.coderWorkspaceActive = true;
+        state.glassIdeActive = true;
+        state.agentChangeLog = [];
+        syncIdeChromeFromState();
+        if (!loopAutoTrigger) {
+          state.coderLoopSessionId = runId;
+          state.coderLoopIteration = 1;
+          state.coderVerifyState = null;
+          state.coderReviewState = null;
+        }
+      }
+
+      let coderBootstrapContext: string | undefined;
+      if (agentId === "coder" && codeWorkspaceRoot) {
+        const wCtx = getCachedWindowContext();
+        let preSeedRelPaths: string[] = [];
+        if (state.glassSettings.indexEnabled !== false) {
+          state.ollamaAvailable = await checkOllamaAvailable();
+          if (hasIndex(codeWorkspaceRoot)) {
+            const results = await searchIndex(codeWorkspaceRoot, prompt, 12);
+            preSeedRelPaths = filterExistingRelPaths(
+              codeWorkspaceRoot,
+              results.map((r) => r.relPath),
+            );
+            ensureIndexWatcher(codeWorkspaceRoot);
+          } else if (state.glassSettings.indexAutoOnOpen !== false && state.indexState.status !== "indexing") {
+            runProjectIndex(codeWorkspaceRoot);
+          }
+        }
+        const screenFilePath = screenContext?.detectedFilePath;
+        const editorFilePath = getGlassIdeEditorContext().relativePath ?? undefined;
+        if (editorFilePath && codeWorkspaceRoot && state.glassIdeActive) {
+          const [validatedEditor] = filterExistingRelPaths(codeWorkspaceRoot, [editorFilePath]);
+          if (validatedEditor && !preSeedRelPaths.includes(validatedEditor)) {
+            preSeedRelPaths.unshift(validatedEditor);
+          }
+        }
+        if (screenFilePath && codeWorkspaceRoot) {
+          const resolved = resolveProjectFilePath(codeWorkspaceRoot, screenFilePath);
+          if (resolved) {
+            const root = resolve(expandTildePath(codeWorkspaceRoot));
+            const rel = relative(root, resolved);
+            const [validated] = filterExistingRelPaths(codeWorkspaceRoot, [rel]);
+            if (validated && !preSeedRelPaths.includes(validated)) {
+              preSeedRelPaths.unshift(validated);
+            }
+          }
+        }
+        coderBootstrapContext = await buildCoderBootstrapContext({
+          projectRoot: codeWorkspaceRoot,
+          appName: wCtx.status === "available" ? wCtx.appName : null,
+          windowTitle: wCtx.status === "available" ? wCtx.windowTitle : null,
+          preSeedFiles: preSeedRelPaths,
+          screenContext,
+          includeFileWalk: preSeedRelPaths.length === 0,
+          prompt: enrichedPrompt,
+        });
+      }
+
+      state.agentRun = {
+        runId,
+        agentId,
+        status: "running",
+        updatedAt: Date.now(),
+        prompt: enrichedPrompt,
+      };
+      state.agentHistory = appendAgentHistory({
+        runId,
+        agentId,
+        prompt: enrichedPrompt,
+        startedAt: Date.now(),
+        status: "running",
+      });
+      push();
+
+      void runAgent({
+        agentId,
+        prompt: enrichedPrompt,
+        runId,
+        outputDir,
+        codeWorkspaceRoot,
+        projectRoot: agentId === "coder" ? codeWorkspaceRoot : undefined,
+        coderBootstrapContext,
+        approvalGate: agentId === "coder" ? createApprovalGate(runId, agentId) : undefined,
+        signal: controller.signal,
+        onEvent: relayAgentEvent,
+      })
+        .catch((err: unknown) => {
+          if (activeAgentRun?.runId !== runId) return;
+          relayAgentEvent({
+            runId,
+            agentId,
+            kind: "error",
+            error: err instanceof Error ? err.message : "Agent crashed",
+          });
+        })
+        .finally(() => {
+          if (activeAgentRun?.runId === runId) {
+            activeAgentRun = null;
+          }
+        });
+
+      return { started: true, runId };
+    },
+  );
+
+  ipcMain.on(IPC.agentStop, (event) => {
+    if (!isOverlayIpcSender(event.sender)) return;
+    const current = activeAgentRun;
+    if (!current) return;
+    rejectApprovalsForRun(current.runId);
+    current.controller.abort();
+    if (current.agentId === "coder") {
+      deactivateCoderWorkspace();
+    }
+    relayAgentEvent({
+      runId: current.runId,
+      agentId: current.agentId,
+      kind: "cancelled",
+    });
+  });
+
+  ipcMain.handle(
+    IPC.agentApprove,
+    (event, payload: AgentApproveRequest): AgentApproveResponse => {
+      if (!isOverlayIpcSender(event.sender)) {
+        return { ok: false, error: "Unauthorized" };
+      }
+      const runId = typeof payload?.runId === "string" ? payload.runId.trim() : "";
+      const pendingToolId = typeof payload?.pendingToolId === "string" ? payload.pendingToolId.trim() : "";
+      if (!runId || !pendingToolId) {
+        return { ok: false, error: "runId and pendingToolId are required" };
+      }
+      const key = `${runId}:${pendingToolId}`;
+      const resolve = approvalResolvers.get(key);
+      if (!resolve) {
+        return { ok: false, error: "No pending approval for this tool" };
+      }
+      resolve(payload.approved === true);
+      return { ok: true };
+    },
+  );
+
+  ipcMain.on(IPC.coderWorkspaceClose, (event) => {
+    if (!isOverlayIpcSender(event.sender)) return;
+    deactivateCoderWorkspace();
+    push();
+  });
+
+  ipcMain.on(IPC.glassIdeOpen, (event) => {
+    if (!isOverlayIpcSender(event.sender)) return;
+    state.glassIdeActive = true;
+    state.coderWorkspaceActive = true;
+    if (
+      state.agentPendingApproval?.agentId === "coder"
+      && !(state.agentRun?.agentId === "coder" && state.agentRun.status === "running")
+    ) {
+      state.agentPendingApproval = null;
+    }
+    syncIdeChromeFromState();
+    ideChromeOrchestrator.resetForIdeOpen();
+    ideAletheiaAdvisory.resetForIdeOpen();
+    try {
+      ensureIdeTerminalSession();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      state.lastError = message;
+      state.glassDockTerminalOpen = false;
+    }
+    void (async () => {
+      if (state.glassIdePreviewUrl) return;
+      const projectRoot = state.glassSettings.agentCodeWorkspaceRoot?.trim();
+      if (!projectRoot) return;
+      try {
+        const url = await maybeStartStaticIdePreview(projectRoot);
+        if (url && !state.glassIdePreviewUrl) {
+          state.glassIdePreviewUrl = url;
+          push();
+        }
+      } catch {
+        // static preview is best-effort
+      }
+    })();
+    push();
+  });
+
+  ipcMain.on(IPC.glassIdeClose, (event) => {
+    if (!isOverlayIpcSender(event.sender)) return;
+    state.glassIdeActive = false;
+    state.glassIdePreviewUrl = null;
+    clearGlassIdeEditorContext();
+    void stopStaticPreviewServer();
+    ideChromeOrchestrator.resetForIdeClose();
+    ideAletheiaAdvisory.resetForIdeClose();
+    const coderBusy =
+      (state.agentRun?.agentId === "coder" && state.agentRun.status === "running")
+      || state.agentPendingApproval?.agentId === "coder";
+    if (!coderBusy) {
+      state.coderWorkspaceActive = false;
+    }
+    syncIdeChromeFromState();
+    push();
+  });
+
+  ipcMain.on(IPC.glassIdePreviewSetUrl, (event, rawUrl: string) => {
+    if (!isOverlayIpcSender(event.sender)) return;
+    const normalized = normalizePreviewUrl(typeof rawUrl === "string" ? rawUrl : "");
+    if (!normalized || !isAllowedPreviewUrl(normalized)) return;
+    state.glassIdePreviewUrl = normalized;
+    push();
+  });
+
+  ipcMain.on(IPC.glassIdePreviewReload, (event) => {
+    if (!isOverlayIpcSender(event.sender)) return;
+    if (!state.glassIdePreviewUrl) return;
+    bumpIdePreviewReload();
+    push();
+  });
+
+  ipcMain.handle(IPC.glassIdeListProject, async (event) => {
+    if (!isOverlayIpcSender(event.sender)) {
+      return { ok: false, error: "Unauthorized" };
+    }
+    const projectRoot = state.glassSettings.agentCodeWorkspaceRoot?.trim() ?? "";
+    return listGlassIdeProjectFiles(projectRoot);
+  });
+
+  ipcMain.handle(IPC.glassIdeReadProjectFile, async (event, relativePath: string) => {
+    if (!isOverlayIpcSender(event.sender)) {
+      return { ok: false, error: "Unauthorized" };
+    }
+    const projectRoot = state.glassSettings.agentCodeWorkspaceRoot?.trim() ?? "";
+    const rel = typeof relativePath === "string" ? relativePath : "";
+    return readGlassIdeProjectFile(projectRoot, rel);
+  });
+
+  ipcMain.handle(
+    IPC.glassIdeWriteProjectFile,
+    async (event, relativePath: string, content: string) => {
+      if (!isOverlayIpcSender(event.sender)) {
+        return { ok: false, error: "Unauthorized" };
+      }
+      const projectRoot = state.glassSettings.agentCodeWorkspaceRoot?.trim() ?? "";
+      const rel = typeof relativePath === "string" ? relativePath : "";
+      const body = typeof content === "string" ? content : "";
+      return writeGlassIdeProjectFile(projectRoot, rel, body);
+    },
+  );
+
+  ipcMain.handle(IPC.glassIdeReadTsConfig, async (event) => {
+    if (!isOverlayIpcSender(event.sender)) {
+      return { ok: false, error: "Unauthorized" };
+    }
+    const projectRoot = state.glassSettings.agentCodeWorkspaceRoot?.trim() ?? "";
+    return readGlassIdeTsConfig(projectRoot);
+  });
+
+  ipcMain.on(IPC.glassIdeEditorContextUpdate, (event, ctx: import("../shared/glassIdeEditorContext.ts").GlassIdeEditorContext) => {
+    if (!isOverlayIpcSender(event.sender)) return;
+    if (!ctx || typeof ctx !== "object") return;
+    setGlassIdeEditorContext(ctx);
+    ideAletheiaAdvisory.onEditorActivity();
+  });
+
+  ipcMain.on(IPC.qaModeToggle, (event) => {
+    if (!isOverlayIpcSender(event.sender)) return;
+    const next = !state.glassSettings.qaModeEnabled;
+    state.glassSettings = { ...state.glassSettings, qaModeEnabled: next };
+    glassUserSettings = state.glassSettings;
+    void persistGlassUserSettings(state.glassSettings);
+    if (next && !qaNotificationShownThisSession) {
+      qaNotificationShownThisSession = true;
+      state.qaNotificationVisible = true;
+      broadcast(IPC.showQaModeNotification, {});
+    }
+    if (!next) {
+      state.qaPipelineState = null;
+    }
+    push();
+  });
+
+  ipcMain.on(IPC.qaAutoFixToggle, (event) => {
+    if (!isOverlayIpcSender(event.sender)) return;
+    const next = !state.glassSettings.qaAutoFix;
+    state.glassSettings = { ...state.glassSettings, qaAutoFix: next };
+    glassUserSettings = state.glassSettings;
+    void persistGlassUserSettings(state.glassSettings);
+    push();
+  });
+
+  ipcMain.on(IPC.dismissQaModeNotification, (event) => {
+    if (!isOverlayIpcSender(event.sender)) return;
+    state.qaNotificationVisible = false;
+    push();
+  });
+
+  ipcMain.on(IPC.idePreviewProbeResult, (event, payload: { errors?: string[]; skipped?: boolean }) => {
+    if (!isOverlayIpcSender(event.sender)) return;
+    if (payload?.skipped) {
+      previewProbeResolve?.(null);
+      previewProbeResolve = null;
+      return;
+    }
+    const errors = Array.isArray(payload?.errors)
+      ? payload.errors.filter((e): e is string => typeof e === "string")
+      : [];
+    previewProbeResolve?.(errors);
+    previewProbeResolve = null;
+  });
+
+  ipcMain.handle(IPC.qaPipelineFixAll, async (event, payload: { runId?: string }) => {
+    if (!isOverlayIpcSender(event.sender)) {
+      return { ok: false, error: "Unauthorized" };
+    }
+    const runId = typeof payload?.runId === "string" ? payload.runId.trim() : "";
+    const pipeline = state.qaPipelineState;
+    if (!runId || !pipeline || pipeline.runId !== runId) {
+      return { ok: false, error: "No QA pipeline for this run." };
+    }
+    const started = triggerQaFixAll(runId, pipeline.checks, qaPipelineHost);
+    return { ok: started };
+  });
+
+  ipcMain.on(IPC.glassIdeLayoutSet, (event, partial: GlassIdeLayoutSettings) => {
+    if (!isOverlayIpcSender(event.sender)) return;
+    if (!partial || typeof partial !== "object") return;
+    const next = { ...state.glassSettings };
+    if (typeof partial.glassIdeTreeWidthPx === "number" && Number.isFinite(partial.glassIdeTreeWidthPx)) {
+      next.glassIdeTreeWidthPx = clampGlassIdeTreeWidthPx(partial.glassIdeTreeWidthPx);
+    }
+    if (typeof partial.glassIdeStreamWidthPx === "number" && Number.isFinite(partial.glassIdeStreamWidthPx)) {
+      next.glassIdeStreamWidthPx = clampGlassIdeStreamWidthPx(partial.glassIdeStreamWidthPx);
+    }
+    if (typeof partial.glassIdeEditorSplitRatio === "number" && Number.isFinite(partial.glassIdeEditorSplitRatio)) {
+      next.glassIdeEditorSplitRatio = clampGlassIdeEditorSplitRatio(partial.glassIdeEditorSplitRatio);
+    }
+    state.glassSettings = next;
+    glassUserSettings = state.glassSettings;
+    void persistGlassUserSettings(state.glassSettings);
+    push();
+  });
+
+  ipcMain.on(IPC.coderPanelSetWidth, (event, widthPx: number) => {
+    if (!isOverlayIpcSender(event.sender)) return;
+    if (typeof widthPx !== "number" || !Number.isFinite(widthPx)) return;
+    const clamped = Math.min(2400, Math.max(380, Math.round(widthPx)));
+    state.glassSettings = { ...state.glassSettings, coderPanelWidthPx: clamped };
+    glassUserSettings = state.glassSettings;
+    void persistGlassUserSettings(state.glassSettings);
+    push();
+  });
+
+  ipcMain.handle(IPC.generateProjectMemory, async (event): Promise<{ ok: boolean; error?: string }> => {
+    if (!isOverlayIpcSender(event.sender)) return { ok: false, error: "Unauthorized" };
+    const projectRoot = state.glassSettings.agentCodeWorkspaceRoot?.trim();
+    if (!projectRoot) {
+      state.lastNotice = "Set a project folder first.";
+      push();
+      return { ok: false, error: "Set a project folder first." };
+    }
+    if (coderBuildLoopHost.isAgentActive()) {
+      state.projectMemoryState = { status: "error", error: "An agent is already running." };
+      push();
+      return { ok: false, error: "An agent is already running." };
+    }
+    if (projectMemoryRunning) {
+      state.projectMemoryState = { status: "error", error: "Project memory generation is already in progress." };
+      push();
+      return { ok: false, error: "Project memory generation is already in progress." };
+    }
+    projectMemoryRunning = true;
+    projectMemoryAbort = new AbortController();
+    try {
+      await generateProjectMemory(projectRoot, coderBuildLoopHost, projectMemoryAbort.signal);
+      return { ok: state.projectMemoryState?.status === "done" };
+    } finally {
+      projectMemoryRunning = false;
+      projectMemoryAbort = null;
+    }
+  });
+
+  ipcMain.on(IPC.cancelProjectMemory, (event) => {
+    if (!isOverlayIpcSender(event.sender)) return;
+    if (!projectMemoryRunning || !projectMemoryAbort) return;
+    projectMemoryAbort.abort();
+  });
+
+  ipcMain.handle(
+    IPC.coderVerifyFix,
+    async (
+      event,
+      payload: { runId?: string; errorOutput?: string },
+    ): Promise<{ ok: boolean; error?: string }> => {
+      if (!isOverlayIpcSender(event.sender)) return { ok: false, error: "Unauthorized" };
+      const errorOutput = typeof payload?.errorOutput === "string" ? payload.errorOutput.trim() : "";
+      if (!errorOutput) return { ok: false, error: "No error output" };
+
+      if (!canStartLoopFix(coderBuildLoopHost)) {
+        state.lastNotice = narrateToolStart("coder-loop-cap", {});
+        push();
+        return { ok: false, error: `Coder has iterated ${CODER_LOOP_MAX_ITERATIONS} times. Review manually.` };
+      }
+      incrementLoopForFix(coderBuildLoopHost);
+
+      state.coderVerifyState = null;
+      push();
+
+      coderBuildLoopHost.broadcastOpenCoder({
+        prompt: buildVerifyFixPrompt(errorOutput),
+        autoRun: true,
+        screenContext: null,
+        loopAutoTrigger: true,
+      });
+      return { ok: true };
+    },
+  );
+
+  ipcMain.handle(
+    IPC.coderReviewFix,
+    async (
+      event,
+      payload: { runId?: string; findings?: string },
+    ): Promise<{ ok: boolean; error?: string }> => {
+      if (!isOverlayIpcSender(event.sender)) return { ok: false, error: "Unauthorized" };
+      const findings = typeof payload?.findings === "string" ? payload.findings.trim() : "";
+      if (!findings) return { ok: false, error: "No findings" };
+
+      if (!canStartLoopFix(coderBuildLoopHost)) {
+        state.lastNotice = narrateToolStart("coder-loop-cap", {});
+        push();
+        return { ok: false, error: `Coder has iterated ${CODER_LOOP_MAX_ITERATIONS} times. Review manually.` };
+      }
+      incrementLoopForFix(coderBuildLoopHost);
+
+      state.coderReviewState = null;
+      push();
+
+      coderBuildLoopHost.broadcastOpenCoder({
+        prompt: buildReviewFixPrompt(findings),
+        autoRun: true,
+        screenContext: null,
+        loopAutoTrigger: true,
+      });
+      return { ok: true };
+    },
+  );
+
+  ipcMain.on(IPC.coderReviewDismiss, (event) => {
+    if (!isOverlayIpcSender(event.sender)) return;
+    state.coderReviewState = null;
+    push();
+  });
+
+  ipcMain.handle(
+    IPC.indexStart,
+    async (event, projectRoot: string): Promise<{ ok: boolean; error?: string }> => {
+      if (!isOverlayIpcSender(event.sender)) return { ok: false, error: "Unauthorized" };
+      const root = typeof projectRoot === "string" ? projectRoot.trim() : "";
+      if (!root) return { ok: false, error: "projectRoot is required" };
+      if (state.indexState.status === "indexing") {
+        return { ok: false, error: "Index already running" };
+      }
+      runProjectIndex(root, true);
+      return { ok: true };
+    },
+  );
+
+  ipcMain.handle(
+    IPC.indexStatus,
+    async (event): Promise<import("../shared/ipc.ts").GlassIndexState> => {
+      if (!isOverlayIpcSender(event.sender)) {
+        return { projectRoot: "", status: "idle" };
+      }
+      const root = state.glassSettings.agentCodeWorkspaceRoot?.trim() ?? "";
+      if (root && state.indexState.projectRoot !== root) {
+        return {
+          projectRoot: root,
+          status: hasIndex(root) ? "ready" : "idle",
+          fileCount: hasIndex(root) ? getIndexFileCount(root) : undefined,
+        };
+      }
+      return state.indexState;
+    },
+  );
+
+  ipcMain.handle(
+    IPC.detectScreenFile,
+    async (event): Promise<import("../shared/ipc.ts").AgentScreenContext> => {
+      if (!isOverlayIpcSender(event.sender)) {
+        return { confidence: "low" };
+      }
+      if (state.glassSettings.screenContextEnabled === false) {
+        return { confidence: "low" };
+      }
+      const workspaceRoot = state.glassSettings.agentCodeWorkspaceRoot?.trim();
+      try {
+        const result = await detectAgentScreenContextFromCapture(async () => {
+          const display = screen.getPrimaryDisplay();
+          return captureDisplayById(display.id, "Primary Display");
+        }, SCREEN_DETECT_TIMEOUT_MS);
+        const sanitized = workspaceRoot
+          ? sanitizeAgentScreenContext(result, workspaceRoot)
+          : result;
+        broadcast(IPC.screenFileResult, sanitized ?? { confidence: "low" });
+        return sanitized ?? { confidence: "low" };
+      } catch (err) {
+        const fallback = { confidence: "low" as const };
+        broadcast(IPC.screenFileResult, fallback);
+        return fallback;
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC.agentPickOutputFolder,
+    async (event): Promise<AgentPickOutputFolderResponse> => {
+      if (!isOverlayIpcSender(event.sender)) {
+        return { ok: false, error: "Unauthorized" };
+      }
+      const result = await dialog.showOpenDialog({
+        properties: ["openDirectory", "createDirectory"],
+        defaultPath: resolveAgentOutputFolder(state.glassSettings),
+        title: "Choose agent output folder",
+      });
+      if (result.canceled || !result.filePaths[0]) {
+        return { ok: false, cancelled: true };
+      }
+      const folder = result.filePaths[0];
+      state.glassSettings = { ...state.glassSettings, agentOutputFolder: folder };
+      glassUserSettings = state.glassSettings;
+      await persistGlassUserSettings(state.glassSettings);
+      push();
+      return { ok: true, folder };
+    },
+  );
+
+  ipcMain.handle(
+    IPC.agentPickWorkspaceRoot,
+    async (event): Promise<AgentPickOutputFolderResponse> => {
+      if (!isOverlayIpcSender(event.sender)) {
+        return { ok: false, error: "Unauthorized" };
+      }
+      const result = await dialog.showOpenDialog({
+        properties: ["openDirectory"],
+        defaultPath: state.glassSettings.agentCodeWorkspaceRoot ?? app.getPath("home"),
+        title: "Choose code workspace root",
+      });
+      if (result.canceled || !result.filePaths[0]) {
+        return { ok: false, cancelled: true };
+      }
+      const folder = result.filePaths[0];
+      const prevRoot = state.glassSettings.agentCodeWorkspaceRoot?.trim();
+      if (prevRoot && prevRoot !== folder) {
+        stopWatching(prevRoot);
+      }
+      state.glassSettings = { ...state.glassSettings, agentCodeWorkspaceRoot: folder };
+      glassUserSettings = state.glassSettings;
+      state.indexState = {
+        projectRoot: folder,
+        status: hasIndex(folder) ? "ready" : "idle",
+        fileCount: hasIndex(folder) ? getIndexFileCount(folder) : undefined,
+      };
+      state.ollamaAvailable = await checkOllamaAvailable();
+      await persistGlassUserSettings(state.glassSettings);
+      if (state.glassIdeActive && state.glassDockTerminalId) {
+        cdPtyToDirectory(state.glassDockTerminalId, folder);
+        ideTerminalCwdRoot = folder;
+      }
+      push();
+      return { ok: true, folder };
+    },
+  );
+
+  ipcMain.handle(
+    IPC.agentOpenPath,
+    async (event, filePath: string): Promise<AgentPathResponse> => {
+      if (!isOverlayIpcSender(event.sender)) {
+        return { ok: false, error: "Unauthorized" };
+      }
+      const path = typeof filePath === "string" ? filePath.trim() : "";
+      if (!path) return { ok: false, error: "path is required" };
+      const err = await shell.openPath(path);
+      if (err) return { ok: false, error: err };
+      return { ok: true };
+    },
+  );
+
+  ipcMain.handle(
+    IPC.agentRevealPath,
+    async (event, filePath: string): Promise<AgentPathResponse> => {
+      if (!isOverlayIpcSender(event.sender)) {
+        return { ok: false, error: "Unauthorized" };
+      }
+      const path = typeof filePath === "string" ? filePath.trim() : "";
+      if (!path) return { ok: false, error: "path is required" };
+      shell.showItemInFolder(path);
+      return { ok: true };
+    },
+  );
+
+  ipcMain.handle(
+    IPC.agentRestoreBackup,
+    async (event, filePath: string): Promise<AgentPathResponse> => {
+      if (!isOverlayIpcSender(event.sender)) {
+        return { ok: false, error: "Unauthorized" };
+      }
+      const path = typeof filePath === "string" ? filePath.trim() : "";
+      if (!path) return { ok: false, error: "path is required" };
+      const result = await restoreBackup(path);
+      if (result.ok) {
+        state.lastNotice = result.message;
+        push();
+      }
+      return { ok: result.ok, error: result.ok ? undefined : result.message };
+    },
+  );
+
   // ── Power Prompt Generator ─────────────────────────────────────────────────
   ipcMain.handle(IPC.promptGenerate, async (event, payload: PromptGenerateRequest) => {
     if (!isOverlayIpcSender(event.sender)) {
@@ -9434,7 +10965,7 @@ function registerIpc(): void {
 
   // ── Terminal AI: Explain Last Error ────────────────────────────────────────
   ipcMain.handle(IPC.terminalExplain, async (event, payload: TerminalExplainRequest): Promise<TerminalExplainResponse> => {
-    if (!isTerminalIpcSender(event.sender)) return { error: "Unauthorized" };
+    if (!isTerminalPanelSender(event.sender)) return { error: "Unauthorized" };
 
     const command = typeof payload?.command === "string" ? payload.command.trim() : "";
     const output = typeof payload?.output === "string" ? payload.output.slice(0, 8000) : "";
@@ -9625,7 +11156,7 @@ function registerIpc(): void {
 
   // ── Terminal AI: Natural Language → Shell command (Task #40) ────────────────
   ipcMain.handle(IPC.nlToShell, async (event, payload: NlToShellRequest): Promise<NlToShellResponse> => {
-    if (!isTerminalIpcSender(event.sender)) return { error: "Unauthorized" };
+    if (!isTerminalPanelSender(event.sender)) return { error: "Unauthorized" };
     const userPrompt = typeof payload?.prompt === "string" ? payload.prompt.trim() : "";
     if (!userPrompt) return { error: "No prompt provided" };
 
@@ -9663,7 +11194,7 @@ function registerIpc(): void {
   ipcMain.handle(
     IPC.voiceShellTranscribe,
     async (event, payload: VoiceShellTranscribeRequest): Promise<VoiceShellTranscribeResponse> => {
-      if (!isTerminalIpcSender(event.sender)) {
+      if (!isTerminalPanelSender(event.sender)) {
         return { error: "Unauthorized" };
       }
 
@@ -9743,7 +11274,7 @@ function registerIpc(): void {
   // Fire-and-forget: renderer pushes its rolling command blocks; the AI ask
   // path reads them via getTerminalContextString().
   ipcMain.on(IPC.terminalContextPush, (event, blocks: TerminalContextBlock[]): void => {
-    if (!isTerminalIpcSender(event.sender)) return;
+    if (!isTerminalPanelSender(event.sender)) return;
     if (!Array.isArray(blocks)) return;
     if (blocks.length === 0) {
       clearTerminalContext();
@@ -10074,6 +11605,10 @@ function registerIpc(): void {
     setOverlayPointerOverBuilderStrip(!!over);
   });
 
+  ipcMain.on(IPC.overlayPointerOverIde, (_event, over: boolean) => {
+    setOverlayPointerOverIde(!!over);
+  });
+
   ipcMain.on(IPC.builderStripPanelOpen, (_event, open: boolean) => {
     setBuilderStripPanelOpen(!!open);
   });
@@ -10098,12 +11633,12 @@ function registerIpc(): void {
   });
 
   ipcMain.on(IPC.resizeTerminal, (event, width: number, height: number) => {
-    if (!isTerminalIpcSender(event.sender)) return;
+    if (!isTerminalPanelSender(event.sender)) return;
     resizeGlassTerminalWindow(width, height);
   });
 
   ipcMain.on(IPC.dismissTerminalWindow, (event) => {
-    if (!isTerminalIpcSender(event.sender)) return;
+    if (!isTerminalPanelSender(event.sender)) return;
     dismissGlassTerminalWindow();
   });
 
@@ -10132,18 +11667,18 @@ function registerIpc(): void {
 
   // ── Built-in terminal raw channels (high-frequency, bypasses state) ─────────
   ipcMain.on(IPC.ptyInput, (event, termId: string, data: string) => {
-    if (!isTerminalIpcSender(event.sender)) return;
+    if (!isTerminalPanelSender(event.sender)) return;
     if (!isValidPtySessionId(termId) || typeof data !== "string") return;
     writePtyInput(termId, data);
   });
   ipcMain.on(IPC.ptyResize, (event, termId: string, cols: number, rows: number) => {
-    if (!isTerminalIpcSender(event.sender)) return;
+    if (!isTerminalPanelSender(event.sender)) return;
     if (!isValidPtySessionId(termId)) return;
     if (typeof cols !== "number" || typeof rows !== "number") return;
     resizePty(termId, cols, rows);
   });
   ipcMain.handle(IPC.ptyReplay, (event, termId: string, fromByte?: number) => {
-    if (!isTerminalIpcSender(event.sender)) return "";
+    if (!isTerminalPanelSender(event.sender)) return "";
     if (!isValidPtySessionId(termId)) return "";
     if (typeof fromByte === "number" && fromByte >= 0) {
       return getPtyReplayBufferFrom(termId, fromByte);
@@ -10151,7 +11686,7 @@ function registerIpc(): void {
     return getPtyReplayBuffer(termId);
   });
   ipcMain.handle(IPC.ptyReplayLength, (event, termId: string) => {
-    if (!isTerminalIpcSender(event.sender)) return 0;
+    if (!isTerminalPanelSender(event.sender)) return 0;
     return isValidPtySessionId(termId) ? getPtyReplayBufferLength(termId) : 0;
   });
 }
@@ -10200,7 +11735,7 @@ app.whenReady().then(async () => {
   refreshAppIdentityState();
 
   const showSplash =
-    process.env.IIVO_GLASS_E2E !== "1" && isBootSplashBundlePresent(__dirname);
+    process.env.IIVO_GLASS_E2E !== "1" && isBootSplashBundlePresent(mainDir);
   if (showSplash) {
     beginGlassBootSequence();
     createSplashWindow();
@@ -10214,6 +11749,7 @@ app.whenReady().then(async () => {
   moments = await loadMoments();
   sessions = await loadSessions();
   glassUserSettings = await loadGlassUserSettings();
+  state.agentHistory = loadAgentHistory();
 
   // Check GitHub PAT at startup (silent — never throws)
   try {
@@ -10266,6 +11802,15 @@ app.whenReady().then(async () => {
   state.glassSettings = glassUserSettings;
   state.onboardingComplete = state.glassSettings.onboardingComplete ?? false;
   state.persona = state.glassSettings.persona;
+  state.ollamaAvailable = await checkOllamaAvailable();
+  const bootWorkspaceRoot = state.glassSettings.agentCodeWorkspaceRoot?.trim();
+  if (bootWorkspaceRoot) {
+    state.indexState = {
+      projectRoot: bootWorkspaceRoot,
+      status: hasIndex(bootWorkspaceRoot) ? "ready" : "idle",
+      fileCount: hasIndex(bootWorkspaceRoot) ? getIndexFileCount(bootWorkspaceRoot) : undefined,
+    };
+  }
   if (!app.isPackaged && state.onboardingComplete && !state.persona) {
     state.persona = "developer";
     glassUserSettings = { ...glassUserSettings, persona: "developer" };
@@ -10375,6 +11920,8 @@ app.whenReady().then(async () => {
 
 app.on("will-quit", () => {
   appIsQuitting = true; // guard PTY onExit callbacks from calling push() on destroyed windows
+  stopAllWatchers();
+  closeAllIndexDbs();
   unregisterCommandBarHotkeys();
   if (glassUpdateCheckTimer) clearInterval(glassUpdateCheckTimer);
   // Task #42: clear title-poll intervals before killing sessions.

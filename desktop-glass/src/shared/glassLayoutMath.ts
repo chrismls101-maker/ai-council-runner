@@ -91,14 +91,26 @@ export const BUILDER_STRIP_ABOVE_FRAME_BOTTOM_GAP_PX = 1;
 /** Gap between strip top and command bar window bottom. */
 export const BUILDER_STRIP_ABOVE_COMMAND_BAR_GAP_PX = 8;
 
-/** Extra bottom reserve so the command bar clears the builder strip band. */
-export function builderStripLayoutReservePx(): number {
+/** Viewport distance from bottom to the builder strip top edge (strip band only). */
+export function builderStripTopFromBottomPx(): number {
   return (
     BUILDER_STRIP_FRAME_INSET_PX +
     BUILDER_STRIP_ABOVE_FRAME_BOTTOM_GAP_PX +
-    BUILDER_STRIP_HEIGHT_PX +
-    BUILDER_STRIP_ABOVE_COMMAND_BAR_GAP_PX
+    BUILDER_STRIP_HEIGHT_PX
   );
+}
+
+/** Extra bottom reserve so the command bar clears the builder strip band. */
+export function builderStripLayoutReservePx(): number {
+  return builderStripTopFromBottomPx() + BUILDER_STRIP_ABOVE_COMMAND_BAR_GAP_PX;
+}
+
+/** Gap between Glass IDE shell bottom and builder strip top (command bar hidden in IDE). */
+export const GLASS_IDE_ABOVE_STRIP_GAP_PX = 4;
+
+/** Bottom inset for Glass IDE — flush above builder strip without command-bar reserve. */
+export function glassIdeBottomReservePx(): number {
+  return builderStripTopFromBottomPx() + GLASS_IDE_ABOVE_STRIP_GAP_PX;
 }
 
 /** Fallback stack height when the command bar has not reported measured height yet. */

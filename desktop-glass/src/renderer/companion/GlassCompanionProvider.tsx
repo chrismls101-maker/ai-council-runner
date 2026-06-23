@@ -186,6 +186,7 @@ function useGlassCompanionSession(): GlassCompanionController {
           frontApp: activeAppRef.current,
           windowTitle: undefined,
         },
+        voiceCoderEnabled: glass.glassSettings.voiceCoderEnabled !== false,
       });
       dispatch({ type: "SUBMIT", text: draft });
       for (const command of plan.commands) send(command);
@@ -196,7 +197,7 @@ function useGlassCompanionSession(): GlassCompanionController {
       return true;
     });
     void tx.startCompanionListening();
-  }, [tx, scheduleRestartListening]);
+  }, [tx, scheduleRestartListening, glass.glassSettings.voiceCoderEnabled]);
 
   const stop = useCallback(() => {
     send(stopEverythingCommand());
@@ -413,6 +414,107 @@ function useGlassCompanionSession(): GlassCompanionController {
     clearVoiceModeAutoSubmit();
     clearRestartTimer();
   }, [clearRestartTimer]);
+
+  // ── Agent narration — Aletheia speaks agent progress when active ───────────
+  const companionActiveRef = useRef(companionActive);
+  companionActiveRef.current = companionActive;
+  const companionWarmupRef = useRef(glass.companionWarmupPhase ?? "none");
+  companionWarmupRef.current = glass.companionWarmupPhase ?? "none";
+  const glassIdeActiveRef = useRef(glass.glassIdeActive === true);
+  glassIdeActiveRef.current = glass.glassIdeActive === true;
+  const speakingRef = useRef(speaking);
+  speakingRef.current = speaking;
+  const narrateQueueRef = useRef<string[]>([]);
+  const narrateBusyRef = useRef(false);
+
+  const tryDequeueNarration = useCallback(async (): Promise<void> => {
+    if (narrateBusyRef.current) return;
+    if (!companionActiveRef.current) {
+      narrateQueueRef.current = [];
+      return;
+    }
+    if (companionWarmupRef.current === "warming") return;
+    if (speakingRef.current) return;
+
+    const text = narrateQueueRef.current.shift();
+    if (!text) return;
+
+    narrateBusyRef.current = true;
+    setSpeaking(true);
+    speakingRef.current = true;
+    try {
+      await tts.speak(text);
+    } catch {
+      // Skip failed narration clips and continue the queue.
+    } finally {
+      narrateBusyRef.current = false;
+      setSpeaking(false);
+      speakingRef.current = false;
+      if (narrateQueueRef.current.length > 0) {
+        void tryDequeueNarration();
+      }
+    }
+  }, [tts.speak]);
+
+  useEffect(() => {
+    const mountedRef = { current: true };
+
+    const enqueueNarration = (text: string): void => {
+      const queue = narrateQueueRef.current;
+      if (queue[queue.length - 1] !== text) {
+        queue.push(text);
+      }
+      void tryDequeueNarration();
+    };
+
+    const handleAgentNarrate = (ev: import("../../shared/ipc.ts").AgentEvent): void => {
+      if (ev.kind !== "narrate" || !ev.text?.trim()) return;
+      if (!companionActiveRef.current) return;
+      if (glassIdeActiveRef.current) return;
+      enqueueNarration(ev.text.trim());
+    };
+
+    const unsub = window.glass.onAgentEvent(handleAgentNarrate);
+
+    return () => {
+      mountedRef.current = false;
+      narrateQueueRef.current = [];
+      unsub();
+    };
+  }, [tryDequeueNarration]);
+
+  const ideAdvisorySpokenRef = useRef(0);
+
+  useEffect(() => {
+    if (!glass.glassIdeActive || !companionActive) return;
+    const advisory = glass.glassIdeAletheia;
+    const text = advisory?.spokenText?.trim();
+    if (!text || !advisory?.spokenNonce) return;
+    if (advisory.spokenNonce <= ideAdvisorySpokenRef.current) return;
+    ideAdvisorySpokenRef.current = advisory.spokenNonce;
+    const queue = narrateQueueRef.current;
+    if (queue[queue.length - 1] !== text) {
+      queue.push(text);
+    }
+    void tryDequeueNarration();
+  }, [
+    glass.glassIdeActive,
+    glass.glassIdeAletheia?.spokenNonce,
+    glass.glassIdeAletheia?.spokenText,
+    companionActive,
+    tryDequeueNarration,
+  ]);
+
+  // When companion speech finishes or warmup completes, drain queued agent narrations.
+  useEffect(() => {
+    if (!companionActive) {
+      narrateQueueRef.current = [];
+      return;
+    }
+    if (!speaking && narrateQueueRef.current.length > 0) {
+      void tryDequeueNarration();
+    }
+  }, [speaking, companionActive, glass.companionWarmupPhase, tryDequeueNarration]);
 
   const activeManifestations =
     scriptPlayer.activeManifestations ?? flatManifestations;

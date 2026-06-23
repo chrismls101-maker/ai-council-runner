@@ -26,31 +26,53 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   padding: 14px 16px 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   flex-shrink: 0;
 }
 
-.grp-label {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  color: rgba(65, 224, 163, 0.7);
-  font-family: "Sora", system-ui, sans-serif;
+.grp-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
-.grp-dismiss {
-  background: none;
-  border: none;
-  color: rgba(140, 165, 210, 0.4);
+.grp-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  color: rgba(140, 165, 210, 0.65);
   cursor: pointer;
-  font-size: 16px;
   padding: 0;
+  transition: all 0.12s;
+}
+.grp-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(210, 225, 245, 0.95);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.grp-icon-btn--dismiss {
+  font-size: 14px;
   line-height: 1;
 }
-.grp-dismiss:hover { color: rgba(140, 165, 210, 0.8); }
+
+.grp-header-actions .glass-hover-tooltip-wrap {
+  display: inline-flex;
+}
 
 .grp-prompt {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  cursor: default;
   padding: 10px 16px;
   font-size: 11px;
   color: rgba(140, 165, 210, 0.45);
@@ -60,6 +82,28 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   flex-shrink: 0;
+}
+
+.grp-file-link .glass-hover-tooltip-wrap {
+  min-width: 0;
+}
+
+.grp-file-link .glass-hover-tooltip-wrap:first-child {
+  flex: 1;
+  display: flex;
+  min-width: 0;
+}
+
+.grp-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: rgba(65, 224, 163, 0.7);
+  font-family: "Sora", system-ui, sans-serif;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .grp-content {
@@ -120,6 +164,60 @@
   font-family: "Sora", system-ui, sans-serif;
 }
 .grp-code-copy:hover { background: rgba(255,255,255,0.14); color: rgba(200,220,255,0.9); }
+
+.grp-file-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  flex-shrink: 0;
+}
+
+.grp-file-link__btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(65, 224, 163, 0.06);
+  border: 1px solid rgba(65, 224, 163, 0.18);
+  border-radius: 7px;
+  color: rgba(65, 224, 163, 0.9);
+  font-size: 12px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-family: "Sora", system-ui, sans-serif;
+  text-align: left;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: all 0.12s;
+}
+.grp-file-link__btn:hover {
+  background: rgba(65, 224, 163, 0.12);
+  border-color: rgba(65, 224, 163, 0.35);
+}
+
+.grp-file-link__icon {
+  flex-shrink: 0;
+  font-size: 14px;
+}
+
+.grp-file-link__reveal {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: rgba(140, 165, 210, 0.55);
+  font-size: 11px;
+  cursor: pointer;
+  font-family: "Sora", system-ui, sans-serif;
+  padding: 4px 0;
+  white-space: nowrap;
+}
+.grp-file-link__reveal:hover {
+  color: rgba(200, 220, 255, 0.85);
+}
 
 .grp-footer {
   padding: 12px 16px;

@@ -34,6 +34,10 @@ export default defineConfig({
       lib: {
         entry: resolve(__dirname, "src/main/index.ts"),
       },
+      rollupOptions: {
+        // TypeScript's runtime uses __filename — must load from node_modules as CJS, not bundle as ESM.
+        external: ["typescript"],
+      },
     },
   },
   preload: {
@@ -59,7 +63,10 @@ export default defineConfig({
       hmr: { overlay: false },
     },
     optimizeDeps: {
-      include: ["lucide-react"],
+      include: ["lucide-react", "monaco-editor"],
+    },
+    worker: {
+      format: "es",
     },
     build: {
       outDir: "out/renderer",

@@ -10,12 +10,23 @@ export function useGlassTerminalToggle(): {
   toggle: () => void;
 } {
   const state = useGlassState();
-  const terminalOpen = state.glassDockTerminalOpen ?? false;
+  const ideActive = state.glassIdeActive === true;
+  const terminalOpen = ideActive
+    ? (state.glassIdeTerminalExpanded ?? false)
+    : (state.glassDockTerminalOpen ?? false);
   const terminalActive = !!state.glassDockTerminalId;
 
   const toggle = useCallback((): void => {
+    if (ideActive) {
+      send({
+        type: "glass-ide-terminal-set-expanded",
+        expanded: !terminalOpen,
+        manual: true,
+      });
+      return;
+    }
     send(terminalOpen ? { type: "glass-terminal-close" } : { type: "glass-terminal-open" });
-  }, [terminalOpen]);
+  }, [ideActive, terminalOpen]);
 
   return {
     terminalOpen,

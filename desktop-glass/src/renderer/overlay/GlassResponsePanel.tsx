@@ -3,6 +3,8 @@ import {
   lastAskResponseBody,
   type GlassLastAskResponse,
 } from "../../shared/glassAskTypes.ts";
+import { agentCatalogName } from "../../shared/agentCatalog.ts";
+import { GlassHoverTooltip } from "../components/GlassHoverTooltip.tsx";
 import { ensureOverlayInteractive, handlePaletteListWheel } from "../glassTextInteraction.ts";
 import "./GlassResponsePanel.css";
 
@@ -10,6 +12,21 @@ interface GlassResponsePanelProps {
   response: GlassLastAskResponse | null;
   open: boolean;
   onDismiss: () => void;
+  /** Re-sync panel content from the latest streamed agent state (does not re-run). */
+  onRefresh?: () => void;
+}
+
+function interactivePointerProps(): {
+  onPointerDown: (e: React.PointerEvent) => void;
+  onPointerEnter: () => void;
+} {
+  return {
+    onPointerDown: (e) => {
+      e.stopPropagation();
+      ensureOverlayInteractive();
+    },
+    onPointerEnter: ensureOverlayInteractive,
+  };
 }
 
 function formatTimestamp(iso: string | undefined): string {
@@ -22,6 +39,68 @@ function formatTimestamp(iso: string | undefined): string {
 function truncate(text: string, max: number): string {
   const clean = text.replace(/\s+/g, " ").trim();
   return clean.length > max ? clean.slice(0, max - 1) + "…" : clean;
+}
+
+function basename(filePath: string): string {
+  const parts = filePath.split(/[/\\]/);
+  return parts[parts.length - 1] || filePath;
+}
+
+// ---------------------------------------------------------------------------
+// Toolbar icons (inline SVG — no external dependency)
+// ---------------------------------------------------------------------------
+
+function IconReveal(): JSX.Element {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path
+        d="M2 4.5h12v9H2z"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M5 7.5h6M5 10h4"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function IconCopy(): JSX.Element {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <rect x="5" y="5" width="8" height="9" rx="1.2" stroke="currentColor" strokeWidth="1.2" />
+      <path
+        d="M4 11H3.5a1.5 1.5 0 0 1-1.5-1.5v-7A1.5 1.5 0 0 1 3.5 1h7A1.5 1.5 0 0 1 12 2.5V3"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function IconRefresh(): JSX.Element {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path
+        d="M12.5 3.5A5.5 5.5 0 1 0 13 9"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
+      <path
+        d="M13 2.5v3h-3"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -37,7 +116,6 @@ function nextKey(prefix: string): string {
 /** Parse inline spans: **bold**, _italic_, `code`. */
 function parseInline(text: string): ReactNode[] {
   const nodes: ReactNode[] = [];
-  // Tokenize on inline code first, then bold, then italic.
   const pattern = /(`[^`]+`)|(\*\*[^*]+\*\*)|(_[^_]+_)/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
@@ -71,7 +149,13 @@ function CodeBlock({ code, lang }: { code: string; lang?: string }): JSX.Element
   };
   return (
     <div className="grp-code-block">
-      <button type="button" className="grp-code-copy" onClick={copy} aria-label="Copy code">
+      <button
+        type="button"
+        className="grp-code-copy"
+        onClick={copy}
+        aria-label="Copy code"
+        {...interactivePointerProps()}
+      >
         {copied ? "Copied" : "Copy"}
       </button>
       <pre data-lang={lang ?? undefined}>{code}</pre>
@@ -100,7 +184,6 @@ export function parseMarkdown(text: string): ReactNode {
   while (i < lines.length) {
     const line = lines[i];
 
-    // Fenced code block
     const fence = /^```(\w+)?\s*$/.exec(line);
     if (fence) {
       flushParagraph();
@@ -111,12 +194,11 @@ export function parseMarkdown(text: string): ReactNode {
         codeLines.push(lines[i]);
         i += 1;
       }
-      i += 1; // skip closing fence
+      i += 1;
       blocks.push(<CodeBlock key={nextKey("code")} code={codeLines.join("\n")} lang={lang} />);
       continue;
     }
 
-    // Headings
     const heading = /^(#{1,6})\s+(.*)$/.exec(line);
     if (heading) {
       flushParagraph();
@@ -130,7 +212,6 @@ export function parseMarkdown(text: string): ReactNode {
       continue;
     }
 
-    // Bullet list
     if (/^\s*[-*]\s+/.test(line)) {
       flushParagraph();
       const items: ReactNode[] = [];
@@ -143,7 +224,6 @@ export function parseMarkdown(text: string): ReactNode {
       continue;
     }
 
-    // Numbered list
     if (/^\s*\d+\.\s+/.test(line)) {
       flushParagraph();
       const items: ReactNode[] = [];
@@ -156,7 +236,6 @@ export function parseMarkdown(text: string): ReactNode {
       continue;
     }
 
-    // Blank line → paragraph break
     if (line.trim() === "") {
       flushParagraph();
       i += 1;
@@ -175,14 +254,17 @@ export function GlassResponsePanel({
   response,
   open,
   onDismiss,
+  onRefresh,
 }: GlassResponsePanelProps): JSX.Element {
   const [copiedAll, setCopiedAll] = useState(false);
   const [savedNote, setSavedNote] = useState(false);
 
   const answer = lastAskResponseBody(response);
   const rendered = useMemo(() => parseMarkdown(answer), [answer]);
+  const agentMeta = response?.agentMeta;
+  const savedFilePath = agentMeta?.savedFilePath;
+  const isAgent = !!agentMeta;
 
-  // Reset transient footer states when the response changes.
   useEffect(() => {
     setCopiedAll(false);
     setSavedNote(false);
@@ -194,6 +276,16 @@ export function GlassResponsePanel({
       setCopiedAll(true);
       window.setTimeout(() => setCopiedAll(false), 1500);
     });
+  };
+
+  const revealInFinder = (): void => {
+    if (!savedFilePath) return;
+    void window.glass.agentRevealPath(savedFilePath);
+  };
+
+  const openSavedFile = (): void => {
+    if (!savedFilePath) return;
+    void window.glass.agentOpenPath(savedFilePath);
   };
 
   const saveAsFile = (): void => {
@@ -210,12 +302,15 @@ export function GlassResponsePanel({
       document.body.removeChild(a);
       window.setTimeout(() => URL.revokeObjectURL(url), 2000);
     } catch {
-      // Fallback: copy to clipboard with a note.
       void window.glass.writeClipboard(answer);
     }
     setSavedNote(true);
     window.setTimeout(() => setSavedNote(false), 1800);
   };
+
+  const headerLabel = isAgent
+    ? `${agentCatalogName(agentMeta.agentId)} · ${formatTimestamp(response?.at)}`
+    : `Answer Panel · ${formatTimestamp(response?.at)}`;
 
   return (
     <div
@@ -223,41 +318,114 @@ export function GlassResponsePanel({
       data-testid="glass-response-panel"
       aria-hidden={!open}
       onMouseEnter={ensureOverlayInteractive}
-      onMouseDown={ensureOverlayInteractive}
+      onPointerDownCapture={ensureOverlayInteractive}
     >
       <div className="grp-header">
-        <span className="grp-label">Answer Panel · {formatTimestamp(response?.at)}</span>
-        <button
-          type="button"
-          className="grp-dismiss"
-          aria-label="Dismiss answer panel"
-          onPointerDown={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onDismiss();
-          }}
-        >
-          ✕
-        </button>
+        <span className="grp-label" title={headerLabel}>{headerLabel}</span>
+        <div className="grp-header-actions">
+          {savedFilePath ? (
+            <GlassHoverTooltip label="Show in Finder" placement="bottom">
+              <button
+                type="button"
+                className="grp-icon-btn"
+                onClick={revealInFinder}
+                aria-label="Show in Finder"
+                {...interactivePointerProps()}
+              >
+                <IconReveal />
+              </button>
+            </GlassHoverTooltip>
+          ) : null}
+          <GlassHoverTooltip label={copiedAll ? "Copied" : "Copy answer"} placement="bottom">
+            <button
+              type="button"
+              className="grp-icon-btn"
+              onClick={copyAll}
+              aria-label={copiedAll ? "Copied" : "Copy answer"}
+              {...interactivePointerProps()}
+            >
+              <IconCopy />
+            </button>
+          </GlassHoverTooltip>
+          {isAgent && onRefresh ? (
+            <GlassHoverTooltip label="Refresh panel" placement="bottom">
+              <button
+                type="button"
+                className="grp-icon-btn"
+                onClick={onRefresh}
+                aria-label="Refresh panel"
+                {...interactivePointerProps()}
+              >
+                <IconRefresh />
+              </button>
+            </GlassHoverTooltip>
+          ) : null}
+          <GlassHoverTooltip label="Close panel" placement="bottom">
+            <button
+              type="button"
+              className="grp-icon-btn grp-icon-btn--dismiss"
+              aria-label="Close answer panel"
+              onPointerDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                ensureOverlayInteractive();
+                onDismiss();
+              }}
+            >
+              ✕
+            </button>
+          </GlassHoverTooltip>
+        </div>
       </div>
 
       {response?.prompt ? (
-        <div className="grp-prompt" title={response.prompt}>
-          {truncate(response.prompt, 60)}
-        </div>
+        <GlassHoverTooltip label={response.prompt} placement="bottom">
+          <div className="grp-prompt">
+            {truncate(response.prompt, 60)}
+          </div>
+        </GlassHoverTooltip>
       ) : null}
 
       <div className="grp-content" onWheel={handlePaletteListWheel}>
         {rendered}
       </div>
 
+      {savedFilePath ? (
+        <div className="grp-file-link">
+          <GlassHoverTooltip label={savedFilePath} placement="top">
+            <button
+              type="button"
+              className="grp-file-link__btn"
+              onClick={openSavedFile}
+              aria-label={`Open ${basename(savedFilePath)}`}
+              {...interactivePointerProps()}
+            >
+              <span className="grp-file-link__icon" aria-hidden="true">📄</span>
+              Open {basename(savedFilePath)}
+            </button>
+          </GlassHoverTooltip>
+          <GlassHoverTooltip label="Show in Finder" placement="top">
+            <button
+              type="button"
+              className="grp-file-link__reveal"
+              onClick={revealInFinder}
+              {...interactivePointerProps()}
+            >
+              Show in Finder
+            </button>
+          </GlassHoverTooltip>
+        </div>
+      ) : null}
+
       <div className="grp-footer">
-        <button type="button" className="grp-btn grp-btn--primary" onClick={copyAll}>
+        <button type="button" className="grp-btn grp-btn--primary" onClick={copyAll} {...interactivePointerProps()}>
           {copiedAll ? "Copied!" : "Copy all"}
         </button>
-        <button type="button" className="grp-btn" onClick={saveAsFile}>
-          {savedNote ? "Saved .md" : "Save as file"}
-        </button>
+        {!isAgent ? (
+          <button type="button" className="grp-btn" onClick={saveAsFile} {...interactivePointerProps()}>
+            {savedNote ? "Saved .md" : "Save as file"}
+          </button>
+        ) : null}
       </div>
     </div>
   );

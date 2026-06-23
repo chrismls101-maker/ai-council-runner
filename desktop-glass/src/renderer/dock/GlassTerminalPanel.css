@@ -1416,6 +1416,51 @@
   margin-bottom: 2px;
 }
 
+/* Glass IDE — collapsed strip: tab bar + NL shell bar only; viewport slides away */
+.glass-terminal-panel--embedded.glass-terminal-panel--ide-collapsed {
+  min-height: var(--gide-terminal-chrome-h, 158px);
+  height: auto;
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.glass-terminal-panel--embedded.glass-terminal-panel--ide-collapsed .gtp-nl-label-hint {
+  display: none;
+}
+
+.glass-terminal-panel--embedded .gtp-content-row {
+  transition:
+    max-height 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.38s cubic-bezier(0.22, 1, 0.36, 1),
+    padding 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+  max-height: 2400px;
+}
+
+.glass-terminal-panel--embedded.glass-terminal-panel--ide-collapsed .gtp-content-row {
+  max-height: 0;
+  opacity: 0;
+  flex: 0 0 0;
+  min-height: 0;
+  padding: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.glass-terminal-panel--embedded.glass-terminal-panel--ide-collapsed .gtp-inline-blocks,
+.glass-terminal-panel--embedded.glass-terminal-panel--ide-collapsed .gtw-root,
+.glass-terminal-panel--embedded.glass-terminal-panel--ide-collapsed .glass-terminal-ended {
+  display: none;
+}
+
+.glass-terminal-panel--embedded .glass-terminal-viewport {
+  pointer-events: auto;
+  cursor: text;
+}
+
+.glass-terminal-panel--embedded .glass-terminal-viewport .xterm-helper-textarea {
+  pointer-events: auto;
+}
+
 .gtp-voice-bar {
   display: flex;
   flex-direction: column;

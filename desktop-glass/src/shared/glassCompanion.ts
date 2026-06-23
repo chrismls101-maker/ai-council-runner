@@ -21,11 +21,10 @@ export const ALETHEIA_IDENTITY_NAME = "Aletheia";
 export const COMPANION_LOOKING_SPEECH = "One moment, let me look at your screen.";
 
 /** Spoken while OmniParser sidecar warms on Companion toggle (once per cold start). */
-export const COMPANION_WARMING_SPEECH = "One moment — I'm opening my sight.";
+export const COMPANION_WARMING_SPEECH = "One moment — waking up.";
 
 /** Spoken once per session when sight is ready after a warm-up. */
-export const COMPANION_READY_SPEECH =
-  "I'm Aletheia. I'm with you — what do you need?";
+export const COMPANION_READY_SPEECH = "I'm Aletheia — what's on your mind?";
 
 /** Bridge between visual capture and answer TTS — fills the thinking gap. */
 export const COMPANION_THINKING_SPEECH = "Mm — let me think on that.";

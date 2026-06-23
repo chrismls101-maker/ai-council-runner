@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { send, useGlassState } from "../useGlassState.ts";
 import {
   applyIivoTtsPlayback,
@@ -131,5 +131,5 @@ export function useIivoTtsRequest(): {
 
   useEffect(() => () => stop(), [stop]);
 
-  return { speak, stop };
+  return useMemo(() => ({ speak, stop }), [speak, stop]);
 }

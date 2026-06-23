@@ -1,0 +1,734 @@
+/* ── Glass IDE shell (Phase 0) ───────────────────────────────────────────── */
+
+.gide-shell {
+  position: fixed;
+  top: var(--overlay-glass-frame-inset-top, 10px);
+  left: var(--overlay-glass-frame-inset-left, 10px);
+  right: var(--overlay-glass-frame-inset-right, 10px);
+  /* Flush above builder strip — explicit reserve (no command bar gap in IDE mode). */
+  bottom: var(--glass-ide-bottom-reserve, var(--builder-strip-top-from-bottom, 52px));
+  z-index: 9050;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  background: rgba(6, 8, 14, 0.94);
+  backdrop-filter: blur(28px) saturate(1.35);
+  -webkit-backdrop-filter: blur(28px) saturate(1.35);
+  border: 1px solid rgba(var(--glass-accent-rgb), 0.18);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 24px 64px rgba(0, 0, 0, 0.45);
+  font-family: "Sora", system-ui, sans-serif;
+  color: rgba(220, 230, 255, 0.92);
+  animation: gide-enter 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+  transition:
+    border-color 0.55s ease,
+    box-shadow 0.55s ease;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.gide-presence-aura {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+  background:
+    radial-gradient(ellipse 80% 55% at 50% 0%, rgba(var(--glass-accent-rgb), 0.12), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(167, 128, 255, 0.08), transparent 70%);
+}
+
+.gide-shell[data-presence="thinking"] {
+  border-color: rgba(var(--glass-accent-rgb), 0.36);
+  animation: gide-enter 0.38s cubic-bezier(0.22, 1, 0.36, 1) both, glass-presence-edge 2.8s ease-in-out infinite;
+}
+
+.gide-shell[data-presence="thinking"] .gide-presence-aura {
+  opacity: 1;
+}
+
+.gide-shell[data-presence="approval"] {
+  border-color: rgba(255, 196, 100, 0.42);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 0 28px var(--presence-glow-amber-soft),
+    0 24px 64px rgba(0, 0, 0, 0.45);
+}
+
+.gide-shell[data-presence="approval"] .gide-presence-aura {
+  opacity: 1;
+  background: radial-gradient(ellipse 70% 50% at 50% 0%, var(--presence-glow-amber-soft), transparent 72%);
+}
+
+.gide-shell[data-presence="listening"] {
+  border-color: rgba(var(--glass-accent-rgb), 0.3);
+}
+
+.gide-shell[data-presence="answering"] {
+  border-color: rgba(167, 128, 255, 0.34);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 0 22px var(--presence-glow-purple),
+    0 24px 64px rgba(0, 0, 0, 0.45);
+}
+
+.gide-shell[data-presence="answering"] .gide-presence-aura {
+  opacity: 0.85;
+}
+
+.gide-shell > * {
+  position: relative;
+  z-index: 1;
+}
+
+.gide-presence-chip {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(var(--glass-accent-rgb), 0.88);
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(var(--glass-accent-rgb), 0.22);
+  background: rgba(var(--glass-accent-rgb), 0.08);
+  animation: glass-presence-breathe 2.4s ease-in-out infinite;
+}
+
+.gide-presence-chip[data-presence="approval"] {
+  color: rgba(255, 210, 140, 0.95);
+  border-color: rgba(255, 196, 100, 0.28);
+  background: rgba(255, 196, 100, 0.1);
+}
+
+.gide-presence-chip[data-presence="answering"] {
+  color: rgba(200, 180, 255, 0.95);
+  border-color: rgba(167, 128, 255, 0.28);
+  background: rgba(167, 128, 255, 0.1);
+}
+
+.gide-presence-chip--aletheia {
+  color: rgba(210, 195, 255, 0.9);
+  border-color: rgba(167, 128, 255, 0.2);
+  background: rgba(120, 90, 200, 0.1);
+  animation: none;
+}
+
+@keyframes gide-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.gide-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.gide-header__lead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.gide-tree-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(160, 185, 230, 0.75);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.gide-tree-toggle:hover {
+  color: rgba(var(--glass-accent-rgb), 0.95);
+  background: rgba(var(--glass-accent-rgb), 0.1);
+  border-color: rgba(var(--glass-accent-rgb), 0.22);
+}
+
+.gide-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(var(--glass-accent-rgb), 0.9);
+}
+
+.gide-header-meta {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: rgba(140, 165, 210, 0.45);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gide-header__tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.gide-exit-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: rgba(200, 215, 240, 0.85);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 12px;
+}
+.gide-exit-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+.gide-exit-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* Main area: tree | center | stream with draggable splits */
+.gide-main {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.gide-split {
+  flex-shrink: 0;
+  position: relative;
+  background: rgba(255, 255, 255, 0.04);
+  z-index: 2;
+  touch-action: none;
+  user-select: none;
+}
+
+.gide-split--horizontal {
+  width: 4px;
+  margin: 0 -3px;
+  cursor: ew-resize;
+}
+
+.gide-split--horizontal::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  right: -4px;
+  cursor: ew-resize;
+}
+
+.gide-split--horizontal:hover,
+.gide-split--horizontal:active {
+  background: rgba(var(--glass-accent-rgb), 0.28);
+  cursor: ew-resize;
+}
+
+.gide-split--vertical {
+  height: 4px;
+  margin: -3px 0;
+  cursor: ns-resize;
+  flex-shrink: 0;
+}
+
+.gide-split--vertical::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -4px;
+  bottom: -4px;
+  cursor: ns-resize;
+}
+
+.gide-split--vertical:hover,
+.gide-split--vertical:active {
+  background: rgba(var(--glass-accent-rgb), 0.28);
+  cursor: ns-resize;
+}
+
+.gide-pane {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: rgba(8, 10, 18, 0.97);
+  overflow: hidden;
+}
+
+.gide-pane--tree {
+  min-width: 0;
+}
+
+.gide-pane--center {
+  flex: 1;
+  min-width: 0;
+}
+
+.gide-center-stack {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.gide-center-editor {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.gide-center-terminal {
+  min-height: 0;
+  padding: 6px;
+  background: rgba(4, 6, 12, 0.6);
+  transition: flex-basis 0.45s cubic-bezier(0.22, 1, 0.36, 1), flex-grow 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+  overflow: hidden;
+}
+
+.gide-center-terminal--collapsed {
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  min-height: var(--gide-terminal-chrome-h, 158px);
+  padding: 6px;
+  overflow: visible;
+}
+
+.gide-center-terminal .glass-terminal-panel--embedded {
+  border-radius: 10px;
+  min-height: 0;
+  pointer-events: auto;
+  height: 100%;
+}
+
+.gide-center-terminal--collapsed .glass-terminal-panel--embedded {
+  height: auto;
+  min-height: var(--gide-terminal-chrome-h, 158px);
+}
+
+.gide-center-terminal .glass-terminal-panel--embedded .glass-terminal-viewport {
+  min-height: 0;
+}
+
+.gide-pane--stream {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.gide-stream-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  flex-shrink: 0;
+}
+
+.gide-stream-toolbar .gide-pane__label {
+  border-bottom: none;
+  padding: 8px 0 8px 12px;
+}
+
+.gide-stream-badge {
+  flex: 1;
+  font-size: 11px;
+  color: rgba(140, 165, 210, 0.55);
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gide-stream-badge--live {
+  color: rgba(var(--glass-accent-rgb), 0.85);
+}
+
+.gide-stop-btn {
+  flex-shrink: 0;
+  margin-right: 10px;
+  background: rgba(255, 90, 90, 0.12);
+  border: 1px solid rgba(255, 90, 90, 0.25);
+  border-radius: 6px;
+  color: rgba(255, 130, 130, 0.9);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 4px 10px;
+}
+.gide-stop-btn:hover {
+  background: rgba(255, 90, 90, 0.22);
+}
+
+.gide-stream-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.gide-stream-pane .gcp-stream {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.gide-stream-composer {
+  flex-shrink: 0;
+  padding: 10px 12px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(6, 8, 14, 0.98);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.gide-exit-blocked {
+  font-size: 10px;
+  color: rgba(255, 180, 120, 0.85);
+  max-width: 200px;
+  text-align: right;
+  line-height: 1.3;
+}
+
+.gide-pane--stream .gcp-approval {
+  max-height: 46%;
+}
+
+.gide-pane--stream .gcp-changelog {
+  max-height: 100px;
+}
+
+.gide-pane--stream .gcp-footer {
+  padding: 8px 12px 10px;
+}
+
+.gide-pane__label {
+  flex-shrink: 0;
+  padding: 8px 12px 6px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(140, 165, 210, 0.45);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.gide-placeholder {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px;
+  text-align: center;
+  color: rgba(140, 165, 210, 0.4);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.gide-placeholder--compact {
+  padding: 12px;
+  font-size: 11px;
+}
+
+.gide-placeholder__phase {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(var(--glass-accent-rgb), 0.55);
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(var(--glass-accent-rgb), 0.2);
+  background: rgba(var(--glass-accent-rgb), 0.06);
+}
+
+.gide-stream-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 16px;
+  scrollbar-width: thin;
+}
+
+.gide-stream-body--active {
+  border-left: 2px solid rgba(var(--glass-accent-rgb), 0.35);
+}
+
+.gide-stream-status {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: rgba(var(--glass-accent-rgb), 0.8);
+  font-style: italic;
+}
+
+.gide-stream-prompt {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: rgba(210, 225, 245, 0.75);
+  line-height: 1.5;
+}
+
+.gide-stream-hint {
+  margin: 0;
+  font-size: 11px;
+  color: rgba(140, 165, 210, 0.35);
+}
+
+/* Chat footer styles — used by stream composer */
+.gide-chat {
+  flex-shrink: 0;
+  padding: 10px 14px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(6, 8, 14, 0.98);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gide-composer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.gide-workspace-btn {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  color: rgba(140, 165, 210, 0.65);
+  font-size: 10px;
+  padding: 5px 10px;
+  cursor: pointer;
+  font-family: inherit;
+  max-width: min(100%, 280px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 1;
+  min-width: 0;
+}
+.gide-workspace-btn:hover {
+  color: rgba(200, 220, 255, 0.9);
+}
+
+.gide-workspace-btn--set {
+  flex-shrink: 0;
+  color: rgba(var(--glass-accent-rgb), 0.9);
+  border-color: rgba(var(--glass-accent-rgb), 0.28);
+  background: rgba(var(--glass-accent-rgb), 0.1);
+}
+.gide-workspace-btn--set:hover {
+  background: rgba(var(--glass-accent-rgb), 0.16);
+}
+
+.gide-detected {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  background: rgba(65, 224, 163, 0.08);
+  border: 1px solid rgba(65, 224, 163, 0.2);
+  font-size: 11px;
+  color: rgba(160, 220, 190, 0.9);
+  font-family: "SF Mono", monospace;
+}
+
+.gide-detected--pending {
+  justify-content: flex-start;
+  background: rgba(var(--glass-accent-rgb), 0.08);
+  border-color: rgba(var(--glass-accent-rgb), 0.2);
+  color: rgba(160, 190, 230, 0.85);
+  font-family: inherit;
+}
+
+.gide-detected--error {
+  justify-content: flex-start;
+  background: rgba(255, 120, 100, 0.08);
+  border-color: rgba(255, 120, 100, 0.25);
+  color: rgba(255, 180, 160, 0.95);
+  font-family: inherit;
+}
+
+.gide-detected-dismiss {
+  background: none;
+  border: none;
+  color: rgba(160, 185, 220, 0.6);
+  cursor: pointer;
+  padding: 0 4px;
+  font-size: 12px;
+}
+
+.gide-stream-pane .gide-ide-feed {
+  flex: 1;
+  min-height: 0;
+}
+
+.gide-composer-field {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.gide-composer-field:focus-within {
+  border-color: rgba(var(--glass-accent-rgb), 0.35);
+  box-shadow: 0 0 0 1px rgba(var(--glass-accent-rgb), 0.12);
+}
+
+.gide-composer-input {
+  flex: 1;
+  width: 100%;
+  resize: none;
+  border: none;
+  background: transparent;
+  color: rgba(220, 230, 255, 0.92);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 10px 44px 10px 12px;
+  outline: none;
+  min-height: 52px;
+  max-height: 140px;
+}
+.gide-composer-input:disabled {
+  opacity: 0.55;
+}
+
+.gide-composer-run {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(160, 185, 230, 0.45);
+  cursor: pointer;
+  padding: 0;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.12s ease;
+}
+.gide-composer-run--ready {
+  color: rgba(220, 235, 255, 0.95);
+  border-color: rgba(var(--glass-accent-rgb), 0.45);
+  background: linear-gradient(
+    145deg,
+    rgba(var(--glass-accent-rgb), 0.42),
+    rgba(var(--glass-accent-rgb), 0.22)
+  );
+  box-shadow:
+    0 0 0 1px rgba(var(--glass-accent-rgb), 0.12),
+    0 4px 14px rgba(var(--glass-accent-rgb), 0.22);
+}
+.gide-composer-run--ready:hover:not(:disabled) {
+  transform: scale(1.04);
+  box-shadow:
+    0 0 0 1px rgba(var(--glass-accent-rgb), 0.2),
+    0 6px 18px rgba(var(--glass-accent-rgb), 0.32);
+}
+.gide-composer-run--disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.gide-composer-run__icon--spin {
+  animation: gide-feed-spin 0.9s linear infinite;
+}
+
+.gide-chat-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.gide-chat-input {
+  flex: 1;
+  resize: none;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: rgba(220, 230, 255, 0.92);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 10px 12px;
+  outline: none;
+  min-height: 44px;
+}
+.gide-chat-input:focus {
+  border-color: rgba(var(--glass-accent-rgb), 0.35);
+}
+.gide-chat-input:disabled {
+  opacity: 0.5;
+}
+
+.gide-run-btn {
+  flex-shrink: 0;
+  background: rgba(var(--glass-accent-rgb), 0.18);
+  border: 1px solid rgba(var(--glass-accent-rgb), 0.3);
+  border-radius: 8px;
+  color: rgba(180, 210, 255, 0.95);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 10px 18px;
+  letter-spacing: 0.04em;
+}
+.gide-run-btn:not(:disabled):hover {
+  background: rgba(var(--glass-accent-rgb), 0.28);
+}
+.gide-run-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.gide-chat-footer {
+  font-size: 9px;
+  color: rgba(140, 165, 210, 0.3);
+}

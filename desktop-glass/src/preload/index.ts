@@ -48,7 +48,25 @@ import {
   type PaletteGetSectionsRequest,
   type PaletteGetSectionsResponse,
   type PaletteRecordUseRequest,
+  type AgentRunRequest,
+  type AgentRunResponse,
+  type AgentEvent,
+  type AgentPickOutputFolderResponse,
+  type AgentPathResponse,
+  type AgentApproveRequest,
+  type AgentApproveResponse,
+  type   AgentScreenContext,
+  type OpenCoderWithPromptPayload,
+  type GlassIndexState,
 } from "../shared/ipc.ts";
+import type {
+  GlassIdeListProjectResponse,
+  GlassIdeReadProjectFileResponse,
+  GlassIdeWriteProjectFileResponse,
+} from "../shared/glassIdeProject.ts";
+import type { GlassIdeTsConfigResponse } from "../shared/glassIdeTsConfig.ts";
+import type { GlassIdeEditorContext } from "../shared/glassIdeEditorContext.ts";
+import type { GlassIdeLayoutSettings } from "../shared/glassIdeLayout.ts";
 import type { WindowContext } from "../shared/windowContextTypes.ts";
 
 const glassApi = {
@@ -106,6 +124,9 @@ const glassApi = {
   },
   setOverlayPointerOverBuilderStrip(over: boolean): void {
     ipcRenderer.send(IPC.overlayPointerOverBuilderStrip, over);
+  },
+  setOverlayPointerOverIde(over: boolean): void {
+    ipcRenderer.send(IPC.overlayPointerOverIde, over);
   },
   setBuilderStripPanelOpen(open: boolean): void {
     ipcRenderer.send(IPC.builderStripPanelOpen, open);
@@ -303,6 +324,167 @@ const glassApi = {
   },
   paletteRecordUse(payload: PaletteRecordUseRequest): Promise<{ ok: boolean }> {
     return ipcRenderer.invoke(IPC.paletteRecordUse, payload) as Promise<{ ok: boolean }>;
+  },
+  // ── Glass Agents ────────────────────────────────────────────────────────────
+  agentRun(payload: AgentRunRequest): Promise<AgentRunResponse> {
+    return ipcRenderer.invoke(IPC.agentRun, payload) as Promise<AgentRunResponse>;
+  },
+  agentStop(): void {
+    ipcRenderer.send(IPC.agentStop);
+  },
+  onAgentEvent(listener: (event: AgentEvent) => void): () => void {
+    const handler = (_event: Electron.IpcRendererEvent, ev: AgentEvent): void => {
+      listener(ev);
+    };
+    ipcRenderer.on(IPC.agentEvent, handler);
+    return () => ipcRenderer.removeListener(IPC.agentEvent, handler);
+  },
+  agentPickOutputFolder(): Promise<AgentPickOutputFolderResponse> {
+    return ipcRenderer.invoke(IPC.agentPickOutputFolder) as Promise<AgentPickOutputFolderResponse>;
+  },
+  agentPickWorkspaceRoot(): Promise<AgentPickOutputFolderResponse> {
+    return ipcRenderer.invoke(IPC.agentPickWorkspaceRoot) as Promise<AgentPickOutputFolderResponse>;
+  },
+  agentOpenPath(filePath: string): Promise<AgentPathResponse> {
+    return ipcRenderer.invoke(IPC.agentOpenPath, filePath) as Promise<AgentPathResponse>;
+  },
+  agentRevealPath(filePath: string): Promise<AgentPathResponse> {
+    return ipcRenderer.invoke(IPC.agentRevealPath, filePath) as Promise<AgentPathResponse>;
+  },
+  agentApprove(payload: AgentApproveRequest): Promise<AgentApproveResponse> {
+    return ipcRenderer.invoke(IPC.agentApprove, payload) as Promise<AgentApproveResponse>;
+  },
+  agentRestoreBackup(filePath: string): Promise<AgentPathResponse> {
+    return ipcRenderer.invoke(IPC.agentRestoreBackup, filePath) as Promise<AgentPathResponse>;
+  },
+  coderWorkspaceClose(): void {
+    ipcRenderer.send(IPC.coderWorkspaceClose);
+  },
+  glassIdeOpen(): void {
+    ipcRenderer.send(IPC.glassIdeOpen);
+  },
+  glassIdeClose(): void {
+    ipcRenderer.send(IPC.glassIdeClose);
+  },
+  glassIdePreviewSetUrl(url: string): void {
+    ipcRenderer.send(IPC.glassIdePreviewSetUrl, url);
+  },
+  glassIdePreviewReload(): void {
+    ipcRenderer.send(IPC.glassIdePreviewReload);
+  },
+  glassIdeListProject(): Promise<GlassIdeListProjectResponse> {
+    return ipcRenderer.invoke(IPC.glassIdeListProject) as Promise<GlassIdeListProjectResponse>;
+  },
+  glassIdeReadProjectFile(relativePath: string): Promise<GlassIdeReadProjectFileResponse> {
+    return ipcRenderer.invoke(
+      IPC.glassIdeReadProjectFile,
+      relativePath,
+    ) as Promise<GlassIdeReadProjectFileResponse>;
+  },
+  glassIdeWriteProjectFile(
+    relativePath: string,
+    content: string,
+  ): Promise<GlassIdeWriteProjectFileResponse> {
+    return ipcRenderer.invoke(
+      IPC.glassIdeWriteProjectFile,
+      relativePath,
+      content,
+    ) as Promise<GlassIdeWriteProjectFileResponse>;
+  },
+  glassIdeReadTsConfig(): Promise<GlassIdeTsConfigResponse> {
+    return ipcRenderer.invoke(IPC.glassIdeReadTsConfig) as Promise<GlassIdeTsConfigResponse>;
+  },
+  glassIdeEditorContextUpdate(ctx: GlassIdeEditorContext): void {
+    ipcRenderer.send(IPC.glassIdeEditorContextUpdate, ctx);
+  },
+  qaModeToggle(): void {
+    ipcRenderer.send(IPC.qaModeToggle);
+  },
+  qaAutoFixToggle(): void {
+    ipcRenderer.send(IPC.qaAutoFixToggle);
+  },
+  dismissQaModeNotification(): void {
+    ipcRenderer.send(IPC.dismissQaModeNotification);
+  },
+  qaPipelineFixAll(payload: { runId: string }): Promise<{ ok: boolean; error?: string }> {
+    return ipcRenderer.invoke(IPC.qaPipelineFixAll, payload) as Promise<{ ok: boolean; error?: string }>;
+  },
+  onShowQaModeNotification(listener: () => void): () => void {
+    const handler = (): void => listener();
+    ipcRenderer.on(IPC.showQaModeNotification, handler);
+    return () => ipcRenderer.removeListener(IPC.showQaModeNotification, handler);
+  },
+  onIdePreviewProbe(listener: () => void): () => void {
+    const handler = (): void => listener();
+    ipcRenderer.on(IPC.idePreviewProbe, handler);
+    return () => ipcRenderer.removeListener(IPC.idePreviewProbe, handler);
+  },
+  idePreviewProbeResult(payload: { errors?: string[]; skipped?: boolean }): void {
+    ipcRenderer.send(IPC.idePreviewProbeResult, payload);
+  },
+  onGlassIdeOpenFile(listener: (payload: { relativePath: string }) => void): () => void {
+    const handler = (_e: unknown, payload: { relativePath: string }): void => listener(payload);
+    ipcRenderer.on(IPC.glassIdeOpenFile, handler);
+    return () => ipcRenderer.removeListener(IPC.glassIdeOpenFile, handler);
+  },
+  glassIdeLayoutSet(partial: GlassIdeLayoutSettings): void {
+    ipcRenderer.send(IPC.glassIdeLayoutSet, partial);
+  },
+  coderPanelSetWidth(widthPx: number): void {
+    ipcRenderer.send(IPC.coderPanelSetWidth, widthPx);
+  },
+  indexStart(projectRoot: string): Promise<{ ok: boolean; error?: string }> {
+    return ipcRenderer.invoke(IPC.indexStart, projectRoot) as Promise<{ ok: boolean; error?: string }>;
+  },
+  getIndexStatus(): Promise<GlassIndexState> {
+    return ipcRenderer.invoke(IPC.indexStatus) as Promise<GlassIndexState>;
+  },
+  onIndexProgress(listener: (progress: GlassIndexState["progress"] & object) => void): () => void {
+    const handler = (_e: unknown, progress: GlassIndexState["progress"] & object): void =>
+      listener(progress);
+    ipcRenderer.on(IPC.indexProgress, handler);
+    return () => ipcRenderer.removeListener(IPC.indexProgress, handler);
+  },
+  onIndexDone(listener: (payload: { fileCount: number; durationMs: number }) => void): () => void {
+    const handler = (_e: unknown, payload: { fileCount: number; durationMs: number }): void =>
+      listener(payload);
+    ipcRenderer.on(IPC.indexDone, handler);
+    return () => ipcRenderer.removeListener(IPC.indexDone, handler);
+  },
+  onIndexError(listener: (payload: { error: string }) => void): () => void {
+    const handler = (_e: unknown, payload: { error: string }): void => listener(payload);
+    ipcRenderer.on(IPC.indexError, handler);
+    return () => ipcRenderer.removeListener(IPC.indexError, handler);
+  },
+  detectScreenFile(): Promise<AgentScreenContext> {
+    return ipcRenderer.invoke(IPC.detectScreenFile) as Promise<AgentScreenContext>;
+  },
+  onScreenFileResult(listener: (ctx: AgentScreenContext) => void): () => void {
+    const handler = (_e: unknown, ctx: AgentScreenContext): void => listener(ctx);
+    ipcRenderer.on(IPC.screenFileResult, handler);
+    return () => ipcRenderer.removeListener(IPC.screenFileResult, handler);
+  },
+  onOpenCoderWithPrompt(
+    listener: (payload: OpenCoderWithPromptPayload) => void,
+  ): () => void {
+    const handler = (_e: unknown, payload: OpenCoderWithPromptPayload): void => listener(payload);
+    ipcRenderer.on(IPC.openCoderWithPrompt, handler);
+    return () => ipcRenderer.removeListener(IPC.openCoderWithPrompt, handler);
+  },
+  generateProjectMemory(): Promise<{ ok: boolean; error?: string }> {
+    return ipcRenderer.invoke(IPC.generateProjectMemory) as Promise<{ ok: boolean; error?: string }>;
+  },
+  cancelProjectMemory(): void {
+    ipcRenderer.send(IPC.cancelProjectMemory);
+  },
+  coderVerifyFix(payload: { runId: string; errorOutput: string }): Promise<{ ok: boolean; error?: string }> {
+    return ipcRenderer.invoke(IPC.coderVerifyFix, payload) as Promise<{ ok: boolean; error?: string }>;
+  },
+  coderReviewFix(payload: { runId: string; findings: string }): Promise<{ ok: boolean; error?: string }> {
+    return ipcRenderer.invoke(IPC.coderReviewFix, payload) as Promise<{ ok: boolean; error?: string }>;
+  },
+  coderReviewDismiss(): void {
+    ipcRenderer.send(IPC.coderReviewDismiss);
   },
 };
 

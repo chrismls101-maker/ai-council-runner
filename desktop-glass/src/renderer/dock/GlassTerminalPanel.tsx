@@ -40,6 +40,7 @@ import type { GlassTerminalPanelAction } from "../../shared/terminalPanelActions
 import { extractOsc7Cwd } from "./terminalOscParse.ts";
 import { TerminalWelcomeSwarm } from "./TerminalWelcomeSwarm.tsx";
 import { GlassHoverTooltip } from "../components/GlassHoverTooltip.tsx";
+import { armIdeOverlayPointer, prepareGlassTextPointerDown } from "../glassTextInteraction.ts";
 
 import "@xterm/xterm/css/xterm.css";
 import "./GlassTerminalPanel.css";
@@ -440,9 +441,10 @@ const NLCommandBar = forwardRef<
     onVoiceStart: () => void;
     onVoiceStop: () => void;
     onVoiceClose: () => void;
+    embedded?: boolean;
   }
 >(function NLCommandBar(
-  { blocks, termId, voiceActive, voiceStopSignal, onVoiceStart, onVoiceStop, onVoiceClose },
+  { blocks, termId, voiceActive, voiceStopSignal, onVoiceStart, onVoiceStop, onVoiceClose, embedded = false },
   ref,
 ) {
   const [query, setQuery] = useState("");
@@ -548,6 +550,7 @@ const NLCommandBar = forwardRef<
       role="region"
       aria-label="Natural language to shell command"
       onKeyDown={handlePreviewKey}
+      onPointerDownCapture={embedded ? armIdeOverlayPointer : undefined}
     >
       <div className="gtp-nl-label">
         <div className="gtp-nl-label-main">
@@ -579,6 +582,7 @@ const NLCommandBar = forwardRef<
             if (voiceActive) onVoiceStop();
             else onVoiceStart();
           }}
+          onPointerDown={embedded ? armIdeOverlayPointer : undefined}
           disabled={!termId}
           aria-label={voiceActive ? "Stop voice input" : "Voice to shell"}
           title={voiceActive ? "Stop voice (⌘⇧V)" : "Voice to shell (⌘⇧V)"}
@@ -594,6 +598,7 @@ const NLCommandBar = forwardRef<
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleInputKey}
+            onPointerDown={embedded ? prepareGlassTextPointerDown : undefined}
             spellCheck={false}
             autoComplete="off"
             disabled={voiceActive}
@@ -1639,6 +1644,13 @@ function IconChevronDown(): JSX.Element {
     </svg>
   );
 }
+function IconChevronUp(): JSX.Element {
+  return (
+    <svg width="12" height="8" viewBox="0 0 12 8" fill="none" aria-hidden="true" style={{ transform: "rotate(180deg)" }}>
+      <path d="M1 1.5L6 6.5L11 1.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
 
 // ── Welcome state — shown when the terminal is fresh (no commands yet) ─────
 
@@ -1701,8 +1713,24 @@ function TerminalWelcome({
   );
 }
 
-export function GlassTerminalPanel(): JSX.Element {
+export interface GlassTerminalPanelProps {
+  variant?: "window" | "embedded";
+  /** IDE dock strip — viewport hidden, tab bar + NL shell bar stay visible. */
+  ideCollapsed?: boolean;
+  onIdeToggleCollapse?: () => void;
+}
+
+export function GlassTerminalPanel({
+  variant = "window",
+  ideCollapsed = false,
+  onIdeToggleCollapse,
+}: GlassTerminalPanelProps = {}): JSX.Element {
+  const embedded = variant === "embedded";
   const state = useGlassState();
+  const reportIdeTerminalInteraction = useCallback((): void => {
+    if (!embedded) return;
+    send({ type: "glass-ide-terminal-interaction" });
+  }, [embedded]);
   const [panelSize, setPanelSize] = useState<GlassTerminalSize>(loadTerminalSize);
   const [showFind, setShowFind] = useState(false);
   // Voice → Shell (Task #44). stopSignal is bumped on a repeat ⌘⇧V press.
@@ -1758,10 +1786,11 @@ export function GlassTerminalPanel(): JSX.Element {
 
   const startResize = useTerminalPanelResize(panelSize, setPanelSize);
 
-  // Sync panel size → Electron window
+  // Sync panel size → Electron window (floating terminal only)
   useEffect(() => {
+    if (embedded) return;
     window.glass.resizeTerminal(panelSize.width, panelSize.height);
-  }, [panelSize.width, panelSize.height]);
+  }, [panelSize.width, panelSize.height, embedded]);
 
   // ── Terminal initialisation ────────────────────────────────────────────────
   useEffect(() => {
@@ -2387,6 +2416,7 @@ export function GlassTerminalPanel(): JSX.Element {
       });
 
       const dataDispose = term.onData((data: string) => {
+        reportIdeTerminalInteraction();
         window.glass.sendPtyInput(termId, data);
       });
 
@@ -2410,7 +2440,7 @@ export function GlassTerminalPanel(): JSX.Element {
       const fromByte = await window.glass.replayPtyByteLength(termId);
       if (!active || attachGen !== attachGenRef.current) return;
 
-      const skipRevealWait = terminalRevealReadyRef.current;
+      const skipRevealWait = terminalRevealReadyRef.current || embedded;
       if (!skipRevealWait) {
         // Wait for reveal animation + real container dimensions before the one resize.
         await sleep(GLASS_TERMINAL_REVEAL_MS + 24);
@@ -2446,7 +2476,7 @@ export function GlassTerminalPanel(): JSX.Element {
       cleanupRef.current = null;
       if (termId) detachedTermRef.current = termId;
     };
-  }, [termId, state.glassDockTerminalOpen]);
+  }, [termId, state.glassDockTerminalOpen, embedded, reportIdeTerminalInteraction]);
 
   // ── Task #42: poll-based title updates for all tabs ───────────────────────
   useEffect(() => {
@@ -2499,7 +2529,7 @@ export function GlassTerminalPanel(): JSX.Element {
       } catch { /* ignore */ }
     }, 0);
     return () => window.clearTimeout(t);
-  }, [panelSize.width, panelSize.height, state.glassDockTerminalId]);
+  }, [panelSize.width, panelSize.height, state.glassDockTerminalId, embedded, ideCollapsed]);
 
   // ── ResizeObserver for container dimension changes ────────────────────────
   useEffect(() => {
@@ -2538,9 +2568,18 @@ export function GlassTerminalPanel(): JSX.Element {
 
   return (
     <div
-      className="glass-terminal-panel"
+      className={[
+        "glass-terminal-panel",
+        embedded ? "glass-terminal-panel--embedded" : "",
+        embedded && ideCollapsed ? "glass-terminal-panel--ide-collapsed" : "",
+      ].filter(Boolean).join(" ")}
       data-testid="glass-terminal-panel"
-      style={{ width: panelSize.width, height: panelSize.height }}
+      style={embedded ? { width: "100%", height: "100%" } : { width: panelSize.width, height: panelSize.height }}
+      onPointerDownCapture={embedded ? () => {
+        armIdeOverlayPointer();
+        reportIdeTerminalInteraction();
+      } : undefined}
+      onPointerEnter={embedded ? armIdeOverlayPointer : undefined}
     >
       {/* Header — tabs + minimal chrome (actions live in ⌘⇧P) */}
       <div className="glass-terminal-header">
@@ -2576,16 +2615,34 @@ export function GlassTerminalPanel(): JSX.Element {
               </button>
             </GlassHoverTooltip>
           )}
-          <GlassHoverTooltip label="Hide terminal panel" placement="top">
-            <button
-              type="button"
-              className="glass-terminal-ctrl-btn glass-terminal-ctrl-btn--hide"
-              onClick={handleClose}
+          {!embedded ? (
+            <GlassHoverTooltip label="Hide terminal panel" placement="top">
+              <button
+                type="button"
+                className="glass-terminal-ctrl-btn glass-terminal-ctrl-btn--hide"
+                onClick={handleClose}
+              >
+                <IconChevronDown />
+                <span>Hide</span>
+              </button>
+            </GlassHoverTooltip>
+          ) : onIdeToggleCollapse ? (
+            <GlassHoverTooltip
+              label={ideCollapsed ? "Expand terminal panel" : "Collapse terminal panel"}
+              placement="top"
             >
-              <IconChevronDown />
-              <span>Hide</span>
-            </button>
-          </GlassHoverTooltip>
+              <button
+                type="button"
+                className="glass-terminal-ctrl-btn glass-terminal-ctrl-btn--hide"
+                onClick={onIdeToggleCollapse}
+                onPointerDown={armIdeOverlayPointer}
+                aria-label={ideCollapsed ? "Expand terminal" : "Collapse terminal"}
+              >
+                {ideCollapsed ? <IconChevronUp /> : <IconChevronDown />}
+                <span>{ideCollapsed ? "Expand" : "Collapse"}</span>
+              </button>
+            </GlassHoverTooltip>
+          ) : null}
         </div>
       </div>
 
@@ -2627,6 +2684,11 @@ export function GlassTerminalPanel(): JSX.Element {
           className="glass-terminal-viewport"
           ref={containerRef}
           data-testid="glass-terminal-viewport"
+          onPointerDown={embedded ? () => {
+            armIdeOverlayPointer();
+            reportIdeTerminalInteraction();
+          } : undefined}
+          onWheel={embedded ? reportIdeTerminalInteraction : undefined}
         />
         <TerminalWelcome
           visible={blocks.length === 0 && terminalReady && terminalActive}
@@ -2647,6 +2709,7 @@ export function GlassTerminalPanel(): JSX.Element {
           onVoiceStart={startVoiceShell}
           onVoiceStop={stopVoiceShell}
           onVoiceClose={closeVoiceShell}
+          embedded={embedded}
         />
       )}
 
@@ -2676,27 +2739,30 @@ export function GlassTerminalPanel(): JSX.Element {
         </div>
       )}
 
-      {/* Resize handles */}
-      <div
-        className="glass-terminal-resize glass-terminal-resize--east"
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize terminal width"
-        onPointerDown={startResize("e")}
-      />
-      <div
-        className="glass-terminal-resize glass-terminal-resize--south"
-        role="separator"
-        aria-orientation="horizontal"
-        aria-label="Resize terminal height"
-        onPointerDown={startResize("s")}
-      />
-      <div
-        className="glass-terminal-resize glass-terminal-resize--south-east"
-        role="presentation"
-        aria-hidden="true"
-        onPointerDown={startResize("se")}
-      />
+      {!embedded ? (
+        <>
+          <div
+            className="glass-terminal-resize glass-terminal-resize--east"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize terminal width"
+            onPointerDown={startResize("e")}
+          />
+          <div
+            className="glass-terminal-resize glass-terminal-resize--south"
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label="Resize terminal height"
+            onPointerDown={startResize("s")}
+          />
+          <div
+            className="glass-terminal-resize glass-terminal-resize--south-east"
+            role="presentation"
+            aria-hidden="true"
+            onPointerDown={startResize("se")}
+          />
+        </>
+      ) : null}
     </div>
   );
 }

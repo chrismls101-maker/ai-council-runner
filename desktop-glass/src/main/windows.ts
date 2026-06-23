@@ -6,7 +6,8 @@
  */
 
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { BrowserWindow, globalShortcut, Menu, screen, shell, type WebContents } from "electron";
 import { GLASS_BOOT_SOUND_ENABLED } from "../shared/bootSound.ts";
 import type { GlassConfig } from "../shared/config.ts";
@@ -66,7 +67,8 @@ import {
 import { IPC } from "../shared/ipc.ts";
 
 const isDev = !!process.env.ELECTRON_RENDERER_URL;
-const preloadPath = join(__dirname, "../preload/index.mjs");
+const mainDir = dirname(fileURLToPath(import.meta.url));
+const preloadPath = join(mainDir, "../preload/index.mjs");
 
 type RendererPage =
   | "index.html"
@@ -139,7 +141,7 @@ function loadRenderer(
   if (isDev && process.env.ELECTRON_RENDERER_URL) {
     void win.loadURL(`${process.env.ELECTRON_RENDERER_URL}/${htmlFile}${qs}`);
   } else {
-    void win.loadFile(join(__dirname, `../renderer/${htmlFile}`), {
+    void win.loadFile(join(mainDir, `../renderer/${htmlFile}`), {
       query: query ?? {},
     });
   }
@@ -160,7 +162,12 @@ const PANEL_ALWAYS_ON_TOP_RELATIVE = 16;
 let overlayRaisedForNotifications = false;
 let overlayPointerOverNotification = false;
 let overlayPointerOverDebriefPanel = false;
+/** When true, dock + command bar stay hidden while Glass IDE / Coder workspace is active. */
+let ideChromeSuppressed = false;
 let overlayPointerOverBuilderStrip = false;
+/** Glass IDE session open — keep overlay OS-interactive for splits, tree, composer. */
+let overlayIdeActive = false;
+let overlayPointerOverIde = false;
 let builderStripPanelOpen = false;
 let commandPaletteOpen = false;
 let powersMenuOpen = false;
@@ -194,16 +201,24 @@ function resetOverlayClickThroughState(overlay: BrowserWindow): void {
   }
 }
 
-/** Renderer reports pointer over the bottom notification card (scroll / click target). */
+/** Renderer reports pointer entered/left the notification card (scroll / click target). */
 export function setOverlayPointerOverNotification(over: boolean): void {
   overlayPointerOverNotification = over;
   if (!windows?.overlay || windows.overlay.isDestroyed()) return;
   if (!overlayRaisedForNotifications || !over) {
+    if (overlayIdeInteractive()) {
+      debugSetIgnoreMouseEvents(windows.overlay, "overlay", false);
+      return;
+    }
     resetOverlayClickThroughState(windows.overlay);
     return;
   }
   debugSetIgnoreMouseEvents(windows.overlay, "overlay", false);
   raiseChromeAboveOverlay(windows);
+}
+
+function overlayIdeInteractive(): boolean {
+  return overlayIdeActive || overlayPointerOverIde;
 }
 
 function applyBuilderStripOverlayInteractivity(): void {
@@ -213,7 +228,10 @@ function applyBuilderStripOverlayInteractivity(): void {
     return;
   }
   const interactive =
-    overlayPointerOverBuilderStrip || builderStripPanelOpen || overlayPointerOverDebriefPanel;
+    overlayIdeInteractive()
+    || overlayPointerOverBuilderStrip
+    || builderStripPanelOpen
+    || overlayPointerOverDebriefPanel;
   if (!interactive) {
     if (!overlayPointerOverNotification) {
       resetOverlayClickThroughState(windows.overlay);
@@ -221,6 +239,19 @@ function applyBuilderStripOverlayInteractivity(): void {
     return;
   }
   debugSetIgnoreMouseEvents(windows.overlay, "overlay", false);
+}
+
+/** Main: Glass IDE opened/closed — session-wide overlay interactivity. */
+export function setOverlayIdeActive(active: boolean): void {
+  overlayIdeActive = active;
+  if (!active) overlayPointerOverIde = false;
+  applyBuilderStripOverlayInteractivity();
+}
+
+/** Renderer reports pointer over the Glass IDE shell. */
+export function setOverlayPointerOverIde(over: boolean): void {
+  overlayPointerOverIde = over;
+  applyBuilderStripOverlayInteractivity();
 }
 
 /** Renderer reports pointer over the debrief side panel — click-through elsewhere. */
@@ -248,7 +279,13 @@ function applyOverlayPaletteModalInteractivity(): void {
     ._cancelPassthroughDebounced;
   if (!commandPaletteOpen && !powersMenuOpen && !responsePanelOpen && !copilotOverlayCardOpen) {
     overlay.setFocusable(false);
-    if (!overlayPointerOverBuilderStrip && !builderStripPanelOpen && !overlayPointerOverNotification && !overlayPointerOverDebriefPanel) {
+    if (
+      !overlayIdeInteractive()
+      && !overlayPointerOverBuilderStrip
+      && !builderStripPanelOpen
+      && !overlayPointerOverNotification
+      && !overlayPointerOverDebriefPanel
+    ) {
       resetOverlayClickThroughState(overlay);
     }
     overlay.showInactive();
@@ -373,6 +410,10 @@ function configureOverlayClickThrough(overlay: BrowserWindow): void {
     debugSetIgnoreMouseEvents(overlay, "overlay", false);
     return;
   }
+  if (overlayIdeInteractive()) {
+    debugSetIgnoreMouseEvents(overlay, "overlay", false);
+    return;
+  }
   debugSetIgnoreMouseEvents(overlay, "overlay", true, true);
 }
 
@@ -397,12 +438,14 @@ function attachOverlayCursorClickThrough(overlay: BrowserWindow): void {
 
   const setPassthrough = (): void => {
     if (overlayPaletteModalActive()) return;
+    if (overlayIdeInteractive()) return;
     if (passthroughTimer !== null) return; // already scheduled
     passthroughTimer = setTimeout(() => {
       passthroughTimer = null;
       if (overlay.isDestroyed()) return;
       if (overlayPaletteModalActive()) return;
-      debugSetIgnoreMouseEvents(overlay, "overlay", true, true);
+      if (overlayIdeInteractive()) return;
+      configureOverlayClickThrough(overlay);
     }, 40);
   };
 
@@ -416,11 +459,11 @@ function attachOverlayCursorClickThrough(overlay: BrowserWindow): void {
   (overlay as BrowserWindow & { _resetPassthrough?: () => void })._resetPassthrough = () => {
     if (passthroughTimer !== null) { clearTimeout(passthroughTimer); passthroughTimer = null; }
     if (overlay.isDestroyed()) return;
-    if (onboardingOverlayForceInteractive || overlayPaletteModalActive()) {
+    if (onboardingOverlayForceInteractive) {
       debugSetIgnoreMouseEvents(overlay, "overlay", false);
-    } else {
-      debugSetIgnoreMouseEvents(overlay, "overlay", true, true);
+      return;
     }
+    configureOverlayClickThrough(overlay);
   };
 
   (overlay as BrowserWindow & { _cancelPassthroughDebounced?: () => void })._cancelPassthroughDebounced =
@@ -455,15 +498,19 @@ function attachOverlayCursorClickThrough(overlay: BrowserWindow): void {
         debugSetIgnoreMouseEvents(overlay, "overlay", false);
         return;
       }
-      // Builder strip: stay OS-interactive so CSS cursor:pointer shows on tab buttons.
-      if (overlayPointerOverBuilderStrip || builderStripPanelOpen) {
+      // Glass IDE / builder strip: stay OS-interactive for splits, tree, tab buttons.
+      if (
+        overlayIdeInteractive()
+        || overlayPointerOverBuilderStrip
+        || builderStripPanelOpen
+      ) {
         if (passthroughTimer !== null) { clearTimeout(passthroughTimer); passthroughTimer = null; }
         debugSetIgnoreMouseEvents(overlay, "overlay", false);
         return;
       }
-      // Cancel any pending passthrough timer and ensure click-through immediately.
+      // Cancel any pending passthrough timer and restore click-through when safe.
       if (passthroughTimer !== null) { clearTimeout(passthroughTimer); passthroughTimer = null; }
-      debugSetIgnoreMouseEvents(overlay, "overlay", true, true);
+      configureOverlayClickThrough(overlay);
       return;
     }
     if (overlayPointerOverNotification) {
@@ -476,10 +523,14 @@ function attachOverlayCursorClickThrough(overlay: BrowserWindow): void {
       type === "hand" ||
       type === "text" ||
       type === "ibeam" ||
-      type === "vertical-text";
+      type === "vertical-text" ||
+      type === "col-resize" ||
+      type === "row-resize" ||
+      type === "ew-resize" ||
+      type === "ns-resize";
     if (interactiveCursor) {
       setInteractive();
-    } else {
+    } else if (!overlayIdeInteractive()) {
       setPassthrough();
     }
   };
@@ -731,6 +782,13 @@ function showPrimaryGlassWindows(): void {
     // Guard: Electron resets setIgnoreMouseEvents on show — re-apply immediately.
     configureOverlayClickThrough(windows.overlay);
   }
+  if (ideChromeSuppressed) {
+    if (!windows.dock.isDestroyed()) windows.dock.hide();
+    if (!windows.commandBar.isDestroyed()) windows.commandBar.hide();
+    stackGlassWindows(windows);
+    logDiagnostics();
+    return;
+  }
   if (commandBarVisible && !windows.commandBar.isDestroyed()) {
     applyCommandBarLayout();
     windows.commandBar.showInactive();
@@ -835,10 +893,14 @@ export function stackGlassWindows(w: GlassWindows): void {
     configureOverlayClickThrough(w.overlay);
   }
 
-  w.dock.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, DOCK_ALWAYS_ON_TOP_RELATIVE);
-  // Use showInactive (not show) — show() steals focus from whatever app the user is in.
-  w.dock.showInactive();
-  if (!w.dock.isDestroyed()) ensureChromeWindowInteractive(w.dock, "dock");
+  if (!ideChromeSuppressed && !w.dock.isDestroyed()) {
+    w.dock.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, DOCK_ALWAYS_ON_TOP_RELATIVE);
+    // Use showInactive (not show) — show() steals focus from whatever app the user is in.
+    w.dock.showInactive();
+    ensureChromeWindowInteractive(w.dock, "dock");
+  } else if (!w.dock.isDestroyed()) {
+    w.dock.hide();
+  }
 
   if (!w.terminal.isDestroyed() && terminalWindowVisible) {
     w.terminal.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, TERMINAL_ALWAYS_ON_TOP_RELATIVE);
@@ -854,7 +916,7 @@ export function stackGlassWindows(w: GlassWindows): void {
     w.overlay.moveTop();
   }
 
-  if (!w.commandBar.isDestroyed() && commandBarVisible) {
+  if (!ideChromeSuppressed && !w.commandBar.isDestroyed() && commandBarVisible) {
     const commandBarRelative = overlayRaisedForNotifications
       ? COMMAND_BAR_TOP_RELATIVE
       : COMMAND_BAR_ALWAYS_ON_TOP_RELATIVE;
@@ -862,7 +924,12 @@ export function stackGlassWindows(w: GlassWindows): void {
     w.commandBar.showInactive();
     w.commandBar.moveTop();
     ensureChromeWindowInteractive(w.commandBar, "commandBar");
-  } else {
+  } else if (!w.commandBar.isDestroyed()) {
+    w.commandBar.hide();
+    if (!ideChromeSuppressed && !w.dock.isDestroyed()) {
+      w.dock.moveTop();
+    }
+  } else if (!ideChromeSuppressed && !w.dock.isDestroyed()) {
     w.dock.moveTop();
   }
 
@@ -1171,6 +1238,7 @@ function createOverlayWindow(): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      webviewTag: true,
     },
   });
   overlay.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
@@ -1970,7 +2038,7 @@ export function isCommandBarVisible(): boolean {
 
 export function focusCommandBar(): void {
   if (!windows?.commandBar || windows.commandBar.isDestroyed()) return;
-  if (glassBootPending || onboardingPending) return;
+  if (glassBootPending || onboardingPending || ideChromeSuppressed) return;
   logGlassClickDebug("focusCommandBar");
   if (!commandBarVisible) {
     commandBarVisible = true;
@@ -2002,7 +2070,7 @@ export function blurCommandBar(): void {
 
 export function toggleCommandBar(): boolean {
   if (!windows?.commandBar || windows.commandBar.isDestroyed()) return commandBarVisible;
-  if (glassBootPending || onboardingPending) return commandBarVisible;
+  if (glassBootPending || onboardingPending || ideChromeSuppressed) return commandBarVisible;
   commandBarVisible = !commandBarVisible;
   if (commandBarVisible) {
     if (layoutManager) {
@@ -2290,6 +2358,37 @@ export function setListenNotesPadVisible(active: boolean): void {
   }
   stackGlassWindows(windows);
   logDiagnostics();
+}
+
+/** Hide dock + command bar while Glass IDE or Coder workspace is active. */
+export function setIdeChromeSuppressed(suppressed: boolean): void {
+  ideChromeSuppressed = suppressed;
+  if (!windows) return;
+  if (suppressed) {
+    if (!windows.dock.isDestroyed()) windows.dock.hide();
+    if (!windows.commandBar.isDestroyed()) windows.commandBar.hide();
+    stackGlassWindows(windows);
+    logDiagnostics();
+    return;
+  }
+  if (glassBootPending || onboardingPending) return;
+  if (commandBarVisible && !windows.commandBar.isDestroyed()) {
+    applyCommandBarLayout();
+    windows.commandBar.showInactive();
+    ensureChromeWindowInteractive(windows.commandBar, "commandBar");
+  }
+  if (!windows.dock.isDestroyed()) {
+    applyDockLayout();
+    windows.dock.showInactive();
+    ensureChromeWindowInteractive(windows.dock, "dock");
+  }
+  stackGlassWindows(windows);
+  logDiagnostics();
+}
+
+/** @deprecated Use setIdeChromeSuppressed — kept for call-site clarity during Coder runs. */
+export function setCoderWorkspaceActive(active: boolean): void {
+  setIdeChromeSuppressed(active);
 }
 
 /** @deprecated Use setListenNotesPadVisible — panel no longer morphs for notes. */

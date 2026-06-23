@@ -2,7 +2,7 @@
    Glass Button Depth — tiered 3D affordance for dock + builder strip
    Level 1: flat idle → soft depth on hover (tools, idle tabs)
    Level 2: soft raised (active tabs, mode pill, secondary actions)
-   Level 3: full raised (terminal, CTAs, gold actions)
+   Level 3: full raised (terminal, CTAs, strip power actions)
    ═══════════════════════════════════════════════════════════════════════════════ */
 
 /* ── Shared motion ── */
@@ -22,7 +22,7 @@
 .glass-btn-depth-1:hover,
 .dock--v3 .gbtn.glass-btn-depth-1:hover,
 .dock--v3 .gbtn:not(.dock__cta):not(.glass-terminal-toggle):hover,
-.builder-tab:not(.glass-terminal-toggle):not(.builder-tab--gold):not(.builder-tab--active):hover {
+.builder-tab:not(.glass-terminal-toggle):not(.builder-tab--powers):not(.builder-tab--palette):not(.builder-tab--aletheia):not(.builder-tab--active):hover {
   background: linear-gradient(
     180deg,
     rgba(255, 255, 255, 0.08) 0%,
@@ -43,7 +43,7 @@
 .glass-btn-depth-1:active,
 .dock--v3 .gbtn.glass-btn-depth-1:active,
 .dock--v3 .gbtn:not(.dock__cta):not(.glass-terminal-toggle):active,
-.builder-tab:not(.glass-terminal-toggle):not(.builder-tab--gold):not(.builder-tab--active):active {
+.builder-tab:not(.glass-terminal-toggle):not(.builder-tab--powers):not(.builder-tab--palette):not(.builder-tab--aletheia):not(.builder-tab--active):active {
   transform: translateY(1px);
   box-shadow:
     0 0 2px rgba(0, 0, 0, 0.4),
@@ -133,7 +133,8 @@
 .glass-btn-depth-3,
 .dock--v3 .gbtn.glass-btn-depth-3,
 .dock--v3 .gbtn.dock__cta,
-.builder-tab.builder-tab--gold {
+.builder-tab.builder-tab--powers,
+.builder-tab.builder-tab--palette {
   background: linear-gradient(
     180deg,
     rgba(255, 255, 255, 0.09) 0%,
@@ -153,7 +154,8 @@
 .glass-btn-depth-3:hover,
 .dock--v3 .gbtn.glass-btn-depth-3:hover,
 .dock--v3 .gbtn.dock__cta:hover,
-.builder-tab.builder-tab--gold:hover {
+.builder-tab.builder-tab--powers:hover,
+.builder-tab.builder-tab--palette:hover {
   background: linear-gradient(
     180deg,
     rgba(255, 255, 255, 0.14) 0%,
@@ -174,7 +176,8 @@
 .glass-btn-depth-3:active,
 .dock--v3 .gbtn.glass-btn-depth-3:active,
 .dock--v3 .gbtn.dock__cta:active,
-.builder-tab.builder-tab--gold:active {
+.builder-tab.builder-tab--powers:active,
+.builder-tab.builder-tab--palette:active {
   transform: translateY(1px);
   box-shadow:
     0 0 2px rgba(0, 0, 0, 0.45),
@@ -218,42 +221,203 @@
     inset 0 -1px 0 rgba(0, 0, 0, 0.14);
 }
 
-/* Gold actions — level 3 gold accent */
-.builder-tab.builder-tab--gold {
-  color: rgba(245, 197, 66, 0.92);
+/* Powers Menu — warm polished silver (level 3) */
+.builder-tab.builder-tab--powers {
+  color: rgba(218, 226, 236, 0.94);
   background: linear-gradient(
     180deg,
-    rgba(245, 197, 66, 0.14) 0%,
-    rgba(245, 197, 66, 0.05) 50%,
+    rgba(226, 232, 240, 0.16) 0%,
+    rgba(148, 163, 184, 0.07) 50%,
     rgba(0, 0, 0, 0.1) 100%
   );
-  border: 0.5px solid rgba(245, 197, 66, 0.28) !important;
-  border-top-color: rgba(245, 197, 66, 0.42) !important;
+  border: 0.5px solid rgba(196, 206, 220, 0.34) !important;
+  border-top-color: rgba(241, 245, 249, 0.48) !important;
   border-bottom-color: rgba(0, 0, 0, 0.38) !important;
   box-shadow:
     0 1px 0 rgba(0, 0, 0, 0.55),
     0 2px 6px rgba(0, 0, 0, 0.28),
-    0 0 10px rgba(245, 197, 66, 0.1),
-    inset 0 1px 0 rgba(245, 197, 66, 0.18),
+    0 0 12px rgba(148, 163, 184, 0.14),
+    inset 0 1px 0 rgba(241, 245, 249, 0.22),
     inset 0 -1px 0 rgba(0, 0, 0, 0.2);
 }
 
-.builder-tab.builder-tab--gold:hover {
-  color: rgba(255, 220, 120, 0.98);
+.builder-tab.builder-tab--powers:hover {
+  color: rgba(248, 250, 252, 0.98);
   background: linear-gradient(
     180deg,
-    rgba(245, 197, 66, 0.22) 0%,
-    rgba(245, 197, 66, 0.1) 50%,
+    rgba(241, 245, 249, 0.24) 0%,
+    rgba(148, 163, 184, 0.11) 50%,
     rgba(0, 0, 0, 0.08) 100%
   );
-  border-color: rgba(245, 197, 66, 0.4) !important;
-  border-top-color: rgba(255, 220, 120, 0.52) !important;
+  border-color: rgba(214, 223, 234, 0.44) !important;
+  border-top-color: rgba(255, 255, 255, 0.58) !important;
   box-shadow:
     0 1px 0 rgba(0, 0, 0, 0.55),
     0 4px 10px rgba(0, 0, 0, 0.32),
-    0 0 18px rgba(245, 197, 66, 0.22),
-    inset 0 1px 0 rgba(245, 197, 66, 0.26),
+    0 0 20px rgba(148, 163, 184, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
     inset 0 -1px 0 rgba(0, 0, 0, 0.14);
+}
+
+/* Command Palette — cool steel silver (level 3, utility tier) */
+.builder-tab.builder-tab--palette {
+  color: rgba(176, 186, 200, 0.88);
+  background: linear-gradient(
+    180deg,
+    rgba(186, 198, 214, 0.11) 0%,
+    rgba(100, 116, 139, 0.05) 50%,
+    rgba(0, 0, 0, 0.11) 100%
+  );
+  border: 0.5px solid rgba(148, 163, 184, 0.26) !important;
+  border-top-color: rgba(203, 213, 225, 0.36) !important;
+  border-bottom-color: rgba(0, 0, 0, 0.4) !important;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.55),
+    0 2px 5px rgba(0, 0, 0, 0.26),
+    0 0 8px rgba(100, 116, 139, 0.1),
+    inset 0 1px 0 rgba(203, 213, 225, 0.16),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.22);
+}
+
+.builder-tab.builder-tab--palette:hover {
+  color: rgba(226, 232, 240, 0.94);
+  background: linear-gradient(
+    180deg,
+    rgba(203, 213, 225, 0.18) 0%,
+    rgba(100, 116, 139, 0.08) 50%,
+    rgba(0, 0, 0, 0.09) 100%
+  );
+  border-color: rgba(148, 163, 184, 0.34) !important;
+  border-top-color: rgba(226, 232, 240, 0.46) !important;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.55),
+    0 3px 8px rgba(0, 0, 0, 0.3),
+    0 0 14px rgba(100, 116, 139, 0.16),
+    inset 0 1px 0 rgba(226, 232, 240, 0.22),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.14);
+}
+
+/* Aletheia — apex aurora (cyan ↔ violet split, always visible) */
+.builder-tab.builder-tab--aletheia {
+  overflow: hidden;
+  color: rgba(240, 249, 255, 0.98);
+  background:
+    linear-gradient(118deg, rgba(56, 189, 248, 0.34) 0%, transparent 52%),
+    linear-gradient(298deg, rgba(139, 92, 246, 0.38) 0%, transparent 54%),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.2) 0%,
+      rgba(88, 28, 135, 0.12) 55%,
+      rgba(0, 0, 0, 0.16) 100%
+    ) !important;
+  border: 0.5px solid rgba(167, 139, 250, 0.55) !important;
+  border-top-color: rgba(186, 230, 253, 0.72) !important;
+  border-left-color: rgba(125, 211, 252, 0.58) !important;
+  border-right-color: rgba(167, 139, 250, 0.68) !important;
+  border-bottom-color: rgba(76, 29, 149, 0.55) !important;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.62),
+    0 4px 10px rgba(0, 0, 0, 0.36),
+    0 0 18px rgba(56, 189, 248, 0.28),
+    0 0 28px rgba(139, 92, 246, 0.42),
+    inset 0 1px 0 rgba(224, 242, 254, 0.32),
+    inset -1px 0 12px rgba(139, 92, 246, 0.22),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.24) !important;
+}
+
+.builder-tab.builder-tab--aletheia:hover {
+  color: rgba(255, 255, 255, 1);
+  background:
+    linear-gradient(118deg, rgba(56, 189, 248, 0.44) 0%, transparent 54%),
+    linear-gradient(298deg, rgba(167, 139, 250, 0.48) 0%, transparent 56%),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.26) 0%,
+      rgba(109, 40, 217, 0.16) 55%,
+      rgba(0, 0, 0, 0.12) 100%
+    ) !important;
+  border-color: rgba(196, 181, 253, 0.68) !important;
+  border-top-color: rgba(224, 242, 254, 0.82) !important;
+  border-right-color: rgba(192, 132, 252, 0.78) !important;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.62),
+    0 5px 14px rgba(0, 0, 0, 0.38),
+    0 0 24px rgba(56, 189, 248, 0.36),
+    0 0 36px rgba(139, 92, 246, 0.55),
+    inset 0 1px 0 rgba(240, 249, 255, 0.4),
+    inset -2px 0 16px rgba(167, 139, 250, 0.3),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.14) !important;
+}
+
+.builder-tab.builder-tab--aletheia.builder-tab--companion--active {
+  background:
+    linear-gradient(118deg, rgba(56, 189, 248, 0.52) 0%, transparent 50%),
+    linear-gradient(298deg, rgba(167, 139, 250, 0.58) 0%, transparent 52%),
+    linear-gradient(
+      180deg,
+      rgba(186, 230, 253, 0.28) 0%,
+      rgba(124, 58, 237, 0.22) 52%,
+      rgba(0, 0, 0, 0.14) 100%
+    ) !important;
+  border-color: rgba(196, 181, 253, 0.75) !important;
+  border-top-color: rgba(240, 249, 255, 0.88) !important;
+  border-right-color: rgba(192, 132, 252, 0.85) !important;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.62),
+    0 4px 12px rgba(0, 0, 0, 0.38),
+    0 0 26px rgba(56, 189, 248, 0.45),
+    0 0 42px rgba(139, 92, 246, 0.62),
+    0 0 58px rgba(167, 139, 250, 0.28),
+    inset 0 1px 0 rgba(240, 249, 255, 0.42),
+    inset -2px 0 18px rgba(167, 139, 250, 0.38),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.22) !important;
+  animation: aletheia-presence-glow 3.2s ease-in-out infinite;
+}
+
+.builder-tab.builder-tab--aletheia.builder-tab--companion--active:hover {
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.62),
+    0 6px 16px rgba(0, 0, 0, 0.4),
+    0 0 32px rgba(56, 189, 248, 0.52),
+    0 0 48px rgba(139, 92, 246, 0.72),
+    0 0 64px rgba(196, 181, 253, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.46),
+    inset -2px 0 20px rgba(192, 132, 252, 0.42),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.14) !important;
+}
+
+.builder-tab.builder-tab--aletheia:active {
+  transform: translateY(1px);
+  box-shadow:
+    0 0 2px rgba(0, 0, 0, 0.45),
+    0 0 16px rgba(139, 92, 246, 0.35),
+    inset 0 2px 5px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(196, 181, 253, 0.12) !important;
+}
+
+@keyframes aletheia-presence-glow {
+  0%, 100% {
+    box-shadow:
+      0 1px 0 rgba(0, 0, 0, 0.62),
+      0 4px 12px rgba(0, 0, 0, 0.38),
+      0 0 22px rgba(56, 189, 248, 0.38),
+      0 0 36px rgba(139, 92, 246, 0.52),
+      0 0 52px rgba(167, 139, 250, 0.22),
+      inset 0 1px 0 rgba(240, 249, 255, 0.42),
+      inset -2px 0 18px rgba(167, 139, 250, 0.38),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.22);
+  }
+  50% {
+    box-shadow:
+      0 1px 0 rgba(0, 0, 0, 0.62),
+      0 4px 12px rgba(0, 0, 0, 0.38),
+      0 0 30px rgba(56, 189, 248, 0.52),
+      0 0 48px rgba(139, 92, 246, 0.72),
+      0 0 68px rgba(196, 181, 253, 0.32),
+      inset 0 1px 0 rgba(255, 255, 255, 0.48),
+      inset -2px 0 22px rgba(192, 132, 252, 0.45),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.22);
+  }
 }
 
 /* Secondary dock actions — soft depth with semantic hover */
