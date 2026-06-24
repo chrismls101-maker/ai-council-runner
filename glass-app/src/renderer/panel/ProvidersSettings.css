@@ -1,0 +1,126 @@
+.providers-settings {
+  margin-top: 12px;
+}
+
+.providers-row {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.providers-row-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.providers-row-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.providers-optional {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.providers-row-display {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.providers-masked {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.providers-update-btn,
+.providers-add-btn,
+.providers-save-btn,
+.providers-cancel-btn,
+.providers-shortcut {
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.providers-update-btn,
+.providers-add-btn,
+.providers-save-btn {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.9);
+  padding: 6px 12px;
+}
+
+.providers-cancel-btn {
+  border: none;
+  background: none;
+  color: rgba(255, 255, 255, 0.55);
+  padding: 6px 8px;
+}
+
+.providers-input {
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 8px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.25);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 13px;
+}
+
+.providers-edit-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.providers-error {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: rgba(255, 140, 140, 0.95);
+}
+
+.providers-add-btn {
+  margin-top: 16px;
+  width: 100%;
+}
+
+.providers-custom {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.providers-custom-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.providers-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.providers-shortcut {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.75);
+  padding: 4px 10px;
+}
+
+.providers-shortcut--active {
+  border-color: rgba(140, 190, 255, 0.55);
+  color: rgba(200, 225, 255, 0.95);
+}

@@ -1,54 +1,63 @@
 import { useEffect, useState, type JSX } from "react";
-import App from "./App";
-import LandingGate from "./components/glass-landing/LandingGate";
-import AccountPage from "./pages/AccountPage";
 import Glass404Page from "./pages/Glass404Page";
 import GlassInstallPage from "./pages/GlassInstallPage";
-import GlassLandingPrototypePage from "./pages/GlassLandingPrototypePage";
 import GlassLandingPage from "./pages/GlassLandingPage";
 import GlassPrivacyPage from "./pages/GlassPrivacyPage";
 import GlassTermsPage from "./pages/GlassTermsPage";
-import LoginPage from "./pages/LoginPage";
 import { isGlassPublicPath, resolveAppRoute, type AppRoute } from "./utils/appRoute";
 
-const ROUTE_TITLES: Record<AppRoute, string> = {
+/**
+ * Public-only router.
+ *
+ * The web app (dashboard, command bar, council UI, login, account) has been
+ * retired. iivo.io is now a landing page + download link only.
+ * All functionality lives in the Glass desktop app.
+ *
+ * Routes:
+ *   /              → GlassLandingPage
+ *   /install       → GlassInstallPage
+ *   /privacy       → GlassPrivacyPage
+ *   /terms         → GlassTermsPage
+ *   *              → Glass404Page
+ */
+
+type PublicRoute = Extract<AppRoute, "landing" | "install" | "privacy" | "terms" | "not-found">;
+
+const ROUTE_TITLES: Record<PublicRoute, string> = {
   landing: "IIVO Glass",
-  "landing-prototype": "IIVO Glass — Landing Prototype",
   install: "Installation Guide — IIVO Glass",
   privacy: "Privacy Policy — IIVO Glass",
   terms: "Terms of Service — IIVO Glass",
-  login: "Sign In — IIVO",
-  account: "My Account — IIVO",
-  dashboard: "IIVO — Intelligence In. Verified Action Out.",
   "not-found": "Page Not Found — IIVO Glass",
 };
 
-function PublicGlassPage({ route }: { route: Exclude<AppRoute, "dashboard"> }): JSX.Element {
+function resolvePublicRoute(raw: AppRoute): PublicRoute {
+  switch (raw) {
+    case "install":  return "install";
+    case "privacy":  return "privacy";
+    case "terms":    return "terms";
+    case "landing":  return "landing";
+    default:         return "not-found";
+  }
+}
+
+function PublicPage({ route }: { route: PublicRoute }): JSX.Element {
   switch (route) {
-    case "landing-prototype":
-      return <GlassLandingPrototypePage />;
-    case "install":
-      return <GlassInstallPage />;
-    case "privacy":
-      return <GlassPrivacyPage />;
-    case "terms":
-      return <GlassTermsPage />;
-    case "login":
-      return <LoginPage />;
-    case "account":
-      return <AccountPage />;
-    case "not-found":
-      return <Glass404Page />;
-    default:
-      return <GlassLandingPage />;
+    case "install":    return <GlassInstallPage />;
+    case "privacy":    return <GlassPrivacyPage />;
+    case "terms":      return <GlassTermsPage />;
+    case "not-found":  return <Glass404Page />;
+    default:           return <GlassLandingPage />;
   }
 }
 
 export default function AppRouter() {
-  const [route, setRoute] = useState<AppRoute>(() => resolveAppRoute());
+  const [route, setRoute] = useState<PublicRoute>(() =>
+    resolvePublicRoute(resolveAppRoute()),
+  );
 
   useEffect(() => {
-    const sync = () => setRoute(resolveAppRoute());
+    const sync = () => setRoute(resolvePublicRoute(resolveAppRoute()));
     window.addEventListener("popstate", sync);
     return () => window.removeEventListener("popstate", sync);
   }, []);
@@ -61,18 +70,5 @@ export default function AppRouter() {
     };
   }, [route]);
 
-  if (route === "dashboard") {
-    return <App />;
-  }
-
-  // Auth pages and landing prototype skip the password gate
-  if (route === "login" || route === "account" || route === "landing-prototype") {
-    return <PublicGlassPage route={route} />;
-  }
-
-  return (
-    <LandingGate>
-      <PublicGlassPage route={route} />
-    </LandingGate>
-  );
+  return <PublicPage route={route} />;
 }

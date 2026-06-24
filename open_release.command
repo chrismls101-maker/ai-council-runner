@@ -1,2 +1,2 @@
 #!/bin/bash
-open /Users/newuser/Desktop/ai-council-runner/desktop-glass/release/
+open /Users/newuser/Desktop/iivo-workspace/glass-app/release/

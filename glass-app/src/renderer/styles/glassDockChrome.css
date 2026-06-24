@@ -1,0 +1,131 @@
+/**
+ * Premium dock chrome — shared frosted shell for top dock pill + workspace-harmonized builder strip.
+ * Dense tier (--glass-command-bar-shell-*) stays default for idle bottom strip / panels.
+ */
+
+:root {
+  --glass-dock-frost-start: rgba(255, 255, 255, 0.11);
+  --glass-dock-frost-end: rgba(255, 255, 255, 0.04);
+  --glass-dock-frost-veil: rgba(12, 14, 20, 0.9);
+  --glass-dock-frost-solid:
+    linear-gradient(
+      160deg,
+      var(--glass-dock-frost-start) 0%,
+      var(--glass-dock-frost-end) 100%
+    ),
+    var(--glass-dock-frost-veil);
+  --glass-dock-frost-border: rgba(255, 255, 255, 0.18);
+  --glass-dock-frost-blur: blur(18px) saturate(155%);
+  --glass-dock-frost-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.26),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 8px 28px rgba(0, 0, 0, 0.34),
+    0 1px 0 rgba(255, 255, 255, 0.05);
+
+  /* Workspace-open strip — matches Research / IDE panel frost */
+  --glass-workspace-frost-start: rgba(255, 255, 255, 0.1);
+  --glass-workspace-frost-end: rgba(255, 255, 255, 0.04);
+  --glass-workspace-frost-veil: rgba(12, 14, 20, 0.88);
+  --glass-workspace-frost-solid:
+    linear-gradient(
+      160deg,
+      var(--glass-workspace-frost-start) 0%,
+      var(--glass-workspace-frost-end) 100%
+    ),
+    var(--glass-workspace-frost-veil);
+  --glass-workspace-frost-blur: blur(14px) saturate(150%);
+  --glass-workspace-frost-border: rgba(255, 255, 255, 0.16);
+  --glass-workspace-frost-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 -6px 24px rgba(0, 0, 0, 0.28);
+}
+
+/* ── Top dock pill — premium frost (structure unchanged) ── */
+.dock__chrome {
+  background: var(--glass-dock-frost-solid);
+  backdrop-filter: var(--glass-dock-frost-blur);
+  -webkit-backdrop-filter: var(--glass-dock-frost-blur);
+  border: 1px solid var(--glass-dock-frost-border);
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+  box-shadow: var(--glass-dock-frost-shadow);
+}
+
+.dock__chrome::after {
+  content: "";
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  bottom: 0;
+  height: 1px;
+  z-index: 2;
+  pointer-events: none;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.22),
+    rgba(255, 255, 255, 0.38),
+    rgba(255, 255, 255, 0.22),
+    transparent
+  );
+  opacity: 0.55;
+}
+
+.dock__sep {
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.14) 48%,
+    transparent 100%
+  );
+}
+
+.dock__ring {
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+.dock--v3.dock--unlocked .dock__chrome {
+  border-color: rgba(245, 197, 66, 0.35);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.26),
+    inset 0 1px 0 rgba(245, 197, 66, 0.12),
+    0 8px 28px rgba(0, 0, 0, 0.34);
+}
+
+/* ── Builder strip when a workspace / IDE is open — harmonize with panel glass ── */
+.overlay-root--workspace-active .builder-strip,
+.overlay-root--ide-active .builder-strip {
+  background: var(--glass-workspace-frost-solid);
+  backdrop-filter: var(--glass-workspace-frost-blur);
+  -webkit-backdrop-filter: var(--glass-workspace-frost-blur);
+  border-color: var(--glass-workspace-frost-border);
+  box-shadow: var(--glass-workspace-frost-shadow);
+}
+
+.overlay-root--workspace-active .builder-panel,
+.overlay-root--ide-active .builder-panel {
+  background: var(--glass-workspace-frost-solid);
+  backdrop-filter: var(--glass-workspace-frost-blur);
+  -webkit-backdrop-filter: var(--glass-workspace-frost-blur);
+  border-color: var(--glass-workspace-frost-border);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 -8px 28px rgba(0, 0, 0, 0.32);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .dock__chrome {
+    background: rgb(12, 14, 20);
+  }
+
+  .overlay-root--workspace-active .builder-strip,
+  .overlay-root--ide-active .builder-strip,
+  .overlay-root--workspace-active .builder-panel,
+  .overlay-root--ide-active .builder-panel {
+    background: rgb(12, 14, 20);
+  }
+}

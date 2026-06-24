@@ -5,6 +5,7 @@ export type ProviderName = "openai" | "anthropic" | "perplexity";
 export const MODELS = {
   openai: {
     gpt4o: "gpt-4o",
+    gpt55: "gpt-5.5",
   },
   anthropic: {
     claudeSonnet4: "claude-sonnet-4-6",
@@ -19,11 +20,11 @@ export const AGENT_MODEL_CONFIG: Record<
   AgentId,
   { provider: ProviderName; model: string }
 > = {
-  strategy: { provider: "openai", model: MODELS.openai.gpt4o },
+  strategy: { provider: "openai", model: MODELS.openai.gpt55 },
   critic: { provider: "anthropic", model: MODELS.anthropic.claudeSonnet4 },
   research: { provider: "perplexity", model: MODELS.perplexity.sonar },
   salesWriter: { provider: "anthropic", model: MODELS.anthropic.claudeSonnet4 },
-  finalJudge: { provider: "openai", model: MODELS.openai.gpt4o },
+  finalJudge: { provider: "openai", model: MODELS.openai.gpt55 },
 };
 
 export function logConfiguredModels(): void {

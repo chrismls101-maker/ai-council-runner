@@ -1,0 +1,379 @@
+/**
+ * Glass IDE — premium visual layer (matches Research / Code Analyst / Writing shells).
+ * Visual-only overrides — layout and behavior unchanged.
+ */
+
+.gide-shell {
+  --gide-panel-frost-start: rgba(255, 255, 255, 0.10);
+  --gide-panel-frost-end: rgba(255, 255, 255, 0.04);
+  --gide-panel-base: rgba(12, 14, 20, 0.88);
+  --gide-panel-blur: 14px;
+  --gide-panel-saturate: 150%;
+  --gide-panel-solid:
+    linear-gradient(160deg, var(--gide-panel-frost-start) 0%, var(--gide-panel-frost-end) 100%),
+    var(--gide-panel-base);
+  --gide-card-bg:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.09) 0%, rgba(255, 255, 255, 0.03) 48%, rgba(0, 0, 0, 0.14) 100%),
+    rgba(8, 10, 18, 0.62);
+  --gide-card-border: rgba(255, 255, 255, 0.14);
+  --gide-card-inset: inset 0 1px 0 rgba(255, 255, 255, 0.11);
+  --gide-card-shadow: 0 4px 22px rgba(0, 0, 0, 0.28);
+  --gide-code-well: rgba(4, 6, 12, 0.72);
+
+  background: transparent;
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0;
+  box-shadow: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+.gide-shell__glass {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: var(--gide-panel-solid);
+  backdrop-filter: blur(var(--gide-panel-blur)) saturate(var(--gide-panel-saturate));
+  -webkit-backdrop-filter: blur(var(--gide-panel-blur)) saturate(var(--gide-panel-saturate));
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .gide-shell__glass {
+    background: rgb(12, 14, 20);
+  }
+}
+
+/* ── Chrome header ─────────────────────────────────────────────────────── */
+
+.gide-header {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.02) 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+}
+
+.gide-title {
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  color: rgba(var(--glass-accent-rgb), 0.95);
+}
+
+.gide-main {
+  background: transparent;
+}
+
+.gide-pane {
+  background: rgba(8, 10, 18, 0.42);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.gide-pane--stream {
+  background: rgba(6, 8, 14, 0.35);
+}
+
+.gide-pane__label {
+  color: rgba(255, 255, 255, 0.38);
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+.gide-stream-toolbar {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* ── Controls (raised glass buttons) ───────────────────────────────────── */
+
+.gide-tree-toggle,
+.gide-index-chip,
+.gide-project-switch-btn,
+.gide-qa-mode-btn,
+.gide-stop-btn {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.09) 0%,
+    rgba(255, 255, 255, 0.03) 52%,
+    rgba(0, 0, 0, 0.08) 100%
+  );
+  border: 0.5px solid rgba(255, 255, 255, 0.14) !important;
+  border-top-color: rgba(255, 255, 255, 0.22) !important;
+  border-bottom-color: rgba(0, 0, 0, 0.32) !important;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.48),
+    0 2px 5px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
+}
+
+.gide-tree-toggle:hover,
+.gide-index-chip:hover:not(:disabled),
+.gide-project-switch-btn:hover,
+.gide-qa-mode-btn:hover,
+.gide-stop-btn:hover {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.13) 0%,
+    rgba(255, 255, 255, 0.05) 52%,
+    rgba(0, 0, 0, 0.06) 100%
+  );
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.48),
+    0 3px 8px rgba(0, 0, 0, 0.28),
+    0 0 12px rgba(var(--glass-accent-rgb), 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+.gide-tree-toggle:active,
+.gide-stop-btn:active {
+  transform: translateY(1px);
+}
+
+.gide-presence-chip {
+  background: linear-gradient(180deg, rgba(var(--glass-accent-rgb), 0.14), rgba(var(--glass-accent-rgb), 0.06));
+  border-color: rgba(var(--glass-accent-rgb), 0.28);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* ── Composer ──────────────────────────────────────────────────────────── */
+
+.gide-stream-composer {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(8, 10, 16, 0.88) 100%);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+}
+
+.gide-composer-field {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.07) 0%, rgba(0, 0, 0, 0.18) 100%);
+  box-shadow: var(--gide-card-inset), 0 2px 14px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.gide-composer-field:focus-within {
+  border-color: rgba(var(--glass-accent-rgb), 0.42);
+  box-shadow:
+    var(--gide-card-inset),
+    0 0 0 1px rgba(var(--glass-accent-rgb), 0.14),
+    0 4px 18px rgba(var(--glass-accent-rgb), 0.12);
+}
+
+.gide-composer-run--ready {
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(var(--glass-accent-rgb), 0.18),
+    0 4px 14px rgba(var(--glass-accent-rgb), 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+/* ── File tree + editor tabs ───────────────────────────────────────────── */
+
+.gide-tree {
+  background: transparent;
+}
+
+.gide-tree__head {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.gide-file-tab {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.gide-file-tab--active {
+  background: linear-gradient(180deg, rgba(var(--glass-accent-rgb), 0.16), rgba(var(--glass-accent-rgb), 0.06));
+  border-color: rgba(var(--glass-accent-rgb), 0.28);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.gide-center-terminal {
+  background: rgba(4, 6, 12, 0.35);
+}
+
+/* ── Stream transcript — glass cards (Cursor-style) ──────────────────── */
+
+.gide-transcript {
+  gap: 12px;
+  padding: 8px 8px 12px;
+}
+
+.gide-transcript__text {
+  margin: 0 2px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--gide-card-border);
+  background: var(--gide-card-bg);
+  box-shadow: var(--gide-card-inset), var(--gide-card-shadow);
+  backdrop-filter: blur(10px) saturate(135%);
+  -webkit-backdrop-filter: blur(10px) saturate(135%);
+}
+
+.gide-transcript__text--live {
+  border-style: dashed;
+  border-color: rgba(var(--glass-accent-rgb), 0.28);
+  background:
+    linear-gradient(165deg, rgba(var(--glass-accent-rgb), 0.08), rgba(0, 0, 0, 0.12)),
+    rgba(8, 10, 18, 0.55);
+}
+
+.gide-transcript__thinking {
+  border-color: rgba(var(--glass-accent-rgb), 0.22);
+  background: linear-gradient(135deg, rgba(var(--glass-accent-rgb), 0.1), rgba(var(--glass-accent-rgb), 0.04));
+  box-shadow: var(--gide-card-inset);
+}
+
+.gide-transcript-reasoning,
+.gide-transcript-cluster,
+.gide-transcript-tool,
+.gide-run-header,
+.gide-feed-row,
+.gide-active-focus,
+.gide-transcript-receipt,
+.gide-completion-card,
+.gide-trust-ledger,
+.gide-changeset,
+.gide-transcript-approval,
+.gide-transcript-verify {
+  border-radius: 12px;
+  border: 1px solid var(--gide-card-border);
+  background: var(--gide-card-bg);
+  box-shadow: var(--gide-card-inset), var(--gide-card-shadow);
+  backdrop-filter: blur(10px) saturate(135%);
+  -webkit-backdrop-filter: blur(10px) saturate(135%);
+}
+
+.gide-transcript-diff-card {
+  margin: 0 2px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: var(--gide-card-bg);
+  box-shadow:
+    var(--gide-card-inset),
+    0 6px 28px rgba(0, 0, 0, 0.32),
+    0 0 0 1px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(12px) saturate(145%);
+  -webkit-backdrop-filter: blur(12px) saturate(145%);
+  overflow: hidden;
+}
+
+.gide-transcript-diff-card--running,
+.gide-transcript-diff-card--preview {
+  border-color: rgba(var(--glass-accent-rgb), 0.32);
+  box-shadow:
+    var(--gide-card-inset),
+    0 0 0 1px rgba(var(--glass-accent-rgb), 0.1),
+    0 8px 28px rgba(0, 0, 0, 0.32),
+    0 0 20px rgba(var(--glass-accent-rgb), 0.08);
+}
+
+.gide-transcript-diff-card__header {
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.gide-transcript-diff__body {
+  background: var(--gide-code-well);
+  border-top: 1px solid rgba(0, 0, 0, 0.25);
+}
+
+.gide-transcript-diff-card .glass-diff__line--add {
+  background: rgba(65, 224, 163, 0.12);
+}
+
+.gide-transcript-diff-card .glass-diff__line--remove {
+  background: rgba(255, 100, 100, 0.14);
+}
+
+.gide-transcript-tool--running {
+  border-color: rgba(var(--glass-accent-rgb), 0.28);
+  background:
+    linear-gradient(165deg, rgba(var(--glass-accent-rgb), 0.1), rgba(0, 0, 0, 0.12)),
+    rgba(8, 10, 18, 0.62);
+}
+
+.gide-transcript-tool--done {
+  border-left: 2px solid rgba(65, 224, 163, 0.55);
+}
+
+.gide-transcript-receipt__output-body,
+.gide-feed-output__body {
+  background: var(--gide-code-well);
+  border-radius: 0 0 10px 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Inline + block code inside stream */
+.gide-shell .grp-code-block,
+.gide-transcript__text .grp-code-block {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.05) 0%, rgba(0, 0, 0, 0.2) 100%),
+    var(--gide-code-well);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), inset 0 0 0 1px rgba(0, 0, 0, 0.2);
+  margin: 10px 0;
+}
+
+.gide-shell .grp-code-block pre {
+  padding: 12px 14px;
+  color: rgba(215, 228, 248, 0.94);
+}
+
+.gide-transcript__text code {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 2px 6px;
+}
+
+.gide-transcript-phase__line {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.14), transparent);
+}
+
+.gide-transcript-phase__label {
+  color: rgba(255, 255, 255, 0.42);
+  letter-spacing: 0.12em;
+}
+
+.gide-transcript-footer {
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+.gide-transcript-approval__btn,
+.gide-transcript-receipt__action,
+.gide-completion-card__cta {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.09) 0%,
+    rgba(255, 255, 255, 0.03) 52%,
+    rgba(0, 0, 0, 0.08) 100%
+  );
+  border: 0.5px solid rgba(255, 255, 255, 0.14);
+  border-top-color: rgba(255, 255, 255, 0.2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.gide-transcript-approval__btn--primary,
+.gide-transcript-receipt__action--primary,
+.gide-completion-card__cta:not(.gide-completion-card__cta--secondary) {
+  border-color: rgba(var(--glass-accent-rgb), 0.35);
+  background: linear-gradient(
+    180deg,
+    rgba(var(--glass-accent-rgb), 0.22) 0%,
+    rgba(var(--glass-accent-rgb), 0.1) 100%
+  );
+}
+
+.gide-transcript-footer__row {
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}

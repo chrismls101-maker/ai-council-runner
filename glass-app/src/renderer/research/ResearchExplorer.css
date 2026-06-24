@@ -1,0 +1,859 @@
+/**
+ * ResearchExplorer -- glass panel layout
+ * Full-screen Apple-style frosted glass over the desktop (no 3D blobs)
+ */
+
+/* -- CSS colour tokens used by TorrentColumn and Phase5Deliver -- */
+:root {
+  --r-blue:  #60a5fa;
+  --r-green: #22c55e;
+  --r-amber: #fbbf24;
+  --r-red:   #ef4444;
+  --r-dim:   rgba(255,255,255,0.28);
+}
+
+/*
+ * Research panel themes — light (default, slight see-through) + dark (solid charcoal).
+ */
+.research-explorer {
+  --research-panel-border: rgba(255, 255, 255, 0.20);
+  --research-panel-edge-highlight: rgba(255, 255, 255, 0.22);
+  --research-panel-fallback: rgb(12, 14, 20);
+  --research-text-primary: rgba(255, 255, 255, 0.92);
+  --research-text-secondary: rgba(255, 255, 255, 0.65);
+  --research-text-muted: rgba(255, 255, 255, 0.45);
+  --research-text-faint: rgba(255, 255, 255, 0.32);
+  --research-input-bg: rgba(0, 0, 0, 0.28);
+  --research-input-bg-focus: rgba(0, 0, 0, 0.36);
+  --research-input-border: rgba(255, 255, 255, 0.14);
+  --research-input-border-focus: rgba(255, 255, 255, 0.28);
+  --research-btn-secondary: rgba(255, 255, 255, 0.55);
+  --research-btn-secondary-hover: rgba(255, 255, 255, 0.72);
+}
+
+.research-explorer--light {
+  --research-panel-frost-start: rgba(255, 255, 255, 0.10);
+  --research-panel-frost-end: rgba(255, 255, 255, 0.04);
+  --research-panel-base: rgba(12, 14, 20, 0.88);
+  --research-panel-blur: 14px;
+  --research-panel-saturate: 150%;
+  --research-text-muted: rgba(255, 255, 255, 0.52);
+  --research-text-faint: rgba(255, 255, 255, 0.42);
+}
+
+.research-explorer--dark {
+  --research-panel-frost-start: rgba(255, 255, 255, 0.12);
+  --research-panel-frost-end: rgba(255, 255, 255, 0.05);
+  --research-panel-base: rgb(12, 14, 20);
+  --research-panel-blur: 0px;
+  --research-panel-saturate: 100%;
+  --research-text-muted: rgba(255, 255, 255, 0.38);
+  --research-text-faint: rgba(255, 255, 255, 0.28);
+}
+
+.research-explorer--light,
+.research-explorer--dark {
+  --research-panel-solid:
+    linear-gradient(
+      160deg,
+      var(--research-panel-frost-start) 0%,
+      var(--research-panel-frost-end) 100%
+    ),
+    var(--research-panel-base);
+}
+
+.research-explorer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: var(--builder-strip-top-from-bottom, 52px);
+  z-index: 200;
+  overflow: hidden;
+  pointer-events: auto;
+  background: transparent;
+  -webkit-font-smoothing: antialiased;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.research-explorer--hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* Sidebar overlays content — do not push the main column */
+.research-explorer__glass {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: var(--research-panel-solid);
+  backdrop-filter: blur(var(--research-panel-blur)) saturate(var(--research-panel-saturate));
+  -webkit-backdrop-filter: blur(var(--research-panel-blur)) saturate(var(--research-panel-saturate));
+  border: none;
+  box-shadow: none;
+}
+
+.research-explorer--dark .research-explorer__glass {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .research-explorer__glass {
+    background: var(--research-panel-fallback);
+  }
+}
+
+/* Top chrome — history, tabs, theme, exit */
+.research-chrome {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 52px;
+  padding: 0 16px 0 12px;
+  pointer-events: auto;
+}
+
+.research-chrome__left {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.research-history-toggle,
+.research-new-btn {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.research-history-toggle:hover,
+.research-new-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.research-new-btn {
+  color: rgba(96, 165, 250, 0.95);
+  border-color: rgba(96, 165, 250, 0.28);
+  background: rgba(96, 165, 250, 0.08);
+}
+
+.research-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 0 4px;
+}
+
+.research-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.research-tab {
+  flex-shrink: 0;
+  max-width: 180px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.research-tab:hover {
+  color: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.research-tab--active {
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+/* Collapsible history sidebar */
+.research-sidebar {
+  position: absolute;
+  top: 52px;
+  left: 0;
+  bottom: 0;
+  z-index: 45;
+  width: 280px;
+  display: flex;
+  flex-direction: column;
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    rgba(8, 10, 16, 0.92);
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  transform: translateX(-100%);
+  transition: transform 0.22s ease;
+  pointer-events: auto;
+}
+
+.research-sidebar--open {
+  transform: translateX(0);
+}
+
+.research-sidebar__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 14px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.research-sidebar__title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.research-sidebar__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+}
+
+.research-sidebar__close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.research-sidebar__list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.research-sidebar__item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 32px 10px 12px;
+  margin-bottom: 4px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.research-sidebar__item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.research-sidebar__item--active {
+  background: rgba(96, 165, 250, 0.12);
+  border-color: rgba(96, 165, 250, 0.28);
+}
+
+.research-sidebar__item-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.88);
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.research-sidebar__item-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.38);
+}
+
+.research-sidebar__item-delete {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.28);
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+
+.research-sidebar__item:hover .research-sidebar__item-delete,
+.research-sidebar__item--active .research-sidebar__item-delete {
+  opacity: 1;
+}
+
+.research-sidebar__item-delete:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: rgba(239, 68, 68, 0.95);
+}
+
+/* -- Content layer (above glass scrim) -- */
+.research-content {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  padding-top: 52px;
+}
+
+/* -- Top bar: chip + question + status -- */
+.research-topbar {
+  flex-shrink: 0;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 24px;
+  background: transparent;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Aletheia chip */
+.research-chip {
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(96, 165, 250, 0.9);
+  background: rgba(96, 165, 250, 0.08);
+  border: 1px solid rgba(96, 165, 250, 0.2);
+  border-radius: 20px;
+  padding: 5px 12px;
+  white-space: nowrap;
+  text-shadow: 0 0 12px rgba(96, 165, 250, 0.4);
+}
+
+/* Question title */
+.research-question {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255,255,255,0.62);
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Phase status */
+.research-status {
+  flex-shrink: 0;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  color: rgba(255,255,255,0.32);
+  text-transform: uppercase;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Restart button */
+.research-restart {
+  flex-shrink: 0;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.2);
+  background: none;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  padding: 4px 12px;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+}
+
+.research-restart:hover {
+  color: rgba(255,255,255,0.55);
+  border-color: rgba(255,255,255,0.25);
+}
+
+/* -- Zone labels bar -- */
+.research-zones {
+  flex-shrink: 0;
+  height: 36px;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  background: transparent;
+}
+
+.research-zone-label {
+  display: flex;
+  align-items: center;
+  padding: 0 18px;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.32);
+  border-right: 1px solid rgba(255,255,255,0.04);
+  user-select: none;
+}
+
+.research-zone-label:last-child {
+  border-right: none;
+}
+
+/* -- Three-column torrent grid -- */
+.research-columns {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  min-height: 0;
+  position: relative;
+}
+
+/* -- Single torrent column -- */
+.torrent-column {
+  position: relative;
+  overflow: hidden;
+  border-right: 1px solid rgba(255,255,255,0.05);
+}
+
+.torrent-column:last-child {
+  border-right: none;
+}
+
+/* Zone label inside column (hidden -- we use the zones bar instead) */
+.torrent-label {
+  display: none;
+}
+
+/* Top mask -- invisible area text scrolls behind */
+.torrent-mask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 52px;
+  background: linear-gradient(to bottom, var(--research-panel-base) 55%, transparent);
+  z-index: 3;
+  pointer-events: none;
+}
+
+/* Canvas fills column */
+.torrent-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* -- Bottom progress bar -- */
+.research-progress {
+  flex-shrink: 0;
+  height: 2px;
+  background: rgba(255,255,255,0.04);
+  position: relative;
+  overflow: hidden;
+}
+
+.research-progress-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(96,165,250,0.5), rgba(34,197,94,0.5));
+  transition: width 1.2s ease;
+}
+
+/* -- Close button (top bar) -- */
+.research-close {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 400;
+  color: rgba(255,255,255,0.18);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: color 0.2s, background 0.2s;
+  line-height: 1;
+}
+
+.research-close:hover {
+  color: rgba(255,255,255,0.55);
+  background: rgba(255,255,255,0.06);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   INTRO SCREEN
+   Glass panel center-stage: question large, countdown, cancel
+   ═══════════════════════════════════════════════════════════ */
+
+.research-intro {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  background: transparent;
+  opacity: 1;
+  transition: opacity 0.6s ease;
+  padding-top: 52px;
+}
+
+.research-intro--out {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.research-intro-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  width: 600px;
+  max-width: calc(100vw - 80px);
+  padding: 40px 44px;
+  gap: 0;
+  pointer-events: auto;
+  position: relative;
+  z-index: 1;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* "Aletheia Research" pill */
+.ri-chip {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: rgba(96, 165, 250, 0.7);
+  background: rgba(96, 165, 250, 0.08);
+  border: 1px solid rgba(96, 165, 250, 0.18);
+  border-radius: 20px;
+  padding: 6px 16px;
+  margin-bottom: 36px;
+  text-shadow: 0 0 18px rgba(96, 165, 250, 0.35);
+}
+
+/* "What do you want to research?" label */
+.ri-label {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: -0.005em;
+  color: var(--research-text-secondary);
+  margin-bottom: 20px;
+}
+
+/* Question textarea — sunken trough (one step darker than panel) */
+.ri-input {
+  width: 100%;
+  position: relative;
+  z-index: 2;
+  background: var(--research-input-bg);
+  border: 1px solid var(--research-input-border);
+  border-radius: 12px;
+  padding: 18px 20px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 18px;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.5;
+  color: var(--research-text-primary);
+  caret-color: rgba(96, 165, 250, 0.9);
+  resize: none;
+  outline: none;
+  pointer-events: auto;
+  -webkit-user-select: text;
+  user-select: text;
+  transition: border-color 0.2s, background 0.2s;
+  -webkit-font-smoothing: antialiased;
+  scrollbar-width: none;
+  margin-bottom: 20px;
+}
+
+.ri-input::-webkit-scrollbar { display: none; }
+
+.ri-input::placeholder {
+  color: var(--research-text-faint);
+}
+
+.ri-input:focus {
+  border-color: var(--research-input-border-focus);
+  background: var(--research-input-bg-focus);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* Action row */
+.ri-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+/* Submit button */
+.ri-submit {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--research-text-primary);
+  background: rgba(96, 165, 250, 0.18);
+  border: 1px solid rgba(96, 165, 250, 0.38);
+  border-radius: 20px;
+  padding: 10px 24px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, opacity 0.2s;
+  -webkit-font-smoothing: antialiased;
+}
+
+.ri-submit:hover:not(:disabled) {
+  background: rgba(96, 165, 250, 0.25);
+  border-color: rgba(96, 165, 250, 0.5);
+}
+
+.ri-submit:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+/* Hint text */
+.ri-hint {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--research-text-muted);
+  text-transform: uppercase;
+}
+
+/* The question -- large, centre-stage during countdown */
+.ri-question {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 32px;
+  font-weight: 300;
+  letter-spacing: -0.03em;
+  line-height: 1.3;
+  color: rgba(255, 255, 255, 0.85);
+  margin-bottom: 48px;
+  /* Subtle text glow for glass depth */
+  text-shadow: 0 0 60px rgba(96, 165, 250, 0.12);
+}
+
+/* "Beginning research in 3..." */
+.ri-status {
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  color: rgba(255, 255, 255, 0.3);
+  margin-bottom: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Thin progress bar */
+.ri-bar {
+  width: 200px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 1px;
+  overflow: hidden;
+  margin-bottom: 48px;
+}
+
+.ri-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, rgba(96,165,250,0.6), rgba(34,197,94,0.5));
+  transition: width 0.95s linear;
+  border-radius: 1px;
+}
+
+/* Cancel link */
+.ri-cancel {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--research-text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px 16px;
+  border-radius: 8px;
+  transition: color 0.2s, background 0.2s;
+}
+
+.ri-cancel:hover {
+  color: var(--research-btn-secondary-hover);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* -- Phase 5 overlay (sits over columns, below topbar) -- */
+.research-phase5-wrap {
+  position: absolute;
+  top: 92px; /* topbar + zones bar */
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.research-phase5-wrap.active {
+  pointer-events: auto;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   REAL REPORT PANEL
+   Glass reading surface that fades in over the torrent columns
+   ═══════════════════════════════════════════════════════════ */
+
+.research-real-report {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  background: var(--research-panel-solid);
+  animation: real-report-in 0.7s ease forwards;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.1) transparent;
+}
+
+.research-real-report::-webkit-scrollbar {
+  width: 4px;
+}
+.research-real-report::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.1);
+  border-radius: 2px;
+}
+
+@keyframes real-report-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.real-report-panel {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 48px 40px 80px;
+}
+
+/* Saved path pill */
+.real-report-path {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 36px;
+}
+
+.real-report-path-label {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(96,165,250,0.5);
+  background: rgba(96,165,250,0.06);
+  border: 1px solid rgba(96,165,250,0.15);
+  border-radius: 10px;
+  padding: 3px 10px;
+}
+
+.real-report-path-name {
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 11px;
+  color: rgba(255,255,255,0.3);
+  letter-spacing: 0.04em;
+}
+
+/* Headings */
+.real-report-h1 {
+  font-size: 26px;
+  font-weight: 300;
+  letter-spacing: -0.025em;
+  color: rgba(255,255,255,0.88);
+  margin: 0 0 24px;
+  line-height: 1.3;
+}
+
+.real-report-h2 {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: rgba(96,165,250,0.8);
+  margin: 36px 0 14px;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+}
+
+.real-report-h3 {
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(255,255,255,0.6);
+  margin: 24px 0 10px;
+  letter-spacing: -0.005em;
+}
+
+/* Body paragraphs */
+.real-report-p {
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 1.75;
+  color: rgba(255,255,255,0.7);
+  margin: 0 0 16px;
+  letter-spacing: -0.005em;
+  -webkit-font-smoothing: antialiased;
+}

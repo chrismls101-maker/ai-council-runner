@@ -1,0 +1,464 @@
+/* ─── Activation — unified premium glass (fullscreen) ───────────────────── */
+
+@import "../styles/glassDockChrome.css";
+@import "../splash/loadingGlassBackground.css";
+
+html.glass-body--activation,
+.glass-body--activation {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  font-family: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.glass-body--activation #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.activation-root {
+  --activation-accent: rgba(186, 210, 255, 0.96);
+  /* Fullscreen gate needs a denser veil than dock pill — dark HUD layers are too transparent alone */
+  --activation-glass-veil: rgba(12, 14, 20, 0.94);
+  --activation-glass-solid:
+    linear-gradient(
+      160deg,
+      var(--glass-dock-frost-start) 0%,
+      var(--glass-dock-frost-end) 100%
+    ),
+    radial-gradient(circle at 18% 0%, rgba(255, 255, 255, 0.05), transparent 34%),
+    radial-gradient(circle at 50% 100%, rgba(255, 255, 255, 0.04), transparent 42%),
+    var(--activation-glass-veil);
+
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.94);
+}
+
+.activation-root--key-wait {
+  --activation-glass-veil: rgba(12, 14, 20, 0.88);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow:
+    0 24px 64px rgba(0, 0, 0, 0.42),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.activation-root--key-wait .activation-glass {
+  background:
+    linear-gradient(
+      160deg,
+      rgba(255, 255, 255, 0.08) 0%,
+      rgba(255, 255, 255, 0.03) 100%
+    ),
+    rgba(12, 14, 20, 0.72);
+}
+
+.activation-root--dissolving .activation-glass {
+  animation: activation-glass-dissolve 0.52s ease forwards;
+}
+
+@keyframes activation-glass-dissolve {
+  to {
+    opacity: 0;
+    transform: scale(1.02);
+  }
+}
+
+/* Single frost layer — window + content share one glass surface */
+.activation-glass {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  isolation: isolate;
+  background: var(--activation-glass-solid);
+  backdrop-filter: var(--loading-glass-dark-blur);
+  -webkit-backdrop-filter: var(--loading-glass-dark-blur);
+  box-shadow:
+    var(--glass-dock-frost-shadow),
+    inset 0 0 40px rgba(255, 255, 255, 0.045);
+}
+
+.activation-glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.11) 0%,
+    rgba(255, 255, 255, 0.04) 24%,
+    transparent 54%
+  );
+}
+
+.activation-glass::after {
+  content: "";
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  top: 0;
+  height: 1px;
+  z-index: 1;
+  pointer-events: none;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.42) 50%, transparent);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.1);
+  opacity: 0.65;
+}
+
+.activation-glass__sheen {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    118deg,
+    transparent 36%,
+    rgba(255, 255, 255, 0.04) 48%,
+    rgba(255, 255, 255, 0.06) 52%,
+    transparent 64%
+  );
+}
+
+.activation-glass__streak {
+  position: absolute;
+  height: 1px;
+  width: 55%;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.18), transparent);
+  opacity: 0.38;
+}
+
+.activation-glass__streak--a {
+  top: 28%;
+  left: -8%;
+  transform: rotate(-12deg);
+}
+
+.activation-glass__streak--b {
+  bottom: 32%;
+  right: -8%;
+  transform: rotate(-12deg);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .activation-glass {
+    background: var(--loading-glass-fallback);
+  }
+}
+
+.activation-stage {
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 48px 40px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  overflow: hidden;
+  animation: activation-in 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.activation-stage--dissolving {
+  pointer-events: none;
+  animation: activation-dissolve 0.52s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes activation-dissolve {
+  from {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.94);
+    filter: blur(10px);
+  }
+}
+
+.activation-key-wait-shell {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  animation: activation-key-wait-shell-in 0.48s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.activation-key-wait-shell--exiting {
+  animation: activation-key-wait-shell-out 0.38s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  pointer-events: none;
+}
+
+@keyframes activation-key-wait-shell-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes activation-key-wait-shell-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.92);
+    filter: blur(8px);
+  }
+}
+
+@keyframes activation-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Content column — no nested card chrome */
+.activation-panel {
+  box-sizing: border-box;
+  width: min(100%, 620px);
+  max-height: calc(100% - 48px);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.activation-header {
+  flex-shrink: 0;
+  -webkit-app-region: drag;
+}
+
+.activation-eyebrow {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.38em;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.activation-heading {
+  margin: 0 0 10px;
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1.1;
+}
+
+.activation-lead {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.66);
+}
+
+.activation-key-section {
+  flex-shrink: 0;
+  margin-top: 28px;
+  -webkit-app-region: no-drag;
+}
+
+.activation-label {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.46);
+}
+
+.activation-input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.97);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+  outline: none;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.activation-input::placeholder {
+  color: rgba(255, 255, 255, 0.26);
+}
+
+.activation-input:focus {
+  border-color: rgba(160, 195, 255, 0.5);
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.2),
+    0 0 0 3px rgba(100, 150, 255, 0.16);
+}
+
+.activation-input--error {
+  border-color: rgba(255, 110, 110, 0.55);
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.2),
+    0 0 0 3px rgba(255, 80, 80, 0.12);
+}
+
+.activation-key-link {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+  margin: 12px 0 0;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+  color: var(--activation-accent);
+  font-size: 14px;
+  line-height: 1.45;
+  font-weight: 500;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.activation-key-link__arrow {
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.activation-key-link__hint {
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 400;
+}
+
+.activation-key-link:hover {
+  color: #fff;
+}
+
+.activation-key-link:hover .activation-key-link__hint {
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.activation-error {
+  margin: 10px 0 0;
+  min-height: 1.25em;
+  font-size: 12px;
+  line-height: 1.35;
+  color: transparent;
+  user-select: none;
+}
+
+.activation-error--visible {
+  color: rgba(255, 150, 150, 0.95);
+  user-select: text;
+}
+
+.activation-status {
+  margin: 6px 0 0;
+  min-height: 1.25em;
+  font-size: 12px;
+  line-height: 1.35;
+  color: transparent;
+  user-select: none;
+}
+
+.activation-status--visible {
+  color: rgba(255, 255, 255, 0.52);
+  user-select: text;
+}
+
+.activation-footer {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 20px;
+  -webkit-app-region: no-drag;
+}
+
+.activation-submit {
+  width: 100%;
+  padding: 14px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.97) 0%, rgba(216, 222, 232, 0.94) 100%);
+  color: #0c1018;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  transition:
+    opacity 0.15s ease,
+    transform 0.12s ease;
+}
+
+.activation-submit:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.activation-submit:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.activation-submit:disabled {
+  opacity: 0.4;
+  cursor: default;
+  transform: none;
+}
+
+.activation-footnote {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.activation-quit {
+  flex-shrink: 0;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.44);
+  font-size: 13px;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  transition: color 0.15s ease;
+}
+
+.activation-quit:hover {
+  color: rgba(255, 255, 255, 0.74);
+}

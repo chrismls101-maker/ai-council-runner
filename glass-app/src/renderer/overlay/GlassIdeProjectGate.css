@@ -1,0 +1,277 @@
+.gide-project-gate {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 20%, rgba(var(--glass-accent-rgb), 0.08), transparent 65%),
+    rgba(4, 6, 12, 0.55);
+}
+
+/* Full-screen workspace shells already have frosted glass — no extra dark band */
+.gide-project-gate--workspace {
+  background: transparent;
+  padding: 12px 24px 32px;
+}
+
+.gide-project-gate__card {
+  width: min(480px, 100%);
+  padding: 28px 28px 22px;
+  border-radius: 14px;
+  border: 1px solid rgba(var(--glass-accent-rgb), 0.22);
+  background: rgba(10, 12, 20, 0.92);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 20px 48px rgba(0, 0, 0, 0.45);
+  text-align: center;
+}
+
+.gide-project-gate__icon {
+  font-size: 22px;
+  color: rgba(var(--glass-accent-rgb), 0.75);
+  margin-bottom: 10px;
+}
+
+.gide-project-gate__title {
+  margin: 0 0 8px;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: rgba(230, 238, 255, 0.96);
+}
+
+.gide-project-gate__subtitle {
+  margin: 0 0 20px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(160, 180, 220, 0.72);
+}
+
+.gide-project-gate__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.gide-project-gate__action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 108px;
+  padding: 14px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%),
+    rgba(8, 10, 18, 0.55);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  color: rgba(220, 235, 255, 0.96);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.15s, background 0.15s, transform 0.15s;
+}
+
+.gide-project-gate__action:hover {
+  border-color: rgba(var(--glass-accent-rgb), 0.42);
+  background:
+    linear-gradient(165deg, rgba(var(--glass-accent-rgb), 0.14) 0%, rgba(var(--glass-accent-rgb), 0.04) 100%),
+    rgba(8, 10, 18, 0.62);
+  transform: translateY(-1px);
+}
+
+.gide-project-gate__action-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(var(--glass-accent-rgb), 0.9);
+}
+
+.gide-project-gate__action-label {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.gide-project-gate__action-desc {
+  font-size: 10px;
+  line-height: 1.35;
+  color: rgba(160, 180, 220, 0.58);
+}
+
+.gide-project-gate__secondary {
+  display: block;
+  width: 100%;
+  padding: 9px 16px;
+  margin-bottom: 18px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(200, 215, 240, 0.88);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.gide-project-gate__recents {
+  text-align: left;
+  margin-top: 4px;
+}
+
+.gide-project-gate__recents-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(140, 165, 210, 0.45);
+  margin-bottom: 8px;
+}
+
+.gide-project-gate__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.gide-project-gate__recent {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: rgba(210, 225, 250, 0.9);
+}
+
+.gide-project-gate__recent:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.gide-project-gate__recent--active {
+  border-color: rgba(var(--glass-accent-rgb), 0.35);
+  background: rgba(var(--glass-accent-rgb), 0.1);
+}
+
+.gide-project-gate__recent-name {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.gide-project-gate__recent-path {
+  font-size: 10px;
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+  color: rgba(140, 165, 210, 0.5);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.gide-project-gate__footer {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.gide-project-gate__link {
+  background: none;
+  border: none;
+  color: rgba(150, 170, 210, 0.65);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.gide-project-gate__link:hover {
+  color: rgba(200, 215, 240, 0.9);
+}
+
+.gide-shell--project-gate {
+  /* Compact welcome — not full IDE chrome height emphasis */
+}
+
+.gide-shell--project-gate .gide-header {
+  border-bottom-color: rgba(255, 255, 255, 0.06);
+}
+
+.gide-project-switch-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: rgba(180, 200, 235, 0.85);
+  cursor: pointer;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gide-project-switch-btn:hover {
+  color: rgba(220, 235, 255, 0.98);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.gide-qa-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(167, 128, 255, 0.28);
+  background: rgba(167, 128, 255, 0.08);
+  color: rgba(210, 195, 255, 0.88);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.gide-qa-mode-btn:hover {
+  background: rgba(167, 128, 255, 0.14);
+  border-color: rgba(167, 128, 255, 0.4);
+}
+
+.gide-qa-mode-btn--active {
+  border-color: rgba(167, 128, 255, 0.55);
+  background: rgba(167, 128, 255, 0.22);
+  color: rgba(235, 225, 255, 0.98);
+  box-shadow: 0 0 18px rgba(167, 128, 255, 0.2);
+}
+
+.gide-qa-mode-btn__glyph {
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.gide-project-gate__actions:has(.gide-project-gate__action:only-child) {
+  grid-template-columns: 1fr;
+  max-width: 220px;
+  margin-inline: auto;
+}
+
+@media (max-width: 520px) {
+  .gide-project-gate__actions:not(:has(.gide-project-gate__action:only-child)) {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,287 @@
+/**
+ * IIVO Glass official boot / loading screen (production).
+ * Typography: Michroma wordmark + Sora (bundled; see iivoBrandFonts.css / App.css).
+ */
+
+.glass-boot {
+  --overlay-glass-frame-inset-top: 10px;
+  --overlay-glass-frame-inset-right: 10px;
+  --overlay-glass-frame-inset-bottom: 10px;
+  --overlay-glass-frame-inset-left: 10px;
+  /* Space reserved for title + progress + subtitle at the bottom */
+  --boot-bottom-reserve: clamp(210px, 29vh, 270px);
+
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  animation: glass-boot-in 0.55s ease both;
+}
+
+@keyframes glass-boot-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Substrate swarm — fills upper screen, stops above the text block */
+.glass-boot__swarm {
+  position: fixed;
+  top: clamp(16px, 3vh, 36px);
+  left: 50%;
+  width: min(92vmin, calc(100vw - 40px));
+  height: min(
+    92vmin,
+    calc(100vh - var(--boot-bottom-reserve) - clamp(16px, 3vh, 36px))
+  );
+  transform: translateX(-50%);
+  z-index: 5;
+  pointer-events: none;
+}
+
+/* Soft center vignette — keeps swarm readable without fighting frosted glass */
+.glass-boot__center-dim {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 52% 48% at 50% 42%,
+    rgba(8, 10, 16, 0.18) 0%,
+    rgba(12, 14, 20, 0.06) 42%,
+    transparent 68%
+  );
+}
+
+/* Boot splash — slightly more see-through so desktop reads through blur */
+.glass-boot .loading-glass-background {
+  --loading-glass-frost-start: rgba(255, 255, 255, 0.12);
+  --loading-glass-frost-end: rgba(255, 255, 255, 0.05);
+  --loading-glass-base: rgba(12, 14, 20, 0.72);
+}
+
+/* Text + progress bar — anchored to bottom, below the swarm */
+.glass-boot__content {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding-bottom: clamp(36px, 5vh, 72px);
+  text-align: center;
+  pointer-events: none;
+}
+
+.glass-boot__title {
+  margin: 0 0 clamp(16px, 2.5vh, 24px);
+  font-family: "Michroma", "Sora", system-ui, sans-serif;
+  font-size: clamp(18px, 2.2vw + 0.4rem, 36px);
+  font-weight: 400;
+  line-height: 1.25;
+  animation: glass-boot-fade 0.9s ease 0.15s both;
+}
+
+/* Brushed chrome logotype */
+.glass-boot__title-chrome {
+  position: relative;
+  display: inline-block;
+  text-transform: uppercase;
+  letter-spacing: clamp(0.12em, 0.18em, 0.22em);
+  filter:
+    drop-shadow(0 1px 0 rgba(255, 255, 255, 0.45))
+    drop-shadow(0 3px 10px rgba(0, 8, 18, 0.85))
+    drop-shadow(0 0 36px rgba(56, 225, 255, 0.38));
+}
+
+.glass-boot__title-wordmark,
+.glass-boot__title-rest {
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+.glass-boot__title-wordmark {
+  /* Michroma + 0.14em from .iivo-wordmark; chrome gradient below */
+  background-image: linear-gradient(
+    168deg,
+    #ffffff 0%,
+    #d4f0ff 12%,
+    #7eb8e0 28%,
+    #ffffff 44%,
+    #38d8f8 58%,
+    #b8ecff 74%,
+    #ffffff 100%
+  );
+}
+
+.glass-boot__title-rest {
+  font-family: var(--iivo-font-display);
+  font-weight: 500;
+  letter-spacing: clamp(0.12em, 0.18em, 0.22em);
+  background-image: linear-gradient(
+    175deg,
+    #ffffff 0%,
+    rgba(200, 235, 255, 0.95) 20%,
+    rgba(120, 175, 220, 0.92) 40%,
+    rgba(220, 245, 255, 0.98) 55%,
+    rgba(100, 185, 235, 0.9) 72%,
+    #f0faff 100%
+  );
+}
+
+@supports not ((-webkit-background-clip: text) or (background-clip: text)) {
+  .glass-boot__title-wordmark,
+  .glass-boot__title-rest {
+    -webkit-text-fill-color: rgba(248, 252, 255, 0.98);
+    color: rgba(248, 252, 255, 0.98);
+    background: none;
+  }
+}
+
+.glass-boot__loading-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(14px, 2vh, 18px);
+  width: min(82%, 540px);
+  margin-bottom: clamp(4px, 0.8vh, 8px);
+  animation: glass-boot-fade 0.9s ease 0.28s both;
+}
+
+.glass-boot__loading-block .glass-energy-progress {
+  width: 100%;
+}
+
+.glass-boot__loading-label {
+  font-family: var(--iivo-font-display);
+  font-size: clamp(11px, 1.1vw + 0.2rem, 15px);
+  font-weight: 500;
+  letter-spacing: 0.38em;
+  text-indent: 0.38em;
+  text-transform: uppercase;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.96) 0%,
+    rgba(200, 230, 255, 0.88) 55%,
+    rgba(140, 190, 230, 0.82) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.2)) drop-shadow(0 0 14px rgba(56, 225, 255, 0.18));
+}
+
+@supports not ((-webkit-background-clip: text) or (background-clip: text)) {
+  .glass-boot__loading-label {
+    -webkit-text-fill-color: rgba(220, 240, 255, 0.92);
+    color: rgba(220, 240, 255, 0.92);
+    background: none;
+    filter: none;
+  }
+}
+
+.glass-boot__ellipsis::after {
+  content: "";
+  animation: glass-boot-ellipsis 1.5s steps(4, end) infinite;
+}
+
+@keyframes glass-boot-ellipsis {
+  0% {
+    content: "";
+  }
+  25% {
+    content: ".";
+  }
+  50% {
+    content: "..";
+  }
+  75% {
+    content: "...";
+  }
+}
+
+.glass-boot__subtitle {
+  margin: clamp(16px, 2.4vh, 24px) 0 0;
+  padding: 0;
+  text-align: center;
+  animation: glass-boot-fade 0.9s ease 0.42s both;
+}
+
+.glass-boot__subtitle-inner {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(12px, 2vw, 18px);
+  max-width: min(92vw, 520px);
+  font-family: var(--iivo-font-display);
+  font-size: clamp(9px, 0.8vw + 0.18rem, 11px);
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  line-height: 1.2;
+  white-space: nowrap;
+  writing-mode: horizontal-tb;
+  background: linear-gradient(
+    180deg,
+    rgba(220, 240, 255, 0.92) 0%,
+    rgba(170, 210, 245, 0.82) 50%,
+    rgba(110, 165, 210, 0.78) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  filter: drop-shadow(0 0 10px rgba(56, 225, 255, 0.15));
+}
+
+.glass-boot__subtitle-inner::before,
+.glass-boot__subtitle-inner::after {
+  content: "";
+  flex: 0 0 clamp(28px, 7vw, 64px);
+  height: 1px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(56, 225, 255, 0.35) 35%,
+    rgba(180, 230, 255, 0.55) 50%,
+    rgba(56, 225, 255, 0.35) 65%,
+    transparent
+  );
+  box-shadow: 0 0 8px rgba(56, 225, 255, 0.18);
+}
+
+@supports not ((-webkit-background-clip: text) or (background-clip: text)) {
+  .glass-boot__subtitle-inner {
+    -webkit-text-fill-color: rgba(180, 215, 245, 0.85);
+    color: rgba(180, 215, 245, 0.85);
+    background: none;
+    filter: none;
+  }
+}
+
+@keyframes glass-boot-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glass-boot {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

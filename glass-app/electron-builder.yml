@@ -1,0 +1,76 @@
+appId: com.iivo.glass
+productName: IIVO Glass
+copyright: Copyright © 2026 Christopher Miles / IIVO
+
+# Build the bundles with electron-vite first (npm run build), then electron-builder
+# only packages the compiled output — never the TS source or tests.
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - out/**
+  - package.json
+
+# node-pty is a native module — must rebuild for current Electron ABI.
+npmRebuild: true
+asar: true
+
+# node-pty and better-sqlite3 ship .node binaries that cannot be inside an asar archive.
+asarUnpack:
+  - "**/node_modules/node-pty/**"
+  - "**/node_modules/better-sqlite3/**"
+  - "**/node_modules/bindings/**"
+  - "**/node_modules/file-uri-to-path/**"
+  - "**/node_modules/sqlite-vec/**"
+  - "**/node_modules/onnxruntime-node/**"
+  - "**/node_modules/fastembed/**"
+
+extraResources:
+  - from: glass-update-manifest.json
+    to: glass-update-manifest.json
+  # Pre-compiled universal binary for one-click BlackHole + Multi-Output Device setup.
+  # Built by: npm run build:audio-helper
+  - from: resources/bin/iivo-audio-setup
+    to: bin/iivo-audio-setup
+
+mac:
+  category: public.app-category.productivity
+  # Bundle id com.iivo.glass + display name IIVO Glass — required for macOS Privacy lists.
+  # Keep in sync with build/mac-extend-info.yml (verified by scripts/verify-mac-package-metadata.mjs).
+  extendInfo:
+    CFBundleName: IIVO Glass
+    CFBundleDisplayName: IIVO Glass
+    NSMicrophoneUsageDescription: >-
+      IIVO Glass uses your microphone only when you tap the microphone button on the
+      command bar to dictate a question.
+    NSScreenCaptureUsageDescription: >-
+      IIVO Glass captures your screen only when you use Capture or ask a visual
+      question that needs to see your display.
+    NSAudioCaptureUsageDescription: >-
+      IIVO Glass captures system audio only when you choose System Audio and start
+      listening from the command bar.
+    NSCameraUsageDescription: >-
+      IIVO Glass does not use the camera. This description is required by macOS for
+      some media capture APIs.
+  target:
+    - dmg
+    - zip
+  # v1 local testing: produce an UNSIGNED development build.
+  # Do not require an Apple Developer ID yet.
+  identity: null
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  artifactName: ${productName}-${version}-${arch}-${os}.${ext}
+  icon: build/icon.icns
+
+dmg:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  title: ${productName} ${version}
+
+publish:
+  provider: github
+  owner: chrismls101-maker
+  repo: ai-council-runner
+  vPrefixedTagName: true
+  releaseType: release

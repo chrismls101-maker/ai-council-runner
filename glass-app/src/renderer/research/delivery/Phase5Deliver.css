@@ -1,0 +1,429 @@
+/* Phase 5 Deliver -- reading surface that emerges after the torrent */
+
+.phase5-panel {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 1.2s ease;
+  overflow: hidden;
+  background: var(--research-panel-solid);
+}
+
+.phase5-panel.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.phase5-scroll {
+  height: 100%;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.phase5-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.phase5-inner {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 64px 40px 120px;
+}
+
+/* SCQA Frame */
+.phase5-eyebrow {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: rgba(96, 165, 250, 0.5);
+  margin-bottom: 10px;
+}
+
+.phase5-question {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 24px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.6);
+  letter-spacing: -0.02em;
+  line-height: 1.4;
+  margin-bottom: 52px;
+  padding-bottom: 32px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Section headers */
+.phase5-section-head {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: rgba(96, 165, 250, 0.55);
+  margin-bottom: 20px;
+  margin-top: 48px;
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  text-shadow: 0 0 14px rgba(96, 165, 250, 0.3);
+}
+
+.phase5-section-head:first-of-type {
+  margin-top: 0;
+}
+
+.section-sub {
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  color: rgba(255, 255, 255, 0.2);
+  text-transform: none;
+  text-shadow: none;
+}
+
+/* Key Judgments */
+.phase5-judgments {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.judgment-row {
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+  padding: 16px 18px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+}
+
+.judgment-row.in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.judgment-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.judgment-tag {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.judgment-confidence {
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.judgment-sources {
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.2);
+  text-transform: uppercase;
+}
+
+.judgment-text {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.7;
+  color: rgba(255, 255, 255, 0.78);
+  letter-spacing: -0.005em;
+}
+
+.judgment-likelihood {
+  color: rgba(255, 255, 255, 0.38);
+  font-style: italic;
+}
+
+/* Options Scorecard */
+.phase5-options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 700px) {
+  .phase5-options {
+    grid-template-columns: 1fr;
+  }
+}
+
+.option-card {
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.55s ease, transform 0.55s ease;
+  padding: 18px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  position: relative;
+}
+
+.option-card.in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.option-card.recommended {
+  border-color: rgba(96, 165, 250, 0.22);
+  background: rgba(96, 165, 250, 0.04);
+}
+
+.option-rec-badge {
+  position: absolute;
+  top: -1px;
+  right: 14px;
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(96, 165, 250, 0.8);
+  background: rgba(8, 10, 18, 0.9);
+  padding: 3px 8px;
+  border-radius: 0 0 6px 6px;
+  border: 1px solid rgba(96, 165, 250, 0.2);
+  border-top: none;
+}
+
+.option-id {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: rgba(255, 255, 255, 0.2);
+}
+
+.option-name {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.88);
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+
+.option-desc {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 12px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.45);
+  letter-spacing: -0.005em;
+}
+
+.option-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.option-metric {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.metric-label {
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.25);
+}
+
+.metric-value {
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.option-why {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 11px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.38);
+}
+
+.option-reverse {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 10px;
+  line-height: 1.5;
+  color: rgba(251, 191, 36, 0.45);
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  padding-top: 10px;
+}
+
+.reverse-label {
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+/* Bottom sections */
+.phase5-bottom {
+  margin-top: 36px;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.6s ease 0.2s, transform 0.6s ease 0.2s;
+}
+
+.phase5-bottom.in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Toggle buttons */
+.section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.35);
+  padding: 8px 0;
+  width: 100%;
+  text-align: left;
+  transition: color 0.2s ease;
+}
+
+.section-toggle:hover {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.toggle-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.toggle-dot.signal { background: var(--r-green, #22c55e); }
+.toggle-dot.warn   { background: var(--r-amber, #fbbf24); }
+
+.toggle-arrow {
+  margin-left: auto;
+  font-size: 8px;
+  opacity: 0.4;
+}
+
+/* Contradiction cards */
+.contradiction-section {
+  margin-bottom: 16px;
+}
+
+.contradiction-card {
+  margin-top: 10px;
+  padding: 16px;
+  background: rgba(251, 191, 36, 0.04);
+  border: 1px solid rgba(251, 191, 36, 0.12);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.conflict-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.conflict-vs {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.2);
+  padding-top: 14px;
+  text-align: center;
+}
+
+.conflict-source {
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(251, 191, 36, 0.5);
+  margin-bottom: 6px;
+}
+
+.conflict-text {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.55);
+  font-style: italic;
+}
+
+.conflict-type {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(251, 191, 36, 0.4);
+}
+
+.conflict-resolution {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 12px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* Audit trail */
+.audit-section {
+  margin-top: 8px;
+}
+
+.audit-grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.audit-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+}
+
+.audit-val {
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: rgba(96, 165, 250, 0.7);
+  -webkit-font-smoothing: antialiased;
+}
+
+.audit-label {
+  font-size: 8px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.2);
+}

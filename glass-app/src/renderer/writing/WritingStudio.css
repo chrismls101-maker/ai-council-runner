@@ -1,0 +1,580 @@
+/**
+ * Writing Studio — full-screen glass workspace (matches Research / Code Analyst shell).
+ */
+.writing-studio {
+  --ws-accent: #fbbf24;
+  --ws-accent-soft: rgba(251, 191, 36, 0.14);
+  --ws-accent-border: rgba(251, 191, 36, 0.32);
+  --workspace-panel-fallback: rgb(12, 14, 20);
+}
+
+.writing-studio--light {
+  --workspace-panel-frost-start: rgba(255, 255, 255, 0.10);
+  --workspace-panel-frost-end: rgba(255, 255, 255, 0.04);
+  --workspace-panel-base: rgba(12, 14, 20, 0.88);
+  --workspace-panel-blur: 14px;
+  --workspace-panel-saturate: 150%;
+}
+
+.writing-studio--dark {
+  --workspace-panel-frost-start: rgba(255, 255, 255, 0.12);
+  --workspace-panel-frost-end: rgba(255, 255, 255, 0.05);
+  --workspace-panel-base: rgb(12, 14, 20);
+  --workspace-panel-blur: 0px;
+  --workspace-panel-saturate: 100%;
+}
+
+.writing-studio--light,
+.writing-studio--dark {
+  --workspace-panel-solid:
+    linear-gradient(160deg, var(--workspace-panel-frost-start) 0%, var(--workspace-panel-frost-end) 100%),
+    var(--workspace-panel-base);
+}
+
+.writing-studio {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: var(--builder-strip-top-from-bottom, 52px);
+  z-index: 200;
+  overflow: hidden;
+  pointer-events: auto;
+  background: transparent;
+  -webkit-font-smoothing: antialiased;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.writing-studio--hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* Sidebar overlays content — do not push the main column */
+
+.writing-studio__glass {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: var(--workspace-panel-solid);
+  backdrop-filter: blur(var(--workspace-panel-blur)) saturate(var(--workspace-panel-saturate));
+  -webkit-backdrop-filter: blur(var(--workspace-panel-blur)) saturate(var(--workspace-panel-saturate));
+}
+
+.writing-studio--dark .writing-studio__glass {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Chrome */
+.writing-chrome {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 52px;
+  padding: 0 16px 0 12px;
+  pointer-events: auto;
+}
+
+.writing-chrome__left {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.writing-chrome__right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.writing-history-toggle,
+.writing-new-btn {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.writing-new-btn {
+  color: rgba(251, 191, 36, 0.95);
+  border-color: var(--ws-accent-border);
+  background: var(--ws-accent-soft);
+}
+
+.writing-tabs {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.writing-tabs::-webkit-scrollbar { display: none; }
+
+.writing-tab {
+  flex-shrink: 0;
+  max-width: 180px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.writing-tab--active {
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+/* Sidebar */
+.writing-sidebar {
+  position: absolute;
+  top: 52px;
+  left: 0;
+  bottom: 0;
+  z-index: 45;
+  width: 280px;
+  display: flex;
+  flex-direction: column;
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    rgba(8, 10, 16, 0.92);
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  transform: translateX(-100%);
+  transition: transform 0.22s ease;
+  pointer-events: auto;
+}
+
+.writing-sidebar--open { transform: translateX(0); }
+
+.writing-sidebar__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.writing-sidebar__title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.writing-sidebar__list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.writing-sidebar__item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 32px 10px 12px;
+  margin-bottom: 4px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.writing-sidebar__item--active {
+  background: var(--ws-accent-soft);
+  border-color: var(--ws-accent-border);
+}
+
+.writing-sidebar__item-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.writing-sidebar__item-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.38);
+}
+
+.writing-sidebar__item-delete {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  opacity: 0;
+  color: rgba(255, 255, 255, 0.28);
+  cursor: pointer;
+}
+
+.writing-sidebar__item:hover .writing-sidebar__item-delete,
+.writing-sidebar__item--active .writing-sidebar__item-delete {
+  opacity: 1;
+}
+
+/* Intro */
+.writing-intro {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  padding: 52px 20px 20px;
+}
+
+.writing-intro--out {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.6s ease;
+}
+
+.writing-intro-inner {
+  width: 640px;
+  max-width: 100%;
+  padding: 32px 40px;
+  pointer-events: auto;
+  text-align: center;
+}
+
+.ws-chip {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: rgba(251, 191, 36, 0.85);
+  margin-bottom: 14px;
+}
+
+.ws-label {
+  font-size: 22px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+  margin-bottom: 18px;
+  letter-spacing: -0.02em;
+}
+
+.ws-option-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+
+.ws-option-label {
+  width: 100%;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.35);
+  margin-bottom: 4px;
+}
+
+.ws-chip-btn {
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 11px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+
+.ws-chip-btn--active {
+  border-color: var(--ws-accent-border);
+  background: var(--ws-accent-soft);
+  color: rgba(251, 191, 36, 0.95);
+}
+
+.ws-input {
+  width: 100%;
+  min-height: 110px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.28);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 14px;
+  line-height: 1.55;
+  resize: vertical;
+  outline: none;
+  margin-bottom: 16px;
+}
+
+.ws-input:focus {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(0, 0, 0, 0.36);
+}
+
+.ws-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+
+.ws-submit {
+  padding: 10px 22px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.95), rgba(245, 158, 11, 0.88));
+  color: #1a1200;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ws-submit:disabled { opacity: 0.4; cursor: default; }
+
+.ws-cancel {
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.ws-hint {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.32);
+}
+
+.ws-brief {
+  font-size: 18px;
+  color: rgba(255, 255, 255, 0.88);
+  margin-bottom: 12px;
+  line-height: 1.4;
+}
+
+.ws-status { font-size: 13px; color: rgba(255, 255, 255, 0.5); margin-bottom: 14px; }
+
+.ws-bar {
+  width: 200px;
+  height: 3px;
+  margin: 0 auto;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.ws-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, rgba(251, 191, 36, 0.7), rgba(34, 197, 94, 0.55));
+  transition: width 0.3s ease;
+}
+
+/* Stream layout */
+.writing-content {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  padding-top: 52px;
+}
+
+.writing-topbar {
+  flex-shrink: 0;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 22px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.writing-badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(251, 191, 36, 0.95);
+  background: var(--ws-accent-soft);
+  border: 1px solid var(--ws-accent-border);
+  border-radius: 20px;
+  padding: 5px 11px;
+}
+
+.writing-task {
+  flex: 1;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.62);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.writing-phase {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.38);
+}
+
+.writing-action-btn {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.writing-zones {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  padding: 8px 22px 0;
+}
+
+.writing-zone-label {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.28);
+}
+
+.writing-columns {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  margin-top: 8px;
+}
+
+.writing-progress {
+  flex-shrink: 0;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.writing-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, rgba(251, 191, 36, 0.55), rgba(34, 197, 94, 0.5));
+  transition: width 1s ease;
+}
+
+/* Deliver — reading experience */
+.writing-deliver {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  overflow-y: auto;
+  padding: 28px 32px 40px;
+  background:
+    linear-gradient(to bottom, rgba(12, 14, 20, 0.75) 0%, rgba(12, 14, 20, 0.94) 16%),
+    var(--workspace-panel-base);
+  pointer-events: auto;
+}
+
+.writing-deliver__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  max-width: 680px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.writing-deliver__stat {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(251, 191, 36, 0.8);
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--ws-accent-border);
+  background: var(--ws-accent-soft);
+}
+
+.writing-deliver__path {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.42);
+  font-family: "JetBrains Mono", monospace;
+}
+
+.writing-deliver__body {
+  max-width: 680px;
+  margin: 0 auto;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 16px;
+  line-height: 1.75;
+  font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+}
+
+.writing-deliver__body h1 {
+  font-size: 28px;
+  font-weight: 600;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  margin: 0 0 20px;
+  letter-spacing: -0.02em;
+}
+
+.writing-deliver__body h2 {
+  font-size: 20px;
+  font-weight: 600;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  margin: 28px 0 12px;
+  color: rgba(251, 191, 36, 0.9);
+}
+
+.writing-deliver__body h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 20px 0 8px;
+}
+
+.writing-deliver__body p {
+  margin: 0 0 16px;
+}
+
+.writing-studio .torrent-column {
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.writing-studio .torrent-column:last-child {
+  border-right: none;
+}

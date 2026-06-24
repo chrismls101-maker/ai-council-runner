@@ -1,0 +1,769 @@
+.glass-dashboard-shell {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: var(--builder-strip-top-from-bottom, 52px);
+  z-index: 200;
+  overflow: hidden;
+  pointer-events: auto;
+  padding: 0 4px 2px;
+  box-sizing: border-box;
+}
+
+.glass-dashboard-shell--hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.glass-dashboard-shell .glass-dashboard {
+  border-radius: 0 0 10px 10px;
+}
+
+.glass-dashboard {
+  --gd-bg: rgba(10, 10, 14, 0.98);
+  --gd-border: rgba(255, 255, 255, 0.72);
+  --gd-text: rgba(255, 255, 255, 0.94);
+  --gd-muted: rgba(255, 255, 255, 0.48);
+  --gd-accent: rgba(120, 170, 255, 0.95);
+  --gd-council-width: 300px;
+  --gd-council-rail-width: 44px;
+
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--gd-bg);
+  color: var(--gd-text);
+  font-family: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  border: 1px solid var(--gd-border);
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.28),
+    0 0 14px rgba(255, 255, 255, 0.22),
+    0 0 28px rgba(255, 255, 255, 0.1),
+    0 0 48px rgba(255, 255, 255, 0.05),
+    inset 0 0 24px rgba(255, 255, 255, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  animation: glass-dashboard-led-pulse 4s ease-in-out infinite;
+}
+
+@keyframes glass-dashboard-led-pulse {
+  0%,
+  100% {
+    border-color: rgba(255, 255, 255, 0.62);
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.24),
+      0 0 12px rgba(255, 255, 255, 0.18),
+      0 0 24px rgba(255, 255, 255, 0.08),
+      0 0 40px rgba(255, 255, 255, 0.04),
+      inset 0 0 20px rgba(255, 255, 255, 0.03),
+      inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  }
+  50% {
+    border-color: rgba(255, 255, 255, 0.88);
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.38),
+      0 0 18px rgba(255, 255, 255, 0.32),
+      0 0 36px rgba(255, 255, 255, 0.14),
+      0 0 56px rgba(255, 255, 255, 0.08),
+      inset 0 0 28px rgba(255, 255, 255, 0.06),
+      inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  }
+}
+
+.glass-dashboard__titlebar {
+  flex-shrink: 0;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px 0 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.glass-dashboard-shell .glass-dashboard__titlebar {
+  -webkit-app-region: no-drag;
+}
+
+.glass-dashboard__title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.glass-dashboard__titlebar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.glass-dashboard__settings-btn {
+  -webkit-app-region: no-drag;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.78);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.glass-dashboard__settings-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.32);
+  color: rgba(255, 255, 255, 0.98);
+}
+
+.glass-dashboard__close {
+  -webkit-app-region: no-drag;
+  width: 42px;
+  height: 42px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.glass-dashboard__close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.glass-dashboard__pulse {
+  flex-shrink: 0;
+  height: 52px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 0 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 12px;
+}
+
+.glass-dashboard__pulse-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.glass-dashboard__pulse-center {
+  text-align: center;
+  color: var(--gd-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.glass-dashboard__pulse-right {
+  text-align: right;
+  color: var(--gd-accent);
+  font-weight: 500;
+}
+
+.glass-dashboard__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.glass-dashboard__dot--ok {
+  background: #3dd68c;
+  box-shadow: 0 0 6px rgba(61, 214, 140, 0.65);
+}
+
+.glass-dashboard__dot--error {
+  background: #ff6b6b;
+  box-shadow: 0 0 6px rgba(255, 107, 107, 0.55);
+}
+
+.glass-dashboard__dot--muted {
+  background: rgba(255, 255, 255, 0.28);
+  box-shadow: none;
+}
+
+.glass-dashboard__provider-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.62);
+  margin-right: 6px;
+}
+
+.glass-dashboard__provider-label--muted {
+  color: rgba(255, 255, 255, 0.38);
+}
+
+.glass-dashboard__body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr var(--gd-council-width);
+  transition: grid-template-columns 0.28s cubic-bezier(0.22, 0.8, 0.22, 1);
+}
+
+.glass-dashboard__body--council-collapsed {
+  grid-template-columns: 1fr var(--gd-council-rail-width);
+}
+
+.glass-dashboard__main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  gap: 18px;
+}
+
+.glass-dashboard__section-label {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.38);
+}
+
+.glass-dashboard__section-label--rail {
+  margin: 0;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  letter-spacing: 0.1em;
+  flex: 1;
+  text-align: center;
+}
+
+.glass-dashboard__chips {
+  display: flex;
+  gap: 8px;
+}
+
+.glass-dashboard__chip {
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.glass-dashboard__sessions {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.glass-dashboard__empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  opacity: 0.4;
+  font-size: 13px;
+  color: var(--gd-muted);
+}
+
+.glass-dashboard__empty--compact {
+  flex: 0;
+  padding: 24px 0;
+}
+
+.glass-dashboard__empty-icon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.glass-dashboard__session-placeholders {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: auto;
+  opacity: 0.18;
+}
+
+.glass-dashboard__session-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.glass-dashboard__session-item {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-dashboard__session-item--clickable {
+  cursor: pointer;
+}
+
+.glass-dashboard__session-item--clickable:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.glass-dashboard__session-detail {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.glass-dashboard__back {
+  align-self: flex-start;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.glass-dashboard__back:hover {
+  opacity: 1;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.glass-dashboard__loading {
+  margin: 0;
+  font-size: 13px;
+  color: var(--gd-muted);
+}
+
+.glass-dashboard__message-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.glass-dashboard__message {
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.glass-dashboard__message-role {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.glass-dashboard__message--user .glass-dashboard__message-role {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.glass-dashboard__message--assistant .glass-dashboard__message-role {
+  color: #7dd3fc;
+}
+
+.glass-dashboard__message-content {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.glass-dashboard__memory {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.glass-dashboard__context-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.glass-dashboard__context-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  font-size: 12px;
+}
+
+.glass-dashboard__context-item:hover .glass-dashboard__context-delete {
+  opacity: 1;
+}
+
+.glass-dashboard__context-key {
+  opacity: 0.5;
+  min-width: 72px;
+  text-transform: capitalize;
+  flex-shrink: 0;
+}
+
+.glass-dashboard__context-value {
+  flex: 1;
+  opacity: 0.9;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.glass-dashboard__context-source--inferred {
+  opacity: 0.4;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.glass-dashboard__context-source--explicit {
+  color: #7dd3fc;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.glass-dashboard__context-delete {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.glass-dashboard__context-delete:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.glass-dashboard__session-time {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.42);
+  white-space: nowrap;
+}
+
+.glass-dashboard__session-badge {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(120, 170, 255, 0.15);
+  color: rgba(180, 210, 255, 0.9);
+  white-space: nowrap;
+}
+
+.glass-dashboard__session-title {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.82);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.glass-dashboard__session-row {
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.glass-dashboard__invoke {
+  flex-shrink: 0;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.glass-dashboard__invoke-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--gd-text);
+  font-size: 14px;
+  padding: 8px 12px;
+  outline: none;
+}
+
+.glass-dashboard__invoke-input::placeholder {
+  color: rgba(255, 255, 255, 0.32);
+}
+
+.glass-dashboard__invoke-send {
+  flex-shrink: 0;
+  border: none;
+  border-radius: 999px;
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #0c1018;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.glass-dashboard__invoke-send:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.glass-dashboard__agents {
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 18px 16px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+  transition: padding 0.28s cubic-bezier(0.22, 0.8, 0.22, 1);
+}
+
+.glass-dashboard__agents--collapsed {
+  padding: 12px 6px;
+  align-items: center;
+}
+
+.glass-dashboard__agents-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+  width: 100%;
+}
+
+.glass-dashboard__agents--collapsed .glass-dashboard__agents-header {
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  margin-bottom: 0;
+  flex: 0 0 auto;
+}
+
+.glass-dashboard__agents--collapsed .glass-dashboard__section-label--rail {
+  flex: 0;
+}
+
+.glass-dashboard__agents--collapsed .glass-dashboard__agents-collapse {
+  order: -1;
+}
+
+.glass-dashboard__agents-collapse {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0.5px solid rgba(255, 255, 255, 0.16);
+  border-top-color: rgba(255, 255, 255, 0.28);
+  border-bottom-color: rgba(0, 0, 0, 0.32);
+  border-radius: 8px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.1) 0%,
+    rgba(255, 255, 255, 0.03) 52%,
+    rgba(0, 0, 0, 0.08) 100%
+  );
+  color: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.45),
+    0 2px 4px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.14);
+  transition:
+    color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.12s ease;
+}
+
+.glass-dashboard__agents-collapse:hover {
+  color: rgba(255, 255, 255, 0.95);
+  border-color: rgba(255, 255, 255, 0.28);
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.45),
+    0 3px 8px rgba(0, 0, 0, 0.28),
+    0 0 12px rgba(255, 255, 255, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+}
+
+.glass-dashboard__agents-collapse:active {
+  transform: translateY(1px);
+  box-shadow:
+    0 0 2px rgba(0, 0, 0, 0.4),
+    inset 0 2px 4px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.glass-dashboard__council-rail {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.glass-dashboard__council-step {
+  position: relative;
+  padding-left: 4px;
+}
+
+.glass-dashboard__council-line {
+  position: absolute;
+  left: 11px;
+  top: -14px;
+  width: 2px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.glass-dashboard__council-step--done .glass-dashboard__council-line {
+  background: rgba(61, 214, 140, 0.45);
+}
+
+.glass-dashboard__council-step--active .glass-dashboard__council-line {
+  background: rgba(120, 170, 255, 0.5);
+}
+
+.glass-dashboard__council-node {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 6px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+.glass-dashboard__council-step--done .glass-dashboard__council-node:not(:disabled) {
+  cursor: pointer;
+}
+
+.glass-dashboard__council-step--done .glass-dashboard__council-node:not(:disabled):hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.glass-dashboard__council-marker {
+  width: 18px;
+  text-align: center;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.glass-dashboard__council-step--active .glass-dashboard__council-marker {
+  color: var(--gd-accent);
+  animation: glass-dashboard-pulse 1.4s ease-in-out infinite;
+}
+
+.glass-dashboard__council-step--done .glass-dashboard__council-marker {
+  color: #3dd68c;
+}
+
+.glass-dashboard__council-step--pending .glass-dashboard__council-marker {
+  color: rgba(255, 255, 255, 0.28);
+}
+
+.glass-dashboard__council-step--failed .glass-dashboard__council-marker {
+  color: #f87171;
+}
+
+.glass-dashboard__council-step--failed .glass-dashboard__council-line {
+  background: rgba(248, 113, 113, 0.45);
+}
+
+.glass-dashboard__council-name {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.glass-dashboard__council-output {
+  margin: 4px 0 12px 28px;
+  padding: 10px;
+  max-height: 180px;
+  overflow: auto;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+@keyframes glass-dashboard-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (max-width: 720px) {
+  .glass-dashboard__body,
+  .glass-dashboard__body--council-collapsed {
+    grid-template-columns: 1fr;
+  }
+
+  .glass-dashboard__agents,
+  .glass-dashboard__agents--collapsed {
+    border-left: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 16px;
+    align-items: stretch;
+  }
+
+  .glass-dashboard__agents--collapsed .glass-dashboard__agents-header {
+    flex-direction: row;
+  }
+
+  .glass-dashboard__section-label--rail {
+    writing-mode: horizontal-tb;
+    transform: none;
+  }
+}

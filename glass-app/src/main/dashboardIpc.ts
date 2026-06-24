@@ -1,0 +1,86 @@
+/**
+ * Dashboard IPC — read session history from SQLite.
+ */
+
+import { ipcMain, type WebContents } from "electron";
+import { IPC } from "../shared/ipc.ts";
+import { getAgentRunsByCorrelation, getLastCouncilRun } from "./agentRunStore.ts";
+import {
+  getRecentSessions,
+  getSessionMessages,
+  getUserContext,
+  deleteUserContextKey,
+} from "./sessionHistoryStore.ts";
+
+let isDashboardIpcSender: (sender: WebContents) => boolean = () => false;
+
+export function setDashboardIpcAuth(check: (sender: WebContents) => boolean): void {
+  isDashboardIpcSender = check;
+}
+
+export { isDashboardIpcSender };
+
+export function registerDashboardIpc(): void {
+  ipcMain.handle(IPC.getRecentSessions, (event) => {
+    if (!isDashboardIpcSender(event.sender)) return [];
+    try {
+      return getRecentSessions(20);
+    } catch (err) {
+      console.error("[dashboardIpc] getRecentSessions:", err);
+      return [];
+    }
+  });
+
+  ipcMain.handle(IPC.getSessionMessages, (event, sessionId: unknown) => {
+    if (!isDashboardIpcSender(event.sender)) return [];
+    if (typeof sessionId !== "string" || !sessionId.trim()) return [];
+    try {
+      return getSessionMessages(sessionId.trim());
+    } catch (err) {
+      console.error("[dashboardIpc] getSessionMessages:", err);
+      return [];
+    }
+  });
+
+  ipcMain.handle(IPC.getLastCouncilRun, (event) => {
+    if (!isDashboardIpcSender(event.sender)) return null;
+    try {
+      return getLastCouncilRun();
+    } catch (err) {
+      console.error("[dashboardIpc] getLastCouncilRun:", err);
+      return null;
+    }
+  });
+
+  ipcMain.handle(IPC.getAgentRunsByCorrelation, (event, correlationId: unknown) => {
+    if (!isDashboardIpcSender(event.sender)) return [];
+    if (typeof correlationId !== "string" || !correlationId.trim()) return [];
+    try {
+      return getAgentRunsByCorrelation(correlationId.trim());
+    } catch (err) {
+      console.error("[dashboardIpc] getAgentRunsByCorrelation:", err);
+      return [];
+    }
+  });
+
+  ipcMain.handle(IPC.getUserContext, (event) => {
+    if (!isDashboardIpcSender(event.sender)) return [];
+    try {
+      return getUserContext();
+    } catch (err) {
+      console.error("[dashboardIpc] getUserContext:", err);
+      return [];
+    }
+  });
+
+  ipcMain.handle(IPC.deleteUserContextKey, (event, key: unknown) => {
+    if (!isDashboardIpcSender(event.sender)) return { ok: false };
+    if (typeof key !== "string" || !key.trim()) return { ok: false };
+    try {
+      return { ok: deleteUserContextKey(key.trim()) };
+    } catch (err) {
+      console.error("[dashboardIpc] deleteUserContextKey:", err);
+      return { ok: false };
+    }
+  });
+}
