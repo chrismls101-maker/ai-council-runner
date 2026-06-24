@@ -26,6 +26,7 @@ function manifestCandidates(): string[] {
   const repoRoot = path.resolve(__dirname, "../../..");
   return [
     fromEnv,
+    path.join(repoRoot, "glass-app/glass-update-manifest.json"),
     path.join(repoRoot, "desktop-glass/glass-update-manifest.json"),
     path.join(repoRoot, "glass-update-manifest.json"),
   ].filter(Boolean) as string[];

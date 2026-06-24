@@ -6,7 +6,7 @@ COPY tsconfig.json tsconfig.server.json vite.config.ts index.html ./
 COPY public ./public
 COPY prototypes ./prototypes
 COPY src ./src
-COPY desktop-glass/glass-update-manifest.json ./desktop-glass/glass-update-manifest.json
+COPY glass-app/glass-update-manifest.json ./glass-app/glass-update-manifest.json
 RUN npm run build
 
 FROM node:22-alpine
@@ -15,6 +15,7 @@ ENV NODE_ENV=production
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/glass-app/glass-update-manifest.json ./glass-app/glass-update-manifest.json
 EXPOSE 3001
 
 # Railway / Docker health check — container is healthy when /api/health returns 200.

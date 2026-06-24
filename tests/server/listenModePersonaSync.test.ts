@@ -10,7 +10,7 @@ import {
   getListenModePersonaCore as desktopCore,
   getListenModePersonaHardRules as desktopRules,
   LISTEN_MODE_PERSONA_NAME as desktopName,
-} from "../../desktop-glass/src/shared/listenModePersona.ts";
+} from "../../glass-app/src/shared/listenModePersona.ts";
 
 test("desktop and server persona names match", () => {
   assert.equal(desktopName, LISTEN_MODE_PERSONA_NAME);

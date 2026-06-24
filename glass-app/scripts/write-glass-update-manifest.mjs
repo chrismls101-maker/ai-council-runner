@@ -98,7 +98,7 @@ const manifest = {
 
 const targets = [
   path.join(glassRoot, "glass-update-manifest.json"),
-  path.join(repoRoot, "desktop-glass/glass-update-manifest.json"),
+  path.join(repoRoot, "glass-app/glass-update-manifest.json"),
 ];
 
 for (const target of targets) {
