@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState, type JSX } from "react";
 
+const INVESTOR_CURL = `curl -H "Authorization: Bearer YOUR_TOKEN" https://iivo.ai/api/landing/glass-browse/stats`;
+
 type FeatureFlagKey =
   | "overlayDemoEnabled"
   | "terminalAutoFixEnabled"
@@ -51,6 +53,7 @@ export default function FounderDashboard(): JSX.Element {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState<FeatureFlagKey | null>(null);
+  const [curlCopied, setCurlCopied] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -103,6 +106,12 @@ export default function FounderDashboard(): JSX.Element {
     } finally {
       setSaving(null);
     }
+  }
+
+  async function copyInvestorCurl(): Promise<void> {
+    await navigator.clipboard.writeText(INVESTOR_CURL);
+    setCurlCopied(true);
+    setTimeout(() => setCurlCopied(false), 2000);
   }
 
   if (error && !overview) {
@@ -201,6 +210,42 @@ export default function FounderDashboard(): JSX.Element {
       </section>
 
       <section className="founder-section">
+        <h2 className="account-section__title">Investor &amp; ops tools</h2>
+        <p className="account-section__desc">
+          The funnel numbers above are live — you do not need a token while signed in here.
+          <code className="founder-inline-code">GLASS_BROWSE_STATS_TOKEN</code> is only for
+          terminal curl and weekly snapshots when you are not in this dashboard.
+        </p>
+        <div className="founder-card founder-card--wide">
+          <p className="founder-card__label">Investor curl (replace YOUR_TOKEN)</p>
+          <code className="founder-curl">{INVESTOR_CURL}</code>
+          <button
+            type="button"
+            className="founder-copy-btn"
+            onClick={() => { void copyInvestorCurl(); }}
+          >
+            {curlCopied ? "Copied!" : "Copy curl template"}
+          </button>
+        </div>
+        <ul className="founder-ops-list">
+          <li>
+            <strong>Railway:</strong> set <code>GLASS_BROWSE_STATS_TOKEN</code> once
+            (<code>openssl rand -hex 24</code>). Store the value in your password manager — it is
+            not shown in this UI.
+          </li>
+          <li>
+            <strong>Weekly snapshot:</strong>{" "}
+            <code>GLASS_BROWSE_STATS_TOKEN=… npm run glass-browse:stats-snapshot</code> → saves to{" "}
+            <code>data/landing/snapshots/</code> for trend lines.
+          </li>
+          <li>
+            <strong>Glass desktop:</strong> Settings → Founder tab shows 24h enters/commands;
+            full funnel totals stay here on iivo.ai.
+          </li>
+        </ul>
+      </section>
+
+      <section className="founder-section">
         <h2 className="account-section__title">Product levers</h2>
         <p className="account-section__desc">
           Updated {new Date(flags.updatedAt).toLocaleString()}
@@ -255,6 +300,44 @@ export default function FounderDashboard(): JSX.Element {
         .founder-toggles { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
         .founder-toggle { display: flex; align-items: center; gap: 12px; cursor: pointer; font-size: 14px; color: #d0d0e8; }
         .founder-toggle input { width: 18px; height: 18px; accent-color: #7c3aed; }
+        .founder-inline-code, .founder-ops-list code {
+          font-family: ui-monospace, Menlo, monospace;
+          font-size: 12px;
+          color: #a78bfa;
+        }
+        .founder-curl {
+          display: block;
+          margin: 8px 0 12px;
+          padding: 12px 14px;
+          border-radius: 8px;
+          font-size: 12px;
+          line-height: 1.5;
+          color: #c4b5fd;
+          background: #0a0a0f;
+          border: 1px solid #2a2a3a;
+          word-break: break-all;
+        }
+        .founder-copy-btn {
+          display: inline-flex;
+          padding: 8px 14px;
+          border-radius: 8px;
+          font-size: 13px;
+          font-weight: 600;
+          color: #d0d0e8;
+          background: #1e1e2e;
+          border: 1px solid #333;
+          cursor: pointer;
+        }
+        .founder-copy-btn:hover { background: #28283a; }
+        .founder-ops-list {
+          margin: 16px 0 0;
+          padding-left: 1.2rem;
+          font-size: 13px;
+          line-height: 1.6;
+          color: #888;
+        }
+        .founder-ops-list li + li { margin-top: 10px; }
+        .founder-ops-list strong { color: #ccc; font-weight: 600; }
       `}</style>
     </div>
   );

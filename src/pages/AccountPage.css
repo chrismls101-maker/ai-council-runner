@@ -1,0 +1,505 @@
+/* Glass-style account hub — matches LoginPage / landing tokens */
+
+.glass-account {
+  --gl-account-accent: #7dd4d8;
+  --gl-account-shell: linear-gradient(165deg, rgba(10, 12, 18, 0.94), rgba(6, 8, 14, 0.9));
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: clamp(20px, 4vw, 40px);
+  overflow: hidden;
+  color: #e8e6e3;
+  font-family: "Satoshi", system-ui, sans-serif;
+}
+
+.glass-account__mesh {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 80% 60% at 15% 10%, rgba(125, 212, 216, 0.14) 0%, transparent 55%),
+    radial-gradient(ellipse 55% 45% at 88% 85%, rgba(90, 120, 180, 0.1) 0%, transparent 50%),
+    linear-gradient(165deg, #0a0a0b 0%, #0e1016 45%, #0a0c12 100%);
+}
+
+.glass-account__frame {
+  position: absolute;
+  inset: clamp(12px, 3vw, 28px);
+  pointer-events: none;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.28),
+    0 0 32px rgba(255, 255, 255, 0.03),
+    inset 0 0 24px rgba(255, 255, 255, 0.02);
+  z-index: 0;
+}
+
+.glass-account__corner {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border-color: rgba(255, 255, 255, 0.85);
+  border-style: solid;
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.5));
+}
+
+.glass-account__corner--tl { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
+.glass-account__corner--tr { top: -1px; right: -1px; border-width: 2px 2px 0 0; }
+.glass-account__corner--bl { bottom: -1px; left: -1px; border-width: 0 0 2px 2px; }
+.glass-account__corner--br { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
+
+.glass-account__inner {
+  position: relative;
+  z-index: 1;
+  max-width: 800px;
+  margin: 0 auto;
+  padding-top: clamp(8px, 2vw, 24px);
+}
+
+.glass-account__topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.glass-account__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.glass-account__ring {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 800;
+  font-family: "Cabinet Grotesk", system-ui, sans-serif;
+  color: rgba(125, 212, 216, 0.95);
+  border: 1px solid rgba(125, 212, 216, 0.35);
+  background: rgba(125, 212, 216, 0.08);
+}
+
+.glass-account__wordmark {
+  font-family: "Cabinet Grotesk", system-ui, sans-serif;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: #f0eeeb;
+}
+
+.glass-account__signout {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(232, 230, 227, 0.55);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.glass-account__signout:hover {
+  color: rgba(232, 230, 227, 0.9);
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.glass-account__heading {
+  margin: 0 0 20px;
+  font-family: "Cabinet Grotesk", system-ui, sans-serif;
+  font-size: clamp(1.5rem, 3.5vw, 1.85rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #f5f3f0;
+}
+
+.glass-account-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 22px;
+}
+
+.glass-account-tab {
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  color: rgba(232, 230, 227, 0.5);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition:
+    color 0.15s ease,
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.glass-account-tab:hover {
+  color: rgba(232, 230, 227, 0.75);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.glass-account-tab--active {
+  color: rgba(10, 10, 11, 0.92);
+  background: linear-gradient(180deg, #8ee8ec 0%, #7dd4d8 52%, #5ec4c8 100%);
+  border-color: rgba(255, 255, 255, 0.35);
+  box-shadow: 0 2px 12px rgba(125, 212, 216, 0.22);
+}
+
+.glass-account-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.glass-account-card {
+  padding: clamp(20px, 3vw, 26px);
+  border-radius: 16px;
+  background: var(--gl-account-shell);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 12px 36px rgba(0, 0, 0, 0.35);
+}
+
+.glass-account-card__title {
+  margin: 0 0 10px;
+  font-family: "Cabinet Grotesk", system-ui, sans-serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #f5f3f0;
+}
+
+.glass-account-card__body {
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: rgba(232, 230, 227, 0.58);
+}
+
+.glass-account-card__body--tight {
+  margin-bottom: 14px;
+}
+
+.glass-account-card__meta {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: rgba(125, 212, 216, 0.85);
+}
+
+.glass-account-card__email {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: rgba(232, 230, 227, 0.45);
+}
+
+.glass-account-card__hint {
+  margin: 12px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(232, 230, 227, 0.42);
+}
+
+.glass-account-card__hint--support {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-account-welcome {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.glass-account-welcome__avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  font-weight: 700;
+  font-family: "Cabinet Grotesk", system-ui, sans-serif;
+  color: rgba(125, 212, 216, 0.95);
+  background: rgba(125, 212, 216, 0.1);
+  border: 1px solid rgba(125, 212, 216, 0.35);
+  box-shadow: 0 0 20px rgba(125, 212, 216, 0.15);
+}
+
+.glass-account-welcome__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.glass-account-steps {
+  margin: 0 0 18px;
+  padding-left: 1.2rem;
+  font-size: 14px;
+  line-height: 1.65;
+  color: rgba(232, 230, 227, 0.62);
+}
+
+.glass-account-steps li + li {
+  margin-top: 6px;
+}
+
+.glass-account-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.glass-account-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  border: 0.5px solid transparent;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.glass-account-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.glass-account-btn--primary {
+  color: rgba(10, 10, 11, 0.92);
+  background: linear-gradient(180deg, #8ee8ec 0%, #7dd4d8 52%, #5ec4c8 100%);
+  border-top-color: rgba(255, 255, 255, 0.55);
+  border-bottom-color: rgba(0, 0, 0, 0.22);
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.45),
+    0 4px 14px rgba(125, 212, 216, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.glass-account-btn--primary:hover:not(:disabled) {
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.45),
+    0 6px 20px rgba(125, 212, 216, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.42);
+}
+
+.glass-account-btn--secondary {
+  color: rgba(232, 230, 227, 0.88);
+  background: rgba(255, 255, 255, 0.06);
+  border: 0.5px solid rgba(255, 255, 255, 0.14);
+}
+
+.glass-account-btn--secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.glass-account-btn--ghost {
+  color: rgba(125, 212, 216, 0.9);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.glass-account-btn--ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.glass-account-token {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.glass-account-token__code {
+  display: block;
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  color: rgba(125, 212, 216, 0.95);
+  word-break: break-all;
+  letter-spacing: 0.03em;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.glass-account-token__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.glass-account-error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #fca5a5;
+  background: rgba(248, 113, 113, 0.08);
+  border: 1px solid rgba(248, 113, 113, 0.22);
+}
+
+.glass-account-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (min-width: 560px) {
+  .glass-account-stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.glass-account-stat {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-account-stat__label {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(232, 230, 227, 0.42);
+}
+
+.glass-account-stat__value {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: rgba(232, 230, 227, 0.88);
+}
+
+.glass-account-support {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.glass-account-support__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.glass-account-support__item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.glass-account-support__label,
+.glass-account-support__link {
+  font-size: 14px;
+  color: rgba(232, 230, 227, 0.78);
+  text-decoration: none;
+}
+
+.glass-account-support__link:hover {
+  color: rgba(125, 212, 216, 0.95);
+}
+
+.glass-account-support__badge {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(232, 230, 227, 0.38);
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-account-support__mailto {
+  color: rgba(125, 212, 216, 0.9);
+  text-decoration: none;
+}
+
+.glass-account-support__mailto:hover {
+  text-decoration: underline;
+}
+
+.glass-account-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: #0a0a0b;
+}
+
+.glass-account-spinner {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.08);
+  border-top-color: #7dd4d8;
+  animation: glass-account-spin 0.8s linear infinite;
+}
+
+@keyframes glass-account-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Founder dashboard — legacy class hooks used by FounderDashboard.tsx */
+.account-section__title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #f0f0f8;
+  margin: 0 0 8px;
+}
+
+.account-section__desc {
+  font-size: 14px;
+  color: #888;
+  margin: 0 0 20px;
+  line-height: 1.5;
+}
+
+.account-error {
+  color: #fca5a5;
+  font-size: 14px;
+  margin: 0 0 12px;
+}
+
+.account-spinner {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.08);
+  border-top-color: #7dd4d8;
+  animation: glass-account-spin 0.8s linear infinite;
+}

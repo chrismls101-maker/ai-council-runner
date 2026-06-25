@@ -154,6 +154,10 @@ export default function FounderTab({ state, link }: FounderTabProps): JSX.Elemen
           />
           <span>Overlay demo on iivo.ai</span>
         </label>
+        <p className="account-tab__hint">
+          Full landing funnel totals (page views, enter rate) live on iivo.ai → Account → Founder.
+          <code>GLASS_BROWSE_STATS_TOKEN</code> is for investor curl / weekly snapshots only.
+        </p>
       </section>
     </div>
   );

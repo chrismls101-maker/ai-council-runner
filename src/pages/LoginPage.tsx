@@ -20,8 +20,11 @@ type AuthCapabilities = {
 };
 
 type OAuthProvider = "github" | "google";
-
+type AuthMode = "signin" | "signup";
 type Status = "idle" | "sending" | "sent" | "error";
+
+const REMEMBER_EMAIL_KEY = "iivo-login-email";
+const REMEMBER_ME_KEY = "iivo-login-remember";
 
 const authClient = createAuthClient({
   baseURL: window.location.origin,
@@ -39,14 +42,31 @@ function socialRedirectUrl(data: unknown): string | null {
   return null;
 }
 
+function initialMode(): AuthMode {
+  const mode = new URLSearchParams(window.location.search).get("mode");
+  return mode === "signup" ? "signup" : "signin";
+}
+
 export default function LoginPage() {
+  const [mode, setMode] = useState<AuthMode>(initialMode);
   const [email, setEmail] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
+  const [showForgotHint, setShowForgotHint] = useState(false);
   const [status, setStatus] = useState<Status>("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [capabilities, setCapabilities] = useState<AuthCapabilities | null>(null);
   const [oauthLoading, setOauthLoading] = useState<OAuthProvider | null>(null);
 
   const redirectTo = new URLSearchParams(window.location.search).get("redirect") ?? "/account";
+
+  useEffect(() => {
+    const savedRemember = localStorage.getItem(REMEMBER_ME_KEY) === "true";
+    const savedEmail = localStorage.getItem(REMEMBER_EMAIL_KEY)?.trim() ?? "";
+    if (savedRemember && savedEmail) {
+      setRememberMe(true);
+      setEmail(savedEmail);
+    }
+  }, []);
 
   useEffect(() => {
     void fetch("/api/auth/capabilities", { credentials: "include" })
@@ -63,11 +83,22 @@ export default function LoginPage() {
       });
   }, []);
 
+  function persistRememberMe(nextEmail: string, remember: boolean): void {
+    if (remember && nextEmail.trim()) {
+      localStorage.setItem(REMEMBER_ME_KEY, "true");
+      localStorage.setItem(REMEMBER_EMAIL_KEY, nextEmail.trim());
+    } else {
+      localStorage.removeItem(REMEMBER_ME_KEY);
+      localStorage.removeItem(REMEMBER_EMAIL_KEY);
+    }
+  }
+
   async function handleMagicLink(e: FormEvent) {
     e.preventDefault();
     if (!email.trim()) return;
     setStatus("sending");
     setErrorMsg("");
+    setShowForgotHint(false);
     try {
       const { error } = await authClient.signIn.magicLink({
         email: email.trim(),
@@ -78,6 +109,7 @@ export default function LoginPage() {
         setErrorMsg(error.message ?? "Could not send magic link");
         return;
       }
+      persistRememberMe(email, rememberMe);
       setStatus("sent");
     } catch (err) {
       setStatus("error");
@@ -98,6 +130,7 @@ export default function LoginPage() {
     setOauthLoading(provider);
     setErrorMsg("");
     setStatus("idle");
+    setShowForgotHint(false);
 
     try {
       const result = await authClient.signIn.social({
@@ -128,11 +161,19 @@ export default function LoginPage() {
     }
   }
 
+  function switchMode(next: AuthMode): void {
+    setMode(next);
+    setShowForgotHint(false);
+    setErrorMsg("");
+    setStatus("idle");
+  }
+
   const socialEnabled = Boolean(capabilities?.github || capabilities?.google);
   const magicReady = capabilities?.magicLink === true;
   const loadingCaps = capabilities === null;
   const busy = status === "sending" || oauthLoading !== null;
   const dbNotReady = capabilities !== null && capabilities.databaseReady === false;
+  const isSignup = mode === "signup";
 
   return (
     <div className="glass-login">
@@ -144,128 +185,203 @@ export default function LoginPage() {
         <span className="glass-login__corner glass-login__corner--br" />
       </div>
 
-      <div className="glass-login__panel">
-        <a href="/" className="glass-login__back">
-          ← Back to IIVO Glass
+      <div className="glass-login__layout">
+        <a href="/" className="glass-login__back glass-login__back--outside">
+          ← Back
         </a>
 
-        <div className="glass-login__brand">
-          <span className="glass-login__ring" aria-hidden="true">G</span>
-          <span className="glass-login__wordmark">IIVO Glass</span>
-        </div>
+        <div className="glass-login__panel">
+          <div className="glass-login__brand">
+            <span className="glass-login__ring" aria-hidden="true">G</span>
+            <span className="glass-login__wordmark">IIVO Glass</span>
+          </div>
 
-        <h1 className="glass-login__title">Sign in</h1>
-        <p className="glass-login__subtitle">
-          Access your account, connect Glass, and manage your builder workspace.
-        </p>
-
-        {status === "sent" ? (
-          <div className="glass-login__sent">
-            <div className="glass-login__sent-icon" aria-hidden="true">✉</div>
-            <p className="glass-login__sent-title">Check your email</p>
-            <p className="glass-login__sent-body">
-              We sent a sign-in link to <strong>{email}</strong>. It expires in 10 minutes.
-            </p>
+          <div className="glass-login__mode-tabs" role="tablist" aria-label="Sign in or sign up">
             <button
               type="button"
-              className="glass-login__btn glass-login__btn--ghost"
-              onClick={() => {
-                setStatus("idle");
-                setEmail("");
-              }}
+              role="tab"
+              aria-selected={!isSignup}
+              className={`glass-login__mode-tab ${!isSignup ? "glass-login__mode-tab--active" : ""}`}
+              onClick={() => switchMode("signin")}
             >
-              Use a different email
+              Sign in
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={isSignup}
+              className={`glass-login__mode-tab ${isSignup ? "glass-login__mode-tab--active" : ""}`}
+              onClick={() => switchMode("signup")}
+            >
+              Sign up
             </button>
           </div>
-        ) : loadingCaps ? (
-          <p className="glass-login__hint">Loading sign-in options…</p>
-        ) : dbNotReady ? (
-          <p className="glass-login__error">
-            Sign-in database is not ready yet.
-            {capabilities?.databaseError ? ` (${capabilities.databaseError})` : " Refresh in a moment or check Railway Postgres + DATABASE_URL."}
+
+          <h1 className="glass-login__title">{isSignup ? "Create your account" : "Welcome back"}</h1>
+          <p className="glass-login__subtitle">
+            {isSignup
+              ? "Use your email or GitHub to create an IIVO account and connect Glass."
+              : "Access your account, connect Glass, and manage your builder workspace."}
           </p>
-        ) : (
-          <>
-            {magicReady ? (
-              <form className="glass-login__form" onSubmit={(e) => { void handleMagicLink(e); }}>
-                <label className="glass-login__label" htmlFor="email">
-                  Email
-                </label>
-                <input
-                  id="email"
-                  className="glass-login__input"
-                  type="email"
-                  placeholder="chrismls101@gmail.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  autoComplete="email"
-                  autoFocus
-                  disabled={busy}
-                />
-                <button
-                  className="glass-login__btn glass-login__btn--primary"
-                  type="submit"
-                  disabled={busy}
-                >
-                  {status === "sending" ? "Sending…" : "Send magic link"}
-                </button>
-              </form>
-            ) : (
-              <p className="glass-login__error">
-                Email sign-in is not available — auth database is not configured on the server.
+
+          {status === "sent" ? (
+            <div className="glass-login__sent">
+              <div className="glass-login__sent-icon" aria-hidden="true">✉</div>
+              <p className="glass-login__sent-title">Check your email</p>
+              <p className="glass-login__sent-body">
+                We sent a {isSignup ? "sign-up" : "sign-in"} link to <strong>{email}</strong>.
+                It expires in 10 minutes.
               </p>
-            )}
+              <button
+                type="button"
+                className="glass-login__btn glass-login__btn--ghost"
+                onClick={() => {
+                  setStatus("idle");
+                }}
+              >
+                Use a different email
+              </button>
+            </div>
+          ) : loadingCaps ? (
+            <p className="glass-login__hint">Loading sign-in options…</p>
+          ) : dbNotReady ? (
+            <p className="glass-login__error">
+              Sign-in database is not ready yet.
+              {capabilities?.databaseError ? ` (${capabilities.databaseError})` : " Refresh in a moment or check Railway Postgres + DATABASE_URL."}
+            </p>
+          ) : (
+            <>
+              {showForgotHint ? (
+                <p className="glass-login__forgot-hint">
+                  IIVO uses passwordless sign-in. Enter your email above and we&apos;ll send a magic
+                  link — same flow as signing in.
+                </p>
+              ) : null}
 
-            {capabilities && magicReady && !capabilities.magicLinkEmail ? (
-              <p className="glass-login__hint">
-                Magic link is enabled but outbound email is not configured (RESEND_API_KEY).
+              {magicReady ? (
+                <form className="glass-login__form" onSubmit={(e) => { void handleMagicLink(e); }}>
+                  <label className="glass-login__label" htmlFor="email">
+                    Email
+                  </label>
+                  <input
+                    id="email"
+                    className="glass-login__input"
+                    type="email"
+                    placeholder="you@company.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    autoComplete="email"
+                    autoFocus
+                    disabled={busy}
+                  />
+                  <div className="glass-login__row">
+                    <label className="glass-login__remember">
+                      <input
+                        type="checkbox"
+                        checked={rememberMe}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setRememberMe(checked);
+                          if (!checked) persistRememberMe(email, false);
+                        }}
+                        disabled={busy}
+                      />
+                      Remember me
+                    </label>
+                    <button
+                      type="button"
+                      className="glass-login__forgot"
+                      onClick={() => {
+                        setShowForgotHint(true);
+                        document.getElementById("email")?.focus();
+                      }}
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                  <button
+                    className="glass-login__btn glass-login__btn--primary"
+                    type="submit"
+                    disabled={busy}
+                  >
+                    {status === "sending"
+                      ? "Sending…"
+                      : isSignup
+                        ? "Create account with email"
+                        : "Send magic link"}
+                  </button>
+                </form>
+              ) : (
+                <p className="glass-login__error">
+                  Email sign-in is not available — auth database is not configured on the server.
+                </p>
+              )}
+
+              {capabilities && magicReady && !capabilities.magicLinkEmail ? (
+                <p className="glass-login__hint">
+                  Magic link is enabled but outbound email is not configured (RESEND_API_KEY).
+                </p>
+              ) : null}
+
+              {errorMsg ? <p className="glass-login__error">{errorMsg}</p> : null}
+
+              {socialEnabled ? (
+                <>
+                  <div className="glass-login__divider">
+                    <span>or</span>
+                  </div>
+                  <div className="glass-login__oauth-row">
+                    {capabilities?.github ? (
+                      <button
+                        className="glass-login__btn glass-login__btn--oauth"
+                        type="button"
+                        disabled={busy}
+                        onClick={() => { void handleSocial("github"); }}
+                      >
+                        <GitHubIcon />
+                        {oauthLoading === "github" ? "Redirecting…" : isSignup ? "Sign up with GitHub" : "GitHub"}
+                      </button>
+                    ) : null}
+                    {capabilities?.google ? (
+                      <button
+                        className="glass-login__btn glass-login__btn--oauth"
+                        type="button"
+                        disabled={busy}
+                        onClick={() => { void handleSocial("google"); }}
+                      >
+                        <GoogleIcon />
+                        {oauthLoading === "google" ? "Redirecting…" : isSignup ? "Sign up with Google" : "Google"}
+                      </button>
+                    ) : null}
+                  </div>
+                </>
+              ) : null}
+
+              <p className="glass-login__switch-mode">
+                {isSignup ? (
+                  <>
+                    Already have an account?{" "}
+                    <button type="button" onClick={() => switchMode("signin")}>Sign in</button>
+                  </>
+                ) : (
+                  <>
+                    New to IIVO?{" "}
+                    <button type="button" onClick={() => switchMode("signup")}>Create an account</button>
+                  </>
+                )}
               </p>
-            ) : null}
+            </>
+          )}
 
-            {errorMsg ? <p className="glass-login__error">{errorMsg}</p> : null}
+          <p className="glass-login__legal">
+            By continuing, you agree to our{" "}
+            <a href="/terms">Terms of Service</a> and{" "}
+            <a href="/privacy">Privacy Policy</a>.
+          </p>
 
-            {socialEnabled ? (
-              <>
-                <div className="glass-login__divider">
-                  <span>or</span>
-                </div>
-                <div className="glass-login__oauth-row">
-                  {capabilities?.github ? (
-                    <button
-                      className="glass-login__btn glass-login__btn--oauth"
-                      type="button"
-                      disabled={busy}
-                      onClick={() => { void handleSocial("github"); }}
-                    >
-                      <GitHubIcon />
-                      {oauthLoading === "github" ? "Redirecting…" : "GitHub"}
-                    </button>
-                  ) : null}
-                  {capabilities?.google ? (
-                    <button
-                      className="glass-login__btn glass-login__btn--oauth"
-                      type="button"
-                      disabled={busy}
-                      onClick={() => { void handleSocial("google"); }}
-                    >
-                      <GoogleIcon />
-                      {oauthLoading === "google" ? "Redirecting…" : "Google"}
-                    </button>
-                  ) : null}
-                </div>
-              </>
-            ) : null}
-          </>
-        )}
-
-        <p className="glass-login__legal">
-          By continuing, you agree to our{" "}
-          <a href="/terms">Terms of Service</a> and{" "}
-          <a href="/privacy">Privacy Policy</a>.
-        </p>
-
-        <span className="glass-login__led" aria-hidden="true" />
+          <span className="glass-login__led" aria-hidden="true" />
+        </div>
       </div>
     </div>
   );
