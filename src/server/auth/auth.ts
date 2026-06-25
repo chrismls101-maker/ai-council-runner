@@ -118,12 +118,22 @@ export type Auth = typeof auth;
 
 /** Run better-auth migrations, role column, and FOUNDER_EMAIL seed on startup. */
 export async function initAuthRoles(): Promise<void> {
-  if (!process.env.DATABASE_URL?.trim()) return;
+  if (!process.env.DATABASE_URL?.trim()) {
+    console.warn("[auth] DATABASE_URL missing — sign-in disabled");
+    return;
+  }
   try {
-    const { runMigrations } = await getMigrations(authOptions);
-    await runMigrations();
-
     const pool = getAuthPool();
+    await pool.query("SELECT 1");
+
+    const migration = await getMigrations(authOptions);
+    if (migration.toBeCreated.length > 0 || migration.toBeAdded.length > 0) {
+      console.log(
+        `[auth] Applying schema: ${migration.toBeCreated.length} new tables, ${migration.toBeAdded.length} table updates`,
+      );
+    }
+    await migration.runMigrations();
+
     await ensureUserRoleSchema(pool);
     await seedFounderEmail(pool);
 
@@ -131,7 +141,8 @@ export async function initAuthRoles(): Promise<void> {
     if (founder) {
       console.log(`[auth] Founder seed checked for ${founder}`);
     }
+    console.log("[auth] Database ready");
   } catch (err) {
-    console.error("[auth] Role init failed:", err);
+    console.error("[auth] Init failed — sign-in will not work until this is fixed:", err);
   }
 }

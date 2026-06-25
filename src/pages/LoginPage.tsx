@@ -100,6 +100,7 @@ export default function LoginPage() {
       const result = await authClient.signIn.social({
         provider,
         callbackURL: redirectTo,
+        disableRedirect: true,
       });
 
       if (result.error) {
