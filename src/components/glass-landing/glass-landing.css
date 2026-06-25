@@ -542,8 +542,146 @@ html.glass-landing-route body::after {
   background: var(--gl-surface);
 }
 
+/* Final install band — big centered footer CTA */
+.glass-landing__final {
+  text-align: center;
+  padding-top: clamp(32px, 6vw, 56px);
+  padding-bottom: clamp(40px, 7vw, 72px);
+}
+
+.glass-landing__final-band {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(52px, 9vw, 96px) clamp(24px, 5vw, 56px);
+  border-radius: clamp(20px, 3vw, 28px);
+  text-align: center;
+  background: linear-gradient(165deg, rgba(10, 12, 18, 0.94), rgba(6, 8, 14, 0.9));
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 24px 64px rgba(0, 0, 0, 0.45),
+    0 0 80px rgba(125, 212, 216, 0.06);
+  isolation: isolate;
+}
+
+.glass-landing__final-band::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 70% 55% at 50% 0%, rgba(125, 212, 216, 0.12) 0%, transparent 58%),
+    radial-gradient(ellipse 50% 40% at 80% 100%, rgba(90, 120, 180, 0.08) 0%, transparent 50%);
+  z-index: 0;
+}
+
+.glass-landing__final-kicker {
+  position: relative;
+  z-index: 1;
+  display: inline-block;
+  margin: 0 0 clamp(20px, 3vw, 28px);
+}
+
+.glass-landing__final-title {
+  position: relative;
+  z-index: 1;
+  margin: 0 0 clamp(16px, 2.5vw, 22px);
+  font-family: var(--gl-font-display);
+  font-weight: 800;
+  font-size: clamp(2.4rem, 8vw, 4.75rem);
+  letter-spacing: -0.04em;
+  line-height: 0.95;
+  color: #f5f3f0;
+  max-width: none;
+}
+
+.glass-landing__final-lead {
+  position: relative;
+  z-index: 1;
+  margin: 0 auto clamp(28px, 4vw, 40px);
+  max-width: 46ch;
+  font-size: clamp(1rem, 2.2vw, 1.2rem);
+  line-height: 1.6;
+  color: rgba(232, 230, 227, 0.58);
+}
+
+.glass-landing__final-cta {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+
+.glass-landing__final-actions {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 820px;
+  margin-inline: auto;
+}
+
+.glass-landing__final-btn {
+  flex: 0 1 auto;
+  white-space: nowrap;
+  padding: 14px 22px;
+  font-size: 14px;
+}
+
+.glass-landing__final-btn--guide {
+  color: rgba(125, 212, 216, 0.92);
+}
+
+.glass-landing__chips--final {
+  justify-content: center;
+  margin-top: 4px;
+}
+
+.glass-landing__final-led {
+  position: relative;
+  z-index: 1;
+  display: block;
+  height: 1px;
+  margin: clamp(32px, 5vw, 44px) auto 0;
+  max-width: min(420px, 72%);
+  background: linear-gradient(
+    90deg,
+    transparent 6%,
+    rgba(120, 255, 190, 0.42) 38%,
+    rgba(160, 255, 210, 0.78) 50%,
+    rgba(120, 255, 190, 0.42) 62%,
+    transparent 94%
+  );
+}
+
+@media (max-width: 639px) {
+  .glass-landing__final-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .glass-landing__final-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (min-width: 640px) {
+  .glass-landing__final-title br {
+    display: none;
+  }
+}
+
+/* Legacy final overrides — keep download panel centered when reused */
 .glass-landing__final .glass-landing__download-panel {
   max-width: 480px;
+  margin-inline: auto;
 }
 
 .glass-landing__final .glass-landing__download-actions {
@@ -939,25 +1077,14 @@ html.glass-landing-route body::after {
   color: var(--gl-text);
 }
 
-/* Final */
-.glass-landing__final {
-  text-align: left;
-  padding-bottom: clamp(64px, 10vw, 96px);
-}
-
-.glass-landing__final-lead {
-  margin: -8px 0 24px;
-  max-width: 52ch;
-  font-size: 17px;
-  color: var(--gl-muted);
-}
+/* Final install band — see .glass-landing__final-band above */
 
 /* Footer */
 .glass-landing__footer {
   position: relative;
   z-index: 1;
   padding: 32px 24px 48px;
-  text-align: left;
+  text-align: center;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
@@ -965,6 +1092,7 @@ html.glass-landing-route body::after {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
   gap: 10px 14px;
   font-size: 14px;
 }

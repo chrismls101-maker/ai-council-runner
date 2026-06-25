@@ -84,12 +84,49 @@ function DownloadCta({
   downloadTestId,
   compact = false,
   hero = false,
+  footer = false,
 }: {
   installTestId?: string;
   downloadTestId?: string;
   compact?: boolean;
   hero?: boolean;
+  footer?: boolean;
 }) {
+  if (footer) {
+    return (
+      <div className="glass-landing__final-cta">
+        <div className="glass-landing__final-actions">
+          <a
+            href={GLASS_DMG_ARM64_DOWNLOAD_URL}
+            className="gl-btn gl-btn--primary glass-landing__final-btn"
+            data-testid={downloadTestId}
+          >
+            Download · Apple Silicon
+          </a>
+          <a
+            href={GLASS_DMG_X64_DOWNLOAD_URL}
+            className="gl-btn gl-btn--ghost glass-landing__final-btn"
+            data-testid={downloadTestId ? `${downloadTestId}-x64` : undefined}
+          >
+            Download · Intel
+          </a>
+          <a
+            href="/install"
+            className="gl-btn gl-btn--ghost glass-landing__final-btn glass-landing__final-btn--guide"
+            data-testid={installTestId}
+          >
+            Installation guide
+          </a>
+        </div>
+        <div className="glass-landing__chips glass-landing__chips--final">
+          <span className="glass-landing__chip">macOS 14+</span>
+          <span className="glass-landing__chip">Free beta</span>
+          <span className="glass-landing__chip">No account required</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className={[
@@ -276,12 +313,18 @@ function GlassLandingPageContent(): JSX.Element {
       </RevealSection>
 
       <RevealSection className="glass-landing__section glass-landing__final">
-        <h2 className="glass-landing__section-title gl-reveal-child">Install the ambient builder OS.</h2>
-        <p className="glass-landing__final-lead gl-reveal-child">
-          Free beta for macOS. Apple Silicon and Intel. No account required.
-        </p>
-        <div className="gl-reveal-child">
-          <DownloadCta compact downloadTestId="glass-landing-download-final" />
+        <div className="glass-landing__final-band gl-reveal-child">
+          <p className="glass-landing__final-kicker gl-surface-pill">Free beta for macOS</p>
+          <h2 className="glass-landing__final-title">
+            Install the ambient
+            <br />
+            builder OS.
+          </h2>
+          <p className="glass-landing__final-lead">
+            Apple Silicon and Intel. Download, drag to Applications, and Glass locks above every app.
+          </p>
+          <DownloadCta footer downloadTestId="glass-landing-download-final" installTestId="glass-landing-install-link" />
+          <span className="glass-landing__final-led" aria-hidden="true" />
         </div>
       </RevealSection>
 

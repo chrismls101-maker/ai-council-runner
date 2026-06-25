@@ -16,6 +16,7 @@
 .gl-macbook-mock {
   --mock-dock-zone: 28px;
   --mock-builder-h: 20px;
+  --mock-glass-lift: 3px;
   --mock-u: 1;
   width: 100%;
   max-width: min(100%, 800px);
@@ -495,6 +496,7 @@
   z-index: 6;
   pointer-events: none;
   width: min(94%, 620px);
+  --mock-dock-bar-h: calc(20px * var(--mock-u));
 }
 
 .gl-macbook-mock__mac-dock {
@@ -504,8 +506,10 @@
   flex-wrap: nowrap;
   gap: calc(2.5px * var(--mock-u));
   width: 100%;
+  min-height: var(--mock-dock-bar-h);
   padding: calc(3px * var(--mock-u)) calc(10px * var(--mock-u)) calc(4px * var(--mock-u));
-  border-radius: calc(14px * var(--mock-u));
+  /* Real macOS dock: semicircular end caps (pill), not a soft rounded rectangle */
+  border-radius: calc(var(--mock-dock-bar-h) / 2);
   background: rgba(255, 255, 255, 0.22);
   backdrop-filter: blur(20px) saturate(190%);
   -webkit-backdrop-filter: blur(20px) saturate(190%);
@@ -527,7 +531,8 @@
 .gl-macbook-mock__mac-dock-reflect {
   height: 3px;
   margin-top: 1px;
-  border-radius: 0 0 8px 8px;
+  margin-inline: calc(var(--mock-dock-bar-h) * 0.22);
+  border-radius: 0 0 999px 999px;
   background: linear-gradient(
     180deg,
     rgba(255, 255, 255, 0.12) 0%,
@@ -782,7 +787,7 @@
   position: absolute;
   left: calc(7px * var(--mock-u));
   right: calc(7px * var(--mock-u));
-  bottom: var(--mock-dock-zone);
+  bottom: calc(var(--mock-dock-zone) + var(--mock-glass-lift));
   height: var(--mock-builder-h);
   z-index: 8;
   display: flex;
@@ -1047,7 +1052,7 @@
   position: absolute;
   left: 10%;
   right: 10%;
-  bottom: calc(var(--mock-dock-zone) + var(--mock-builder-h) + 8px * var(--mock-u));
+  bottom: calc(var(--mock-dock-zone) + var(--mock-builder-h) + 8px * var(--mock-u) + var(--mock-glass-lift));
   z-index: 8;
 }
 
@@ -1636,7 +1641,7 @@
   .gl-macbook-mock__command-bar {
     left: 8%;
     right: 8%;
-    bottom: calc(var(--mock-dock-zone) + var(--mock-builder-h) + 6px);
+    bottom: calc(var(--mock-dock-zone) + var(--mock-builder-h) + 6px + var(--mock-glass-lift));
   }
 
   .gl-macbook-mock__browser {
