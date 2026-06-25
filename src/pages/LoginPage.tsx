@@ -5,9 +5,16 @@
  * After login, redirects to /account (or ?redirect= param).
  */
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { createAuthClient } from "better-auth/client";
 import { magicLinkClient } from "better-auth/client/plugins";
+
+type AuthCapabilities = {
+  magicLink: boolean;
+  magicLinkEmail: boolean;
+  github: boolean;
+  google: boolean;
+};
 
 const authClient = createAuthClient({
   baseURL: window.location.origin,
@@ -22,8 +29,23 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [errorMsg, setErrorMsg] = useState("");
+  const [capabilities, setCapabilities] = useState<AuthCapabilities | null>(null);
 
   const redirectTo = new URLSearchParams(window.location.search).get("redirect") ?? "/account";
+
+  useEffect(() => {
+    void fetch("/api/auth/capabilities")
+      .then((res) => res.json())
+      .then((data: AuthCapabilities) => setCapabilities(data))
+      .catch(() => {
+        setCapabilities({
+          magicLink: false,
+          magicLinkEmail: false,
+          github: false,
+          google: false,
+        });
+      });
+  }, []);
 
   async function handleMagicLink(e: FormEvent) {
     e.preventDefault();
@@ -43,6 +65,10 @@ export default function LoginPage() {
   }
 
   async function handleGitHub() {
+    if (!capabilities?.github) {
+      setErrorMsg("GitHub sign-in is not configured yet. Use email magic link instead.");
+      return;
+    }
     try {
       await authClient.signIn.social({
         provider: "github",
@@ -55,6 +81,10 @@ export default function LoginPage() {
   }
 
   async function handleGoogle() {
+    if (!capabilities?.google) {
+      setErrorMsg("Google sign-in is not configured yet. Use email magic link instead.");
+      return;
+    }
     try {
       await authClient.signIn.social({
         provider: "google",
@@ -65,6 +95,10 @@ export default function LoginPage() {
       setErrorMsg(err instanceof Error ? err.message : "Google sign-in failed");
     }
   }
+
+  const socialEnabled = Boolean(capabilities?.github || capabilities?.google);
+  const magicReady = capabilities?.magicLink === true;
+  const loadingCaps = capabilities === null;
 
   return (
     <div className="login-page">
@@ -96,9 +130,12 @@ export default function LoginPage() {
               Use a different email
             </button>
           </div>
+        ) : loadingCaps ? (
+          <p className="login-hint">Loading sign-in options…</p>
         ) : (
           <>
             {/* Magic link form */}
+            {magicReady ? (
             <form className="login-form" onSubmit={(e) => { void handleMagicLink(e); }}>
               <label className="login-form__label" htmlFor="email">Email address</label>
               <input
@@ -120,11 +157,24 @@ export default function LoginPage() {
                 {status === "sending" ? "Sending…" : "Send magic link"}
               </button>
             </form>
+            ) : (
+              <p className="login-error">
+                Email sign-in is not available yet — auth database is not configured on the server.
+              </p>
+            )}
+
+            {capabilities && magicReady && !capabilities.magicLinkEmail ? (
+              <p className="login-hint">
+                Magic link is enabled but outbound email is not configured yet (RESEND_API_KEY).
+              </p>
+            ) : null}
 
             {errorMsg && (
               <p className="login-error">{errorMsg}</p>
             )}
 
+            {socialEnabled ? (
+              <>
             {/* Divider */}
             <div className="login-divider">
               <span>or continue with</span>
@@ -132,6 +182,7 @@ export default function LoginPage() {
 
             {/* OAuth providers */}
             <div className="login-oauth">
+              {capabilities?.github ? (
               <button
                 className="login-btn login-btn--oauth"
                 type="button"
@@ -140,6 +191,8 @@ export default function LoginPage() {
                 <GitHubIcon />
                 GitHub
               </button>
+              ) : null}
+              {capabilities?.google ? (
               <button
                 className="login-btn login-btn--oauth"
                 type="button"
@@ -148,7 +201,10 @@ export default function LoginPage() {
                 <GoogleIcon />
                 Google
               </button>
+              ) : null}
             </div>
+              </>
+            ) : null}
           </>
         )}
 
@@ -282,6 +338,12 @@ export default function LoginPage() {
           color: #f87171;
           font-size: 13px;
           margin: -8px 0 8px;
+        }
+        .login-hint {
+          color: #888;
+          font-size: 12px;
+          margin: 0 0 12px;
+          line-height: 1.4;
         }
         .login-legal {
           font-size: 12px;

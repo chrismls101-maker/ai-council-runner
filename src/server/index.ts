@@ -137,6 +137,7 @@ import { ttsHandler } from "./voice/ttsRoute.js";
 import { auth, initAuthRoles } from "./auth/auth.js";
 import { toNodeHandler } from "better-auth/node";
 import { issueGlassConnectToken, verifyGlassConnectToken } from "./auth/glassConnect.js";
+import { getAuthCapabilities } from "./auth/authCapabilities.js";
 import { getAuthPool } from "./auth/authPool.js";
 import { getUserRoleById } from "./auth/userRoles.js";
 import { registerFounderRoutes } from "./founder/founderRoutes.js";
@@ -275,6 +276,10 @@ app.get("/api/auth/glass-connect/verify/:token", async (req, res) => {
     role,
     fullBuildLoop: flags.coderBuildLoopEnabledForNewUsers,
   });
+});
+
+app.get("/api/auth/capabilities", (_req, res) => {
+  res.json(getAuthCapabilities());
 });
 
 // ─── Auth (better-auth) — must come before express.json() global middleware ───
