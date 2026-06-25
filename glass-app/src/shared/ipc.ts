@@ -307,6 +307,10 @@ export const IPC = {
   deleteUserContextKey: "glass:delete-user-context-key",
   /** Dashboard → main: 7-day retention rollup from local SQLite. */
   getRetentionSummary: "glass:get-retention-summary",
+  /** Dashboard → main: agent event bus subscriber health snapshot. */
+  getAgentBusHealth: "glass:get-agent-bus-health",
+  /** Dashboard → main: per-session model spend from SQLite. */
+  getSessionSpend: "glass:get-session-spend",
   /** Renderer → main: open Glass Settings window. */
   openGlassSettings: "glass:open-glass-settings",
   /** Renderer → main: close Glass Settings window. */
@@ -834,6 +838,7 @@ export type GlassCommand =
   | { type: "run-setup-check"; silent?: boolean; forceCaptureProbe?: boolean }
   | { type: "run-capture-diagnostics" }
   | { type: "clear-last-notice" }
+  | { type: "clear-recovery-toast" }
   | { type: "clear-last-error" }
   | { type: "clear-capture-diagnostics-report" }
   | { type: "report-mic-permission"; status: import("./glassCapabilities.ts").MicPermissionReport }
@@ -1132,6 +1137,11 @@ export interface GlassState {
   config: GlassConfig;
   lastError?: string;
   lastNotice?: string;
+  /** One-shot boot toast after unclean process exit (cleared by renderer). */
+  recoveryToast?: string;
+  recoveryToastNonce?: number;
+  /** Persistent warning when session-history.db was quarantined on startup. */
+  dbRecoveryWarning?: string;
   lastSentUrl?: string;
   session: GlassSession | null;
   sessionSummary: string;
@@ -1246,7 +1256,9 @@ export interface GlassState {
   qaRiskPaths?: string[];
   /** Token usage + estimated cost for the active / last Coder run. */
   coderRunUsage?: import("./coderAgentModels.ts").CoderRunUsage | null;
-  /** Latest media/page context for Listen mode (text metadata only). */
+  /** Estimated USD for all model calls in the current Glass session (SQLite). */
+  sessionSpendUsd?: number;
+  /** Active Glass agent run — updated by main while an agent loop is live. */
   mediaContext?: import("./mediaContextTypes.ts").MediaContext | null;
   appUpdate: import("./glassAppUpdate.ts").GlassAppUpdateState;
   /** Seconds remaining before listening starts; undefined when idle. */
@@ -1278,6 +1290,8 @@ export interface GlassState {
   blackHoleInstallProgress?: string;
   /** Linked IIVO account (set after user pastes a connect token). */
   iivoAccountLink: import("./iivoAccountLink.ts").IivoAccountLink | null;
+  /** Server-side feature flags (polled from /api/glass/runtime-config). */
+  serverRuntimeFlags: import("./serverRuntimeFlags.ts").ServerRuntimeFlags | null;
   /** Live Meeting Intelligence runtime (populated only when meetings mode is active). */
   meetingIntelligence?: MeetingIntelligenceState;
   /**
@@ -1831,8 +1845,10 @@ export type {
   AgentRunRow,
   AgentRunStatus,
   MessageRow,
+  ModelCallRow,
   SessionRow,
   SessionRowWithMeta,
+  SessionSpendSummary,
   UserContextRow,
 } from "./glassSessionHistory.ts";
 
@@ -1842,4 +1858,20 @@ export interface RetentionSummary {
   workflowsPerSession: number;
   autofixAcceptanceRate: number;
   buildLoopSuccessRate: number;
+}
+
+export interface AgentBusSubscriberHealth {
+  subscriberId: string;
+  consecutiveMissedHeartbeats: number;
+  healthy: boolean;
+  lastAckSeq: number;
+}
+
+export interface AgentBusHealthSnapshot {
+  healthy: boolean;
+  dlqDepth: number;
+  openBreakers: string[];
+  heartbeatSeq: number;
+  subscribers: AgentBusSubscriberHealth[];
+  staleSubscribers: string[];
 }

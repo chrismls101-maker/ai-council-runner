@@ -1,4 +1,6 @@
 import { useEffect, useState, type JSX } from "react";
+import AccountPage from "./pages/AccountPage";
+import LoginPage from "./pages/LoginPage";
 import Glass404Page from "./pages/Glass404Page";
 import GlassInstallPage from "./pages/GlassInstallPage";
 import GlassLandingPage from "./pages/GlassLandingPage";
@@ -18,46 +20,61 @@ import { isGlassPublicPath, resolveAppRoute, type AppRoute } from "./utils/appRo
  *   /install       → GlassInstallPage
  *   /privacy       → GlassPrivacyPage
  *   /terms         → GlassTermsPage
+ *   /login         → LoginPage
+ *   /account       → AccountPage
  *   *              → Glass404Page
  */
 
-type PublicRoute = Extract<AppRoute, "landing" | "install" | "privacy" | "terms" | "not-found">;
+type AppRouteView =
+  | "landing"
+  | "install"
+  | "privacy"
+  | "terms"
+  | "login"
+  | "account"
+  | "not-found";
 
-const ROUTE_TITLES: Record<PublicRoute, string> = {
+const ROUTE_TITLES: Record<AppRouteView, string> = {
   landing: "IIVO Glass",
   install: "Installation Guide — IIVO Glass",
   privacy: "Privacy Policy — IIVO Glass",
   terms: "Terms of Service — IIVO Glass",
+  login: "Sign in — IIVO",
+  account: "Account — IIVO",
   "not-found": "Page Not Found — IIVO Glass",
 };
 
-function resolvePublicRoute(raw: AppRoute): PublicRoute {
+function resolveRoute(raw: AppRoute): AppRouteView {
   switch (raw) {
     case "install":  return "install";
     case "privacy":  return "privacy";
     case "terms":    return "terms";
+    case "login":    return "login";
+    case "account":  return "account";
     case "landing":  return "landing";
     default:         return "not-found";
   }
 }
 
-function PublicPage({ route }: { route: PublicRoute }): JSX.Element {
+function AppPage({ route }: { route: AppRouteView }): JSX.Element {
   switch (route) {
     case "install":    return <GlassInstallPage />;
     case "privacy":    return <GlassPrivacyPage />;
     case "terms":      return <GlassTermsPage />;
+    case "login":      return <LoginPage />;
+    case "account":    return <AccountPage />;
     case "not-found":  return <Glass404Page />;
     default:           return <GlassLandingPage />;
   }
 }
 
 export default function AppRouter() {
-  const [route, setRoute] = useState<PublicRoute>(() =>
-    resolvePublicRoute(resolveAppRoute()),
+  const [route, setRoute] = useState<AppRouteView>(() =>
+    resolveRoute(resolveAppRoute()),
   );
 
   useEffect(() => {
-    const sync = () => setRoute(resolvePublicRoute(resolveAppRoute()));
+    const sync = () => setRoute(resolveRoute(resolveAppRoute()));
     window.addEventListener("popstate", sync);
     return () => window.removeEventListener("popstate", sync);
   }, []);
@@ -70,5 +87,5 @@ export default function AppRouter() {
     };
   }, [route]);
 
-  return <PublicPage route={route} />;
+  return <AppPage route={route} />;
 }

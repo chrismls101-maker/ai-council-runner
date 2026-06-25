@@ -3,6 +3,7 @@
  */
 
 import { InsufficientCreditsError } from "../usage/types.js";
+import { assertAiCallsEnabled } from "../founder/featureFlags.js";
 import type { GlassAskRequestBody, GlassAskResponseBody } from "./glassAskTypes.js";
 import {
   ProviderError,
@@ -28,6 +29,15 @@ export async function handleGlassAsk(
   signal?: AbortSignal,
   caller?: GlassDirectAskCaller,
 ): Promise<GlassAskResponseBody> {
+  try {
+    await assertAiCallsEnabled();
+  } catch (err) {
+    throw new GlassAskServiceError(
+      err instanceof Error ? err.message : "AI calls are disabled.",
+      503,
+    );
+  }
+
   const prompt = body.prompt?.trim();
   if (!prompt) {
     throw new GlassAskValidationError("prompt is required");

@@ -129,8 +129,11 @@ export function buildReviewFixPrompt(findings: string): string {
   ].join("\n");
 }
 
-export function canStartLoopFix(host: CoderBuildLoopHost): boolean {
-  return (host.getLoopIteration() ?? 1) < CODER_LOOP_MAX_ITERATIONS;
+export function canStartLoopFix(
+  host: CoderBuildLoopHost,
+  maxIterations = CODER_LOOP_MAX_ITERATIONS,
+): boolean {
+  return (host.getLoopIteration() ?? 1) < maxIterations;
 }
 
 export function incrementLoopForFix(host: CoderBuildLoopHost): number {

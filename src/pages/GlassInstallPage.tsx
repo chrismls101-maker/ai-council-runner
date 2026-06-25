@@ -1,12 +1,14 @@
 import type { JSX } from "react";
 import GlassDocLayout from "../components/glass-landing/GlassDocLayout";
+import { useGlassLatestRelease } from "../hooks/useGlassLatestRelease";
 import {
   GLASS_DMG_ARM64_DOWNLOAD_URL,
   GLASS_DMG_X64_DOWNLOAD_URL,
-  GLASS_LATEST_VERSION,
 } from "../utils/glassRelease";
 
 export default function GlassInstallPage(): JSX.Element {
+  const { version: glassVersion } = useGlassLatestRelease();
+
   return (
     <GlassDocLayout
       title="Beta Install Guide"
@@ -48,8 +50,8 @@ export default function GlassInstallPage(): JSX.Element {
         </p>
         <p>
           The file is named{" "}
-          <code>IIVO-Glass-{GLASS_LATEST_VERSION}-arm64.dmg</code> (Apple Silicon) or{" "}
-          <code>IIVO-Glass-{GLASS_LATEST_VERSION}-x64.dmg</code> (Intel). It will land in your{" "}
+          <code>IIVO-Glass-{glassVersion}-arm64.dmg</code> (Apple Silicon) or{" "}
+          <code>IIVO-Glass-{glassVersion}-x64.dmg</code> (Intel). It will land in your{" "}
           <strong>Downloads</strong> folder.{" "}
           Direct links:{" "}
           <a href={GLASS_DMG_ARM64_DOWNLOAD_URL}>Apple Silicon</a>

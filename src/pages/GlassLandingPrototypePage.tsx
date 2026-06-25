@@ -1,3 +1,4 @@
+import type { JSX } from "react";
 import { useReducedMotion } from "framer-motion";
 import { motion } from "framer-motion";
 import GlassButton from "../components/glass-landing/GlassButton";
@@ -159,7 +160,7 @@ export default function GlassLandingPrototypePage(): JSX.Element {
           {SURFACES.map(({ label, copy }) => (
             <GlassCard key={label}>
               <span className="glp-card-label">{label}</span>
-              {copy}
+              <p className="glass-card__text">{copy}</p>
             </GlassCard>
           ))}
         </div>

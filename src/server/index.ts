@@ -92,10 +92,19 @@ import {
 } from "./glass/glassAskPayload.js";
 import { loadGlassUpdateManifest } from "./glass/glassUpdateManifest.js";
 import {
+  handleGlassDownloadLatest,
+  handleGlassDownloadRedirect,
   handleGlassElectronUpdateFeed,
   handleGlassUpdateDownload,
   withGlassUpdateProxyUrls,
 } from "./glass/glassUpdateFeed.js";
+import {
+  appendGlassBrowseEvent,
+  getGlassBrowseSocialProof,
+  getGlassBrowseStats,
+  isAuthorizedGlassBrowseStats,
+  parseGlassBrowseEventPayload,
+} from "./landing/glassBrowseAnalytics.js";
 import { translateLiveCaption } from "./glass/glassTranslate.js";
 import {
   clearGlassUserProfile,
@@ -125,9 +134,13 @@ import {
 } from "./landingGate.js";
 import rateLimit from "express-rate-limit";
 import { ttsHandler } from "./voice/ttsRoute.js";
-import { auth } from "./auth/auth.js";
+import { auth, initAuthRoles } from "./auth/auth.js";
 import { toNodeHandler } from "better-auth/node";
 import { issueGlassConnectToken, verifyGlassConnectToken } from "./auth/glassConnect.js";
+import { getAuthPool } from "./auth/authPool.js";
+import { getUserRoleById } from "./auth/userRoles.js";
+import { registerFounderRoutes } from "./founder/founderRoutes.js";
+import { assertAiCallsEnabled, getFeatureFlags } from "./founder/featureFlags.js";
 
 // ─── Rate limiters ───────────────────────────────────────────────────────────
 // Council runs are expensive (multi-agent AI). 5 runs / 15 min per IP for open beta.
@@ -244,17 +257,23 @@ app.post("/api/auth/glass-connect/issue", express.json(), async (req, res) => {
   }
 });
 
-app.get("/api/auth/glass-connect/verify/:token", (req, res) => {
+app.get("/api/auth/glass-connect/verify/:token", async (req, res) => {
   const entry = verifyGlassConnectToken(req.params.token ?? "");
   if (!entry) {
     res.status(404).json({ error: "Invalid or expired connect token" });
     return;
   }
+  const [role, flags] = await Promise.all([
+    getUserRoleById(getAuthPool(), entry.userId),
+    getFeatureFlags(),
+  ]);
   res.json({
     sessionToken: entry.sessionToken,
     userId: entry.userId,
     email: entry.email,
     name: entry.name,
+    role,
+    fullBuildLoop: flags.coderBuildLoopEnabledForNewUsers,
   });
 });
 
@@ -268,6 +287,7 @@ app.all(/^\/api\/auth/, toNodeHandler(auth));
 app.post("/api/glass/ask", glassApiAuthMiddleware, glassLimiter, express.json({ limit: "6mb" }), async (req, res) => {
   const body = req.body as GlassAskRequestBody;
   try {
+    await assertAiCallsEnabled();
     validateGlassAskPayloadSize(body);
     const result = await handleGlassAsk(body);
     res.json(result);
@@ -320,6 +340,7 @@ app.post("/api/glass/ask/stream", glassApiAuthMiddleware, glassLimiter, express.
   req.on("close", () => ac.abort());
 
   try {
+    await assertAiCallsEnabled();
     const missing = validateGlassDirectApiKey();
     if (missing.length > 0) {
       send({ error: `Missing API keys: ${missing.join(", ")}. Add them to your .env file.`, status: 503 });
@@ -392,6 +413,73 @@ app.post("/api/landing-gate/unlock", (req, res) => {
   res.json({ ok: true });
 });
 
+app.post("/api/landing/glass-browse/event", async (req, res) => {
+  const payload = parseGlassBrowseEventPayload(req.body);
+  if (!payload) {
+    res.status(400).json({ error: "Invalid glass browse event." });
+    return;
+  }
+  try {
+    const entry = await appendGlassBrowseEvent(payload.event, payload.metadata);
+    res.status(201).json({ ok: true, id: entry.id });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to record event.";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.get("/api/landing/glass-browse/social-proof", async (_req, res) => {
+  try {
+    const [proof, flags] = await Promise.all([
+      getGlassBrowseSocialProof(),
+      getFeatureFlags(),
+    ]);
+    res.json({ ok: true, ...proof, demoEnabled: flags.overlayDemoEnabled });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to load social proof.";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.get("/api/glass/runtime-config", glassApiAuthMiddleware, async (_req, res) => {
+  try {
+    const flags = await getFeatureFlags();
+    res.json({
+      ok: true,
+      overlayDemoEnabled: flags.overlayDemoEnabled,
+      terminalAutoFixEnabled: flags.terminalAutoFixEnabled,
+      coderBuildLoopEnabledForNewUsers: flags.coderBuildLoopEnabledForNewUsers,
+      aiCallsEnabled: flags.aiCallsEnabled,
+      updatedAt: flags.updatedAt,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to load runtime config.";
+    res.status(500).json({ error: message });
+  }
+});
+
+registerFounderRoutes(app);
+
+app.get("/api/landing/glass-browse/stats", async (req, res) => {
+  if (!isAuthorizedGlassBrowseStats(req)) {
+    res.status(401).json({
+      error: "Unauthorized. Set GLASS_BROWSE_STATS_TOKEN on the server and pass Bearer token or ?token=.",
+    });
+    return;
+  }
+  try {
+    const stats = await getGlassBrowseStats();
+    res.json({
+      ok: true,
+      stats,
+      enterRate: stats.pageViews > 0 ? stats.entered / stats.pageViews : null,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to load stats.";
+    res.status(500).json({ error: message });
+  }
+});
+
 // IIVO voice — text -> speech (key stays server-side)
 app.post("/api/tts", express.json({ limit: "64kb" }), ttsHandler);
 
@@ -458,6 +546,18 @@ app.get("/api/glass/update/electron/latest-mac.yml", (req, res) => {
 
 app.get("/api/glass/update/download/:filename", (req, res) => {
   void handleGlassUpdateDownload(req, res);
+});
+
+app.get("/api/glass/download/latest", (req, res) => {
+  void handleGlassDownloadLatest(req, res);
+});
+
+app.get("/api/glass/download/arm64", (req, res) => {
+  void handleGlassDownloadRedirect(req, res, "arm64");
+});
+
+app.get("/api/glass/download/x64", (req, res) => {
+  void handleGlassDownloadRedirect(req, res, "x64");
 });
 
 app.post("/api/transcribe-audio", glassApiAuthMiddleware, express.json({ limit: "8mb" }), async (req, res) => {
@@ -1489,6 +1589,7 @@ if (process.env.NODE_ENV === "production") {
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`IIVO server listening on http://0.0.0.0:${PORT}`);
+  void initAuthRoles();
   logApiKeyStatus();
   logImageVisionStatus();
   logConfiguredModels();

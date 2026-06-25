@@ -146,7 +146,7 @@ import {
   getRecentTerminalContextBlocks,
 } from "./terminalContext.ts";
 import { saveResponseToMemoryVault } from "../shared/iivoMemoryClient.ts";
-import { waitForMinLookingDuration, waitForMinThinkingDuration, GLASS_ASK_TIMEOUT_MS, VOICE_ASK_STATUS } from "../shared/glassAskTiming.ts";
+import { waitForMinLookingDuration, waitForMinThinkingDuration, resolveGlassAskTimeoutMs, VOICE_ASK_STATUS } from "../shared/glassAskTiming.ts";
 import type { PanelTab } from "../shared/types.ts";
 import { GlassSessionStore } from "../shared/sessionStore.ts";
 import {
@@ -278,8 +278,9 @@ import {
   resetListenSessionChainsDedup,
 } from "./listenSessionChains.ts";
 import { agentBus, AgentBus, type AudioBuildPlanPayload } from "./agentEventBus.ts";
-import { migrateAnthropicKeyFromEnv } from "./anthropicKeyStore.ts";
+import { migrateAnthropicKeyFromEnv, resolveAnthropicApiKey } from "./anthropicKeyStore.ts";
 import {
+  ensureAnthropicKeyActivated,
   gateActivationAfterOnboarding,
   gateActivationForReturningUser,
   markOnboardingComplete,
@@ -290,7 +291,7 @@ import { isActivationIpcSender, openActivationWindowDev } from "./activationWind
 import { configureGlassDashboardRuntime, initGlassDashboard, teardownGlassDashboard } from "./glassDashboardWindow.ts";
 import { initGlassSettings, isSettingsIpcSender, teardownGlassSettings } from "./glassSettingsWindow.ts";
 import { registerDashboardIpc, setDashboardIpcAuth, isDashboardIpcSender } from "./dashboardIpc.ts";
-import { closeDatabase, initDatabase } from "./glassDatabase.ts";
+import { closeDatabase, gracefulDatabaseShutdown, initDatabase } from "./glassDatabase.ts";
 import {
   logSessionStart,
   logSessionEnd,
@@ -299,9 +300,11 @@ import {
   logTerminalAutofixDismissed,
   logBuildLoopStarted,
   logBuildLoopCompleted,
+  logRetentionEvent,
 } from "./glassRetentionEvents.ts";
 import { randomUUID } from "crypto";
 import { pruneHistory, seedUserContextFromProfile, persistChatExchange } from "./sessionHistoryStore.ts";
+import { getSessionSpendSummary } from "./modelCallStore.ts";
 import { notifyMemoryServicesReady, runPostSessionExtraction } from "./glassMemoryEngine.ts";
 import { connectAnthropicApiKey } from "./connectAnthropicApiKey.ts";
 import { connectOpenAiApiKey } from "./connectOpenAiApiKey.ts";
@@ -339,6 +342,7 @@ import { buildMetaPrompt } from "./powerPromptEngine.ts";
 import { buildDetectionPrompt, buildGenerationPrompt } from "./extractMode.ts";
 import { parseExtractDetectLabel } from "../shared/extractModeLogic.ts";
 import { runExtractBuildHandoff } from "./extractBuildHandoffRunner.ts";
+import { fetchServerRuntimeFlags } from "./serverRuntimeConfig.ts";
 import { buildTerminalFixPrompt, parseTerminalFixResponse } from "./terminalFixEngine.ts";
 import { EXTRACT_BUILD_MACOS_PERMISSION_EXPLAIN } from "../shared/extractBuildHandoff.ts";
 import { getSpendSnapshot, refreshSpendSnapshot, startSpendPolling } from "./spendTracker.ts";
@@ -587,6 +591,10 @@ import {
   type GlassCommandFeedItem,
 } from "../shared/commandFeed.ts";
 import { askIivoGlass, askIivoGlassStream, GlassAskCancelledError, isGlassAskPayloadTooLargeError } from "./glassAskClient.ts";
+import {
+  formatGlassAskErrorForUser,
+  isGlassAskMissingKeyError,
+} from "../shared/glassAskClientUtils.ts";
 import { optimizeVisualAskImage } from "./visualImageOptimizer.ts";
 import { applyOptimizedToPayload } from "./glassVisualAskCapture.ts";
 import {
@@ -655,11 +663,15 @@ import {
 import { runGlassSetupCheck, runGlassServerHealthCheck } from "./glassSetupCheck.ts";
 import {
   clearIivoServerDegradedSources,
+  clearIivoServerDegradedSource,
   getIivoServerDegradedReason,
   markIivoServerDegraded,
   registerIivoServerDegradedHandler,
 } from "./iivoServerDegradedMain.ts";
-import { registerIivoServerDegradedReporter } from "../shared/iivoServerDegradedHooks.ts";
+import {
+  registerIivoServerDegradedReporter,
+  registerIivoServerRecoveredReporter,
+} from "../shared/iivoServerDegradedHooks.ts";
 import { openGlassSystemSettings } from "./glassSystemSettings.ts";
 import { glassMenuAppName } from "../shared/glassAppIdentity.ts";
 import type { GlassAppIdentityReport, DuplicateGlassAppBundle } from "../shared/glassAppIdentityReport.ts";
@@ -714,6 +726,7 @@ import {
   registerSession as registerScrollbackSession,
   writeBlocks as writeScrollbackBlocks,
   getRecentSummary as getScrollbackRecentSummary,
+  getLastScrollbackError as getScrollbackLastError,
   getByIdsInOrder as getScrollbackByIdsInOrder,
   closeDb as closeScrollbackDb,
 } from "./scrollbackStore.ts";
@@ -909,6 +922,9 @@ interface AppState {
   panelTab: PanelTab;
   lastError?: string;
   lastNotice?: string;
+  recoveryToast?: string;
+  recoveryToastNonce?: number;
+  dbRecoveryWarning?: string;
   lastSentUrl?: string;
   pendingCaptureDataUrl?: string;
   latestScreenshot?: GlassLatestScreenshotState | null;
@@ -993,6 +1009,7 @@ interface AppState {
   coderCheckpoints: import("../shared/coderCheckpoints.ts").CoderCheckpoint[];
   coderTerminalCwdByRunId: Record<string, string>;
   coderRunUsage: import("../shared/coderAgentModels.ts").CoderRunUsage | null;
+  sessionSpendUsd: number;
   qaRiskTriggered?: boolean;
   qaRiskPaths?: string[];
   mediaContext: MediaContext | null;
@@ -1305,11 +1322,13 @@ const state: AppState = {
   coderCheckpoints: [],
   coderTerminalCwdByRunId: {},
   coderRunUsage: null,
+  sessionSpendUsd: 0,
   mediaContext: null,
   appUpdate: emptyGlassAppUpdateState(app.getVersion()),
   onboardingOpen: false,
   glassUserProfile: null,
   iivoAccountLink: null,
+  serverRuntimeFlags: null,
   omniParserInstall: getOmniParserInstallState(),
 };
 
@@ -3780,21 +3799,34 @@ function applyServerHealthPollResult(health: GlassServerHealthForSetup | null): 
 
 function scheduleServerHealthPolling(): void {
   if (process.env.IIVO_GLASS_E2E === "1") return;
-  const POLL_MS = 45_000;
+  const POLL_HEALTHY_MS = 30_000;
+  const POLL_DEGRADED_MS = 10_000;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const pollDelay = (): number =>
+    getIivoServerDegradedReason() ? POLL_DEGRADED_MS : POLL_HEALTHY_MS;
+
+  const scheduleNext = (): void => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(runPoll, pollDelay());
+  };
+
   const runPoll = (): void => {
     void runGlassServerHealthCheck(config)
       .then((health) => {
         applyServerHealthPollResult(health);
+        scheduleNext();
       })
       .catch(() => {
         markIivoServerDegraded("health", "IIVO server health check failed.");
         state.iivoServerDegradedReason = getIivoServerDegradedReason();
         refreshSetupCapabilities();
         push();
+        scheduleNext();
       });
   };
+
   runPoll();
-  setInterval(runPoll, POLL_MS);
 }
 
 function scheduleInitialSetupCheck(): void {
@@ -3817,8 +3849,18 @@ function scheduleInitialSetupCheck(): void {
   });
 }
 
+function refreshSessionSpendState(sessionId?: string | null): void {
+  const sid = sessionId?.trim() || sessions.current()?.id;
+  if (!sid) {
+    state.sessionSpendUsd = 0;
+    return;
+  }
+  state.sessionSpendUsd = getSessionSpendSummary(sid).totalUsd;
+}
+
 function snapshot(): GlassState {
   const session = sessions.current();
+  refreshSessionSpendState(session?.id);
   return {
     privacy: state.privacy,
     transcript: state.transcript,
@@ -3828,6 +3870,9 @@ function snapshot(): GlassState {
     config,
     lastError: state.lastError,
     lastNotice: state.lastNotice,
+    recoveryToast: state.recoveryToast,
+    recoveryToastNonce: state.recoveryToastNonce,
+    dbRecoveryWarning: state.dbRecoveryWarning,
     lastSentUrl: state.lastSentUrl,
     session,
     sessionSummary: session ? buildSessionSummary(session) : "",
@@ -3911,6 +3956,7 @@ function snapshot(): GlassState {
     coderCheckpoints: state.coderCheckpoints,
     coderTerminalCwdByRunId: state.coderTerminalCwdByRunId,
     coderRunUsage: state.coderRunUsage,
+    sessionSpendUsd: state.sessionSpendUsd,
     qaRiskTriggered: state.qaRiskTriggered,
     qaRiskPaths: state.qaRiskPaths,
     mediaContext: state.mediaContext,
@@ -5399,13 +5445,18 @@ async function submitCommand(
 
   const chatMemorySessionId = randomUUID();
   const windowCtxForSession = getCachedWindowContext();
+  const liveSessionId = sessions.current()?.id;
+  const askSessionId = liveSessionId ?? chatMemorySessionId;
 
   const companionDepthAsk =
     state.companionModeActive === true && companionPrefersResponsePanel(text);
 
   const askRequest = {
     prompt: text,
-    session: buildGlassAskSessionPayload(text),
+    session: {
+      ...buildGlassAskSessionPayload(text),
+      sessionId: askSessionId,
+    },
     latestScreenshot: latestScreenshot ?? lensScreenshotPayload,
     lensContext: lensAttached ?? undefined,
     visualIntent: visualIntent || Boolean(lensScreenshotPayload) || undefined,
@@ -5443,7 +5494,7 @@ async function submitCommand(
     Promise.race([
       promise,
       new Promise<T>((_, reject) => {
-        setTimeout(() => reject(new Error(VOICE_ASK_STATUS.timeout)), GLASS_ASK_TIMEOUT_MS);
+        setTimeout(() => reject(new Error(VOICE_ASK_STATUS.timeout)), resolveGlassAskTimeoutMs());
       }),
     ]);
 
@@ -5610,14 +5661,15 @@ async function submitCommand(
     await recordGlassContextAfterResponse(text);
 
     try {
-      persistChatExchange(chatMemorySessionId, text, fullAnswer, {
+      persistChatExchange(askSessionId, text, fullAnswer, {
         agentId: "chat",
         title: rawText.trim().slice(0, 80) || undefined,
         contextApp: windowCtxForSession.appName ?? undefined,
       });
-      void runPostSessionExtraction(chatMemorySessionId, `chat:${chatMemorySessionId}`).catch((err) => {
+      void runPostSessionExtraction(askSessionId, `chat:${askSessionId}`).catch((err) => {
         console.warn("[memory] command-bar post-session extraction failed", err);
       });
+      refreshSessionSpendState(askSessionId);
     } catch (err) {
       console.error("[memory] command-bar persist failed:", err);
     }
@@ -5756,13 +5808,12 @@ async function submitCommand(
     }
 
     removePendingAskFeedItems();
-    const rawMessage = err instanceof Error ? err.message : "Could not reach IIVO server.";
-    const message = isGlassAskPayloadTooLargeError(err)
-      ? GLASS_VISUAL_PAYLOAD_TOO_LARGE_MESSAGE
-      : rawMessage;
+    const missingKey = isGlassAskMissingKeyError(err);
+    const message = formatGlassAskErrorForUser(err);
     state.visualAskPayloadDiagnostics = state.visualAskPayloadDiagnostics
       ? { ...state.visualAskPayloadDiagnostics, status: "failed" }
       : null;
+    const rawMessage = err instanceof Error ? err.message : "";
     const serverResult = isGlassAskPayloadTooLargeError(err)
       ? "413"
       : /vision|not enabled|not configured/i.test(rawMessage)
@@ -5779,11 +5830,17 @@ async function submitCommand(
     state.askStatus = "error";
     state.partialAnswer = undefined;
     pushFeed(
-      createCommandFeedItem("error", `${message} Use Open in IIVO to continue in the browser.`, {
-        prompt: text,
-      }),
+      createCommandFeedItem(
+        "error",
+        missingKey ? message : `${message} Use Open in IIVO to continue in the browser.`,
+        { prompt: text },
+      ),
     );
     state.lastError = message;
+    if (missingKey) {
+      state.lastNotice = message;
+      void ensureAnthropicKeyActivated();
+    }
     state.operationDiagnostics = recordOperation(state.operationDiagnostics, "ask-iivo", "error", message);
   } finally {
     if (requestGeneration === askRequestGeneration) {
@@ -6728,6 +6785,10 @@ async function handleCommand(
       state.lastNotice = undefined;
       push();
       return;
+    case "clear-recovery-toast":
+      state.recoveryToast = undefined;
+      push();
+      return;
     case "clear-last-error":
       state.lastError = undefined;
       push();
@@ -6893,12 +6954,16 @@ async function handleCommand(
             userId: string;
             email: string;
             name: string | null;
+            role?: "founder" | "admin" | "user";
+            fullBuildLoop?: boolean;
           };
           const link = {
             sessionToken: data.sessionToken,
             userId: data.userId,
             email: data.email,
             name: data.name ?? null,
+            role: data.role === "founder" || data.role === "admin" ? data.role : "user",
+            fullBuildLoop: data.fullBuildLoop !== false,
             linkedAt: new Date().toISOString(),
           };
           await persistIivoAccountLink(link);
@@ -8786,7 +8851,18 @@ async function handleCommand(
 // ─── Glass Command Palette helpers (Task #66) ───────────────────────────────────
 
 async function runPaletteTerminalFixLast(): Promise<void> {
-  const block = getLastTerminalErrorBlock();
+  let block = getLastTerminalErrorBlock();
+  if (!block) {
+    const persisted = getScrollbackLastError();
+    if (persisted) {
+      block = {
+        command: persisted.command,
+        output: persisted.output,
+        exitCode: persisted.exitCode,
+        status: "error",
+      };
+    }
+  }
   if (!block) {
     state.lastNotice = "No failed terminal command to fix.";
     push();
@@ -8905,6 +8981,24 @@ export function getTerminalAutoFixSessionStats(): typeof terminalAutoFixSession 
   return { ...terminalAutoFixSession };
 }
 
+async function refreshServerRuntimeFlags(): Promise<void> {
+  const flags = await fetchServerRuntimeFlags(config);
+  if (flags) {
+    state.serverRuntimeFlags = flags;
+    push();
+  }
+}
+
+function getCoderLoopMaxIterations(): number {
+  const link = state.iivoAccountLink;
+  if (!link || link.fullBuildLoop !== false) return CODER_LOOP_MAX_ITERATIONS;
+  return 1;
+}
+
+function isTerminalAutoFixGloballyEnabled(): boolean {
+  return state.serverRuntimeFlags?.terminalAutoFixEnabled !== false;
+}
+
 /**
  * Called when the Glass built-in terminal exits with a non-zero code.
  * Uses the strict 3-line format from terminalFixEngine for reliable parsing:
@@ -8917,6 +9011,7 @@ async function handleTerminalAutoFix(
   exitCode: number,
   context: import("./glassTerminal.ts").GlassTerminalExitContext,
 ): Promise<void> {
+  if (!isTerminalAutoFixGloballyEnabled()) return;
   const { lastCommand, outputLines } = context;
   if (!lastCommand) return;
 
@@ -8929,7 +9024,12 @@ async function handleTerminalAutoFix(
   const outputText = meaningfulLines.join("\n");
 
   // Use the canonical 3-line prompt from terminalFixEngine (strict format, reliable parsing)
-  const prompt = buildTerminalFixPrompt(lastCommand, outputText, exitCode);
+  const prompt = buildTerminalFixPrompt(
+    lastCommand,
+    outputText,
+    exitCode,
+    getTerminalContextString() ?? undefined,
+  );
 
   try {
     const response = await askIivoGlass(config, {
@@ -10837,6 +10937,7 @@ function registerIpc(): void {
         estimatedUsd: ev.usageEstimatedUsd ?? 0,
         updatedAt: Date.now(),
       };
+      refreshSessionSpendState();
       shouldPush = true;
     }
 
@@ -11159,6 +11260,7 @@ function registerIpc(): void {
         agentId,
         prompt: enrichedPrompt,
         runId,
+        sessionId: sessions.current()?.id,
         outputDir,
         codeWorkspaceRoot,
         projectRoot: agentId === "coder" ? codeWorkspaceRoot : undefined,
@@ -11650,7 +11752,7 @@ function registerIpc(): void {
       const errorOutput = typeof payload?.errorOutput === "string" ? payload.errorOutput.trim() : "";
       if (!errorOutput) return { ok: false, error: "No error output" };
 
-      if (!canStartLoopFix(coderBuildLoopHost)) {
+      if (!canStartLoopFix(coderBuildLoopHost, getCoderLoopMaxIterations())) {
         const capLine = narrateToolStart("coder-loop-cap", {});
         state.lastNotice = capLine;
         broadcastCoderNarrate(capLine, payload?.runId);
@@ -11683,7 +11785,7 @@ function registerIpc(): void {
       const findings = typeof payload?.findings === "string" ? payload.findings.trim() : "";
       if (!findings) return { ok: false, error: "No findings" };
 
-      if (!canStartLoopFix(coderBuildLoopHost)) {
+      if (!canStartLoopFix(coderBuildLoopHost, getCoderLoopMaxIterations())) {
         const capLine = narrateToolStart("coder-loop-cap", {});
         state.lastNotice = capLine;
         broadcastCoderNarrate(capLine, payload?.runId);
@@ -12557,6 +12659,9 @@ function registerIpc(): void {
   ipcMain.handle(
     IPC.terminalFix,
     async (_event, payload: TerminalFixRequest): Promise<TerminalFixResponse> => {
+      if (!isTerminalAutoFixGloballyEnabled()) {
+        return { error: "Terminal Auto Fix is disabled by system operator." };
+      }
       const command = typeof payload?.command === "string" ? payload.command.trim() : "";
       const output = typeof payload?.output === "string" ? payload.output.trim() : "";
       const exitCode = typeof payload?.exitCode === "number" ? payload.exitCode : 1;
@@ -12884,15 +12989,31 @@ app.whenReady().then(() =>
     push();
   });
   registerIivoServerDegradedReporter(markIivoServerDegraded);
+  registerIivoServerRecoveredReporter(clearIivoServerDegradedSource);
   state.glassSettings = glassUserSettings;
   state.agentHistory = loadAgentHistory();
   migrateAnthropicKeyFromEnv();
 
-  initDatabase();
+  const dbInit = initDatabase();
+  if (dbInit.recoveredFromCorruption) {
+    const backupName = dbInit.corruptionBackupPath
+      ? dbInit.corruptionBackupPath.split(/[/\\]/).pop() ?? "glass-corrupted.db"
+      : "glass-corrupted.db";
+    state.dbRecoveryWarning =
+      `Local session database was damaged and has been reset. Backup saved as ${backupName}.`;
+    state.lastNotice = state.dbRecoveryWarning;
+  }
+  if (dbInit.recoveredFromUncleanExit) {
+    logRetentionEvent("glass_unclean_exit_recovery");
+    state.recoveryToast = "Glass recovered from an unexpected exit.";
+    state.recoveryToastNonce = Date.now();
+  }
   logSessionStart();
-  void notifyMemoryServicesReady().catch((err) => {
-    console.error("[memory] startup notifyMemoryServicesReady failed:", err);
-  });
+  if (resolveAnthropicApiKey()) {
+    void notifyMemoryServicesReady().catch((err) => {
+      console.error("[memory] startup notifyMemoryServicesReady failed:", err);
+    });
+  }
   try {
     pruneHistory();
   } catch (err) {
@@ -12946,6 +13067,8 @@ app.whenReady().then(() =>
   }
   state.glassUserProfile = glassOnboardingState.profile;
   state.iivoAccountLink = await loadIivoAccountLink();
+  void refreshServerRuntimeFlags();
+  setInterval(() => { void refreshServerRuntimeFlags(); }, 5 * 60_000);
   if (needsSortingHat) {
     setOnboardingPending(true);
   }
@@ -13097,6 +13220,10 @@ app.whenReady().then(() =>
   });
   }),
 );
+
+app.on("before-quit", () => {
+  gracefulDatabaseShutdown();
+});
 
 app.on("will-quit", () => {
   appIsQuitting = true; // guard PTY onExit callbacks from calling push() on destroyed windows

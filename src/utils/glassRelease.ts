@@ -1,26 +1,16 @@
 /**
- * glassRelease.ts — Single source of truth for the current public Glass release.
+ * glassRelease.ts — Public Glass download entry points for the IIVO web app.
  *
- * Update GLASS_LATEST_VERSION when a new build is published to GitHub Releases.
- * Both the landing page and install guide import from this file — one bump covers all.
- *
- * GitHub release asset naming convention (from notarize-and-release.sh):
- *   IIVO-Glass-{version}-arm64.dmg   — Apple Silicon
- *   IIVO-Glass-{version}-x64.dmg     — Intel
+ * Download buttons use stable server redirects that always resolve to the latest
+ * GitHub release (see /api/glass/download/*). No manual version bump needed
+ * when a new DMG is published.
  */
 
-export const GLASS_LATEST_VERSION = "0.5.0";
+/** Stable redirect — server resolves latest arm64 DMG from GitHub Releases. */
+export const GLASS_DMG_ARM64_DOWNLOAD_URL = "/api/glass/download/arm64";
 
-const RELEASES_BASE =
-  `https://github.com/chrismls101-maker/ai-council-runner/releases/download/v${GLASS_LATEST_VERSION}`;
-
-/** Apple Silicon (arm64) DMG — default for most current Mac users. */
-export const GLASS_DMG_ARM64_DOWNLOAD_URL =
-  `${RELEASES_BASE}/IIVO-Glass-${GLASS_LATEST_VERSION}-arm64.dmg`;
-
-/** Intel (x64) DMG — for older Mac hardware. */
-export const GLASS_DMG_X64_DOWNLOAD_URL =
-  `${RELEASES_BASE}/IIVO-Glass-${GLASS_LATEST_VERSION}-x64.dmg`;
+/** Stable redirect — server resolves latest x64 DMG from GitHub Releases. */
+export const GLASS_DMG_X64_DOWNLOAD_URL = "/api/glass/download/x64";
 
 /**
  * Default download URL — Apple Silicon.
@@ -31,6 +21,12 @@ export const GLASS_DMG_DOWNLOAD_URL = GLASS_DMG_ARM64_DOWNLOAD_URL;
 /** Link to the GitHub Releases page (fallback / "see all versions"). */
 export const GLASS_RELEASES_PAGE_URL =
   "https://github.com/chrismls101-maker/ai-council-runner/releases";
+
+/**
+ * Fallback version label when /api/glass/download/latest is unavailable (offline dev).
+ * Bump only if you need accurate copy without hitting the API.
+ */
+export const GLASS_LATEST_VERSION = "0.8.2";
 
 /**
  * BlackHole 2ch version bundled with this release of IIVO Glass.

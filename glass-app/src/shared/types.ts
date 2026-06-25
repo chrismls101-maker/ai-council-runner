@@ -25,6 +25,7 @@ export type PanelTab =
   | "actions"
   | "diagnostics"
   | "account"
+  | "founder"
   | "installations"
   | "power-stack";
 

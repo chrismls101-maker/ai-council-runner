@@ -192,7 +192,7 @@ test.describe("Install page (/install)", () => {
   test("direct download link is present and external", async ({ page }) => {
     await page.goto(BASE + "/install");
     await expect(page.getByTestId("glass-install-page")).toBeVisible();
-    const dmgLink = page.locator('a[href*=".dmg"], a[href*="releases"]').first();
+    const dmgLink = page.locator('a[href*="/api/glass/download/"], a[href*=".dmg"], a[href*="releases"]').first();
     await expect(dmgLink).toBeVisible();
   });
 

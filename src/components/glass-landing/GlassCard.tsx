@@ -12,7 +12,7 @@ export default function GlassCard({
 }: GlassCardProps) {
   return (
     <Tag className={["glass-card", className].filter(Boolean).join(" ")} {...rest}>
-      <p className="glass-card__text">{children}</p>
+      {children}
     </Tag>
   );
 }

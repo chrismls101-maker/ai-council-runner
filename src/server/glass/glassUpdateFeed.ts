@@ -4,9 +4,13 @@
  */
 
 import type { Request, Response } from "express";
+import { loadGlassUpdateManifest } from "./glassUpdateManifest.js";
 
 const GITHUB_OWNER = "chrismls101-maker";
 const GITHUB_REPO = "ai-council-runner";
+
+export const GLASS_RELEASES_PAGE_URL =
+  `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases`;
 
 type GitHubReleaseAsset = {
   name: string;
@@ -17,6 +21,16 @@ type GitHubReleaseAsset = {
 type GitHubRelease = {
   tag_name: string;
   assets: GitHubReleaseAsset[];
+};
+
+export type GlassLatestDownloadInfo = {
+  ok: boolean;
+  version?: string;
+  tagName?: string;
+  arm64Url?: string;
+  x64Url?: string;
+  releasesPageUrl?: string;
+  reason?: string;
 };
 
 let cachedRelease: { at: number; release: GitHubRelease } | null = null;
@@ -35,6 +49,14 @@ function githubHeaders(): Record<string, string> {
   const token = githubToken();
   if (token) headers.Authorization = `Bearer ${token}`;
   return headers;
+}
+
+export function parseGlassVersion(tagName: string): string {
+  return tagName.replace(/^v/i, "").trim();
+}
+
+export function glassDmgFilename(version: string, arch: "arm64" | "x64"): string {
+  return `IIVO-Glass-${version}-${arch}.dmg`;
 }
 
 async function fetchLatestRelease(): Promise<GitHubRelease> {
@@ -67,6 +89,97 @@ function proxyDownloadUrl(req: Request, filename: string): string {
   const host = req.get("x-forwarded-host") ?? req.get("host") ?? "iivo.ai";
   const proto = req.get("x-forwarded-proto") ?? req.protocol ?? "https";
   return `${proto}://${host}/api/glass/update/download/${encodeURIComponent(filename)}`;
+}
+
+function publicGithubDownloadUrl(version: string, arch: "arm64" | "x64"): string {
+  const tag = version.startsWith("v") ? version : `v${version}`;
+  return `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/${tag}/${glassDmgFilename(version, arch)}`;
+}
+
+function resolveAssetDownloadUrl(req: Request, asset: GitHubReleaseAsset): string {
+  if (githubToken()) return proxyDownloadUrl(req, asset.name);
+  if (asset.browser_download_url?.trim()) return asset.browser_download_url.trim();
+  return proxyDownloadUrl(req, asset.name);
+}
+
+function manifestFallback(version: string, req: Request): GlassLatestDownloadInfo {
+  const arm64Name = glassDmgFilename(version, "arm64");
+  const x64Name = glassDmgFilename(version, "x64");
+  return {
+    ok: true,
+    version,
+    tagName: version.startsWith("v") ? version : `v${version}`,
+    arm64Url: githubToken()
+      ? proxyDownloadUrl(req, arm64Name)
+      : publicGithubDownloadUrl(version, "arm64"),
+    x64Url: githubToken()
+      ? proxyDownloadUrl(req, x64Name)
+      : publicGithubDownloadUrl(version, "x64"),
+    releasesPageUrl: GLASS_RELEASES_PAGE_URL,
+  };
+}
+
+export async function resolveLatestGlassDownloadInfo(req: Request): Promise<GlassLatestDownloadInfo> {
+  try {
+    const release = await fetchLatestRelease();
+    const version = parseGlassVersion(release.tag_name);
+    const arm64 = findAsset(release, glassDmgFilename(version, "arm64"));
+    const x64 = findAsset(release, glassDmgFilename(version, "x64"));
+
+    if (!arm64 && !x64) {
+      return {
+        ok: false,
+        version,
+        tagName: release.tag_name,
+        reason: `Latest release v${version} has no IIVO-Glass DMG assets.`,
+      };
+    }
+
+    return {
+      ok: true,
+      version,
+      tagName: release.tag_name,
+      arm64Url: arm64 ? resolveAssetDownloadUrl(req, arm64) : undefined,
+      x64Url: x64 ? resolveAssetDownloadUrl(req, x64) : undefined,
+      releasesPageUrl: GLASS_RELEASES_PAGE_URL,
+    };
+  } catch (err) {
+    const manifest = loadGlassUpdateManifest();
+    if (manifest.ok && manifest.version?.trim()) {
+      return manifestFallback(manifest.version.trim(), req);
+    }
+
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, reason: message };
+  }
+}
+
+export async function handleGlassDownloadLatest(req: Request, res: Response): Promise<void> {
+  const info = await resolveLatestGlassDownloadInfo(req);
+  if (!info.ok) {
+    res.status(503).json(info);
+    return;
+  }
+  res.json(info);
+}
+
+export async function handleGlassDownloadRedirect(
+  req: Request,
+  res: Response,
+  arch: "arm64" | "x64",
+): Promise<void> {
+  const info = await resolveLatestGlassDownloadInfo(req);
+  const url = arch === "arm64" ? info.arm64Url : info.x64Url;
+
+  if (!info.ok || !url) {
+    res.status(503).json({
+      ok: false,
+      error: info.reason ?? `No ${arch} download is available for the latest release.`,
+    });
+    return;
+  }
+
+  res.redirect(302, url);
 }
 
 export async function handleGlassUpdateDownload(req: Request, res: Response): Promise<void> {

@@ -8,23 +8,8 @@
 
 import { betterAuth } from "better-auth";
 import { magicLink } from "better-auth/plugins";
-import pg from "pg";
-
-const { Pool } = pg;
-
-// ── Database ──────────────────────────────────────────────────────────────────
-
-function makePool() {
-  const url = process.env.DATABASE_URL;
-  if (!url) {
-    console.warn("[auth] DATABASE_URL not set — auth will not function");
-  }
-  return new Pool({
-    connectionString: url,
-    // Railway Postgres requires SSL; don't reject self-signed certs
-    ssl: url ? { rejectUnauthorized: false } : undefined,
-  });
-}
+import { getAuthPool } from "./authPool.js";
+import { ensureUserRoleSchema, seedFounderEmail } from "./userRoles.js";
 
 // ── Magic link email ──────────────────────────────────────────────────────────
 
@@ -98,8 +83,19 @@ export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET ?? "dev-secret-change-in-production",
 
   database: {
-    db: makePool(),
+    db: getAuthPool(),
     type: "pg",
+  },
+
+  user: {
+    additionalFields: {
+      role: {
+        type: "string",
+        required: false,
+        defaultValue: "user",
+        input: false,
+      },
+    },
   },
 
   emailAndPassword: { enabled: false },
@@ -123,3 +119,19 @@ export const auth = betterAuth({
 });
 
 export type Auth = typeof auth;
+
+/** Ensure role column exists and FOUNDER_EMAIL is promoted on startup. */
+export async function initAuthRoles(): Promise<void> {
+  if (!process.env.DATABASE_URL?.trim()) return;
+  try {
+    const pool = getAuthPool();
+    await ensureUserRoleSchema(pool);
+    await seedFounderEmail(pool);
+    const founder = process.env.FOUNDER_EMAIL?.trim();
+    if (founder) {
+      console.log(`[auth] Founder seed checked for ${founder}`);
+    }
+  } catch (err) {
+    console.error("[auth] Role init failed:", err);
+  }
+}

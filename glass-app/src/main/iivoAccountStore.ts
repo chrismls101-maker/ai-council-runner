@@ -21,6 +21,8 @@ export async function loadIivoAccountLink(): Promise<IivoAccountLink | null> {
       userId: parsed.userId,
       email: parsed.email,
       name: parsed.name ?? null,
+      role: parsed.role === "founder" || parsed.role === "admin" ? parsed.role : "user",
+      fullBuildLoop: parsed.fullBuildLoop !== false,
       linkedAt: parsed.linkedAt ?? new Date().toISOString(),
     };
   } catch {

@@ -2,33 +2,50 @@
  * AccountPage.tsx — User account dashboard
  *
  * Shows: user info, Glass connection button (issues connect token),
- * sign-out button.
+ * optional Founder tab, sign-out button.
  */
 
 import { useState, useEffect } from "react";
 import { createAuthClient } from "better-auth/client";
+import FounderDashboard from "../components/account/FounderDashboard";
 
 const authClient = createAuthClient({
   baseURL: window.location.origin,
 });
 
 type ConnectStatus = "idle" | "generating" | "ready" | "error";
+type AccountTab = "profile" | "founder";
+type UserRole = "founder" | "admin" | "user";
 
 export default function AccountPage() {
   const [user, setUser] = useState<{ name?: string | null; email: string; image?: string | null } | null>(null);
+  const [role, setRole] = useState<UserRole>("user");
+  const [tab, setTab] = useState<AccountTab>("profile");
   const [loading, setLoading] = useState(true);
   const [connectStatus, setConnectStatus] = useState<ConnectStatus>("idle");
   const [connectToken, setConnectToken] = useState("");
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    void authClient.getSession().then((res) => {
+    void (async () => {
+      const res = await authClient.getSession();
       setUser(res?.data?.user ?? null);
-      setLoading(false);
       if (!res?.data?.user) {
+        setLoading(false);
         window.location.href = "/login?redirect=/account";
+        return;
       }
-    });
+      try {
+        const profileRes = await fetch("/api/account/profile", { credentials: "include" });
+        if (profileRes.ok) {
+          const profile = (await profileRes.json()) as { user?: { role?: UserRole } };
+          if (profile.user?.role) setRole(profile.user.role);
+        }
+      } catch {
+        /* profile optional */
+      }
+      setLoading(false);
+    })();
   }, []);
 
   async function handleSignOut() {
@@ -71,11 +88,11 @@ export default function AccountPage() {
   if (!user) return null;
 
   const initials = (user.name ?? user.email).slice(0, 2).toUpperCase();
+  const isFounder = role === "founder";
 
   return (
     <div className="account-page">
       <div className="account-container">
-        {/* Header */}
         <div className="account-header">
           <span className="account-logo">IIVO</span>
           <button className="account-signout" onClick={() => { void handleSignOut(); }}>
@@ -83,71 +100,94 @@ export default function AccountPage() {
           </button>
         </div>
 
-        {/* Profile card */}
-        <div className="account-card">
-          <div className="account-avatar">{initials}</div>
-          <div className="account-info">
-            {user.name && <p className="account-name">{user.name}</p>}
-            <p className="account-email">{user.email}</p>
-          </div>
-        </div>
-
-        {/* Glass connection */}
-        <div className="account-section">
-          <h2 className="account-section__title">Connect IIVO Glass</h2>
-          <p className="account-section__desc">
-            Link your Glass app to this account. Open IIVO Glass → Settings → Account,
-            then paste the token below.
-          </p>
-
-          {connectStatus === "idle" && (
+        <div className="account-tabs">
+          <button
+            type="button"
+            className={`account-tab ${tab === "profile" ? "account-tab--active" : ""}`}
+            onClick={() => setTab("profile")}
+          >
+            Profile
+          </button>
+          {isFounder ? (
             <button
-              className="account-btn account-btn--primary"
-              onClick={() => { void handleGenerateToken(); }}
+              type="button"
+              className={`account-tab ${tab === "founder" ? "account-tab--active" : ""}`}
+              onClick={() => setTab("founder")}
             >
-              Generate connect token
+              Founder
             </button>
-          )}
-
-          {connectStatus === "generating" && (
-            <button className="account-btn account-btn--primary" disabled>
-              Generating…
-            </button>
-          )}
-
-          {connectStatus === "ready" && (
-            <div className="account-token">
-              <code className="account-token__code">{connectToken}</code>
-              <button
-                className="account-btn account-btn--copy"
-                onClick={() => { void handleCopy(); }}
-              >
-                {copied ? "Copied!" : "Copy"}
-              </button>
-              <p className="account-token__hint">
-                This token expires in 5 minutes. Paste it into IIVO Glass → Settings → Account.
-              </p>
-              <button
-                className="account-btn account-btn--ghost"
-                onClick={() => { setConnectStatus("idle"); setConnectToken(""); }}
-              >
-                Generate a new token
-              </button>
-            </div>
-          )}
-
-          {connectStatus === "error" && (
-            <div>
-              <p className="account-error">Failed to generate token. Please try again.</p>
-              <button
-                className="account-btn account-btn--primary"
-                onClick={() => { setConnectStatus("idle"); }}
-              >
-                Try again
-              </button>
-            </div>
-          )}
+          ) : null}
         </div>
+
+        {tab === "founder" && isFounder ? (
+          <FounderDashboard />
+        ) : (
+          <>
+            <div className="account-card">
+              <div className="account-avatar">{initials}</div>
+              <div className="account-info">
+                {user.name && <p className="account-name">{user.name}</p>}
+                <p className="account-email">{user.email}</p>
+              </div>
+            </div>
+
+            <div className="account-section">
+              <h2 className="account-section__title">Connect IIVO Glass</h2>
+              <p className="account-section__desc">
+                Link your Glass app to this account. Open IIVO Glass → Settings → Account,
+                then paste the token below.
+              </p>
+
+              {connectStatus === "idle" && (
+                <button
+                  className="account-btn account-btn--primary"
+                  onClick={() => { void handleGenerateToken(); }}
+                >
+                  Generate connect token
+                </button>
+              )}
+
+              {connectStatus === "generating" && (
+                <button className="account-btn account-btn--primary" disabled>
+                  Generating…
+                </button>
+              )}
+
+              {connectStatus === "ready" && (
+                <div className="account-token">
+                  <code className="account-token__code">{connectToken}</code>
+                  <button
+                    className="account-btn account-btn--copy"
+                    onClick={() => { void handleCopy(); }}
+                  >
+                    {copied ? "Copied!" : "Copy"}
+                  </button>
+                  <p className="account-token__hint">
+                    This token expires in 5 minutes. Paste it into IIVO Glass → Settings → Account.
+                  </p>
+                  <button
+                    className="account-btn account-btn--ghost"
+                    onClick={() => { setConnectStatus("idle"); setConnectToken(""); }}
+                  >
+                    Generate a new token
+                  </button>
+                </div>
+              )}
+
+              {connectStatus === "error" && (
+                <div>
+                  <p className="account-error">Failed to generate token. Please try again.</p>
+                  <button
+                    className="account-btn account-btn--primary"
+                    onClick={() => { setConnectStatus("idle"); }}
+                  >
+                    Try again
+                  </button>
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       <style>{`
@@ -166,11 +206,11 @@ export default function AccountPage() {
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
         .account-container {
-          max-width: 560px; margin: 0 auto; padding-top: 40px;
+          max-width: 720px; margin: 0 auto; padding-top: 40px;
         }
         .account-header {
           display: flex; align-items: center; justify-content: space-between;
-          margin-bottom: 32px;
+          margin-bottom: 24px;
         }
         .account-logo {
           font-size: 20px; font-weight: 800; letter-spacing: -0.5px;
@@ -183,6 +223,17 @@ export default function AccountPage() {
           cursor: pointer; padding: 4px 8px; border-radius: 6px;
         }
         .account-signout:hover { color: #aaa; background: #1e1e2e; }
+        .account-tabs {
+          display: flex; gap: 8px; margin-bottom: 20px;
+        }
+        .account-tab {
+          background: #13131a; border: 1px solid #2a2a3a; color: #888;
+          padding: 8px 14px; border-radius: 8px; font-size: 13px;
+          font-weight: 600; cursor: pointer;
+        }
+        .account-tab--active {
+          color: #f0f0f8; border-color: #7c3aed; background: #1a1428;
+        }
         .account-card {
           background: #13131a; border: 1px solid #2a2a3a; border-radius: 12px;
           padding: 20px 24px; display: flex; align-items: center; gap: 16px;

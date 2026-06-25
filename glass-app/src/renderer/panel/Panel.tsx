@@ -40,6 +40,7 @@ import { SetupSection } from "./SetupSection.tsx";
 import { CopilotPanel } from "./CopilotPanel.tsx";
 import { AudioTab } from "./AudioTab.tsx";
 import AccountTab from "./AccountTab.tsx";
+import FounderTab from "./FounderTab.tsx";
 import { LiveNotesTab } from "./LiveNotesTab.tsx";
 import { PowerStackTab } from "./PowerStackTab.tsx";
 import { ProvidersSettings } from "./ProvidersSettings.tsx";
@@ -56,6 +57,7 @@ const ALL_TABS: { id: PanelTab; label: string; devOnly?: boolean; builderOnly?: 
   { id: "audio", label: "Audio" },
   { id: "summary", label: "Summary" },
   { id: "account", label: "Account" },
+  { id: "founder", label: "Founder" },
   { id: "diagnostics", label: "Diagnostics", devOnly: true },
 ];
 
@@ -1224,6 +1226,7 @@ export function Panel(): JSX.Element {
   }, [state.panelTab]);
 
   const TABS = ALL_TABS.filter((t) => {
+    if (t.id === "founder" && state.iivoAccountLink?.role !== "founder") return false;
     if (t.devOnly && !IS_DEV) return false;
     if (t.builderOnly && !isBuilder) return false;
     return true;
@@ -1339,6 +1342,12 @@ export function Panel(): JSX.Element {
           {tab === "account" ? (
             <div className="panel__body">
               <AccountTab state={state} />
+            </div>
+          ) : null}
+
+          {tab === "founder" && state.iivoAccountLink?.role === "founder" ? (
+            <div className="panel__body">
+              <FounderTab state={state} link={state.iivoAccountLink} />
             </div>
           ) : null}
 

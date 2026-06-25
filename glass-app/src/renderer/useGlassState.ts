@@ -84,6 +84,7 @@ export const fallbackState: GlassState = {
   glassUserProfile: null,
   commandBarOverlayClearancePx: undefined,
   iivoAccountLink: null,
+  serverRuntimeFlags: null,
   iivoApiUrl: DEFAULT_CONFIG.iivoApiUrl,
   iivoWebUrl: DEFAULT_CONFIG.iivoWebUrl,
   wingman: DEFAULT_WINGMAN_STATE,
