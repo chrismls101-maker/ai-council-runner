@@ -9,6 +9,11 @@ import {
 } from "react";
 import { useGlassBrowse } from "./glassBrowseMode";
 import {
+  detectGlassBrowseMobilePlatform,
+  isGlassBrowseMobile,
+  type GlassBrowseMobilePlatform,
+} from "./glassBrowseDevice";
+import {
   formatGlassBrowseSocialProof,
   useGlassBrowseSocialProof,
 } from "../../hooks/useGlassBrowseSocialProof";
@@ -57,9 +62,41 @@ function SendIcon(): JSX.Element {
   );
 }
 
+function MobileStatusIcons(): JSX.Element {
+  return (
+    <span className="glass-browse__mobile-status-icons" aria-hidden="true">
+      <span className="glass-browse__mobile-signal">
+        <i /><i /><i /><i />
+      </span>
+      <span className="glass-browse__mobile-wifi" />
+      <span className="glass-browse__mobile-battery" />
+    </span>
+  );
+}
+
+function MobileChrome({
+  profile,
+  platform,
+}: {
+  profile: "phone" | "tablet";
+  platform: GlassBrowseMobilePlatform;
+}): JSX.Element {
+  return (
+    <div className={`glass-browse__mobile-chrome glass-browse__mobile-chrome--${platform}`} aria-hidden="true">
+      <div className={`glass-browse__mobile-status glass-browse__mobile-status--${profile}`}>
+        <span className="glass-browse__mobile-time">9:41</span>
+        {profile === "phone" ? <span className="glass-browse__mobile-island" /> : null}
+        <MobileStatusIcons />
+      </div>
+      <div className="glass-browse__mobile-home-indicator" />
+    </div>
+  );
+}
+
 export default function GlassBrowseOverlay(): JSX.Element | null {
   const {
     active,
+    deviceProfile,
     hint,
     agentsPanelOpen,
     demoResponse,
@@ -102,22 +139,37 @@ export default function GlassBrowseOverlay(): JSX.Element | null {
 
   if (!active) return null;
 
+  const isMobile = isGlassBrowseMobile(deviceProfile);
+  const mobilePlatform = detectGlassBrowseMobilePlatform();
+
   return (
-    <div className="glass-browse" data-testid="glass-browse-overlay" aria-hidden={false}>
-      <div className="glass-browse__desktop-chrome" aria-hidden="true">
-        <div className="glass-browse__menubar">
-          <span className="glass-browse__menubar-app">Safari</span>
-          <span>File</span>
-          <span>Edit</span>
-          <span>View</span>
-          <span className="glass-browse__menubar-time">9:41 AM</span>
+    <div
+      className={`glass-browse glass-browse--${deviceProfile}`}
+      data-testid="glass-browse-overlay"
+      data-device-profile={deviceProfile}
+      aria-hidden={false}
+    >
+      {isMobile ? (
+        <MobileChrome
+          profile={deviceProfile === "tablet" ? "tablet" : "phone"}
+          platform={mobilePlatform}
+        />
+      ) : (
+        <div className="glass-browse__desktop-chrome" aria-hidden="true">
+          <div className="glass-browse__menubar">
+            <span className="glass-browse__menubar-app">Safari</span>
+            <span>File</span>
+            <span>Edit</span>
+            <span>View</span>
+            <span className="glass-browse__menubar-time">9:41 AM</span>
+          </div>
+          <div className="glass-browse__mac-dock">
+            {["finder", "safari", "mail", "messages", "photos", "music", "notes"].map((tone) => (
+              <span key={tone} className={`glass-browse__dock-icon glass-browse__dock-icon--${tone}`} />
+            ))}
+          </div>
         </div>
-        <div className="glass-browse__mac-dock">
-          {["finder", "safari", "mail", "messages", "photos", "music", "notes"].map((tone) => (
-            <span key={tone} className={`glass-browse__dock-icon glass-browse__dock-icon--${tone}`} />
-          ))}
-        </div>
-      </div>
+      )}
 
       <div className="glass-browse__frame" aria-hidden="true">
         <span className="glass-browse__corner glass-browse__corner--tl" />
@@ -135,7 +187,7 @@ export default function GlassBrowseOverlay(): JSX.Element | null {
         data-testid="glass-browse-exit"
       >
         Exit Glass view
-        <span className="glass-browse__exit-kbd">Esc</span>
+        {!isMobile ? <span className="glass-browse__exit-kbd">Esc</span> : null}
       </button>
 
       <p className="glass-browse__live-badge" data-testid="glass-browse-live-badge">

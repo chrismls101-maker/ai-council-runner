@@ -7,9 +7,22 @@ const MAC_DOCK_ICONS = [
   { label: "Messages", tone: "messages", active: false },
   { label: "Maps", tone: "maps", active: false },
   { label: "Photos", tone: "photos", active: false },
-  { label: "Music", tone: "music", active: false },
+  { label: "FaceTime", tone: "facetime", active: false },
+  { label: "Calendar", tone: "calendar", active: false },
+  { label: "Contacts", tone: "contacts", active: false },
+  { label: "Reminders", tone: "reminders", active: false },
   { label: "Notes", tone: "notes", active: false },
+  { label: "TV", tone: "tv", active: false },
+  { label: "Music", tone: "music", active: false },
+  { label: "Podcasts", tone: "podcasts", active: false },
+  { label: "App Store", tone: "appstore", active: false },
   { label: "Settings", tone: "settings", active: false },
+  { label: "Cursor", tone: "cursor", active: true },
+  { label: "Terminal", tone: "terminal", active: false },
+  { label: "Slack", tone: "slack", active: false },
+  { label: "Chrome", tone: "chrome", active: false },
+  { divider: true as const },
+  { label: "Trash", tone: "trash", active: false },
 ] as const;
 
 const BROWSER_TABS = [
@@ -137,13 +150,21 @@ export default function GlassDesktopFrameMock(): JSX.Element {
             {/* macOS Dock — above Glass chrome */}
             <div className="gl-macbook-mock__mac-dock-wrap">
               <div className="gl-macbook-mock__mac-dock">
-                {MAC_DOCK_ICONS.map((icon) => (
-                  <span
-                    key={icon.label}
-                    className={`gl-macbook-mock__mac-dock-icon gl-macbook-mock__mac-dock-icon--${icon.tone}${icon.active ? " gl-macbook-mock__mac-dock-icon--running" : ""}`}
-                    title={icon.label}
-                  />
-                ))}
+                {MAC_DOCK_ICONS.map((icon, index) =>
+                  "divider" in icon ? (
+                    <span
+                      key={`dock-divider-${index}`}
+                      className="gl-macbook-mock__mac-dock-divider"
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <span
+                      key={icon.label}
+                      className={`gl-macbook-mock__mac-dock-icon gl-macbook-mock__mac-dock-icon--${icon.tone}${icon.active ? " gl-macbook-mock__mac-dock-icon--running" : ""}`}
+                      title={icon.label}
+                    />
+                  ),
+                )}
               </div>
               <div className="gl-macbook-mock__mac-dock-reflect" aria-hidden="true" />
             </div>

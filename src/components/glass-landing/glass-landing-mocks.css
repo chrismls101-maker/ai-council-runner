@@ -38,6 +38,10 @@
     --mock-dock-zone: 36px;
     max-width: 1000px;
   }
+
+  .gl-macbook-mock__mac-dock-wrap {
+    width: min(96%, 720px);
+  }
 }
 
 .gl-macbook-mock__device {
@@ -490,14 +494,18 @@
   transform: translateX(-50%);
   z-index: 6;
   pointer-events: none;
+  width: min(94%, 620px);
 }
 
 .gl-macbook-mock__mac-dock {
   display: flex;
   align-items: flex-end;
-  gap: calc(3px * var(--mock-u));
-  padding: calc(3px * var(--mock-u)) calc(8px * var(--mock-u)) calc(4px * var(--mock-u));
-  border-radius: calc(12px * var(--mock-u));
+  justify-content: center;
+  flex-wrap: nowrap;
+  gap: calc(2.5px * var(--mock-u));
+  width: 100%;
+  padding: calc(3px * var(--mock-u)) calc(10px * var(--mock-u)) calc(4px * var(--mock-u));
+  border-radius: calc(14px * var(--mock-u));
   background: rgba(255, 255, 255, 0.22);
   backdrop-filter: blur(20px) saturate(190%);
   -webkit-backdrop-filter: blur(20px) saturate(190%);
@@ -505,6 +513,15 @@
   box-shadow:
     0 4px 14px rgba(0, 0, 0, 0.24),
     inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.gl-macbook-mock__mac-dock-divider {
+  align-self: center;
+  width: 1px;
+  height: calc(12px * var(--mock-u));
+  margin: 0 calc(2px * var(--mock-u));
+  background: rgba(255, 255, 255, 0.22);
+  flex-shrink: 0;
 }
 
 .gl-macbook-mock__mac-dock-reflect {
@@ -586,6 +603,81 @@
 .gl-macbook-mock__mac-dock-icon--settings {
   background: linear-gradient(180deg, #b8bcc6 0%, #8e8e93 100%);
   border-radius: 6px;
+}
+
+.gl-macbook-mock__mac-dock-icon--facetime {
+  background: linear-gradient(180deg, #34d058 0%, #1aab3a 100%);
+  border-radius: 50%;
+}
+
+.gl-macbook-mock__mac-dock-icon--calendar {
+  background: linear-gradient(180deg, #fff 0%, #f2f2f7 100%);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.gl-macbook-mock__mac-dock-icon--calendar::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 35%;
+  background: #ff3b30;
+  border-radius: calc(3px * var(--mock-u)) calc(3px * var(--mock-u)) 0 0;
+}
+
+.gl-macbook-mock__mac-dock-icon--contacts {
+  background: linear-gradient(180deg, #e8e8ed 0%, #c7c7cc 100%);
+  border-radius: 50%;
+}
+
+.gl-macbook-mock__mac-dock-icon--reminders {
+  background: linear-gradient(180deg, #fff 0%, #f2f2f7 100%);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.gl-macbook-mock__mac-dock-icon--tv {
+  background: linear-gradient(180deg, #1c1c1e 0%, #000 100%);
+  border-radius: calc(3px * var(--mock-u));
+}
+
+.gl-macbook-mock__mac-dock-icon--podcasts {
+  background: linear-gradient(180deg, #b165fb 0%, #7c3aed 100%);
+  border-radius: calc(4px * var(--mock-u));
+}
+
+.gl-macbook-mock__mac-dock-icon--appstore {
+  background: linear-gradient(180deg, #5ac8fa 0%, #007aff 100%);
+  border-radius: calc(4px * var(--mock-u));
+}
+
+.gl-macbook-mock__mac-dock-icon--cursor {
+  background: linear-gradient(180deg, #3a3a3c 0%, #1c1c1e 100%);
+  border-radius: calc(4px * var(--mock-u));
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 0 0 1px rgba(125, 212, 216, 0.35);
+}
+
+.gl-macbook-mock__mac-dock-icon--terminal {
+  background: linear-gradient(180deg, #2c2c2e 0%, #1c1c1e 100%);
+  border-radius: calc(4px * var(--mock-u));
+}
+
+.gl-macbook-mock__mac-dock-icon--slack {
+  background: linear-gradient(180deg, #e8a5c8 0%, #611f69 55%, #36c5f0 100%);
+  border-radius: calc(4px * var(--mock-u));
+}
+
+.gl-macbook-mock__mac-dock-icon--chrome {
+  background: conic-gradient(from 0deg, #ea4335, #fbbc05, #34a853, #4285f4, #ea4335);
+  border-radius: 50%;
+}
+
+.gl-macbook-mock__mac-dock-icon--trash {
+  background: linear-gradient(180deg, #d1d1d6 0%, #aeaeb2 100%);
+  border-radius: calc(4px * var(--mock-u));
 }
 
 /* Glass overlay */

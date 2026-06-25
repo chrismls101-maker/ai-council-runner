@@ -18,6 +18,11 @@ import {
   classifyGlassBrowseDemoCategory,
   glassBrowseDemoAnswer,
 } from "./glassBrowseDemo";
+import {
+  detectGlassBrowseDevice,
+  type GlassBrowseDeviceProfile,
+  isGlassBrowseMobile,
+} from "./glassBrowseDevice";
 
 export type GlassBrowseHint = {
   id: string;
@@ -43,8 +48,27 @@ const HINTS: Record<string, GlassBrowseHint> = {
   },
 };
 
+const MOBILE_HINTS: Record<string, GlassBrowseHint> = {
+  hero: {
+    id: "hero",
+    title: "Glass on mobile",
+    body: "Scroll the site beneath this layer — command bar and builder strip stay fixed.",
+  },
+  "ambient-os": {
+    id: "ambient-os",
+    title: "Your browser is the canvas",
+    body: "Safari, Chrome, iivo.ai — Glass floats above whatever you're viewing.",
+  },
+  "builder-stack": {
+    id: "builder-stack",
+    title: "Leaving Glass view",
+    body: "Install Glass on Mac for the full desktop overlay on every app.",
+  },
+};
+
 type GlassBrowseContextValue = {
   active: boolean;
+  deviceProfile: GlassBrowseDeviceProfile;
   hint: GlassBrowseHint;
   agentsPanelOpen: boolean;
   demoResponse: string | null;
@@ -57,19 +81,18 @@ type GlassBrowseContextValue = {
 
 const GlassBrowseContext = createContext<GlassBrowseContextValue | null>(null);
 
-function useIsDesktopBrowse(): boolean {
-  const [desktop, setDesktop] = useState(
-    () => typeof window !== "undefined" && window.matchMedia("(min-width: 900px)").matches,
+function useGlassBrowseDevice(): GlassBrowseDeviceProfile {
+  const [profile, setProfile] = useState<GlassBrowseDeviceProfile>(() =>
+    typeof window !== "undefined" ? detectGlassBrowseDevice() : "desktop",
   );
 
   useEffect(() => {
-    const mq = window.matchMedia("(min-width: 900px)");
-    const onChange = (): void => setDesktop(mq.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
+    const onResize = (): void => setProfile(detectGlassBrowseDevice());
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  return desktop;
+  return profile;
 }
 
 export function GlassBrowseProvider({ children }: { children: ReactNode }): JSX.Element {
@@ -77,7 +100,7 @@ export function GlassBrowseProvider({ children }: { children: ReactNode }): JSX.
   const [hintId, setHintId] = useState("hero");
   const [agentsPanelOpen, setAgentsPanelOpen] = useState(false);
   const [demoResponse, setDemoResponse] = useState<string | null>(null);
-  const desktop = useIsDesktopBrowse();
+  const deviceProfile = useGlassBrowseDevice();
   const autoExitTimerRef = useRef<number | null>(null);
 
   const clearAutoExitTimer = useCallback((): void => {
@@ -104,13 +127,16 @@ export function GlassBrowseProvider({ children }: { children: ReactNode }): JSX.
   }, [clearAutoExitTimer]);
 
   const enter = useCallback((): void => {
-    if (!desktop) return;
     setActive(true);
     setHintId("hero");
     setAgentsPanelOpen(false);
     setDemoResponse(null);
-    trackGlassBrowseEvent("entered");
-  }, [desktop]);
+    const profile = detectGlassBrowseDevice();
+    trackGlassBrowseEvent("entered", isGlassBrowseMobile(profile) ? { profile } : undefined);
+    if (isGlassBrowseMobile(profile)) {
+      trackGlassBrowseEvent("mobile_preview", { profile, mode: "overlay" });
+    }
+  }, []);
 
   const submitDemoAsk = useCallback((text: string): void => {
     const trimmed = text.trim();
@@ -135,11 +161,13 @@ export function GlassBrowseProvider({ children }: { children: ReactNode }): JSX.
 
   useEffect(() => {
     if (!active) {
-      document.documentElement.classList.remove("glass-browse-active");
+      document.documentElement.classList.remove("glass-browse-active", "glass-browse-active--phone", "glass-browse-active--tablet");
       return;
     }
 
     document.documentElement.classList.add("glass-browse-active");
+    document.documentElement.classList.toggle("glass-browse-active--phone", deviceProfile === "phone");
+    document.documentElement.classList.toggle("glass-browse-active--tablet", deviceProfile === "tablet");
 
     const sections = ["hero", "ambient-os", "builder-stack"]
       .map((id) => document.getElementById(id) ?? document.querySelector(`[data-glass-section="${id}"]`))
@@ -167,7 +195,8 @@ export function GlassBrowseProvider({ children }: { children: ReactNode }): JSX.
           return;
         }
 
-        if (HINTS[id]) setHintId(id);
+        const hints = isGlassBrowseMobile(deviceProfile) ? MOBILE_HINTS : HINTS;
+        if (hints[id]) setHintId(id);
       },
       { threshold: [0.08, 0.2, 0.35, 0.5], rootMargin: "-12% 0px -28% 0px" },
     );
@@ -176,14 +205,16 @@ export function GlassBrowseProvider({ children }: { children: ReactNode }): JSX.
     return () => {
       observer.disconnect();
       clearAutoExitTimer();
-      document.documentElement.classList.remove("glass-browse-active");
+      document.documentElement.classList.remove("glass-browse-active", "glass-browse-active--phone", "glass-browse-active--tablet");
     };
-  }, [active, clearAutoExitTimer, exit]);
+  }, [active, clearAutoExitTimer, deviceProfile, exit]);
 
   const value = useMemo(
     (): GlassBrowseContextValue => ({
       active,
-      hint: HINTS[hintId] ?? HINTS.hero,
+      deviceProfile,
+      hint: (isGlassBrowseMobile(deviceProfile) ? MOBILE_HINTS : HINTS)[hintId]
+        ?? (isGlassBrowseMobile(deviceProfile) ? MOBILE_HINTS.hero : HINTS.hero),
       agentsPanelOpen,
       demoResponse,
       enter,
@@ -192,7 +223,7 @@ export function GlassBrowseProvider({ children }: { children: ReactNode }): JSX.
       submitDemoAsk,
       clearDemoResponse: () => setDemoResponse(null),
     }),
-    [active, hintId, agentsPanelOpen, demoResponse, enter, exit, submitDemoAsk],
+    [active, deviceProfile, hintId, agentsPanelOpen, demoResponse, enter, exit, submitDemoAsk],
   );
 
   return <GlassBrowseContext.Provider value={value}>{children}</GlassBrowseContext.Provider>;
