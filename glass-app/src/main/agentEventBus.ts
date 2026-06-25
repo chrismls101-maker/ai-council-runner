@@ -50,6 +50,7 @@ export type BusEventType =
   | "context.intent.research"
   | "context.intent.writing"
   | "context.intent.meeting"
+  | "knowledge.audio.build_plan_ready"
   | "session.enriched"
   | "delivery.complete"
   | "bus.dlq.event"
@@ -123,6 +124,30 @@ export interface IntentPayload {
   windowTitle?: string;
   focusedText?: string;
   audioTranscript?: string;
+}
+
+/** Emitted when an audio/video listening session produces an extractable build intent. */
+export interface AudioBuildPlanPayload {
+  /** Formatted prompt ready to inject into Glass Coder pre-fill. */
+  coderPrompt: string;
+  /** First 500 chars of the source transcript (for memory/logging). */
+  sourceTranscriptExcerpt: string;
+  /** Raw extracted intent JSON from the extraction model. */
+  extractedIntent: {
+    intent: string;
+    requirements: string[];
+    stack: string[];
+  };
+}
+
+/** Emitted when a Listen Mode session ends with extractable moments. */
+export interface MeetingSessionPayload {
+  /** Full rolling transcript text from the session. */
+  transcript: string;
+  /** Key moments extracted during the session. */
+  moments: Array<{ type: string; summary: string; importance: string }>;
+  /** Action steps found (type === "action_step" moments). */
+  actionSteps: string[];
 }
 
 // ── Circuit Breaker ────────────────────────────────────────────────────────────

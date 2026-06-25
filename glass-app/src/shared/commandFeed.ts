@@ -19,7 +19,9 @@ export type GlassCommandFeedKind =
   /** Build error detected in-stream from the Glass dock terminal */
   | "build-error"
   /** Design-to-code capture card — shows screenshot thumbnail + 4 quick-action buttons */
-  | "design-capture";
+  | "design-capture"
+  /** Audio/video session produced a build plan — shows "Build from video" action button */
+  | "build-from-audio";
 
 export interface GlassCommandFeedItem {
   id: string;
@@ -79,6 +81,9 @@ export interface GlassCommandFeedItem {
    * not the response id, so the renderer needs this to send the right feedItemId.
    */
   designCaptureId?: string;
+  // ── Build-from-audio fields ───────────────────────────────────────────────
+  /** Pre-formatted Coder prompt from audio intent extraction (for build-from-audio cards). */
+  audioBuildPrompt?: string;
 }
 
 export const MAX_COMMAND_FEED_ITEMS = 12;
@@ -96,6 +101,7 @@ export const COMMAND_FEED_TITLES: Record<GlassCommandFeedKind, string> = {
   shell: "Running",
   "build-error": "Build error",
   "design-capture": "Design to Code",
+  "build-from-audio": "Build from video",
 };
 
 let feedSeq = 0;
@@ -124,6 +130,7 @@ export function createCommandFeedItem(
     designAction?: import("./designToCode.ts").DesignToCodeAction;
     designStack?: import("./designToCode.ts").DesignStack;
     designCaptureId?: string;
+    audioBuildPrompt?: string;
   } = {},
 ): GlassCommandFeedItem {
   feedSeq += 1;
@@ -151,6 +158,7 @@ export function createCommandFeedItem(
     designAction: opts.designAction,
     designStack: opts.designStack,
     designCaptureId: opts.designCaptureId,
+    audioBuildPrompt: opts.audioBuildPrompt,
   };
 }
 

@@ -3,6 +3,8 @@
  */
 
 import { iivoApiAuthHeaders } from "./iivoApiAuth.ts";
+import { isIivoServerUnreachableError } from "./iivoServerDegraded.ts";
+import { reportIivoServerDegraded } from "./iivoServerDegradedHooks.ts";
 
 export interface GlassMemorySaveInput {
   apiUrl: string;
@@ -61,14 +63,23 @@ export async function saveResponseToMemoryVault(input: GlassMemorySaveInput): Pr
   });
 
   const url = `${input.apiUrl.replace(/\/+$/, "")}/api/memory`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      ...iivoApiAuthHeaders(),
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: {
+        ...iivoApiAuthHeaders(),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    const message = "Memory save failed — IIVO server unavailable.";
+    if (isIivoServerUnreachableError(err)) {
+      reportIivoServerDegraded("memory", message);
+    }
+    throw new Error(message);
+  }
 
   if (!res.ok) {
     let detail = "";
@@ -77,6 +88,10 @@ export async function saveResponseToMemoryVault(input: GlassMemorySaveInput): Pr
     } catch {
       // ignore body read errors
     }
-    throw new Error(`Memory save failed (${res.status})${detail ? `: ${detail}` : ""}`);
+    const message = `Memory save failed (${res.status})${detail ? `: ${detail}` : ""}`;
+    if (res.status >= 500 || res.status === 503) {
+      reportIivoServerDegraded("memory", message);
+    }
+    throw new Error(message);
   }
 }

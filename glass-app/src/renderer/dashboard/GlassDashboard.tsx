@@ -6,6 +6,7 @@ import type {
   GlassDashboardAgentEvent,
   GlassState,
   MessageRow,
+  RetentionSummary,
   SessionRowWithMeta,
   UserContextRow,
 } from "../../shared/ipc.ts";
@@ -206,6 +207,7 @@ export function GlassDashboard({ visible = true, onClose }: GlassDashboardProps)
   const [sessionMessages, setSessionMessages] = useState<MessageRow[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [userContext, setUserContext] = useState<UserContextRow[]>([]);
+  const [retentionSummary, setRetentionSummary] = useState<RetentionSummary | null>(null);
 
   useEffect(() => {
     void window.glass.getState().then(setGlassState);
@@ -225,13 +227,15 @@ export function GlassDashboard({ visible = true, onClose }: GlassDashboardProps)
 
   useEffect(() => {
     void (async () => {
-      const [sessions, councilRows, contextRows] = await Promise.all([
+      const [sessions, councilRows, contextRows, retention] = await Promise.all([
         window.glass.getRecentSessions(),
         window.glass.getLastCouncilRun(),
         window.glass.getUserContext(),
+        window.glass.getRetentionSummary(),
       ]);
       setRecentSessions(sessions);
       setUserContext(contextRows);
+      setRetentionSummary(retention);
       if (councilRows && councilRows.length > 0) {
         setCouncilRun(councilStateFromAgentRuns(councilRows));
       }
@@ -395,6 +399,27 @@ export function GlassDashboard({ visible = true, onClose }: GlassDashboardProps)
                   <span className="glass-dashboard__chip">Coming soon</span>
                 </div>
               </section>
+
+              {retentionSummary ? (
+                <section
+                  className="glass-dashboard__retention"
+                  data-testid="glass-dashboard-retention"
+                >
+                  <p className="glass-dashboard__section-label">Activity (7 days)</p>
+                  <ul className="glass-dashboard__retention-stats">
+                    <li>Sessions: {retentionSummary.sessionsLast7Days}</li>
+                    <li>Workflows / session: {retentionSummary.workflowsPerSession}</li>
+                    <li>
+                      Autofix acceptance:{" "}
+                      {Math.round(retentionSummary.autofixAcceptanceRate * 100)}%
+                    </li>
+                    <li>
+                      Build loop success:{" "}
+                      {Math.round(retentionSummary.buildLoopSuccessRate * 100)}%
+                    </li>
+                  </ul>
+                </section>
+              ) : null}
 
               <section className="glass-dashboard__sessions">
                 <p className="glass-dashboard__section-label">Recent sessions</p>

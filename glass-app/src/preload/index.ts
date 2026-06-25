@@ -67,6 +67,7 @@ import {
   type   AgentScreenContext,
   type OpenCoderWithPromptPayload,
   type GlassIndexState,
+  type RetentionSummary,
 } from "../shared/ipc.ts";
 import type {
   GlassIdeListProjectResponse,
@@ -226,11 +227,6 @@ const glassApi = {
     ipcRenderer.on(IPC.companionDeepgramFinal, handler);
     return () => ipcRenderer.removeListener(IPC.companionDeepgramFinal, handler);
   },
-  onCompanionDeepgramUnavailable(listener: () => void): () => void {
-    const handler = (): void => listener();
-    ipcRenderer.on(IPC.companionDeepgramUnavailable, handler);
-    return () => ipcRenderer.removeListener(IPC.companionDeepgramUnavailable, handler);
-  },
   setE2eCaptureProbes(payload: {
     screenCaptureProbe?: import("../shared/captureSourceEnumeration.ts").ScreenCaptureProbeStatus;
     screenCaptureDetail?: string;
@@ -309,6 +305,9 @@ const glassApi = {
   getAppVersion(): Promise<string> {
     return ipcRenderer.invoke(IPC.getAppVersion) as Promise<string>;
   },
+  getSentryDsn(): Promise<string | null> {
+    return ipcRenderer.invoke(IPC.getSentryDsn) as Promise<string | null>;
+  },
   settingsOpenExternal(url: string): Promise<{ ok: boolean }> {
     return ipcRenderer.invoke(IPC.settingsOpenExternal, url) as Promise<{ ok: boolean }>;
   },
@@ -354,6 +353,9 @@ const glassApi = {
   },
   deleteUserContextKey(key: string): Promise<{ ok: boolean }> {
     return ipcRenderer.invoke(IPC.deleteUserContextKey, key) as Promise<{ ok: boolean }>;
+  },
+  getRetentionSummary(): Promise<RetentionSummary> {
+    return ipcRenderer.invoke(IPC.getRetentionSummary) as Promise<RetentionSummary>;
   },
   activationSetPresentation(
     mode: import("../shared/ipc.ts").ActivationPresentation,

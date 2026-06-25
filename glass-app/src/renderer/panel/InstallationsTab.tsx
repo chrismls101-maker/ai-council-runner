@@ -91,7 +91,7 @@ export function InstallationsTab(): JSX.Element {
         {!omni?.sidecarPresent ? (
           <p className="empty" style={{ marginTop: 12 }}>
             OmniParser sidecar not found in this Glass build. Dev: ensure{" "}
-            <code>desktop-glass/omniparser-sidecar</code> exists.
+            <code>glass-app/omniparser-sidecar</code> exists.
           </p>
         ) : null}
       </PanelSection>

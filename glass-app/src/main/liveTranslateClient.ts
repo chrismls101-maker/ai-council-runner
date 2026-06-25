@@ -11,6 +11,8 @@ import type {
   LiveTranslateTargetLanguage,
   LiveTranslateWorkflowMode,
 } from "../shared/liveTranslateTypes.ts";
+import { isIivoServerUnreachableError } from "../shared/iivoServerDegraded.ts";
+import { markIivoServerDegraded } from "./iivoServerDegradedMain.ts";
 
 export interface TranslateViaServerRequest {
   text: string;
@@ -57,8 +59,12 @@ export async function translateViaServer(
       }),
       signal: AbortSignal.timeout(25_000),
     });
-  } catch {
-    throw new Error("Translation server unavailable.");
+  } catch (err) {
+    const message = "Translation server unavailable.";
+    if (isIivoServerUnreachableError(err)) {
+      markIivoServerDegraded("translate", message);
+    }
+    throw new Error(message);
   }
 
   const body = (await res.json().catch(() => ({}))) as {
@@ -69,7 +75,11 @@ export async function translateViaServer(
   };
 
   if (!res.ok) {
-    throw new Error(body.error ?? `Translation failed (${res.status})`);
+    const detail = body.error ?? `Translation failed (${res.status})`;
+    if (res.status >= 500 || res.status === 503) {
+      markIivoServerDegraded("translate", detail);
+    }
+    throw new Error(detail);
   }
 
   const translated = body.translated?.trim();

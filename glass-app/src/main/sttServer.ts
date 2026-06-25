@@ -7,6 +7,7 @@ import type { GlassConfig } from "../shared/config.ts";
 import { withIivoApiAuthHeaders } from "../shared/iivoApiAuth.ts";
 import type { SttTranscribeRequest, SttTranscribeResult } from "../shared/sttTypes.ts";
 import { STT_SERVER_UNAVAILABLE_MESSAGE } from "../shared/sttTypes.ts";
+import { markIivoServerDegraded } from "./iivoServerDegradedMain.ts";
 import type { FetchLike } from "./sttOpenAI.ts";
 
 export function buildTranscribeAudioUrl(config: GlassConfig): string {
@@ -34,6 +35,7 @@ export async function transcribeViaServer(
       }),
     });
   } catch {
+    markIivoServerDegraded("stt", STT_SERVER_UNAVAILABLE_MESSAGE);
     throw new Error(STT_SERVER_UNAVAILABLE_MESSAGE);
   }
 
@@ -48,6 +50,7 @@ export async function transcribeViaServer(
   if (!res.ok) {
     const detail = body.error ?? res.statusText;
     if (res.status === 503) {
+      markIivoServerDegraded("stt", detail || STT_SERVER_UNAVAILABLE_MESSAGE);
       throw new Error(detail || STT_SERVER_UNAVAILABLE_MESSAGE);
     }
     throw new Error(detail || `Server transcription failed (${res.status})`);

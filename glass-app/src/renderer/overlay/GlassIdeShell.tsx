@@ -156,8 +156,11 @@ export function GlassIdeShell({
   const coderModelId = resolveCoderAgentModelId(state.glassSettings.coderAgentModel);
   const composerMode = parseGlassCoderComposerMode(state.glassSettings.coderComposerMode);
   const indexState = state.indexState;
+  const codeSearchOffline = state.ollamaAvailable === false && Boolean(workspaceLabel);
   const indexChipLabel =
-    indexState?.status === "indexing"
+    codeSearchOffline
+      ? "Semantic search offline — start Ollama"
+      : indexState?.status === "indexing"
       ? "Indexing…"
       : indexState?.status === "ready" && indexState.fileCount != null
         ? `Index · ${indexState.fileCount} files`
@@ -547,7 +550,12 @@ export function GlassIdeShell({
           {!inProjectGate && indexChipLabel ? (
             <button
               type="button"
-              className="gide-index-chip"
+              className={`gide-index-chip${codeSearchOffline ? " gide-index-chip--offline" : ""}`}
+              title={
+                codeSearchOffline
+                  ? "Vector code search needs Ollama on localhost:11434. Symbol search still works. Start Ollama, then click to index."
+                  : undefined
+              }
               onClick={() => {
                 if (workspaceLabel && indexState?.status !== "indexing") {
                   void window.glass.indexStart(workspaceLabel);

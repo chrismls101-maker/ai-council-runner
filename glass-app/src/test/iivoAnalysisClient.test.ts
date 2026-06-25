@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   buildAnalysisFailureNotice,
   buildSessionAnalysisPrompt,
-} from "../shared/iivoAnalysisClient.ts";
+} from "../shared/sessionPayload.ts";
 
 test("analysis prompt builder", () => {
   const prompt = buildSessionAnalysisPrompt();

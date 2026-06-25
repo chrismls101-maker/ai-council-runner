@@ -141,6 +141,8 @@ export interface TranscriptionController {
   probeVirtualAudioDevices: () => Promise<void>;
   testSystemAudio: () => Promise<void>;
   connectSystemAudio: () => Promise<void>;
+  restoreStartupAudio: () => Promise<void>;
+  activateWhisperFallback: (scope: "translate" | "listen" | "companion") => void;
   testBlackHole: () => Promise<void>;
 }
 
@@ -174,6 +176,21 @@ export function useTranscription(): TranscriptionController {
   const systemAudioProbeInFlightRef = useRef(false);
   const translateListeningIntentRef = useRef(false);
   const companionDeepgramRef = useRef(false);
+  const whisperFallbackRef = useRef(false);
+  const deepgramEnabledRef = useRef(!!glassState.stt.deepgramEnabled);
+  const liveTranslateActiveRef = useRef(isLiveTranslateActive(glassState.liveTranslate));
+  const kickChunkSegmentRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    deepgramEnabledRef.current = !!glassState.stt.deepgramEnabled;
+    if (glassState.stt.deepgramEnabled) {
+      whisperFallbackRef.current = false;
+    }
+  }, [glassState.stt.deepgramEnabled]);
+
+  useEffect(() => {
+    liveTranslateActiveRef.current = isLiveTranslateActive(glassState.liveTranslate);
+  }, [glassState.liveTranslate]);
 
   const shouldSuppressTranslateError = useCallback(
     (error?: string, translateListeningIntent = translateListeningIntentRef.current): boolean =>
@@ -303,6 +320,7 @@ export function useTranscription(): TranscriptionController {
     companionSystemAudioActiveRef.current = false;
     setCompanionSystemAudioActive(false);
     companionDeepgramRef.current = false;
+    kickChunkSegmentRef.current = null;
   }, []);
 
   const stopListeningRef = useRef<(() => void) | null>(null);
@@ -454,42 +472,46 @@ export function useTranscription(): TranscriptionController {
     ) => {
       chunkSourceRef.current = source;
       const mimeType = pickRecorderMime();
-      // translateActive: prefer the explicit forTranslate flag (set synchronously by the caller
-      // before the IPC state round-trip completes) over the potentially-stale glassState.
-      const translateActive = forTranslate || isLiveTranslateActive(glassState.liveTranslate);
-      const companionDeepgramActive =
-        (forCompanionDeepgram || companionDeepgramRef.current)
-        && source === "microphone"
-        && !!glassState.stt.deepgramEnabled;
-      const deepgramAvailable =
-        source === "system_audio" && !!glassState.stt.deepgramEnabled;
-      const listenDiarizationActive =
-        deepgramAvailable &&
-        glassState.copilot?.config?.sessionType === "video_learning" &&
-        copilotModeIsActive(glassState.copilot?.config?.mode ?? "off");
-      const useDeepgramStreaming = translateActive && deepgramAvailable;
-      // Listen mode runs a separate Deepgram session for speaker diarization while
-      // OpenAI/server STT still handles chunk transcription for live notes.
-      const forwardDeepgramForListen = listenDiarizationActive && !useDeepgramStreaming;
-      const forwardDeepgramAudio =
-        useDeepgramStreaming || forwardDeepgramForListen || companionDeepgramActive;
+
+      const resolveStreamingFlags = () => {
+        const translateActive =
+          forTranslate || liveTranslateActiveRef.current;
+        const deepgramAvailable =
+          !whisperFallbackRef.current &&
+          source === "system_audio" &&
+          !!deepgramEnabledRef.current;
+        const companionDeepgramActive =
+          !whisperFallbackRef.current &&
+          (forCompanionDeepgram || companionDeepgramRef.current) &&
+          source === "microphone" &&
+          !!deepgramEnabledRef.current;
+        const listenDiarizationActive =
+          deepgramAvailable &&
+          glassState.copilot?.config?.sessionType === "video_learning" &&
+          copilotModeIsActive(glassState.copilot?.config?.mode ?? "off");
+        const useDeepgramStreaming = translateActive && deepgramAvailable;
+        const forwardDeepgramForListen = listenDiarizationActive && !useDeepgramStreaming;
+        const forwardDeepgramAudio =
+          useDeepgramStreaming || forwardDeepgramForListen || companionDeepgramActive;
+        return { translateActive, useDeepgramStreaming, companionDeepgramActive, forwardDeepgramAudio };
+      };
 
       const beginSegment = () => {
         if (mediaStreamRef.current !== stream || !isListeningRef.current) return;
         const recorder = new MediaRecorder(stream, { mimeType });
+        const { translateActive, useDeepgramStreaming, companionDeepgramActive, forwardDeepgramAudio } =
+          resolveStreamingFlags();
 
         recorder.ondataavailable = (event) => {
           if (!event.data || event.data.size === 0) return;
-          if (forwardDeepgramAudio) {
-            // Streaming path: forward raw audio bytes to main → Deepgram WebSocket.
-            // Do NOT apply the 512-byte silence filter here — Deepgram needs silence
-            // chunks to run its own VAD and detect speech boundaries correctly.
+          const flags = resolveStreamingFlags();
+          if (flags.forwardDeepgramAudio) {
             void event.data.arrayBuffer().then((buf) => {
               window.glass.sendDeepgramAudioChunk(buf);
             });
           }
-          if (useDeepgramStreaming || companionDeepgramActive) return;
-          if (event.data.size < 512) return; // silence filter for Whisper/server STT only
+          if (flags.useDeepgramStreaming || flags.companionDeepgramActive) return;
+          if (event.data.size < 512) return;
           void processBlob(event.data, mimeType, source);
         };
 
@@ -523,6 +545,16 @@ export function useTranscription(): TranscriptionController {
             type: "SET_ERROR",
             message: err instanceof Error ? err.message : "Could not start audio recorder.",
           });
+        }
+      };
+
+      kickChunkSegmentRef.current = () => {
+        if (!isListeningRef.current || mediaStreamRef.current !== stream) return;
+        const recorder = mediaRecorderRef.current;
+        if (recorder?.state === "recording") {
+          recorder.stop();
+        } else {
+          beginSegment();
         }
       };
 
@@ -563,7 +595,7 @@ export function useTranscription(): TranscriptionController {
         if (event.results[i].isFinal) finalChunk += part;
         else interim += part;
       }
-      const translateActive = isLiveTranslateActive(glassState.liveTranslate);
+      const translateActive = liveTranslateActiveRef.current;
       const interimText = interim.trim();
       if (translateActive && interimText) {
         send({
@@ -610,34 +642,7 @@ export function useTranscription(): TranscriptionController {
     dispatch({ type: "START_LISTENING" });
     send({ type: "start-listening" });
     startTimer();
-  }, [snapshot, stopListening, startTimer, appendMicDraft, maybeAutoSendMicDraft, glassState.liveTranslate]);
-
-  const fallbackCompanionToWebSpeech = useCallback(() => {
-    if (!companionDeepgramRef.current) return;
-    companionDeepgramRef.current = false;
-    if (chunkSegmentTimerRef.current != null) {
-      window.clearTimeout(chunkSegmentTimerRef.current);
-      chunkSegmentTimerRef.current = null;
-    }
-    if (mediaRecorderRef.current?.state !== "inactive") {
-      mediaRecorderRef.current?.stop();
-    }
-    mediaRecorderRef.current = null;
-    if (mediaStreamRef.current) {
-      stopMediaStreamState(mediaStreamRef.current.getTracks());
-      mediaStreamRef.current = null;
-    }
-    setSelectedMode("microphone_web_speech");
-    dispatch({ type: "SET_MODE", mode: "microphone_web_speech" });
-    isListeningRef.current = true;
-    startWebSpeech();
-  }, [startWebSpeech, dispatch]);
-
-  useEffect(() => {
-    return window.glass.onCompanionDeepgramUnavailable(() => {
-      fallbackCompanionToWebSpeech();
-    });
-  }, [fallbackCompanionToWebSpeech]);
+  }, [snapshot, stopListening, startTimer, appendMicDraft, maybeAutoSendMicDraft]);
 
   const startMediaRecorder = useCallback(async () => {
     try {
@@ -898,6 +903,23 @@ export function useTranscription(): TranscriptionController {
   ]);
 
   const connectSystemAudio = testSystemAudio;
+
+  const restoreStartupAudio = useCallback(async () => {
+    await reportVirtualAudioDevices();
+    if (glassState.transcriptionMode === "system_audio") {
+      setSelectedMode("system_audio");
+      dispatch({ type: "SET_MODE", mode: "system_audio" });
+    }
+    await connectSystemAudio();
+  }, [connectSystemAudio, glassState.transcriptionMode]);
+
+  const activateWhisperFallback = useCallback((scope: "translate" | "listen" | "companion") => {
+    whisperFallbackRef.current = true;
+    if (scope === "companion") {
+      companionDeepgramRef.current = false;
+    }
+    kickChunkSegmentRef.current?.();
+  }, []);
 
   const testBlackHole = useCallback(async () => {
     await reportVirtualAudioDevices();
@@ -1245,6 +1267,8 @@ export function useTranscription(): TranscriptionController {
     probeVirtualAudioDevices,
     testSystemAudio,
     connectSystemAudio,
+    restoreStartupAudio,
+    activateWhisperFallback,
     testBlackHole,
   };
 }

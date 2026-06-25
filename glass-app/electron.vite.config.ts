@@ -23,6 +23,12 @@ function resolveBuildSentryDsn(): string {
 const bakedGlassApiSecret = resolveBuildGlassApiSecret();
 const bakedSentryDsn = resolveBuildSentryDsn();
 
+if (envMode === "production" && !bakedSentryDsn) {
+  console.warn(
+    "[glass build] SENTRY_DSN is not set in the environment or repo root .env — packaged crash reports will be dropped.",
+  );
+}
+
 export default defineConfig({
   main: {
     define: {
@@ -71,6 +77,9 @@ export default defineConfig({
     build: {
       outDir: "out/renderer",
       rollupOptions: {
+        // Only listed HTML entry points ship in the packaged app. Dev-only splash
+        // prototypes (soundPrototypeMain.ts, backgroundPreviewMain.tsx) are never
+        // imported from these entries and are excluded from the production bundle.
         input: {
           dock: resolve(__dirname, "index.html"),
           panel: resolve(__dirname, "panel.html"),

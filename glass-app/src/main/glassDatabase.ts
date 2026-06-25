@@ -146,6 +146,19 @@ CREATE TABLE IF NOT EXISTS extraction_pending (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_extraction_pending_dedupe ON extraction_pending(dedupe_tag);
 `;
 
+const MIGRATION_V5_RETENTION_EVENTS = `
+CREATE TABLE IF NOT EXISTS retention_events (
+  id              TEXT PRIMARY KEY,
+  event_name      TEXT NOT NULL,
+  session_id      TEXT,
+  created_at      INTEGER NOT NULL,
+  meta            TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_retention_events_name ON retention_events(event_name);
+CREATE INDEX IF NOT EXISTS idx_retention_events_session ON retention_events(session_id);
+CREATE INDEX IF NOT EXISTS idx_retention_events_time ON retention_events(created_at);
+`;
+
 let _db: Database.Database | null = null;
 let _dbDisabled = false;
 let _vecExtensionLoaded = false;
@@ -229,6 +242,14 @@ function applyMigrations(db: Database.Database): void {
       db.prepare("INSERT INTO schema_version (version) VALUES (?)").run(4);
     } catch (err) {
       console.error("[glassDatabase] V4 extraction_pending schema failed:", err);
+    }
+  }
+  if (current < 5) {
+    try {
+      db.exec(MIGRATION_V5_RETENTION_EVENTS);
+      db.prepare("INSERT INTO schema_version (version) VALUES (?)").run(5);
+    } catch (err) {
+      console.error("[glassDatabase] V5 retention_events schema failed:", err);
     }
   }
 }

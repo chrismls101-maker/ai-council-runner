@@ -14,6 +14,7 @@ import {
   type AgentStartedPayload,
   type DeliveryCompletePayload,
   type TaskCreatedPayload,
+  type MeetingSessionPayload,
   agentLifecycleEventType,
 } from "./agentEventBus.ts";
 import { storeChainResearchFix, clearChainResearchContext } from "./agentChainContext.ts";
@@ -32,6 +33,7 @@ import { runPostSessionExtraction } from "./glassMemoryEngine.ts";
 import {
   resolveAgentOutputForMemory,
 } from "./glassMemoryOutput.ts";
+import { logAgentChainFired, logWorkflowTriggered } from "./glassRetentionEvents.ts";
 
 const cleanups: Array<() => void> = [];
 let chainsInitialized = false;
@@ -94,6 +96,7 @@ function wireCoderErrorToResearch(
       if (!event.payload.recoverable) return;
 
       const { error } = event.payload;
+      logAgentChainFired("coder-error-to-research", event.sessionId);
       console.log("[AgentChains] Coder error detected — firing Research to find a fix");
       console.log(`[AgentChains] correlationId: ${event.correlationId}`);
 
@@ -156,6 +159,7 @@ function wireResearchCompleteToWriting(
       const draftPrompt = event.payload.draftPrompt
         ?? "Write a clear, well-structured document based on the research findings.";
 
+      logAgentChainFired("research-to-writing", event.sessionId);
       console.log("[AgentChains] Research complete — firing Writing agent");
 
       try {
@@ -203,6 +207,7 @@ function wireCouncilCompleteToWriter(
           ? `Write a clear, well-structured document based on this council analysis:\n\n${event.payload.judgeAnswer}`
           : "Write a clear, well-structured document based on the council analysis.");
 
+      logAgentChainFired("council-to-writing", event.sessionId);
       console.log("[AgentChains] Council complete — firing Writing agent");
       console.log(`[AgentChains] correlationId: ${event.correlationId}`);
 
@@ -448,6 +453,93 @@ function wirePostSessionMemoryExtraction(): () => void {
   };
 }
 
+// ── Chain 4: Meeting Session → Action Plan (Writing agent) ───────────────────
+//
+// When a Listen Mode session ends with extracted moments, fire the Writing
+// agent to produce a structured action plan markdown document automatically.
+//
+// Trigger:  context.intent.meeting  (payload.moments.length >= 2)
+// Response: Writing agent → saved meeting-action-plan-[sessionId]-[ts].md
+
+function wireMeetingSessionToActionPlan(
+  getAnthropicModel: () => string,
+  getOutputDir: () => string,
+): () => void {
+  return agentBus.subscribe<MeetingSessionPayload>(
+    "context.intent.meeting",
+    "meeting-action-plan-chain",
+    async (event) => {
+      const { transcript, moments, actionSteps } = event.payload;
+
+      // Only fire if there's meaningful content
+      if (!moments || moments.length < 2) return;
+
+      const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+      const filename = `meeting-action-plan-${event.sessionId.slice(0, 8)}-${ts}.md`;
+
+      const momentsSummary = moments
+        .filter((m) => m.importance !== "low")
+        .slice(0, 12)
+        .map((m) => `- [${m.type}] ${m.summary}`)
+        .join("\n");
+
+      const actionStepsSummary = actionSteps.length > 0
+        ? actionSteps.map((s) => `- ${s}`).join("\n")
+        : "(none detected)";
+
+      const transcriptExcerpt = transcript.length > 2_000
+        ? transcript.slice(0, 2_000) + "\n[transcript truncated]"
+        : transcript;
+
+      const draftPrompt = [
+        `Produce a clean action plan document from this meeting/conversation session.`,
+        `Save it as: ${filename}`,
+        ``,
+        `Structure it with exactly three sections:`,
+        ``,
+        `## Key Decisions`,
+        `List the important decisions or conclusions from this session.`,
+        ``,
+        `## Action Items`,
+        `List concrete next steps. Include owner and deadline if mentioned in the content.`,
+        ``,
+        `## Key Insights`,
+        `Notable ideas, facts, or context worth preserving.`,
+        ``,
+        `---`,
+        ``,
+        `Key moments extracted during the session:`,
+        momentsSummary,
+        ``,
+        `Action steps detected:`,
+        actionStepsSummary,
+        ``,
+        `Transcript excerpt:`,
+        transcriptExcerpt,
+      ].join("\n");
+
+      logAgentChainFired("meeting-to-action-plan", event.sessionId);
+      logWorkflowTriggered("meeting_action_plan", event.sessionId);
+      console.log("[AgentChains] Meeting session ended — firing Writing agent for action plan");
+      console.log(`[AgentChains] correlationId: ${event.correlationId}`);
+
+      try {
+        await runChainAgent({
+          runId: chainRunId("chain-meeting-action-plan"),
+          agentId: "writing",
+          prompt: draftPrompt,
+          outputDir: getOutputDir(),
+          anthropicModel: getAnthropicModel(),
+          correlationId: event.correlationId,
+          sessionId: event.sessionId,
+        });
+      } catch (err) {
+        console.error("[AgentChains] Meeting→ActionPlan chain failed:", err);
+      }
+    },
+  );
+}
+
 // ── Init / Teardown ──────────────────────────────────────────────────────────
 
 export interface ChainConfig {
@@ -468,6 +560,7 @@ export function initAgentChains(config: ChainConfig): void {
     wireCoderErrorToResearch(config.getAnthropicModel, config.getOutputDir),
     wireResearchCompleteToWriting(config.getAnthropicModel, config.getOutputDir),
     wireCouncilCompleteToWriter(config.getAnthropicModel, config.getOutputDir),
+    wireMeetingSessionToActionPlan(config.getAnthropicModel, config.getOutputDir),
     wireResearchBootstrapStore(),
     wireSessionHistoryStore(),
     wireAgentPromptCache(),

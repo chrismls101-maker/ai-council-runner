@@ -50,6 +50,12 @@ const publicArm64Dmg = publicDownloadUrl(version, arm64DmgName);
 const publicX64Dmg = publicDownloadUrl(version, x64DmgName);
 
 const RELEASE_NOTES = {
+  "0.8.2": [
+    "Deepgram streaming falls back to Whisper when translate audio drops.",
+    "System audio routing restores on relaunch after quit.",
+    "Panel shows when the IIVO server is offline.",
+    "IDE shows when Ollama semantic search is offline.",
+  ],
   "0.1.11": [
     "Fix Check for updates — pulls releases through iivo.ai (private GitHub repo).",
     "Update check now shows Checking… and surfaces errors in Setup.",

@@ -69,6 +69,23 @@ export function BuilderStrip({
 
   useBuilderStripClickThrough(activeTab !== null);
 
+  const closeBuilderPanel = useCallback((): void => {
+    syncBuilderStripPanelOpen(false);
+    setActiveTab(null);
+  }, []);
+
+  const dismissOverlayMenus = useCallback((): void => {
+    if (glassState.powersMenuOpen) send({ type: "dismiss-powers-menu" });
+    if (glassState.commandPaletteOpen) send({ type: "dismiss-command-palette" });
+  }, [glassState.commandPaletteOpen, glassState.powersMenuOpen]);
+
+  // Keep agents / powers / palette mutually exclusive — only one overlay at a time.
+  useEffect(() => {
+    if ((glassState.powersMenuOpen || glassState.commandPaletteOpen) && activeTab !== null) {
+      closeBuilderPanel();
+    }
+  }, [activeTab, closeBuilderPanel, glassState.commandPaletteOpen, glassState.powersMenuOpen]);
+
   // Safety: ensure overlay OS click-through on mount; reset on unmount.
   useEffect(() => {
     window.glass.setBuilderStripVisible(true);
@@ -90,12 +107,29 @@ export function BuilderStrip({
 
   const handleTabClick = useCallback((tab: BuilderTab): void => {
     armBuilderStripInteractive();
+    dismissOverlayMenus();
     setActiveTab((prev) => {
       const next = prev === tab ? null : tab;
       syncBuilderStripPanelOpen(next !== null);
       return next;
     });
-  }, []);
+  }, [dismissOverlayMenus]);
+
+  const handlePowersClick = useCallback((): void => {
+    armBuilderStripInteractive();
+    if (activeTab !== null) {
+      closeBuilderPanel();
+    }
+    send({ type: "toggle-powers-menu" });
+  }, [activeTab, closeBuilderPanel]);
+
+  const handlePaletteClick = useCallback((): void => {
+    armBuilderStripInteractive();
+    if (activeTab !== null) {
+      closeBuilderPanel();
+    }
+    send({ type: "toggle-command-palette" });
+  }, [activeTab, closeBuilderPanel]);
 
   const handleAgentsTabClick = useCallback((): void => {
     armBuilderStripInteractive();
@@ -111,17 +145,17 @@ export function BuilderStrip({
     : "AI Agents — research, write files, and automate tasks with Claude";
 
   const handleClosePanel = useCallback((): void => {
-    syncBuilderStripPanelOpen(false);
-    setActiveTab(null);
-  }, []);
+    closeBuilderPanel();
+  }, [closeBuilderPanel]);
 
   // Expose extract-tab opener via ref so overlay card can trigger it without prop drilling
   useEffect(() => {
     return window.glass.onOpenCoderWithPrompt(() => {
+      dismissOverlayMenus();
       syncBuilderStripPanelOpen(true);
       setActiveTab("agents");
     });
-  }, []);
+  }, [dismissOverlayMenus]);
 
   useEffect(() => {
     if (onOpenExtractRef) {
@@ -351,9 +385,10 @@ export function BuilderStrip({
         >
           <button
             type="button"
-            className="builder-tab builder-tab--powers"
-            onClick={() => send({ type: "toggle-powers-menu" })}
+            className={`builder-tab builder-tab--powers${glassState.powersMenuOpen ? " builder-tab--active" : ""}`}
+            onClick={handlePowersClick}
             aria-label="Glass Powers Menu (Command Shift P)"
+            aria-pressed={glassState.powersMenuOpen === true}
           >
             <span className="builder-tab__strip-label builder-tab__strip-label--powers" aria-hidden="true">
               Powers Menu
@@ -367,9 +402,10 @@ export function BuilderStrip({
         >
           <button
             type="button"
-            className="builder-tab builder-tab--palette"
-            onClick={() => send({ type: "toggle-command-palette" })}
+            className={`builder-tab builder-tab--palette${glassState.commandPaletteOpen ? " builder-tab--active" : ""}`}
+            onClick={handlePaletteClick}
             aria-label="Glass Command Palette (Command Shift G)"
+            aria-pressed={glassState.commandPaletteOpen === true}
           >
             <span className="builder-tab__strip-label builder-tab__strip-label--palette" aria-hidden="true">
               Command Palette

@@ -47,7 +47,7 @@ import {
   shouldAutoApproveCoderTool,
   shouldAutoSkipCoderTool,
 } from "../shared/agentApprovalMode.ts";
-import { loadGlassEnv } from "./loadGlassEnv.ts";
+import { loadGlassEnv, loadGlassEnvUserData } from "./loadGlassEnv.ts";
 import * as Sentry from "@sentry/electron/main";
 import { installGlassE2eHooks, getE2eExternalUrls, resetE2eExternalUrls } from "./e2eMainHooks.ts";
 import { installDefaultGlassHandoffOpener, openGlassHandoffUrl } from "./glassBrowserHandoff.ts";
@@ -166,7 +166,7 @@ import {
 import {
   buildAnalysisFailureNotice,
   buildSessionAnalysisPrompt,
-} from "../shared/iivoAnalysisClient.ts";
+} from "../shared/sessionPayload.ts";
 import { captureDisplayById } from "./capture.ts";
 import {
   resolveCaptureDisplay,
@@ -216,6 +216,7 @@ import {
   toggleOverlay,
   togglePanel,
   closePanel,
+  ensurePanelLayout,
   unregisterCommandBarHotkeys,
   setOnboardingPending,
   setGlassBootSequenceCompleteHandler,
@@ -272,6 +273,11 @@ import { emptyGlassIdeAletheiaSnapshot } from "../shared/glassIdeAletheiaAdvisor
 import type { IdeChromeSignal } from "../shared/glassIdeChromeOrchestrator.ts";
 import { runAgent, type ApprovalGateRequest } from "./agentRunner.ts";
 import { initAgentChains, teardownAgentChains } from "./agentChains.ts";
+import {
+  fireListenSessionChains,
+  resetListenSessionChainsDedup,
+} from "./listenSessionChains.ts";
+import { agentBus, AgentBus, type AudioBuildPlanPayload } from "./agentEventBus.ts";
 import { migrateAnthropicKeyFromEnv } from "./anthropicKeyStore.ts";
 import {
   gateActivationAfterOnboarding,
@@ -285,6 +291,15 @@ import { configureGlassDashboardRuntime, initGlassDashboard, teardownGlassDashbo
 import { initGlassSettings, isSettingsIpcSender, teardownGlassSettings } from "./glassSettingsWindow.ts";
 import { registerDashboardIpc, setDashboardIpcAuth, isDashboardIpcSender } from "./dashboardIpc.ts";
 import { closeDatabase, initDatabase } from "./glassDatabase.ts";
+import {
+  logSessionStart,
+  logSessionEnd,
+  logTerminalAutofixShown,
+  logTerminalAutofixAccepted,
+  logTerminalAutofixDismissed,
+  logBuildLoopStarted,
+  logBuildLoopCompleted,
+} from "./glassRetentionEvents.ts";
 import { randomUUID } from "crypto";
 import { pruneHistory, seedUserContextFromProfile, persistChatExchange } from "./sessionHistoryStore.ts";
 import { notifyMemoryServicesReady, runPostSessionExtraction } from "./glassMemoryEngine.ts";
@@ -556,7 +571,14 @@ import {
 import {
   restoreMacOutputFromSettings,
   broadcastStartupAudioRestore,
+  applyPersistedAudioState,
+  buildAudioPersistencePatch,
 } from "./startupAudioRestore.ts";
+import {
+  activateDeepgramWhisperFallback,
+  resetTranslateWhisperFallback,
+  type DeepgramWhisperFallbackDeps,
+} from "./deepgramWhisperFallback.ts";
 import { getCurrentMacOutputDeviceName } from "./macAudioOutput.ts";
 import { installBlackHoleAndSetupAudio } from "./blackHoleInstaller.ts";
 import {
@@ -630,7 +652,14 @@ import {
   collectGlassAppIdentityReport,
   findDuplicateGlassAppBundles,
 } from "./glassAppIdentityDiagnostic.ts";
-import { runGlassSetupCheck } from "./glassSetupCheck.ts";
+import { runGlassSetupCheck, runGlassServerHealthCheck } from "./glassSetupCheck.ts";
+import {
+  clearIivoServerDegradedSources,
+  getIivoServerDegradedReason,
+  markIivoServerDegraded,
+  registerIivoServerDegradedHandler,
+} from "./iivoServerDegradedMain.ts";
+import { registerIivoServerDegradedReporter } from "../shared/iivoServerDegradedHooks.ts";
 import { openGlassSystemSettings } from "./glassSystemSettings.ts";
 import { glassMenuAppName } from "../shared/glassAppIdentity.ts";
 import type { GlassAppIdentityReport, DuplicateGlassAppBundle } from "../shared/glassAppIdentityReport.ts";
@@ -786,6 +815,7 @@ import {
 } from "./clipboardIntelligence.ts";
 
 loadGlassEnv();
+loadGlassEnvUserData(app.getPath("userData"));
 
 const mainDir = dirname(fileURLToPath(import.meta.url));
 
@@ -840,10 +870,7 @@ Sentry.init({
   dsn: process.env.SENTRY_DSN,
   release: app.getVersion(),
   environment: app.isPackaged ? "production" : "development",
-  // Only report errors in packaged (production) builds.
-  // Dev builds throw various expected errors (auth mismatches, missing env vars,
-  // audio probe failures) that are noise in the Sentry dashboard.
-  enabled: app.isPackaged,
+  enabled: app.isPackaged && !!process.env.SENTRY_DSN?.trim(),
   attachStacktrace: true,
   maxBreadcrumbs: 40,
   beforeSend(event) {
@@ -910,6 +937,7 @@ interface AppState {
   windowCaptureDetail?: string;
   micPermission: MicPermissionReport;
   serverHealthForSetup: GlassServerHealthForSetup | null;
+  iivoServerDegradedReason?: string;
   setupCapabilities: GlassCapabilityRow[];
   setupCheckSummary?: string;
   captureDiagnosticsReport?: CaptureDiagnosticsReport;
@@ -1242,6 +1270,7 @@ const state: AppState = {
   windowCaptureProbe: "unknown",
   micPermission: "not_requested",
   serverHealthForSetup: null,
+  iivoServerDegradedReason: undefined,
   setupCapabilities: [],
   duplicateAppBundles: [],
   virtualAudioDevices: [],
@@ -1622,6 +1651,22 @@ let listenDeepgramSession: DeepgramStreamingSession | null = null;
 let listenDeepgramReconnectAttempts = 0;
 const LISTEN_DEEPGRAM_RECONNECT_BASE_MS = 1_000;
 const LISTEN_DEEPGRAM_RECONNECT_MAX_MS = 30_000;
+const LISTEN_DEEPGRAM_MAX_CONNECT_ATTEMPTS = 2;
+const TRANSLATE_DEEPGRAM_MAX_CONNECT_ATTEMPTS = 2;
+const TRANSLATE_DEEPGRAM_MAX_RECONNECT_ATTEMPTS = 2;
+let translateDeepgramReconnectAttempts = 0;
+
+function deepgramWhisperFallbackDeps(): DeepgramWhisperFallbackDeps {
+  return {
+    getStt: () => state.stt,
+    setStt: (next) => {
+      state.stt = next;
+    },
+    push,
+    stopTranslateDeepgram: () => stopDeepgramSession(),
+    stopCompanionDeepgram: () => stopCompanionDeepgramSession(),
+  };
+}
 
 /** Companion mic — Deepgram diarization when DEEPGRAM_API_KEY is set. */
 let companionDeepgramSession: DeepgramStreamingSession | null = null;
@@ -1767,11 +1812,14 @@ function startListenDeepgramSession(): void {
         }, 1_500);
       } else {
         listenDeepgramSession = null;
+        console.warn(
+          "[deepgram:listen] diarization unavailable after connect retries — continuing on Whisper chunks",
+        );
       }
     });
   };
 
-  attemptListenDeepgramConnect(2);
+  attemptListenDeepgramConnect(LISTEN_DEEPGRAM_MAX_CONNECT_ATTEMPTS);
   console.log("[deepgram:listen] session started (diarization enabled)");
 }
 
@@ -1783,12 +1831,6 @@ function stopListenDeepgramSession(): void {
     listenDeepgramReconnectAttempts = 0;
     console.log("[deepgram:listen] session closed");
   }
-}
-
-function notifyCompanionDeepgramUnavailable(reason: string): void {
-  console.warn(`[deepgram:companion] unavailable — ${reason}`);
-  stopCompanionDeepgramSession();
-  broadcast(IPC.companionDeepgramUnavailable, {});
 }
 
 /** Start a diarization-enabled Deepgram session for companion mic. */
@@ -1818,7 +1860,14 @@ function startCompanionDeepgramSession(): void {
       if (!state.companionModeActive) return;
       companionDeepgramReconnectAttempts += 1;
       if (companionDeepgramReconnectAttempts > COMPANION_DEEPGRAM_MAX_RECONNECT_ATTEMPTS) {
-        notifyCompanionDeepgramUnavailable("max reconnect attempts exceeded");
+        activateDeepgramWhisperFallback(
+          "companion",
+          "max reconnect attempts exceeded",
+          deepgramWhisperFallbackDeps(),
+        );
+        state.lastNotice =
+          "Companion listening continues via Whisper (speaker labels unavailable).";
+        push();
         return;
       }
       const delayMs = Math.min(
@@ -1835,7 +1884,15 @@ function startCompanionDeepgramSession(): void {
   companionDeepgramSession = new DeepgramStreamingSession(dgKey, "auto", makeCompanionCallbacks());
   companionDeepgramSession.connect().catch((err: unknown) => {
     console.error("[deepgram:companion] connect failed:", (err as Error).message ?? err);
-    notifyCompanionDeepgramUnavailable("initial connect failed");
+    if (!state.companionModeActive) return;
+    activateDeepgramWhisperFallback(
+      "companion",
+      "initial connect failed",
+      deepgramWhisperFallbackDeps(),
+    );
+    state.lastNotice =
+      "Companion listening continues via Whisper (speaker labels unavailable).";
+    push();
   });
   console.log("[deepgram:companion] session started (diarization enabled)");
 }
@@ -2253,6 +2310,7 @@ function ensureListenNotesLoopRunning(): void {
 /** Fresh listen capture — reset runtime and start the notes loop. */
 function bootstrapListenNotesPipeline(): void {
   if (!shouldRunListenNotesPipeline()) return;
+  resetListenSessionChainsDedup();
   ensureListenSession();
   listenMomentRuntime = prepareListenModeSession(listenMomentRuntime, Date.now());
   listenRollingTranscript = initialListenRollingTranscript();
@@ -2268,6 +2326,22 @@ function bootstrapListenNotesPipeline(): void {
   // even when the user didn't manually trigger it. Retry cadence is handled in the notes loop.
   lastProactiveMediaCaptureMs = 0;
   setTimeout(() => { void proactivelyCaptureMediaContext().catch(() => {}); }, 2_000);
+}
+
+/** Fire listen-end agent chains (build plan + meeting action plan) once per listen slice. */
+function maybeFireListenSessionChains(captured?: {
+  transcript?: string;
+  moments?: ListenMoment[];
+  sessionId?: string;
+}): void {
+  if (!shouldRunListenNotesPipeline()) return;
+  const endingSession = sessions.current();
+  fireListenSessionChains({
+    transcript: captured?.transcript ?? listenRollingTranscript.rollingText ?? "",
+    moments: captured?.moments ?? listenMomentRuntime.moments ?? [],
+    sessionId: captured?.sessionId ?? endingSession?.id ?? `listen-${Date.now()}`,
+    config,
+  });
 }
 
 function isTranslateActive(): boolean {
@@ -2771,11 +2845,15 @@ function checkListeningLimit(elapsedMs: number): void {
 }
 
 async function stopListeningFromLimit(reason: "user" | "auto"): Promise<void> {
+  const wasListening = state.privacy.listening;
   broadcastTranscriptionControl({ type: "stop" });
   dispatchPrivacy({ type: "PAUSE", at: new Date().toISOString() });
   state.stt = { ...state.stt, listeningElapsedMs: 0 };
   state.operationDiagnostics = recordOperation(state.operationDiagnostics, "pause", "ok");
   resetListeningLimitTracking();
+  if (wasListening) {
+    maybeFireListenSessionChains();
+  }
   state.lastNotice =
     reason === "auto"
       ? "Listening stopped — limit reached with no response."
@@ -3610,9 +3688,11 @@ async function applyGlassSetupCheckResult(
     (process.env.IIVO_GLASS_E2E !== "1" || process.env.IIVO_GLASS_LIVE_E2E === "1")
   ) {
     const skipSystemAudioDowngrade =
-      process.env.IIVO_GLASS_LIVE_E2E === "1" &&
-      result.systemAudioStatus === "not_tested" &&
-      state.systemAudioStatus === "available";
+      (process.env.IIVO_GLASS_LIVE_E2E === "1" &&
+        result.systemAudioStatus === "not_tested" &&
+        state.systemAudioStatus === "available") ||
+      (glassUserSettings.systemAudioEnabledAtQuit === true &&
+        glassUserSettings.persistedSystemAudioStatus === "available");
     if (!skipSystemAudioDowngrade) {
       state.systemAudioStatus = result.systemAudioStatus;
       state.systemAudioDetail = result.systemAudioDetail;
@@ -3622,6 +3702,7 @@ async function applyGlassSetupCheckResult(
     state.systemAudioDetail = result.systemAudioDetail;
   }
   if (result.serverHealth?.reachable) {
+    clearIivoServerDegradedSources(["setup", "health"]);
     if (isServerConnectivityMessage(state.lastError)) {
       state.lastError = undefined;
     }
@@ -3634,7 +3715,10 @@ async function applyGlassSetupCheckResult(
         { ...state.stt, lastError: undefined },
       );
     }
+  } else if (result.serverHealth && !result.serverHealth.reachable) {
+    markIivoServerDegraded("setup", result.serverHealth.checkError);
   }
+  state.iivoServerDegradedReason = getIivoServerDegradedReason();
   refreshSetupCapabilities();
   refreshOmniParserInstall();
   state.setupCheckSummary = formatSetupCheckSummary(state.setupCapabilities);
@@ -3679,6 +3763,38 @@ function refreshCommandBarOverlayClearance(): boolean {
   }
   state.commandBarOverlayClearancePx = clearance;
   return true;
+}
+
+function applyServerHealthPollResult(health: GlassServerHealthForSetup | null): void {
+  if (!health) return;
+  state.serverHealthForSetup = health;
+  if (health.reachable) {
+    clearIivoServerDegradedSources(["health", "setup"]);
+  } else {
+    markIivoServerDegraded("health", health.checkError);
+  }
+  state.iivoServerDegradedReason = getIivoServerDegradedReason();
+  refreshSetupCapabilities();
+  push();
+}
+
+function scheduleServerHealthPolling(): void {
+  if (process.env.IIVO_GLASS_E2E === "1") return;
+  const POLL_MS = 45_000;
+  const runPoll = (): void => {
+    void runGlassServerHealthCheck(config)
+      .then((health) => {
+        applyServerHealthPollResult(health);
+      })
+      .catch(() => {
+        markIivoServerDegraded("health", "IIVO server health check failed.");
+        state.iivoServerDegradedReason = getIivoServerDegradedReason();
+        refreshSetupCapabilities();
+        push();
+      });
+  };
+  runPoll();
+  setInterval(runPoll, POLL_MS);
 }
 
 function scheduleInitialSetupCheck(): void {
@@ -3747,6 +3863,7 @@ function snapshot(): GlassState {
     connectedDisplays: getConnectedDisplays(),
     setupCapabilities: state.setupCapabilities,
     setupCheckSummary: state.setupCheckSummary,
+    iivoServerDegradedReason: state.iivoServerDegradedReason,
     captureDiagnosticsReport: state.captureDiagnosticsReport,
     appIdentityReport: state.appIdentityReport,
     duplicateAppBundles: state.duplicateAppBundles,
@@ -5800,15 +5917,21 @@ async function handleCommand(
         transcriptionMode: state.transcriptionMode,
         translateActive: isTranslateActive(),
       });
-      cancelListenCountdown();
-      broadcastTranscriptionControl({ type: "stop" });
-      dispatchPrivacy({ type: "PAUSE", at: new Date().toISOString() });
-      copilot.dismissSilenceWarning();
-      state.stt = { ...state.stt, listeningElapsedMs: 0 };
-      resetListeningLimitTracking();
-      state.operationDiagnostics = recordOperation(state.operationDiagnostics, "pause", "ok");
-      if (command.reason !== "user") {
-        state.lastNotice = MIC_PAUSED_AUTO_MESSAGE;
+      {
+        const wasListening = state.privacy.listening;
+        cancelListenCountdown();
+        broadcastTranscriptionControl({ type: "stop" });
+        dispatchPrivacy({ type: "PAUSE", at: new Date().toISOString() });
+        copilot.dismissSilenceWarning();
+        state.stt = { ...state.stt, listeningElapsedMs: 0 };
+        resetListeningLimitTracking();
+        state.operationDiagnostics = recordOperation(state.operationDiagnostics, "pause", "ok");
+        if (wasListening) {
+          maybeFireListenSessionChains();
+        }
+        if (command.reason !== "user") {
+          state.lastNotice = MIC_PAUSED_AUTO_MESSAGE;
+        }
       }
       push();
       return;
@@ -5835,6 +5958,19 @@ async function handleCommand(
       resetListeningLimitTracking();
       systemAudioLastSignalMs = undefined;
       activeListeningRuntime = clearActiveListeningRuntime();
+
+      // ── Capture transcript/moments BEFORE runtime reset ──────────────────────
+      const endingTranscript = listenRollingTranscript.rollingText ?? "";
+      const endingMoments = listenMomentRuntime.moments ?? [];
+      const endingSession = sessions.current();
+      const endingSessionId = endingSession?.id ?? `listen-${Date.now()}`;
+
+      maybeFireListenSessionChains({
+        transcript: endingTranscript,
+        moments: endingMoments,
+        sessionId: endingSessionId,
+      });
+
       listenMomentRuntime = clearListenModeRuntime();
       listenLastChunkMs = undefined;
       listenRollingTranscript = initialListenRollingTranscript();
@@ -5847,13 +5983,13 @@ async function handleCommand(
       liveTranslateRuntime = stopLiveTranslate(liveTranslateRuntime);
       setOverlayPinnedForTranslate(false);
       copilot.setDebrief(null);
-      const endingSession = sessions.current();
       if (
         endingSession &&
         (endingSession.status === "active" || endingSession.status === "paused")
       ) {
         sessions.endSession();
       }
+
       setListenNotesPadVisible(false);
       state.companionModeActive = false;
       state.companionPresence = null;
@@ -5895,12 +6031,17 @@ async function handleCommand(
       // Guard: key check BEFORE starting the session so no overlay/caption appears on failure.
       const dgKey = process.env.DEEPGRAM_API_KEY?.trim();
       if (!dgKey) {
-        state.lastError = "DEEPGRAM_API_KEY is not set — add it to desktop-glass/.env and restart.";
+        state.lastError = "DEEPGRAM_API_KEY is not set — add it to glass-app/.env and restart.";
         push();
         return;
       }
       armTranslateGracePeriod();
       clearTranslateStartupErrors();
+      resetTranslateWhisperFallback();
+      translateDeepgramReconnectAttempts = 0;
+      if (process.env.DEEPGRAM_API_KEY?.trim()) {
+        state.stt = { ...state.stt, deepgramEnabled: true };
+      }
       liveTranslateRuntime = startLiveTranslate(liveTranslateRuntime, {
         targetLanguage: command.targetLanguage ?? liveTranslateRuntime.config.targetLanguage,
       });
@@ -5932,20 +6073,40 @@ async function handleCommand(
           },
           onClose: () => {
             if (!isTranslateActive()) return;
+            translateDeepgramReconnectAttempts += 1;
+            if (translateDeepgramReconnectAttempts > TRANSLATE_DEEPGRAM_MAX_RECONNECT_ATTEMPTS) {
+              activateDeepgramWhisperFallback(
+                "translate",
+                "max reconnect attempts exceeded",
+                deepgramWhisperFallbackDeps(),
+              );
+              return;
+            }
             console.warn("[deepgram] translate WS closed unexpectedly — reconnecting in 1s…");
             setTimeout(() => {
               if (!isTranslateActive()) return;
               deepgramSession = new DeepgramStreamingSession(dgKey, srcLang, makeTranslateCallbacks());
-              deepgramSession.connect().catch((reconnErr: unknown) => {
+              deepgramSession.connect().then(() => {
+                translateDeepgramReconnectAttempts = 0;
+              }).catch((reconnErr: unknown) => {
                 console.error("[deepgram] post-drop reconnect failed:", (reconnErr as Error).message);
                 deepgramSession = null;
+                if (translateDeepgramReconnectAttempts >= TRANSLATE_DEEPGRAM_MAX_RECONNECT_ATTEMPTS) {
+                  activateDeepgramWhisperFallback(
+                    "translate",
+                    "post-drop reconnect failed",
+                    deepgramWhisperFallbackDeps(),
+                  );
+                }
               });
             }, 1_000);
           },
         });
         deepgramSession = new DeepgramStreamingSession(dgKey, srcLang, makeTranslateCallbacks());
         const attemptDeepgramConnect = (attemptsLeft: number) => {
-          deepgramSession?.connect().catch((err: unknown) => {
+          deepgramSession?.connect().then(() => {
+            translateDeepgramReconnectAttempts = 0;
+          }).catch((err: unknown) => {
             const msg = (err as Error).message ?? String(err);
             console.error(`[deepgram] connect failed (${attemptsLeft} retries left):`, msg);
             if (attemptsLeft > 0 && isTranslateActive()) {
@@ -5958,13 +6119,16 @@ async function handleCommand(
             } else {
               deepgramSession = null;
               if (isTranslateActive()) {
-                state.lastError = `Deepgram connection failed: ${msg}`;
-                push();
+                activateDeepgramWhisperFallback(
+                  "translate",
+                  `initial connect failed: ${msg}`,
+                  deepgramWhisperFallbackDeps(),
+                );
               }
             }
           });
         };
-        attemptDeepgramConnect(2);
+        attemptDeepgramConnect(TRANSLATE_DEEPGRAM_MAX_CONNECT_ATTEMPTS);
       }
       push();
       return;
@@ -5975,6 +6139,7 @@ async function handleCommand(
         privacyListening: state.privacy.listening,
       });
       clearTranslateGracePeriod();
+      resetTranslateWhisperFallback();
       stopDeepgramSession();
       liveTranslateRuntime = stopLiveTranslate(liveTranslateRuntime);
       setOverlayPinnedForTranslate(false);
@@ -6071,6 +6236,15 @@ async function handleCommand(
     }
     case "transcription-set-mode":
       state.transcriptionMode = command.mode;
+      glassUserSettings = {
+        ...glassUserSettings,
+        ...buildAudioPersistencePatch({
+          transcriptionMode: state.transcriptionMode,
+          systemAudioStatus: state.systemAudioStatus,
+        }),
+      };
+      state.glassSettings = glassUserSettings;
+      void persistGlassUserSettings(glassUserSettings);
       push();
       return;
     case "system-audio-set-status":
@@ -6079,6 +6253,15 @@ async function handleCommand(
       if (command.status === "requires_virtual_device" || command.status === "available") {
         state.nativeLoopbackTested = true;
       }
+      glassUserSettings = {
+        ...glassUserSettings,
+        ...buildAudioPersistencePatch({
+          transcriptionMode: state.transcriptionMode,
+          systemAudioStatus: state.systemAudioStatus,
+        }),
+      };
+      state.glassSettings = glassUserSettings;
+      void persistGlassUserSettings(glassUserSettings);
       refreshSetupCapabilities();
       push();
       return;
@@ -6505,6 +6688,11 @@ async function handleCommand(
     case "remove-command-feed-item": {
       // Clean up shellOutputs entry if this was a /run shell card
       const removing = state.commandFeed.find((item) => item.id === command.id);
+      // Treat removal of a terminal-fix card as a dismissal
+      if (removing?.kind === "terminal-fix") {
+        terminalAutoFixSession.dismissed += 1;
+        logTerminalAutofixDismissed();
+      }
       if (removing?.shellOutputId && state.shellOutputs?.[removing.shellOutputId]) {
         // Cancel any in-flight exec first
         const cancelFn = shellCancels.get(removing.shellOutputId);
@@ -6531,6 +6719,9 @@ async function handleCommand(
       return;
     case "set-tab":
       state.panelTab = command.tab;
+      if (isPanelVisible()) {
+        ensurePanelLayout();
+      }
       push();
       return;
     case "clear-last-notice":
@@ -7298,6 +7489,21 @@ async function handleCommand(
         push();
       }
       return;
+    case "e2e-surface-build-from-audio-card": {
+      if (process.env.IIVO_GLASS_E2E !== "1") return;
+      const coderPrompt = command.prompt?.trim() || "Build: E2E test app from video";
+      const body = coderPrompt.replace(/^Build:\s*/i, "").split("\n")[0]?.trim() || "E2E build plan";
+      pushFeed(
+        createCommandFeedItem("build-from-audio", body, {
+          title: "Build from video",
+          audioBuildPrompt: coderPrompt,
+          fullBody: coderPrompt,
+          pinned: true,
+        }),
+      );
+      push();
+      return;
+    }
     case "test-microphone":
       state.panelTab = "setup";
       if (!isPanelVisible()) togglePanel();
@@ -8258,16 +8464,30 @@ async function handleCommand(
     // ── Terminal auto-fix accept ───────────────────────────────────────────────
     // User clicked "Fix it" on the overlay card — type the fix into the PTY.
     case "glass-terminal-fix-accept": {
-      const { termId, command: fixCmd } = command;
+      const { termId, command: fixCmd, feedItemId } = command;
       if (termId && fixCmd) {
-        // Ensure terminal panel is visible so user can see the fix running
+        terminalAutoFixSession.accepted += 1;
+        logTerminalAutofixAccepted();
         if (!state.glassDockTerminalOpen) {
           state.glassDockTerminalOpen = true;
           push();
           showGlassTerminalWindowUnlessIde();
         }
-        // Write the fix command + Enter to the PTY
         writePtyInput(termId, `${fixCmd}\r`);
+        if (feedItemId) {
+          state.commandFeed = state.commandFeed.filter((item) => item.id !== feedItemId);
+          push();
+        }
+      }
+      return;
+    }
+
+    // ── Build from audio ──────────────────────────────────────────────────────
+    // User clicked "Build from video" on a build-from-audio card.
+    case "glass-build-from-audio": {
+      const { prompt: audioPrompt } = command;
+      if (audioPrompt?.trim()) {
+        await handleCommand({ type: "open-coder-with-prompt", prompt: audioPrompt, autoRun: false });
       }
       return;
     }
@@ -8331,6 +8551,7 @@ async function handleCommand(
       if (state.powersMenuOpen) {
         state.commandPaletteOpen = false;
         setCommandPaletteOpen(false);
+        setBuilderStripPanelOpen(false);
       }
       setPowersMenuOpen(state.powersMenuOpen);
       push();
@@ -8352,6 +8573,7 @@ async function handleCommand(
       if (state.commandPaletteOpen) {
         state.powersMenuOpen = false;
         setPowersMenuOpen(false);
+        setBuilderStripPanelOpen(false);
       }
       setCommandPaletteOpen(state.commandPaletteOpen);
       push();
@@ -8495,7 +8717,7 @@ async function handleCommand(
         const buf = await fetchGlassTtsBuffer(text);
         if (!buf) {
           console.error(
-            "[Glass TTS] glass-tts: no audio (check ELEVENLABS_API_KEY in desktop-glass/.env or repo .env)",
+            "[Glass TTS] glass-tts: no audio (check ELEVENLABS_API_KEY in glass-app/.env or repo .env)",
           );
           state.ttsAudio = { id: `failed-${Date.now()}`, data: "" };
           push();
@@ -8602,6 +8824,8 @@ async function runPaletteTerminalFixLast(): Promise<void> {
     const parsed = parseTerminalFixResponse(raw);
     const termId = state.glassDockTerminalId;
     if (parsed.fixedCommand && termId) {
+      terminalAutoFixSession.shown += 1;
+      logTerminalAutofixShown();
       pushFeed(
         createCommandFeedItem("terminal-fix", parsed.diagnosis ?? "Suggested fix", {
           title: "Glass Terminal",
@@ -8668,9 +8892,25 @@ async function runPaletteExplainClipboard(): Promise<void> {
 // ─── Terminal auto-fix ────────────────────────────────────────────────────────
 
 /**
+ * Per-session auto-fix acceptance counters (in-process only, not persisted).
+ * Tracks how often users accept vs dismiss fix suggestions — retention signal.
+ */
+const terminalAutoFixSession = {
+  shown: 0,
+  accepted: 0,
+  dismissed: 0,
+};
+
+export function getTerminalAutoFixSessionStats(): typeof terminalAutoFixSession {
+  return { ...terminalAutoFixSession };
+}
+
+/**
  * Called when the Glass built-in terminal exits with a non-zero code.
- * Asks the AI what went wrong and how to fix it, then pushes a "terminal-fix"
- * overlay card with the suggestion and a one-click "Fix it" button.
+ * Uses the strict 3-line format from terminalFixEngine for reliable parsing:
+ *   Line 1: corrected command (ready to run)
+ *   Line 2: what went wrong (≤12 words)
+ *   Line 3: what the fix does differently (≤12 words)
  */
 async function handleTerminalAutoFix(
   termId: string,
@@ -8686,36 +8926,27 @@ async function handleTerminalAutoFix(
     .filter((l) => l.length > 0 && !l.match(/^[\$%>#]\s/))
     .slice(-30); // last 30 meaningful lines
 
-  // Build the AI prompt
   const outputText = meaningfulLines.join("\n");
-  const prompt = [
-    `The user ran this command in the Glass Terminal and it failed (exit code ${exitCode}):`,
-    ``,
-    `Command: ${lastCommand}`,
-    ``,
-    outputText ? `Terminal output:\n${outputText}` : "(no output captured)",
-    ``,
-    `In 1-2 sentences explain what went wrong. Then on a new line write exactly:`,
-    `FIX: <the corrected command>`,
-    ``,
-    `Only output one FIX line. If no single-command fix exists, write FIX: none`,
-  ].join("\n");
+
+  // Use the canonical 3-line prompt from terminalFixEngine (strict format, reliable parsing)
+  const prompt = buildTerminalFixPrompt(lastCommand, outputText, exitCode);
 
   try {
-    const response = await askIivoGlass(config, { prompt, modelPurpose: "default" });
-    const answer = response.answer?.trim() ?? "";
-    if (!answer) return;
+    const response = await askIivoGlass(config, {
+      prompt,
+      modelPurpose: "default",
+      responseStyle: "full",
+    });
+    const raw = response.answer?.trim() ?? "";
+    if (!raw) return;
 
-    // Parse explanation and fix command
-    const fixMatch = answer.match(/^FIX:\s*(.+)$/im);
-    const fixCommand = fixMatch?.[1]?.trim() ?? null;
-    const explanation = answer.replace(/^FIX:.*$/im, "").trim();
+    const parsed = parseTerminalFixResponse(raw);
 
-    // Don't surface a card if there's no actionable fix
-    if (!fixCommand || fixCommand === "none") {
-      if (explanation) {
+    // No fix available — surface error explanation only
+    if (!parsed.fixedCommand) {
+      if (parsed.diagnosis) {
         pushFeed(
-          createCommandFeedItem("error", explanation, {
+          createCommandFeedItem("error", parsed.diagnosis, {
             title: "Terminal error",
             failedCommand: lastCommand,
           }),
@@ -8725,14 +8956,16 @@ async function handleTerminalAutoFix(
       return;
     }
 
-    // Push the fix card — "Fix it" button will dispatch glass-terminal-fix-accept
+    // Surface the fix card — "Fix it" button dispatches glass-terminal-fix-accept
+    terminalAutoFixSession.shown += 1;
+    logTerminalAutofixShown();
     pushFeed(
-      createCommandFeedItem("terminal-fix", explanation, {
+      createCommandFeedItem("terminal-fix", parsed.diagnosis ?? "Suggested fix", {
         title: "Glass Terminal",
         termId,
-        fixCommand,
+        fixCommand: parsed.fixedCommand,
         failedCommand: lastCommand,
-        fullBody: explanation,
+        fullBody: [parsed.diagnosis, parsed.whatChanged].filter(Boolean).join("\n\n"),
       }),
     );
     push();
@@ -9864,6 +10097,15 @@ function isPanelIpcSender(sender: Electron.WebContents): boolean {
   return sender.id === panel.webContents.id;
 }
 
+function isGlassRendererSender(sender: Electron.WebContents): boolean {
+  const wins = getWindows();
+  if (!wins) return false;
+  for (const win of Object.values(wins)) {
+    if (win && !win.isDestroyed() && win.webContents.id === sender.id) return true;
+  }
+  return false;
+}
+
 function isApiKeySettingsSender(sender: Electron.WebContents): boolean {
   return isOverlayIpcSender(sender)
     || isPanelIpcSender(sender)
@@ -9998,6 +10240,11 @@ function registerIpc(): void {
     (sender) => state.glassDashboardActive === true && isOverlayIpcSender(sender),
   );
   registerDashboardIpc();
+
+  ipcMain.handle(IPC.getSentryDsn, (event) => {
+    if (!isGlassRendererSender(event.sender)) return null;
+    return process.env.SENTRY_DSN?.trim() || null;
+  });
 
   ipcMain.handle(IPC.writeClipboard, (event, text: string) => {
     if (!isOverlayIpcSender(event.sender) && !isTerminalIpcSender(event.sender)) return false;
@@ -10613,6 +10860,11 @@ function registerIpc(): void {
     if (ev.kind === "done") {
       const path = state.agentRun?.savedFilePath;
       if (ev.agentId === "coder") {
+        logBuildLoopCompleted(sessions.current()?.id, {
+          agentRunId: ev.runId,
+          iterations: state.coderLoopIteration ?? 1,
+          success: true,
+        });
         state.lastNotice = "Glass Coder finished — review changes in the Coder panel.";
       } else {
         state.lastNotice = agentCompletionNotice(path);
@@ -10644,6 +10896,11 @@ function registerIpc(): void {
     } else if (ev.kind === "error") {
       state.lastNotice = ev.error ?? "Agent failed.";
       if (ev.agentId === "coder") {
+        logBuildLoopCompleted(sessions.current()?.id, {
+          agentRunId: ev.runId,
+          iterations: state.coderLoopIteration ?? 1,
+          success: false,
+        });
         coderPostRunScheduler.clear(ev.runId);
       }
       state.agentHistory = updateAgentHistoryRun(ev.runId, {
@@ -10656,6 +10913,11 @@ function registerIpc(): void {
       state.lastNotice = "Agent stopped.";
       rejectApprovalsForRun(ev.runId);
       if (ev.agentId === "coder") {
+        logBuildLoopCompleted(sessions.current()?.id, {
+          agentRunId: ev.runId,
+          iterations: state.coderLoopIteration ?? 1,
+          success: false,
+        });
         deactivateCoderWorkspace();
       }
       state.agentHistory = updateAgentHistoryRun(ev.runId, {
@@ -10718,6 +10980,7 @@ function registerIpc(): void {
         state.agentChangeLog = [];
         syncIdeChromeFromState();
         if (!loopAutoTrigger) {
+          logBuildLoopStarted(sessions.current()?.id, { agentRunId: runId });
           state.coderLoopSessionId = runId;
           state.coderLoopIteration = 1;
           state.coderVerifyState = null;
@@ -11106,6 +11369,10 @@ function registerIpc(): void {
       state.lastError = message;
       state.glassDockTerminalOpen = false;
     }
+    void (async () => {
+      state.ollamaAvailable = await checkOllamaAvailable();
+      push();
+    })();
     void (async () => {
       if (state.glassIdePreviewUrl) return;
       const projectRoot = state.glassSettings.agentCodeWorkspaceRoot?.trim();
@@ -12054,7 +12321,7 @@ function registerIpc(): void {
 
       const dgKey = process.env.DEEPGRAM_API_KEY?.trim();
       if (!dgKey) {
-        return { error: "DEEPGRAM_API_KEY is not configured — add it to desktop-glass/.env and restart." };
+        return { error: "DEEPGRAM_API_KEY is not configured — add it to glass-app/.env and restart." };
       }
 
       const rawBuffer = payload?.buffer;
@@ -12611,10 +12878,18 @@ app.whenReady().then(() =>
   moments = await loadMoments();
   sessions = await loadSessions();
   glassUserSettings = await loadGlassUserSettings();
+  applyPersistedAudioState(glassUserSettings, state);
+  registerIivoServerDegradedHandler(() => {
+    state.iivoServerDegradedReason = getIivoServerDegradedReason();
+    push();
+  });
+  registerIivoServerDegradedReporter(markIivoServerDegraded);
+  state.glassSettings = glassUserSettings;
   state.agentHistory = loadAgentHistory();
   migrateAnthropicKeyFromEnv();
 
   initDatabase();
+  logSessionStart();
   void notifyMemoryServicesReady().catch((err) => {
     console.error("[memory] startup notifyMemoryServicesReady failed:", err);
   });
@@ -12624,12 +12899,32 @@ app.whenReady().then(() =>
     console.error("[sessionHistory] startup prune failed:", err);
   }
 
-  // Wire agent chains (Coder → Research, Research → Writing, etc.)
+  // Wire agent chains (Coder → Research, Research → Writing, Meeting → ActionPlan, etc.)
   initAgentChains({
     getAnthropicModel: () =>
       resolveCoderAgentApiModel(resolveCoderAgentModelId(state.glassSettings?.coderAgentModel)),
     getOutputDir: () => resolveAgentOutputFolder(state.glassSettings),
   });
+
+  // Wire: audio build plan ready → surface "Build from video" feed card
+  agentBus.subscribe<AudioBuildPlanPayload>(
+    "knowledge.audio.build_plan_ready",
+    "audio-build-plan-ui",
+    (event) => {
+      const { coderPrompt, extractedIntent } = event.payload;
+      const body = extractedIntent.intent.trim() || "Build plan extracted from audio session.";
+      pushFeed(
+        createCommandFeedItem("build-from-audio", body, {
+          title: "Build from video",
+          audioBuildPrompt: coderPrompt,
+          fullBody: coderPrompt,
+          pinned: true,
+        }),
+      );
+      push();
+      console.log("[audio-build-plan] Feed card surfaced — user can click to open Coder");
+    },
+  );
 
   // Check GitHub PAT at startup (silent — never throws)
   try {
@@ -12770,6 +13065,7 @@ app.whenReady().then(() =>
   refreshSetupCapabilities();
   push();
   scheduleInitialSetupCheck();
+  scheduleServerHealthPolling();
   initGlassAutoUpdater((patch) => {
     state.appUpdate = {
       ...state.appUpdate,
@@ -12804,6 +13100,15 @@ app.whenReady().then(() =>
 
 app.on("will-quit", () => {
   appIsQuitting = true; // guard PTY onExit callbacks from calling push() on destroyed windows
+  glassUserSettings = {
+    ...glassUserSettings,
+    ...buildAudioPersistencePatch({
+      transcriptionMode: state.transcriptionMode,
+      systemAudioStatus: state.systemAudioStatus,
+    }),
+  };
+  void persistGlassUserSettings(glassUserSettings);
+  logSessionEnd();
   teardownGlassDashboard();
   teardownGlassSettings();
   teardownAgentChains();

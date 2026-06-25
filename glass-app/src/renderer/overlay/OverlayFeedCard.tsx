@@ -350,8 +350,8 @@ export function FeedCard({
                     type: "glass-terminal-fix-accept",
                     termId: item.termId ?? "",
                     command: item.fixCommand ?? "",
+                    feedItemId: item.id,
                   });
-                  send({ type: "remove-command-feed-item", id: item.id });
                 }}
               >
                 ↳ Fix it
@@ -367,6 +367,70 @@ export function FeedCard({
   // ── Design-to-Code capture card (#163) ───────────────────────────────────
   if (item.kind === "design-capture") {
     return <DesignCaptureCard item={item} />;
+  }
+
+  // ── Build-from-audio card ─────────────────────────────────────────────────
+  if (item.kind === "build-from-audio") {
+    const buildPrompt = item.audioBuildPrompt ?? item.fullBody ?? "";
+    return (
+      <article
+        className="overlay-build-from-audio-card glass-answer-shell"
+        data-testid="glass-build-from-audio-card"
+        onPointerDownCapture={ensureOverlayInteractive}
+      >
+        <span className="glass-answer-shell__sheen" aria-hidden="true" />
+        <button
+          type="button"
+          className="overlay-feed-card__dismiss-x"
+          aria-label="Dismiss"
+          title="Dismiss"
+          onPointerDown={ensureOverlayInteractive}
+          onClick={() => send({ type: "remove-command-feed-item", id: item.id })}
+        >
+          ×
+        </button>
+        <div className="overlay-build-error-card__inner">
+          <div className="overlay-build-error-card__header">
+            <span className="overlay-build-error-card__icon" aria-hidden="true">▶</span>
+            <span className="overlay-build-error-card__label">{item.title}</span>
+          </div>
+          {item.body ? (
+            <p
+              className="overlay-build-error-card__snippet glass-selectable-text"
+              onContextMenu={prepareGlassTextContextMenu}
+              onPointerDownCapture={prepareGlassTextPointerDown}
+            >
+              {item.body}
+            </p>
+          ) : null}
+          <div className="overlay-build-error-card__actions">
+            <button
+              type="button"
+              className="gbtn gbtn--primary"
+              data-testid="glass-build-from-audio-btn"
+              onPointerDown={ensureOverlayInteractive}
+              onClick={() => {
+                if (buildPrompt.trim()) {
+                  send({ type: "glass-build-from-audio", prompt: buildPrompt });
+                  send({ type: "remove-command-feed-item", id: item.id });
+                }
+              }}
+            >
+              Build from video
+            </button>
+            <button
+              type="button"
+              className="gbtn gbtn--ghost"
+              onPointerDown={ensureOverlayInteractive}
+              onClick={() => send({ type: "remove-command-feed-item", id: item.id })}
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+        <span className="glass-answer-shell__led ui-led-line" aria-hidden="true" />
+      </article>
+    );
   }
 
   // ── Build-error card (#162) ───────────────────────────────────────────────

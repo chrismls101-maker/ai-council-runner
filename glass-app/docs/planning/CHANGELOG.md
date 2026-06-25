@@ -1,5 +1,24 @@
 # IIVO Glass — Changelog
 
+## v0.8.2 — 2026-06-23
+
+### Reliability & blockers
+- **Deepgram → Whisper fallback** for Live Translate when streaming fails; companion fallback no longer disables translate Deepgram
+- **Persist audio routing** across restarts (system audio mode + BlackHole routing restore on boot)
+- **Server degraded indicator** in panel when IIVO server is offline (runtime + setup check)
+- **Sentry DSN** loaded from userData `.env` at runtime; renderer bootstraps via IPC
+
+### Code hygiene
+- Removed dead `iivoAnalysisClient.ts`; session analysis helpers live in `sessionPayload.ts`
+- IDE shows **semantic search offline** when Ollama is down; refreshes on IDE open
+- Per-source server degraded state; health poll on boot + every 45s
+- Fixed stale `desktop-glass/` paths in user-facing errors
+
+### Dashboard & memory
+- Settings window, council rail, sqlite-vec migration repairs, dashboard IPC
+
+---
+
 ## v0.8.1 — 2026-06-22
 
 ### Aletheia Companion

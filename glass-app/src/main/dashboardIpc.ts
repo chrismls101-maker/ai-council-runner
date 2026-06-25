@@ -11,6 +11,7 @@ import {
   getUserContext,
   deleteUserContextKey,
 } from "./sessionHistoryStore.ts";
+import { getRetentionSummary } from "./glassRetentionEvents.ts";
 
 let isDashboardIpcSender: (sender: WebContents) => boolean = () => false;
 
@@ -81,6 +82,28 @@ export function registerDashboardIpc(): void {
     } catch (err) {
       console.error("[dashboardIpc] deleteUserContextKey:", err);
       return { ok: false };
+    }
+  });
+
+  ipcMain.handle(IPC.getRetentionSummary, (event) => {
+    if (!isDashboardIpcSender(event.sender)) {
+      return {
+        sessionsLast7Days: 0,
+        workflowsPerSession: 0,
+        autofixAcceptanceRate: 0,
+        buildLoopSuccessRate: 0,
+      };
+    }
+    try {
+      return getRetentionSummary();
+    } catch (err) {
+      console.error("[dashboardIpc] getRetentionSummary:", err);
+      return {
+        sessionsLast7Days: 0,
+        workflowsPerSession: 0,
+        autofixAcceptanceRate: 0,
+        buildLoopSuccessRate: 0,
+      };
     }
   });
 }

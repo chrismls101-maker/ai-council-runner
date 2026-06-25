@@ -2116,11 +2116,14 @@ export function setOverlayMode(mode: OverlayMode): void {
   logDiagnostics();
 }
 
+export function ensurePanelLayout(): void {
+  if (!windows?.panel || windows.panel.isDestroyed() || !layoutManager) return;
+  windows.panel.setBounds(layoutManager.getPanelLayout());
+}
+
 export function openPanel(): void {
   if (!windows?.panel || windows.panel.isDestroyed()) return;
-  if (layoutManager) {
-    windows.panel.setBounds(layoutManager.getPanelLayout());
-  }
+  ensurePanelLayout();
   windows.panel.show();
   stackGlassWindows(windows);
   logDiagnostics();

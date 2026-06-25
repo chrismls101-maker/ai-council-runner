@@ -98,4 +98,27 @@ test.describe("IIVO Glass overlay response cards", () => {
     expect(String(state.moments?.[0]?.note ?? "")).toContain(prompt);
     expect(state.commandFeed?.some((item) => item.kind === "moment")).toBe(true);
   });
+
+  test("glass-overlay-build-from-audio", async () => {
+    const { command, overlay } = await getGlassWindows(app.browser);
+    const prompt = "Build: E2E todo app\n\nRequirements:\n- React";
+
+    await command.evaluate(
+      (p) =>
+        window.glass.send({
+          type: "e2e-surface-build-from-audio-card",
+          prompt: p,
+        }),
+      prompt,
+    );
+
+    const card = overlay.locator('[data-testid="glass-build-from-audio-card"]');
+    await expect(card).toBeVisible({ timeout: 5_000 });
+    await expect(overlay.locator('[data-testid="glass-build-from-audio-btn"]')).toBeVisible();
+
+    await overlay.locator('[data-testid="glass-build-from-audio-btn"]').click();
+
+    const state = await readGlassState(command);
+    expect(state.glassIdeActive).toBe(true);
+  });
 });

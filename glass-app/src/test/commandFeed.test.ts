@@ -27,6 +27,19 @@ test("createCommandFeedItem allows a custom title + pinned flag", () => {
   assert.equal(item.pinned, true);
 });
 
+test("createCommandFeedItem supports build-from-audio with audioBuildPrompt", () => {
+  const item = createCommandFeedItem("build-from-audio", "Build a React dashboard", {
+    title: "Build from video",
+    audioBuildPrompt: "Build: React dashboard\n\nRequirements:\n- charts",
+    fullBody: "Build: React dashboard\n\nRequirements:\n- charts",
+    pinned: true,
+  });
+  assert.equal(item.kind, "build-from-audio");
+  assert.equal(item.title, "Build from video");
+  assert.equal(item.audioBuildPrompt?.includes("React dashboard"), true);
+  assert.equal(item.pinned, true);
+});
+
 test("response card events render as feed items per type", () => {
   for (const kind of ["command", "thinking", "response", "capture", "transcript", "error", "moment"] as const) {
     const item = createCommandFeedItem(kind, `body ${kind}`);

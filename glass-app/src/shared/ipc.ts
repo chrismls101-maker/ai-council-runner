@@ -124,8 +124,6 @@ export const IPC = {
   companionPrivacyResumed: "glass:companion-privacy-resumed",
   /** Main → renderer: Deepgram final transcript for companion mic (diarized). */
   companionDeepgramFinal: "glass:companion-deepgram-final",
-  /** Main → renderer: companion Deepgram unavailable — fall back to Web Speech. */
-  companionDeepgramUnavailable: "glass:companion-deepgram-unavailable",
   // ── Built-in terminal (PTY) ────────────────────────────────────────────────
   /** Main → renderer: PTY output data. Payload: { termId, data }. */
   ptyData: "glass:pty-data",
@@ -307,12 +305,15 @@ export const IPC = {
   getAgentRunsByCorrelation: "glass:get-agent-runs-by-correlation",
   getUserContext: "glass:get-user-context",
   deleteUserContextKey: "glass:delete-user-context-key",
+  /** Dashboard → main: 7-day retention rollup from local SQLite. */
+  getRetentionSummary: "glass:get-retention-summary",
   /** Renderer → main: open Glass Settings window. */
   openGlassSettings: "glass:open-glass-settings",
   /** Renderer → main: close Glass Settings window. */
   closeGlassSettings: "glass:close-glass-settings",
   /** Settings renderer → main: app version string. */
   getAppVersion: "glass:get-app-version",
+  getSentryDsn: "glass:get-sentry-dsn",
   /** Settings renderer → main: open URL in default browser. */
   settingsOpenExternal: "glass:settings-open-external",
   /** Renderer → main: open Glass IDE shell (Glass Coder transform). */
@@ -756,6 +757,7 @@ export type TranscriptionControlCommand =
   | { type: "probe-microphone" }
   | { type: "probe-virtual-audio-devices" }
   | { type: "startup-audio-restore" }
+  | { type: "deepgram-whisper-fallback"; scope: "translate" | "listen" | "companion" }
   | { type: "connect-system-audio" }
   | { type: "test-system-audio" }
   | { type: "test-blackhole" };
@@ -930,6 +932,8 @@ export type GlassCommand =
       type: "e2e-set-app-update";
       update: Partial<import("./glassAppUpdate.ts").GlassAppUpdateState>;
     }
+  /** E2E only — surface a build-from-audio overlay card without running extraction. */
+  | { type: "e2e-surface-build-from-audio-card"; prompt?: string }
   | { type: "translate-set-config"; patch: Partial<import("./liveTranslateTypes.ts").LiveTranslateConfig> }
   | { type: "translate-start"; targetLanguage?: import("./liveTranslateTypes.ts").LiveTranslateTargetLanguage }
   | { type: "translate-stop" }
@@ -987,7 +991,10 @@ export type GlassCommand =
   | { type: "glass-context-ask" }
   // ── Terminal auto-fix ─────────────────────────────────────────────────────
   /** User clicked "Fix it" on a terminal-fix overlay card — types fix into PTY */
-  | { type: "glass-terminal-fix-accept"; termId: string; command: string }
+  | { type: "glass-terminal-fix-accept"; termId: string; command: string; feedItemId?: string }
+  // ── Build from audio ─────────────────────────────────────────────────────
+  /** User clicked "Build from video" on a build-from-audio card — opens Coder pre-filled */
+  | { type: "glass-build-from-audio"; prompt: string }
   | { type: "glass-terminal-run"; command: string }
   /** IDE embedded terminal — expand/collapse chrome (orchestrator + builder strip sync). */
   | { type: "glass-ide-terminal-set-expanded"; expanded: boolean; manual?: boolean }
@@ -1157,6 +1164,8 @@ export interface GlassState {
   connectedDisplays: ConnectedDisplaySnapshot[];
   setupCapabilities: import("./glassCapabilities.ts").GlassCapabilityRow[];
   setupCheckSummary?: string;
+  /** Live server-degraded reason (mid-session failures + setup check). */
+  iivoServerDegradedReason?: string;
   captureDiagnosticsReport?: import("./captureDiagnostics.ts").CaptureDiagnosticsReport;
   appIdentityReport?: import("./glassAppIdentityReport.ts").GlassAppIdentityReport;
   duplicateAppBundles?: import("./glassAppIdentityReport.ts").DuplicateGlassAppBundle[];
@@ -1826,3 +1835,11 @@ export type {
   SessionRowWithMeta,
   UserContextRow,
 } from "./glassSessionHistory.ts";
+
+/** 7-day local retention rollup (dashboard). */
+export interface RetentionSummary {
+  sessionsLast7Days: number;
+  workflowsPerSession: number;
+  autofixAcceptanceRate: number;
+  buildLoopSuccessRate: number;
+}

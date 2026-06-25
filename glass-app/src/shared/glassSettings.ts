@@ -58,6 +58,12 @@ export interface GlassUserSettings {
   audioRoutingConfigured?: boolean;
   /** Saved Mac speaker/output device name for startup restore. */
   savedMacOutputDeviceName?: string;
+  /** Last transcription mode when system audio was connected (restored on launch). */
+  persistedTranscriptionMode?: import("./audioCaptureTypes.ts").TranscriptionMode;
+  /** Last system-audio status when the app quit (restored on launch). */
+  persistedSystemAudioStatus?: import("./systemAudioTypes.ts").SystemAudioStatus;
+  /** True when system audio was available at last quit — triggers startup restore. */
+  systemAudioEnabledAtQuit?: boolean;
   /** Session Copilot mode + behavior. Default off (no auto extraction). */
   copilot: GlassCopilotConfig;
   /**
@@ -183,6 +189,41 @@ export function parseMicAutoSendAfterSilence(value: unknown): boolean {
 }
 
 export function parseClipboardIntelligenceEnabled(value: unknown): boolean {
+  return value === true;
+}
+
+const VALID_TRANSCRIPTION_MODES = new Set([
+  "manual",
+  "microphone_web_speech",
+  "microphone_media_recorder",
+  "system_audio",
+]);
+
+export function parsePersistedTranscriptionMode(
+  value: unknown,
+): import("./audioCaptureTypes.ts").TranscriptionMode | undefined {
+  if (typeof value !== "string" || !VALID_TRANSCRIPTION_MODES.has(value)) return undefined;
+  return value as import("./audioCaptureTypes.ts").TranscriptionMode;
+}
+
+const VALID_SYSTEM_AUDIO_STATUSES = new Set([
+  "available",
+  "requires_permission",
+  "requires_virtual_device",
+  "source_enumeration_failed",
+  "not_tested",
+  "unsupported",
+  "error",
+]);
+
+export function parsePersistedSystemAudioStatus(
+  value: unknown,
+): import("./systemAudioTypes.ts").SystemAudioStatus | undefined {
+  if (typeof value !== "string" || !VALID_SYSTEM_AUDIO_STATUSES.has(value)) return undefined;
+  return value as import("./systemAudioTypes.ts").SystemAudioStatus;
+}
+
+export function parseSystemAudioEnabledAtQuit(value: unknown): boolean {
   return value === true;
 }
 

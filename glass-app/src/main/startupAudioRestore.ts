@@ -3,8 +3,16 @@
  */
 
 import type { GlassUserSettings } from "../shared/glassSettings.ts";
+import {
+  applyPersistedAudioState,
+  buildAudioPersistencePatch,
+  type PersistedAudioStateTarget,
+} from "../shared/audioStartupPersistence.ts";
 import { broadcastTranscriptionControl } from "./glassOperations.ts";
 import { setMacOutputDeviceByName } from "./macAudioOutput.ts";
+
+export type { PersistedAudioStateTarget };
+export { applyPersistedAudioState, buildAudioPersistencePatch };
 
 export interface StartupAudioRestoreResult {
   restoredOutput: boolean;

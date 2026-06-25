@@ -276,7 +276,7 @@ This document is the **source of truth** for what IIVO Glass promises users. Eve
 
 **Tests**
 - `src/test/glassBrowserHandoff.test.ts`
-- `src/test/iivoAnalysisClient.test.ts`
+- `src/test/iivoAnalysisClient.test.ts` (session analysis helpers in `sessionPayload.ts`)
 - `src/test/config.test.ts`
 - `tests/e2e/glass-critical.spec.ts` — **“6 — Open in IIVO only on user action”**, **“6b — visual Open in IIVO uploads screenshot on click only”**
 - Optional live: `IIVO_GLASS_E2E_REAL_HANDOFF=1`

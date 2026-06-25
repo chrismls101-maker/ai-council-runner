@@ -21,6 +21,14 @@ export const SESSION_ANALYSIS_PROMPT = [
   "and what should be saved as memory.",
 ].join(" ");
 
+export function buildSessionAnalysisPrompt(): string {
+  return SESSION_ANALYSIS_PROMPT;
+}
+
+export function buildAnalysisFailureNotice(error: string): string {
+  return `${error} You can try Open in IIVO instead.`;
+}
+
 export interface SessionPayloadOptions {
   maxEvents?: number;
   maxInsights?: number;

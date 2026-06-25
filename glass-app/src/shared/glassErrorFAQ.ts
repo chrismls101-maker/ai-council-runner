@@ -36,7 +36,7 @@ const FAQ: GlassFAQEntry[] = [
 
 **Most common fix (macOS):** node-pty's \`spawn-helper\` binary lost its executable permission during install.
 
-1. Run: \`npm run postinstall --prefix desktop-glass\`
+1. Run: \`npm run postinstall --prefix glass-app\`
 2. Restart Glass (\`npm run glass:dev\`)
 3. Open the dock terminal again (\`>_\`)
 
@@ -95,7 +95,7 @@ If you have Loopback instead of BlackHole, create a virtual device there that pa
 
 **How to fix it (direct OpenAI):**
 1. Get an API key from platform.openai.com/api-keys.
-2. Open the \`desktop-glass/.env\` file (create it if it doesn't exist).
+2. Open the \`glass-app/.env\` file (create it if it doesn't exist).
 3. Add: \`IIVO_GLASS_OPENAI_API_KEY=sk-...\`
 4. Restart Glass.
 
@@ -117,9 +117,9 @@ If you have Loopback instead of BlackHole, create a virtual device there that pa
 
 **How to fix it:**
 1. Start your IIVO server: \`npm run dev\` in the server directory.
-2. Check that \`IIVO_API_URL\` in \`desktop-glass/.env\` points to the correct address (default: \`http://127.0.0.1:3001\`).
+2. Check that \`IIVO_API_URL\` in \`glass-app/.env\` points to the correct address (default: \`http://127.0.0.1:3001\`).
 3. Alternatively, bypass the server entirely by setting a direct OpenAI key:
-   \`IIVO_GLASS_OPENAI_API_KEY=sk-...\` in \`desktop-glass/.env\`, then restart.`,
+   \`IIVO_GLASS_OPENAI_API_KEY=sk-...\` in \`glass-app/.env\`, then restart.`,
     },
   },
 
@@ -133,7 +133,7 @@ If you have Loopback instead of BlackHole, create a virtual device there that pa
 **Common causes and fixes:**
 
 **Invalid or expired OpenAI key:**
-Check \`IIVO_GLASS_OPENAI_API_KEY\` in \`desktop-glass/.env\`. Visit platform.openai.com to verify the key is active.
+Check \`IIVO_GLASS_OPENAI_API_KEY\` in \`glass-app/.env\`. Visit platform.openai.com to verify the key is active.
 
 **Rate limit (429):**
 Your OpenAI account has hit its usage limit. Add billing at platform.openai.com or wait for the limit to reset.
@@ -156,7 +156,7 @@ Check your usage at platform.openai.com/usage — you may need to add a payment 
 **Common causes and fixes:**
 
 **Invalid or expired OpenAI key:**
-Check \`IIVO_GLASS_OPENAI_API_KEY\` in \`desktop-glass/.env\`. Visit platform.openai.com to verify the key is active and has credit.
+Check \`IIVO_GLASS_OPENAI_API_KEY\` in \`glass-app/.env\`. Visit platform.openai.com to verify the key is active and has credit.
 
 **Rate limit (429):**
 Your OpenAI account has hit its usage limit. Add billing at platform.openai.com or wait for the limit to reset.
@@ -190,7 +190,7 @@ Check **System Settings → Privacy & Security → Microphone** and re-grant acc
 
 **How to fix it:**
 1. Make sure your IIVO server is running (\`npm run dev\`).
-2. Check \`IIVO_API_URL\` in \`desktop-glass/.env\` — it should match your server address (e.g. \`http://127.0.0.1:3001\`).
+2. Check \`IIVO_API_URL\` in \`glass-app/.env\` — it should match your server address (e.g. \`http://127.0.0.1:3001\`).
 3. Check \`GLASS_API_SECRET\` matches on both the Glass desktop app and the server.
 4. Try restarting both the IIVO server and Glass.`,
     },
@@ -234,7 +234,7 @@ Check **System Settings → Privacy & Security → Microphone** and re-grant acc
 
 **How to fix it:**
 1. Check that your IIVO server is running.
-2. Verify \`IIVO_API_URL\` and \`GLASS_API_SECRET\` are set correctly in \`desktop-glass/.env\`.
+2. Verify \`IIVO_API_URL\` and \`GLASS_API_SECRET\` are set correctly in \`glass-app/.env\`.
 3. Try pausing the session, waiting a few seconds, then resuming — Glass will retry.
 4. If the session data is important, it's saved locally and will retry automatically on next startup.`,
     },
@@ -292,7 +292,7 @@ export function lookupGlassErrorAnswer(rawPrompt: string): GlassErrorAnswer | nu
     body: `Here are the most common places to check for Glass errors:
 
 **STT / Transcription issues:**
-- Verify \`IIVO_GLASS_OPENAI_API_KEY\` in \`desktop-glass/.env\` is set and valid (platform.openai.com/api-keys).
+- Verify \`IIVO_GLASS_OPENAI_API_KEY\` in \`glass-app/.env\` is set and valid (platform.openai.com/api-keys).
 - Make sure the IIVO server is running if you're using server-side STT.
 
 **System audio issues:**
@@ -303,7 +303,7 @@ export function lookupGlassErrorAnswer(rawPrompt: string): GlassErrorAnswer | nu
 - System Settings → Privacy & Security → Microphone / Screen Recording — ensure Glass has access.
 
 **Server connection:**
-- \`IIVO_API_URL\` and \`GLASS_API_SECRET\` must match between \`desktop-glass/.env\` and your server.
+- \`IIVO_API_URL\` and \`GLASS_API_SECRET\` must match between \`glass-app/.env\` and your server.
 
 Restart Glass after any .env changes.`,
   };

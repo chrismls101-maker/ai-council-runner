@@ -41,6 +41,10 @@ export function TranscriptionProvider({ children }: { children: ReactNode }): JS
         void tx.connectSystemAudio();
       } else if (command.type === "test-blackhole") {
         void tx.testBlackHole();
+      } else if (command.type === "startup-audio-restore") {
+        void tx.restoreStartupAudio();
+      } else if (command.type === "deepgram-whisper-fallback") {
+        tx.activateWhisperFallback(command.scope);
       }
     });
     return unsubscribe;

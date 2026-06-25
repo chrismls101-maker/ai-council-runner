@@ -83,6 +83,40 @@
   justify-content: center;
   border-radius: 11px;
   flex-shrink: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.06) 0%,
+    rgba(255, 255, 255, 0.02) 52%,
+    rgba(0, 0, 0, 0.08) 100%
+  );
+  border: 0.5px solid rgba(255, 255, 255, 0.1) !important;
+  border-top-color: rgba(255, 255, 255, 0.16) !important;
+  border-bottom-color: rgba(0, 0, 0, 0.28) !important;
+  color: rgba(255, 255, 255, 0.72);
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.14);
+}
+
+.dock--rail .dock__rail-btn:hover,
+.dock--rail .dock__mode-pill:hover {
+  color: rgba(255, 255, 255, 0.92);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.1) 0%,
+    rgba(255, 255, 255, 0.04) 52%,
+    rgba(0, 0, 0, 0.06) 100%
+  );
+  border-color: rgba(255, 255, 255, 0.16) !important;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.45),
+    0 3px 8px rgba(0, 0, 0, 0.24),
+    0 0 10px rgba(56, 225, 255, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12);
 }
 
 .dock--rail .dock__mode-pill {
@@ -132,6 +166,8 @@
   height: 18px;
   flex-shrink: 0;
   opacity: 0.82;
+  color: inherit;
+  stroke: currentColor;
 }
 
 .dock--rail .gbtn:hover .dock__rail-icon {

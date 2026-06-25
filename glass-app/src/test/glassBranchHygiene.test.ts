@@ -8,7 +8,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const glassRoot = join(__dirname, "..", "..");
 
 test("GLASS_BRANCH_HYGIENE documents stable vs WIP branches", () => {
-  const doc = readFileSync(join(glassRoot, "GLASS_BRANCH_HYGIENE.md"), "utf8");
+  const doc = readFileSync(join(glassRoot, "docs/reports/GLASS_BRANCH_HYGIENE.md"), "utf8");
   assert.ok(doc.includes("cleanup/focused-iivo-lens-core"));
   assert.ok(doc.includes("wip/glass-splash-dock-audio-panel"));
   assert.ok(doc.includes("git add ."));
@@ -16,7 +16,7 @@ test("GLASS_BRANCH_HYGIENE documents stable vs WIP branches", () => {
 });
 
 test("WIP integration plan documents cherry-pick workflow", () => {
-  const doc = readFileSync(join(glassRoot, "WIP_INTEGRATION_PLAN.md"), "utf8");
+  const doc = readFileSync(join(glassRoot, "docs/planning/WIP_INTEGRATION_PLAN.md"), "utf8");
   assert.ok(doc.includes("wip/glass-splash-dock-audio-panel"));
   assert.ok(doc.includes("cherry-pick"));
   assert.ok(doc.includes("glass:git:guard:all"));

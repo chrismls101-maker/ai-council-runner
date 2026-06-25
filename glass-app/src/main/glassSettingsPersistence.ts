@@ -23,6 +23,9 @@ import {
   parseCoderPanelWidth,
   parseBoolDefaultTrue,
   parseBoolDefaultFalse,
+  parsePersistedTranscriptionMode,
+  parsePersistedSystemAudioStatus,
+  parseSystemAudioEnabledAtQuit,
   type GlassUserSettings,
 } from "../shared/glassSettings.ts";
 import { parseRecentCoderProjects } from "../shared/recentCoderProjects.ts";
@@ -77,6 +80,15 @@ function buildSettingsFromParsed(parsed: Partial<GlassUserSettings>): GlassUserS
         parsed.selectedVirtualAudioDeviceId.trim()
           ? parsed.selectedVirtualAudioDeviceId.trim()
           : undefined,
+      audioRoutingConfigured: parsed.audioRoutingConfigured === true,
+      savedMacOutputDeviceName:
+        typeof parsed.savedMacOutputDeviceName === "string" &&
+        parsed.savedMacOutputDeviceName.trim()
+          ? parsed.savedMacOutputDeviceName.trim()
+          : undefined,
+      persistedTranscriptionMode: parsePersistedTranscriptionMode(parsed.persistedTranscriptionMode),
+      persistedSystemAudioStatus: parsePersistedSystemAudioStatus(parsed.persistedSystemAudioStatus),
+      systemAudioEnabledAtQuit: parseSystemAudioEnabledAtQuit(parsed.systemAudioEnabledAtQuit),
       copilot: parseCopilotSettings(parsed.copilot),
       iivoApiUrl: parseGlassServerUrl(parsed.iivoApiUrl),
       iivoWebUrl: parseGlassServerUrl(parsed.iivoWebUrl),

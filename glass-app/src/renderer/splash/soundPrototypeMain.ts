@@ -1,5 +1,6 @@
 /**
- * Boot sound lab — uses the same synth as production splash (edit synth, hear here, migrate when ready).
+ * Boot sound lab — DEV ONLY. Not an electron-vite renderer entry; open manually
+ * for synth tuning. Production splash uses splash.html → main.tsx.
  */
 
 import "./soundPrototype.css";

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { isGlassAskPayloadTooLargeError } from "../main/glassAskClient.ts";
+import { isGlassAskPayloadTooLargeError } from "../shared/glassAskClientUtils.ts";
 
 test("isGlassAskPayloadTooLargeError detects 413 failures", () => {
   assert.equal(

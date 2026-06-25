@@ -4,10 +4,13 @@ import { sanitizeLogText } from "../shared/logSanitizer.ts";
 type SentryInitOptions = NonNullable<Parameters<typeof Sentry.init>[0]>;
 type BeforeSendEvent = NonNullable<Parameters<NonNullable<SentryInitOptions["beforeSend"]>>[0]>;
 
+let activeSentryDsn = process.env.SENTRY_DSN?.trim() ?? "";
+let sentryBootstrapped = false;
+
 function scrubString(s: string): string {
   let out = sanitizeLogText(s);
-  if (process.env.SENTRY_DSN) {
-    out = out.replace(process.env.SENTRY_DSN, "[REDACTED]");
+  if (activeSentryDsn) {
+    out = out.replace(activeSentryDsn, "[REDACTED]");
   }
   return out;
 }
@@ -33,12 +36,39 @@ function scrubEvent(event: BeforeSendEvent): BeforeSendEvent {
   return event;
 }
 
-Sentry.init({
-  dsn: process.env.SENTRY_DSN,
-  enabled: process.env.NODE_ENV === "production",
-  attachStacktrace: true,
-  maxBreadcrumbs: 40,
-  beforeSend(event) {
-    return scrubEvent(event);
-  },
-});
+async function resolveSentryDsn(): Promise<string | undefined> {
+  try {
+    const fromMain = await window.glass?.getSentryDsn?.();
+    if (fromMain?.trim()) return fromMain.trim();
+  } catch {
+    // preload not ready
+  }
+  const baked = process.env.SENTRY_DSN?.trim();
+  return baked || undefined;
+}
+
+export async function bootstrapSentryRenderer(): Promise<void> {
+  if (sentryBootstrapped) return;
+  sentryBootstrapped = true;
+
+  const dsn = await resolveSentryDsn();
+  activeSentryDsn = dsn ?? "";
+  if (!dsn) {
+    if (import.meta.env.PROD) {
+      console.warn("[sentry] SENTRY_DSN not configured — renderer crash reports disabled");
+    }
+    return;
+  }
+
+  Sentry.init({
+    dsn,
+    enabled: import.meta.env.PROD,
+    attachStacktrace: true,
+    maxBreadcrumbs: 40,
+    beforeSend(event) {
+      return scrubEvent(event);
+    },
+  });
+}
+
+void bootstrapSentryRenderer();

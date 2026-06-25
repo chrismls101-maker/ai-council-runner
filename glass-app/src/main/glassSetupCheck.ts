@@ -105,3 +105,30 @@ export async function runGlassSetupCheck(input: {
     systemAudioDiagnostics: audioProbe.diagnosticsLine,
   };
 }
+
+/** Lightweight server-only health ping (no capture probes). */
+export async function runGlassServerHealthCheck(
+  config: GlassConfig,
+): Promise<GlassServerHealthForSetup | null> {
+  const healthFetch = await fetchGlassServerHealth(config);
+  const rawHealth = healthFetch.snapshot
+    ? await enrichGlassServerHealthSnapshot(config, healthFetch.snapshot)
+    : null;
+  if (rawHealth) {
+    return {
+      reachable: true,
+      vision: rawHealth.vision,
+      stt: rawHealth.stt
+        ? {
+            configured: rawHealth.stt.configured,
+            enabled: rawHealth.stt.enabled ?? rawHealth.stt.configured,
+            reason: rawHealth.stt.reason,
+          }
+        : undefined,
+    };
+  }
+  return {
+    reachable: false,
+    checkError: healthFetch.error,
+  };
+}

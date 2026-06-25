@@ -19,7 +19,7 @@ import {
   glassDirectResponseIsClean,
   sourceExcludesRunCouncilFull,
 } from "../shared/glassDirectGuard.ts";
-import { buildGlassAskUrl } from "../main/glassAskClient.ts";
+import { buildGlassAskUrl } from "../shared/glassAskClientUtils.ts";
 import { DEFAULT_CONFIG } from "../shared/config.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

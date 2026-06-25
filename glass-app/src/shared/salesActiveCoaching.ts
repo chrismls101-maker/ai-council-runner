@@ -1,6 +1,10 @@
 /**
  * Active Listening — sales/call coaching signal extraction.
  *
+ * Wired into the live listening pipeline (not imported from index.ts directly):
+ *   salesActiveCoaching → activeListeningContext → currentMomentContext → ask path
+ *   salesSignals → activeListeningGuidance (meeting mode coaching hints)
+ *
  * Extracts live-call coaching signals from recent transcript only. Never
  * fabricates customer statements — if not in transcript, omit or say missing.
  */

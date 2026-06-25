@@ -17,6 +17,7 @@ import { buildLocalSessionSummary } from "./glassMemoryLocal.ts";
 import { extractionDedupeKey } from "./glassMemoryPure.ts";
 import { getSessionMessages, getSessionMeta } from "./sessionHistoryStore.ts";
 import { getLatestCorrelationAgentRuns } from "./agentRunStore.ts";
+import { logMemoryEnrichmentUsed } from "./glassRetentionEvents.ts";
 
 const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -529,6 +530,7 @@ export async function hydrateContext(
 
     if (selected.length) {
       touchMemories(selected.map((h) => h.id));
+      logMemoryEnrichmentUsed(undefined, { memoryCount: selected.length });
     }
 
     const relevantMemories = selectedSummaries.join("\n\n");

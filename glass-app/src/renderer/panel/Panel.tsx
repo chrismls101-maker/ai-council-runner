@@ -44,6 +44,7 @@ import { LiveNotesTab } from "./LiveNotesTab.tsx";
 import { PowerStackTab } from "./PowerStackTab.tsx";
 import { ProvidersSettings } from "./ProvidersSettings.tsx";
 import { InstallationsTab } from "./InstallationsTab.tsx";
+import { ServerDegradedIndicator } from "./ServerDegradedIndicator.tsx";
 
 const ALL_TABS: { id: PanelTab; label: string; devOnly?: boolean; builderOnly?: boolean }[] = [
   { id: "power-stack", label: "POWER STACK", builderOnly: true },
@@ -1242,6 +1243,7 @@ export function Panel(): JSX.Element {
           </div>
         </div>
         <div className="dock__pills">
+          <ServerDegradedIndicator state={state} />
           <SessionPill status={state.session?.status ?? null} />
           <StatusPill status={state.privacy.status} />
         </div>

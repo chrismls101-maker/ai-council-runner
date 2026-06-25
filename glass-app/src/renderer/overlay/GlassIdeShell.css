@@ -210,6 +210,12 @@
   cursor: default;
 }
 
+.gide-index-chip--offline {
+  border-color: rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.1);
+  color: rgba(253, 230, 138, 0.95);
+}
+
 .gide-header__tools {
   display: flex;
   align-items: center;
