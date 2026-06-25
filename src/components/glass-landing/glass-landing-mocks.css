@@ -14,8 +14,8 @@
 /* ── MacBook desktop + Glass overlay mock ─────────────────────────────────── */
 
 .gl-macbook-mock {
-  --mock-dock-zone: 52px;
-  --mock-builder-h: 22px;
+  --mock-dock-zone: 28px;
+  --mock-builder-h: 20px;
   --mock-u: 1;
   width: 100%;
   max-width: min(100%, 800px);
@@ -24,8 +24,8 @@
 
 @media (min-width: 960px) {
   .gl-macbook-mock {
-    --mock-dock-zone: 68px;
-    --mock-builder-h: 26px;
+    --mock-dock-zone: 34px;
+    --mock-builder-h: 24px;
     --mock-u: 1.38;
     max-width: 940px;
     margin-inline: 0;
@@ -35,7 +35,7 @@
 
 @media (min-width: 1200px) {
   .gl-macbook-mock {
-    --mock-dock-zone: 72px;
+    --mock-dock-zone: 36px;
     max-width: 1000px;
   }
 }
@@ -422,11 +422,11 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
-/* macOS Dock — visible below Glass strip (strip sits just above this zone) */
+/* macOS Dock — compact, sits at screen bottom below Glass strip */
 .gl-macbook-mock__mac-dock-wrap {
   position: absolute;
   left: 50%;
-  bottom: calc(4px * var(--mock-u));
+  bottom: calc(2px * var(--mock-u));
   transform: translateX(-50%);
   z-index: 6;
   pointer-events: none;
@@ -435,38 +435,38 @@
 .gl-macbook-mock__mac-dock {
   display: flex;
   align-items: flex-end;
-  gap: calc(5px * var(--mock-u));
-  padding: calc(6px * var(--mock-u)) calc(12px * var(--mock-u)) calc(7px * var(--mock-u));
-  border-radius: calc(18px * var(--mock-u));
+  gap: calc(3px * var(--mock-u));
+  padding: calc(3px * var(--mock-u)) calc(8px * var(--mock-u)) calc(4px * var(--mock-u));
+  border-radius: calc(12px * var(--mock-u));
   background: rgba(255, 255, 255, 0.22);
   backdrop-filter: blur(20px) saturate(190%);
   -webkit-backdrop-filter: blur(20px) saturate(190%);
   border: 1px solid rgba(255, 255, 255, 0.28);
   box-shadow:
-    0 6px 20px rgba(0, 0, 0, 0.28),
+    0 4px 14px rgba(0, 0, 0, 0.24),
     inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 .gl-macbook-mock__mac-dock-reflect {
-  height: 6px;
+  height: 3px;
   margin-top: 1px;
-  border-radius: 0 0 12px 12px;
+  border-radius: 0 0 8px 8px;
   background: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.14) 0%,
+    rgba(255, 255, 255, 0.12) 0%,
     transparent 100%
   );
-  transform: scaleY(-0.55);
-  opacity: 0.45;
-  filter: blur(1px);
+  transform: scaleY(-0.5);
+  opacity: 0.35;
+  filter: blur(0.5px);
   pointer-events: none;
 }
 
 .gl-macbook-mock__mac-dock-icon {
   position: relative;
-  width: calc(22px * var(--mock-u));
-  height: calc(22px * var(--mock-u));
-  border-radius: calc(6px * var(--mock-u));
+  width: calc(14px * var(--mock-u));
+  height: calc(14px * var(--mock-u));
+  border-radius: calc(4px * var(--mock-u));
   flex-shrink: 0;
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.35),
@@ -477,13 +477,13 @@
   content: "";
   position: absolute;
   left: 50%;
-  bottom: -4px;
+  bottom: -3px;
   transform: translateX(-50%);
-  width: 3px;
-  height: 3px;
+  width: 2px;
+  height: 2px;
   border-radius: 50%;
   background: rgba(232, 230, 227, 0.85);
-  box-shadow: 0 0 4px rgba(255, 255, 255, 0.4);
+  box-shadow: 0 0 3px rgba(255, 255, 255, 0.4);
 }
 
 .gl-macbook-mock__mac-dock-icon--finder {
@@ -491,8 +491,8 @@
 }
 
 .gl-macbook-mock__mac-dock-icon--safari {
-  width: calc(24px * var(--mock-u));
-  height: calc(24px * var(--mock-u));
+  width: calc(15px * var(--mock-u));
+  height: calc(15px * var(--mock-u));
   border-radius: 50%;
   background:
     radial-gradient(circle at 50% 50%, #fff 0%, #fff 18%, transparent 19%),
@@ -635,7 +635,7 @@
   display: flex;
   align-items: center;
   gap: 0;
-  padding: 0 calc(4px * var(--mock-u));
+  padding: 0 calc(5px * var(--mock-u));
   border-radius: calc(9px * var(--mock-u)) calc(9px * var(--mock-u)) 0 0;
   background: linear-gradient(165deg, rgba(10, 12, 18, 0.94), rgba(6, 8, 14, 0.9));
   backdrop-filter: blur(20px) saturate(160%);
@@ -646,6 +646,20 @@
     0 0 0 1px rgba(0, 0, 0, 0.32),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
   overflow: hidden;
+}
+
+.gl-macbook-mock__builder-strip::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.07) 0%,
+    transparent 42%,
+    transparent 100%
+  );
 }
 
 .gl-macbook-mock__builder-group {
@@ -672,18 +686,40 @@
 }
 
 .gl-macbook-mock__builder-tab {
+  position: relative;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   gap: calc(2px * var(--mock-u));
-  height: calc(13px * var(--mock-u));
-  padding: 0 calc(3px * var(--mock-u));
+  height: calc(15px * var(--mock-u));
+  padding: 0 calc(4px * var(--mock-u));
   border-radius: calc(4px * var(--mock-u));
-  font-size: calc(5px * var(--mock-u));
+  font-size: calc(5.5px * var(--mock-u));
   font-weight: 500;
-  letter-spacing: 0.02em;
-  color: rgba(232, 230, 227, 0.42);
+  letter-spacing: 0.03em;
+  color: rgba(255, 255, 255, 0.48);
+  background: transparent;
+  border: 0.5px solid transparent;
   white-space: nowrap;
   flex-shrink: 0;
+  box-shadow: none;
+}
+
+/* Level 1 — idle tool tabs (resting 3D depth) */
+.gl-macbook-mock__builder-tab:not(.gl-macbook-mock__builder-tab--terminal):not(.gl-macbook-mock__builder-tab--dashboard):not(.gl-macbook-mock__builder-tab--aletheia):not(.gl-macbook-mock__builder-tab--agents):not(.gl-macbook-mock__builder-tab--powers):not(.gl-macbook-mock__builder-tab--palette):not(.gl-macbook-mock__builder-tab--active) {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.06) 0%,
+    rgba(255, 255, 255, 0.02) 52%,
+    rgba(0, 0, 0, 0.03) 100%
+  );
+  border-color: rgba(255, 255, 255, 0.08);
+  border-top-color: rgba(255, 255, 255, 0.14);
+  border-bottom-color: rgba(0, 0, 0, 0.22);
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.1);
 }
 
 .gl-macbook-mock__builder-tab-icon {
@@ -716,14 +752,141 @@
 
 .gl-macbook-mock__builder-tab--active {
   color: rgba(255, 255, 255, 0.92);
-  background: rgba(255, 255, 255, 0.08);
-  border: 0.5px solid rgba(255, 255, 255, 0.12);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.1) 0%,
+    rgba(255, 255, 255, 0.04) 52%,
+    rgba(0, 0, 0, 0.07) 100%
+  );
+  border: 0.5px solid rgba(255, 255, 255, 0.14);
+  border-top-color: rgba(255, 255, 255, 0.22);
+  border-bottom-color: rgba(0, 0, 0, 0.32);
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.48),
+    0 1px 3px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.16);
 }
 
+/* Level 3 — Dashboard apex (white LED) */
+.gl-macbook-mock__builder-tab--dashboard {
+  height: calc(16px * var(--mock-u));
+  padding: 0 calc(5px * var(--mock-u));
+  font-weight: 600;
+  color: rgba(248, 250, 252, 0.94);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.18) 0%,
+    rgba(255, 255, 255, 0.06) 50%,
+    rgba(0, 0, 0, 0.1) 100%
+  );
+  border: 0.5px solid rgba(255, 255, 255, 0.42);
+  border-top-color: rgba(255, 255, 255, 0.68);
+  border-bottom-color: rgba(0, 0, 0, 0.38);
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.55),
+    0 1px 3px rgba(0, 0, 0, 0.26),
+    0 0 8px rgba(255, 255, 255, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+}
+
+/* Level 3 — Aletheia aurora */
+.gl-macbook-mock__builder-tab--aletheia {
+  overflow: hidden;
+  color: rgba(240, 249, 255, 0.98);
+  background:
+    linear-gradient(118deg, rgba(56, 189, 248, 0.34) 0%, transparent 52%),
+    linear-gradient(298deg, rgba(139, 92, 246, 0.38) 0%, transparent 54%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.2) 0%, rgba(88, 28, 135, 0.12) 55%, rgba(0, 0, 0, 0.16) 100%);
+  border: 0.5px solid rgba(167, 139, 250, 0.55);
+  border-top-color: rgba(186, 230, 253, 0.72);
+  border-bottom-color: rgba(76, 29, 149, 0.55);
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.62),
+    0 2px 5px rgba(0, 0, 0, 0.32),
+    0 0 10px rgba(56, 189, 248, 0.22),
+    0 0 14px rgba(139, 92, 246, 0.32),
+    inset 0 1px 0 rgba(224, 242, 254, 0.28),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.24);
+}
+
+/* Level 3 — Agents (active indigo) */
 .gl-macbook-mock__builder-tab--agents.gl-macbook-mock__builder-tab--active {
-  color: rgba(125, 212, 216, 0.95);
-  background: rgba(125, 212, 216, 0.1);
-  border-color: rgba(125, 212, 216, 0.2);
+  color: rgba(240, 244, 255, 0.98);
+  background: linear-gradient(
+    180deg,
+    rgba(129, 140, 248, 0.28) 0%,
+    rgba(67, 56, 202, 0.14) 52%,
+    rgba(0, 0, 0, 0.08) 100%
+  );
+  border: 0.5px solid rgba(165, 180, 252, 0.52);
+  border-top-color: rgba(224, 231, 255, 0.68);
+  border-bottom-color: rgba(0, 0, 0, 0.38);
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.55),
+    0 2px 5px rgba(0, 0, 0, 0.28),
+    0 0 10px rgba(99, 102, 241, 0.22),
+    inset 0 1px 0 rgba(224, 231, 255, 0.28),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.14);
+}
+
+/* Level 3 — Powers Menu (warm silver) */
+.gl-macbook-mock__builder-tab--powers {
+  color: rgba(218, 226, 236, 0.94);
+  background: linear-gradient(
+    180deg,
+    rgba(226, 232, 240, 0.16) 0%,
+    rgba(148, 163, 184, 0.07) 50%,
+    rgba(0, 0, 0, 0.1) 100%
+  );
+  border: 0.5px solid rgba(196, 206, 220, 0.34);
+  border-top-color: rgba(241, 245, 249, 0.48);
+  border-bottom-color: rgba(0, 0, 0, 0.38);
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.55),
+    0 1px 3px rgba(0, 0, 0, 0.26),
+    0 0 6px rgba(148, 163, 184, 0.12),
+    inset 0 1px 0 rgba(241, 245, 249, 0.2),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+}
+
+/* Level 3 — Command Palette (cool steel) */
+.gl-macbook-mock__builder-tab--palette {
+  color: rgba(176, 186, 200, 0.88);
+  background: linear-gradient(
+    180deg,
+    rgba(186, 198, 214, 0.11) 0%,
+    rgba(100, 116, 139, 0.05) 50%,
+    rgba(0, 0, 0, 0.11) 100%
+  );
+  border: 0.5px solid rgba(148, 163, 184, 0.26);
+  border-top-color: rgba(203, 213, 225, 0.36);
+  border-bottom-color: rgba(0, 0, 0, 0.4);
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.55),
+    0 1px 3px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(203, 213, 225, 0.14),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.22);
+}
+
+.gl-macbook-mock__builder-tab--agents:not(.gl-macbook-mock__builder-tab--active) {
+  color: rgba(186, 210, 255, 0.92);
+  background: linear-gradient(
+    180deg,
+    rgba(100, 160, 255, 0.18) 0%,
+    rgba(79, 70, 229, 0.08) 50%,
+    rgba(0, 0, 0, 0.1) 100%
+  );
+  border: 0.5px solid rgba(129, 140, 248, 0.36);
+  border-top-color: rgba(199, 210, 254, 0.5);
+  border-bottom-color: rgba(0, 0, 0, 0.38);
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.55),
+    0 1px 3px rgba(0, 0, 0, 0.26),
+    0 0 6px rgba(99, 102, 241, 0.14),
+    inset 0 1px 0 rgba(199, 210, 254, 0.18),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.2);
 }
 
 /* Command bar — above builder strip, never covering the dock */
