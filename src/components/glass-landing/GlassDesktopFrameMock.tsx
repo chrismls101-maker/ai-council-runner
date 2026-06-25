@@ -118,19 +118,20 @@ export default function GlassDesktopFrameMock(): JSX.Element {
                   </div>
                 </div>
               </div>
+            </div>
 
-              <div className="gl-macbook-mock__mac-dock-wrap">
-                <div className="gl-macbook-mock__mac-dock">
-                  {MAC_DOCK_ICONS.map((icon) => (
-                    <span
-                      key={icon.label}
-                      className={`gl-macbook-mock__mac-dock-icon gl-macbook-mock__mac-dock-icon--${icon.tone}${icon.active ? " gl-macbook-mock__mac-dock-icon--running" : ""}`}
-                      title={icon.label}
-                    />
-                  ))}
-                </div>
-                <div className="gl-macbook-mock__mac-dock-reflect" aria-hidden="true" />
+            {/* macOS Dock — above Glass chrome */}
+            <div className="gl-macbook-mock__mac-dock-wrap">
+              <div className="gl-macbook-mock__mac-dock">
+                {MAC_DOCK_ICONS.map((icon) => (
+                  <span
+                    key={icon.label}
+                    className={`gl-macbook-mock__mac-dock-icon gl-macbook-mock__mac-dock-icon--${icon.tone}${icon.active ? " gl-macbook-mock__mac-dock-icon--running" : ""}`}
+                    title={icon.label}
+                  />
+                ))}
               </div>
+              <div className="gl-macbook-mock__mac-dock-reflect" aria-hidden="true" />
             </div>
 
             {/* IIVO Glass overlay */}
