@@ -10,7 +10,7 @@ import { betterAuth } from "better-auth";
 import type { BetterAuthOptions } from "@better-auth/core";
 import { getMigrations } from "better-auth/db/migration";
 import { magicLink } from "better-auth/plugins";
-import { getAuthPool, hasAuthDatabase } from "./authPool.js";
+import { connectAuthPool, getAuthPool, hasAuthDatabase } from "./authPool.js";
 import { ensureUserRoleSchema, seedFounderEmail } from "./userRoles.js";
 
 // ── Magic link email ──────────────────────────────────────────────────────────
@@ -110,11 +110,16 @@ function buildAuthOptions(): BetterAuthOptions {
   };
 }
 
-const authOptions = buildAuthOptions();
+let authInstance: ReturnType<typeof betterAuth> | null = null;
 
-export const auth = betterAuth(authOptions);
+export function getAuth(): ReturnType<typeof betterAuth> {
+  if (!authInstance) {
+    throw new Error("Auth not initialized");
+  }
+  return authInstance;
+}
 
-export type Auth = typeof auth;
+export type Auth = ReturnType<typeof getAuth>;
 
 let authDatabaseReady = false;
 let authInitError: string | null = null;
@@ -127,7 +132,7 @@ export function getAuthInitError(): string | null {
   return authInitError;
 }
 
-/** Run better-auth migrations, role column, and FOUNDER_EMAIL seed on startup. */
+/** Connect Postgres, run better-auth migrations, seed founder role. */
 export async function initAuthRoles(): Promise<void> {
   if (!hasAuthDatabase()) {
     authInitError = "DATABASE_URL is not set";
@@ -137,10 +142,10 @@ export async function initAuthRoles(): Promise<void> {
   }
   try {
     authInitError = null;
-    const pool = getAuthPool();
-    await pool.query("SELECT 1");
+    await connectAuthPool();
+    authInstance = betterAuth(buildAuthOptions());
 
-    const migration = await getMigrations(authOptions);
+    const migration = await getMigrations(buildAuthOptions());
     if (migration.toBeCreated.length > 0 || migration.toBeAdded.length > 0) {
       console.log(
         `[auth] Applying schema: ${migration.toBeCreated.length} new tables, ${migration.toBeAdded.length} table updates`,
@@ -148,6 +153,7 @@ export async function initAuthRoles(): Promise<void> {
     }
     await migration.runMigrations();
 
+    const pool = getAuthPool();
     await ensureUserRoleSchema(pool);
     await seedFounderEmail(pool);
 
@@ -160,6 +166,7 @@ export async function initAuthRoles(): Promise<void> {
     console.log("[auth] Database ready");
   } catch (err) {
     authDatabaseReady = false;
+    authInstance = null;
     authInitError = err instanceof Error ? err.message : String(err);
     console.error("[auth] Init failed — sign-in will not work until this is fixed:", err);
     throw err;

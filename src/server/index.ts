@@ -134,7 +134,7 @@ import {
 } from "./landingGate.js";
 import rateLimit from "express-rate-limit";
 import { ttsHandler } from "./voice/ttsRoute.js";
-import { auth, initAuthRoles } from "./auth/auth.js";
+import { getAuth, initAuthRoles } from "./auth/auth.js";
 import { toNodeHandler } from "better-auth/node";
 import { issueGlassConnectToken, verifyGlassConnectToken } from "./auth/glassConnect.js";
 import { getAuthCapabilities } from "./auth/authCapabilities.js";
@@ -240,7 +240,7 @@ app.post("/api/auth/glass-connect/issue", express.json(), async (req, res) => {
     for (const [key, value] of Object.entries(req.headers)) {
       if (value) headers.set(key, Array.isArray(value) ? value.join(", ") : value);
     }
-    const session = await auth.api.getSession({ headers });
+    const session = await getAuth().api.getSession({ headers });
     if (!session?.user) {
       res.status(401).json({ error: "Not authenticated" });
       return;
@@ -286,15 +286,20 @@ app.get("/api/auth/capabilities", (_req, res) => {
 // toNodeHandler adapts better-auth's fetch-based handler to Node.js req/res.
 // Mount before express.json() so better-auth handles its own body parsing.
 // glass-connect routes above must register first (same /api/auth prefix).
-const authHandler = toNodeHandler(auth);
-app.all(/^\/api\/auth/, (req, res) => {
-  void Promise.resolve(authHandler(req, res)).catch((err: unknown) => {
-    console.error("[auth] request failed:", err);
-    if (!res.headersSent) {
-      res.status(500).json({ error: "Authentication service error" });
-    }
-  });
-});
+const authHandler = (req: express.Request, res: express.Response) => {
+  try {
+    const handler = toNodeHandler(getAuth());
+    void Promise.resolve(handler(req, res)).catch((err: unknown) => {
+      console.error("[auth] request failed:", err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Authentication service error" });
+      }
+    });
+  } catch {
+    res.status(503).json({ error: "Authentication service is not ready" });
+  }
+};
+app.all(/^\/api\/auth/, authHandler);
 
 /** Visual ask may include optimized JPEG data URLs — parse before the global 2mb limit. */
 app.post("/api/glass/ask", glassApiAuthMiddleware, glassLimiter, express.json({ limit: "6mb" }), async (req, res) => {

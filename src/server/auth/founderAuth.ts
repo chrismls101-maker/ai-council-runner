@@ -3,7 +3,7 @@
  */
 
 import type { Request } from "express";
-import { auth } from "./auth.js";
+import { getAuth } from "./auth.js";
 import { getAuthPool } from "./authPool.js";
 import { getUserRoleById, type UserRole } from "./userRoles.js";
 
@@ -62,7 +62,7 @@ export async function getUserFromSessionToken(token: string): Promise<FounderUse
 }
 
 export async function getCurrentUserWithRole(req: Request): Promise<FounderUser> {
-  const session = await auth.api.getSession({ headers: expressHeadersToFetch(req) });
+  const session = await getAuth().api.getSession({ headers: expressHeadersToFetch(req) });
   if (!session?.user) {
     throw new FounderAuthError(401, "Not authenticated.");
   }
