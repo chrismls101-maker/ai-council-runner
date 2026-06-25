@@ -1638,10 +1638,79 @@
     max-width: 100%;
   }
 
+  /* Hero mock — shorter dock + smaller Glass chrome on phone */
+  .gl-macbook-mock__mac-dock-wrap {
+    width: min(68%, 300px);
+  }
+
+  .gl-macbook-mock__mac-dock {
+    gap: calc(1.5px * var(--mock-u));
+    padding-inline: calc(6px * var(--mock-u));
+  }
+
+  .gl-macbook-mock__mac-dock-icon--facetime,
+  .gl-macbook-mock__mac-dock-icon--contacts,
+  .gl-macbook-mock__mac-dock-icon--reminders,
+  .gl-macbook-mock__mac-dock-icon--tv,
+  .gl-macbook-mock__mac-dock-icon--podcasts,
+  .gl-macbook-mock__mac-dock-icon--appstore,
+  .gl-macbook-mock__mac-dock-icon--terminal,
+  .gl-macbook-mock__mac-dock-icon--slack,
+  .gl-macbook-mock__mac-dock-icon--chrome,
+  .gl-macbook-mock__mac-dock-divider,
+  .gl-macbook-mock__mac-dock-icon--trash {
+    display: none;
+  }
+
   .gl-macbook-mock__command-bar {
-    left: 8%;
-    right: 8%;
-    bottom: calc(var(--mock-dock-zone) + var(--mock-builder-h) + 6px + var(--mock-glass-lift));
+    left: 14%;
+    right: 14%;
+    bottom: calc(var(--mock-dock-zone) + var(--mock-builder-h) + 4px + var(--mock-glass-lift));
+  }
+
+  .gl-macbook-mock__composer {
+    border-radius: 8px;
+  }
+
+  .gl-macbook-mock__composer-main {
+    padding: 3px 5px 4px;
+    gap: 3px;
+  }
+
+  .gl-macbook-mock__composer-input {
+    font-size: 6.5px;
+  }
+
+  .gl-macbook-mock__composer-send {
+    width: 11px;
+    height: 11px;
+    font-size: 7px;
+    border-radius: 4px;
+  }
+
+  .gl-macbook-mock__glass-rail-chrome {
+    padding: 3px 2px 4px;
+    gap: 2px;
+    border-radius: 0 8px 8px 0;
+  }
+
+  .gl-macbook-mock__glass-ring {
+    width: 16px;
+    height: 16px;
+    font-size: 7px;
+  }
+
+  .gl-macbook-mock__glass-rail-btn {
+    width: 16px;
+    height: 16px;
+    font-size: 7px;
+    border-radius: 5px;
+  }
+
+  .gl-macbook-mock__builder-strip {
+    height: 16px;
+    left: calc(9px * var(--mock-u));
+    right: calc(9px * var(--mock-u));
   }
 
   .gl-macbook-mock__browser {

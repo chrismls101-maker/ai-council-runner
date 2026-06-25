@@ -895,6 +895,7 @@ html.glass-browse-active.glass-browse-active--tablet [data-glass-scroll-zone] {
 .glass-browse--phone {
   --overlay-glass-frame-inset-bottom: max(8px, env(safe-area-inset-bottom, 0px));
   --builder-strip-bottom: calc(var(--mobile-home-height) + env(safe-area-inset-bottom, 0px));
+  --builder-strip-height: 34px;
 }
 
 .glass-browse--tablet {
@@ -1195,6 +1196,109 @@ html.glass-browse-active.glass-browse-active--tablet [data-glass-scroll-zone] {
 
 .glass-browse--phone .glass-browse__frame {
   top: calc(var(--mobile-status-height) + env(safe-area-inset-top, 0px) + 2px);
+}
+
+/* Phone-only — tighter command bar, panels, and strip (not tablet) */
+.glass-browse--phone .glass-browse__command {
+  min-height: 44px;
+  padding: 5px 7px 6px;
+  border-radius: 11px;
+}
+
+.glass-browse--phone .glass-browse__command-row {
+  gap: 5px;
+}
+
+.glass-browse--phone .glass-browse__mic {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+.glass-browse--phone .glass-browse__mic-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.glass-browse--phone .glass-browse__send {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+.glass-browse--phone .glass-browse__input {
+  font-size: 13px;
+}
+
+.glass-browse--phone .glass-browse__try-row {
+  padding: 4px 8px;
+  gap: 4px;
+}
+
+.glass-browse--phone .glass-browse__try-chip {
+  font-size: 10px;
+  padding: 2px 6px;
+}
+
+.glass-browse--phone .glass-browse__hint {
+  padding: 8px 10px;
+  bottom: calc(var(--builder-strip-bottom) + var(--builder-strip-height) + 92px);
+}
+
+.glass-browse--phone .glass-browse__hint-kicker {
+  font-size: 10px;
+  margin-bottom: 4px;
+}
+
+.glass-browse--phone .glass-browse__hint-body {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.glass-browse--phone .glass-browse__agent-panel {
+  padding: 10px 12px 11px;
+  bottom: calc(var(--builder-strip-bottom) + var(--builder-strip-height) + 56px);
+  border-radius: 12px;
+}
+
+.glass-browse--phone .glass-browse__agent-panel-head {
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+
+.glass-browse--phone .glass-browse__agent-panel-copy {
+  font-size: 12px;
+  line-height: 1.45;
+  margin-bottom: 8px;
+}
+
+.glass-browse--phone .glass-browse__agent-panel-lines span {
+  height: 5px;
+}
+
+.glass-browse--phone .glass-browse__response {
+  padding: 10px 12px;
+  bottom: calc(var(--builder-strip-bottom) + var(--builder-strip-height) + 56px);
+  border-radius: 12px;
+}
+
+.glass-browse--phone .glass-browse__response-head {
+  font-size: 11px;
+}
+
+.glass-browse--phone .glass-browse__response p {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.glass-browse--phone .glass-browse__strip {
+  left: max(12px, env(safe-area-inset-left, 0px));
+  right: max(12px, env(safe-area-inset-right, 0px));
+}
+
+.glass-browse--phone .glass-browse__strip-tab {
+  padding: 4px 7px;
+  font-size: 10px;
 }
 
 .glass-browse--tablet .glass-browse__frame {
