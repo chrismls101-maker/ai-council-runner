@@ -10,7 +10,7 @@ import { betterAuth } from "better-auth";
 import type { BetterAuthOptions } from "@better-auth/core";
 import { getMigrations } from "better-auth/db/migration";
 import { magicLink } from "better-auth/plugins";
-import { getAuthPool } from "./authPool.js";
+import { getAuthPool, hasAuthDatabase } from "./authPool.js";
 import { ensureUserRoleSchema, seedFounderEmail } from "./userRoles.js";
 
 // ── Magic link email ──────────────────────────────────────────────────────────
@@ -81,7 +81,7 @@ function buildAuthOptions(): BetterAuthOptions {
   return {
     baseURL,
     secret: process.env.BETTER_AUTH_SECRET ?? "dev-secret-change-in-production",
-    database: getAuthPool(),
+    database: hasAuthDatabase() ? getAuthPool() : undefined,
     user: {
       additionalFields: {
         role: {
@@ -116,10 +116,17 @@ export const auth = betterAuth(authOptions);
 
 export type Auth = typeof auth;
 
+let authDatabaseReady = false;
+
+export function isAuthDatabaseReady(): boolean {
+  return authDatabaseReady;
+}
+
 /** Run better-auth migrations, role column, and FOUNDER_EMAIL seed on startup. */
 export async function initAuthRoles(): Promise<void> {
-  if (!process.env.DATABASE_URL?.trim()) {
+  if (!hasAuthDatabase()) {
     console.warn("[auth] DATABASE_URL missing — sign-in disabled");
+    authDatabaseReady = false;
     return;
   }
   try {
@@ -137,12 +144,16 @@ export async function initAuthRoles(): Promise<void> {
     await ensureUserRoleSchema(pool);
     await seedFounderEmail(pool);
 
+    authDatabaseReady = true;
+
     const founder = process.env.FOUNDER_EMAIL?.trim();
     if (founder) {
       console.log(`[auth] Founder seed checked for ${founder}`);
     }
     console.log("[auth] Database ready");
   } catch (err) {
+    authDatabaseReady = false;
     console.error("[auth] Init failed — sign-in will not work until this is fixed:", err);
+    throw err;
   }
 }

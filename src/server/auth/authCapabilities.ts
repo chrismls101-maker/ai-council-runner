@@ -3,8 +3,13 @@
  * Used by the login page to hide providers that are not configured on the server.
  */
 
+import { isAuthDatabaseReady } from "./auth.js";
+import { hasAuthDatabase } from "./authPool.js";
+
 export type AuthCapabilities = {
   ok: true;
+  /** True after better-auth migrations succeed on startup. */
+  databaseReady: boolean;
   magicLink: boolean;
   /** True when Resend is configured so magic-link emails are actually sent. */
   magicLinkEmail: boolean;
@@ -13,14 +18,16 @@ export type AuthCapabilities = {
 };
 
 export function getAuthCapabilities(): AuthCapabilities {
-  const hasDb = Boolean(process.env.DATABASE_URL?.trim());
+  const hasDb = hasAuthDatabase();
   const hasAuthSecret = Boolean(process.env.BETTER_AUTH_SECRET?.trim());
+  const databaseReady = hasDb && isAuthDatabaseReady();
 
   return {
     ok: true,
-    magicLink: hasDb && hasAuthSecret,
+    databaseReady,
+    magicLink: databaseReady && hasAuthSecret,
     magicLinkEmail: Boolean(process.env.RESEND_API_KEY?.trim()),
-    github: Boolean(process.env.GITHUB_CLIENT_ID?.trim() && process.env.GITHUB_CLIENT_SECRET?.trim()),
-    google: Boolean(process.env.GOOGLE_CLIENT_ID?.trim() && process.env.GOOGLE_CLIENT_SECRET?.trim()),
+    github: databaseReady && Boolean(process.env.GITHUB_CLIENT_ID?.trim() && process.env.GITHUB_CLIENT_SECRET?.trim()),
+    google: databaseReady && Boolean(process.env.GOOGLE_CLIENT_ID?.trim() && process.env.GOOGLE_CLIENT_SECRET?.trim()),
   };
 }

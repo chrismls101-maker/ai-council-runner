@@ -286,7 +286,15 @@ app.get("/api/auth/capabilities", (_req, res) => {
 // toNodeHandler adapts better-auth's fetch-based handler to Node.js req/res.
 // Mount before express.json() so better-auth handles its own body parsing.
 // glass-connect routes above must register first (same /api/auth prefix).
-app.all(/^\/api\/auth/, toNodeHandler(auth));
+const authHandler = toNodeHandler(auth);
+app.all(/^\/api\/auth/, (req, res) => {
+  void Promise.resolve(authHandler(req, res)).catch((err: unknown) => {
+    console.error("[auth] request failed:", err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Authentication service error" });
+    }
+  });
+});
 
 /** Visual ask may include optimized JPEG data URLs — parse before the global 2mb limit. */
 app.post("/api/glass/ask", glassApiAuthMiddleware, glassLimiter, express.json({ limit: "6mb" }), async (req, res) => {
@@ -1592,19 +1600,28 @@ if (process.env.NODE_ENV === "production") {
   });
 }
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`IIVO server listening on http://0.0.0.0:${PORT}`);
-  void initAuthRoles();
-  logApiKeyStatus();
-  logImageVisionStatus();
-  logConfiguredModels();
-  logGlassModelStatus();
-  logConfiguredTokenModes();
-  void appendAuditEvent({ eventType: "app_started" });
-  const missing = validateApiKeys();
-  if (missing.length > 0) {
-    console.warn(
-      `Warning: Missing API keys: ${missing.join(", ")}. Add them to .env before running.`,
-    );
+async function startServer(): Promise<void> {
+  try {
+    await initAuthRoles();
+  } catch (err) {
+    console.error("[auth] Startup migration failed — sign-in endpoints disabled until DB is fixed");
   }
-});
+
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`IIVO server listening on http://0.0.0.0:${PORT}`);
+    logApiKeyStatus();
+    logImageVisionStatus();
+    logConfiguredModels();
+    logGlassModelStatus();
+    logConfiguredTokenModes();
+    void appendAuditEvent({ eventType: "app_started" });
+    const missing = validateApiKeys();
+    if (missing.length > 0) {
+      console.warn(
+        `Warning: Missing API keys: ${missing.join(", ")}. Add them to .env before running.`,
+      );
+    }
+  });
+}
+
+void startServer();

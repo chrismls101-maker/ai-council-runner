@@ -11,6 +11,7 @@ import { magicLinkClient } from "better-auth/client/plugins";
 import "./LoginPage.css";
 
 type AuthCapabilities = {
+  databaseReady?: boolean;
   magicLink: boolean;
   magicLinkEmail: boolean;
   github: boolean;
@@ -56,6 +57,7 @@ export default function LoginPage() {
           magicLinkEmail: false,
           github: false,
           google: false,
+          databaseReady: false,
         });
       });
   }, []);
@@ -129,6 +131,7 @@ export default function LoginPage() {
   const magicReady = capabilities?.magicLink === true;
   const loadingCaps = capabilities === null;
   const busy = status === "sending" || oauthLoading !== null;
+  const dbNotReady = capabilities !== null && capabilities.databaseReady === false;
 
   return (
     <div className="glass-login">
@@ -175,6 +178,10 @@ export default function LoginPage() {
           </div>
         ) : loadingCaps ? (
           <p className="glass-login__hint">Loading sign-in options…</p>
+        ) : dbNotReady ? (
+          <p className="glass-login__error">
+            Sign-in database is not ready yet. The server may still be running migrations — refresh in a moment. If this persists, check Railway logs for DATABASE_URL / Postgres.
+          </p>
         ) : (
           <>
             {magicReady ? (
