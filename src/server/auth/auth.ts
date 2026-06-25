@@ -117,19 +117,26 @@ export const auth = betterAuth(authOptions);
 export type Auth = typeof auth;
 
 let authDatabaseReady = false;
+let authInitError: string | null = null;
 
 export function isAuthDatabaseReady(): boolean {
   return authDatabaseReady;
 }
 
+export function getAuthInitError(): string | null {
+  return authInitError;
+}
+
 /** Run better-auth migrations, role column, and FOUNDER_EMAIL seed on startup. */
 export async function initAuthRoles(): Promise<void> {
   if (!hasAuthDatabase()) {
+    authInitError = "DATABASE_URL is not set";
     console.warn("[auth] DATABASE_URL missing — sign-in disabled");
     authDatabaseReady = false;
     return;
   }
   try {
+    authInitError = null;
     const pool = getAuthPool();
     await pool.query("SELECT 1");
 
@@ -153,6 +160,7 @@ export async function initAuthRoles(): Promise<void> {
     console.log("[auth] Database ready");
   } catch (err) {
     authDatabaseReady = false;
+    authInitError = err instanceof Error ? err.message : String(err);
     console.error("[auth] Init failed — sign-in will not work until this is fixed:", err);
     throw err;
   }

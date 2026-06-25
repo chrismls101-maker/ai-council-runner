@@ -10,9 +10,12 @@ export function getAuthPool(): pg.Pool {
     throw new Error("DATABASE_URL is not configured");
   }
   if (!pool) {
+    const useSsl = !url.includes("localhost") && !url.includes("127.0.0.1");
     pool = new Pool({
       connectionString: url,
-      ssl: { rejectUnauthorized: false },
+      ssl: useSsl ? { rejectUnauthorized: false } : undefined,
+      max: 10,
+      connectionTimeoutMillis: 15_000,
     });
   }
   return pool;

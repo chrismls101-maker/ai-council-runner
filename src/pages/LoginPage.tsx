@@ -12,6 +12,7 @@ import "./LoginPage.css";
 
 type AuthCapabilities = {
   databaseReady?: boolean;
+  databaseError?: string;
   magicLink: boolean;
   magicLinkEmail: boolean;
   github: boolean;
@@ -180,7 +181,8 @@ export default function LoginPage() {
           <p className="glass-login__hint">Loading sign-in options…</p>
         ) : dbNotReady ? (
           <p className="glass-login__error">
-            Sign-in database is not ready yet. The server may still be running migrations — refresh in a moment. If this persists, check Railway logs for DATABASE_URL / Postgres.
+            Sign-in database is not ready yet.
+            {capabilities?.databaseError ? ` (${capabilities.databaseError})` : " Refresh in a moment or check Railway Postgres + DATABASE_URL."}
           </p>
         ) : (
           <>
