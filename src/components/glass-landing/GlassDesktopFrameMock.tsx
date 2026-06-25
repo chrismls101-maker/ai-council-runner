@@ -115,6 +115,20 @@ export default function GlassDesktopFrameMock(): JSX.Element {
                       <span className="gl-macbook-mock__site-card" />
                       <span className="gl-macbook-mock__site-card" />
                     </div>
+                    <div className="gl-macbook-mock__site-footer-band" aria-hidden="true">
+                      <span className="gl-macbook-mock__site-footer-line" />
+                      <span className="gl-macbook-mock__site-footer-line gl-macbook-mock__site-footer-line--short" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Page continues behind the dock */}
+                <div className="gl-macbook-mock__site-bleed" aria-hidden="true">
+                  <div className="gl-macbook-mock__site-bleed-mesh" />
+                  <div className="gl-macbook-mock__site-bleed-row">
+                    <span className="gl-macbook-mock__site-bleed-card" />
+                    <span className="gl-macbook-mock__site-bleed-card" />
+                    <span className="gl-macbook-mock__site-bleed-card" />
                   </div>
                 </div>
               </div>

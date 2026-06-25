@@ -7,6 +7,8 @@
  */
 
 import { betterAuth } from "better-auth";
+import type { BetterAuthOptions } from "@better-auth/core";
+import { getMigrations } from "better-auth/db/migration";
 import { magicLink } from "better-auth/plugins";
 import { getAuthPool } from "./authPool.js";
 import { ensureUserRoleSchema, seedFounderEmail } from "./userRoles.js";
@@ -18,12 +20,10 @@ async function sendMagicLinkEmail(to: string, url: string) {
   const from = process.env.RESEND_FROM_EMAIL ?? "noreply@iivo.ai";
 
   if (!apiKey) {
-    // Dev fallback — log to console so you can click the link during local dev
     console.log(`[auth] Magic link for ${to} →\n  ${url}`);
     return;
   }
 
-  // Lazy-import Resend so it's not required when RESEND_API_KEY is absent
   // @ts-ignore — resend not in devDeps; runtime-only when RESEND_API_KEY is set
   const { Resend } = await import("resend");
   const resend = new Resend(apiKey);
@@ -74,59 +74,59 @@ function buildSocialProviders() {
 
 // ── Auth instance ─────────────────────────────────────────────────────────────
 
-const baseURL = process.env.NODE_ENV === "production"
-  ? "https://iivo.ai"
-  : "http://localhost:3001";
+const baseURL = process.env.BETTER_AUTH_URL?.trim()
+  || (process.env.NODE_ENV === "production" ? "https://iivo.ai" : "http://localhost:3001");
 
-export const auth = betterAuth({
-  baseURL,
-  secret: process.env.BETTER_AUTH_SECRET ?? "dev-secret-change-in-production",
-
-  database: {
-    db: getAuthPool(),
-    type: "pg",
-  },
-
-  user: {
-    additionalFields: {
-      role: {
-        type: "string",
-        required: false,
-        defaultValue: "user",
-        input: false,
+function buildAuthOptions(): BetterAuthOptions {
+  return {
+    baseURL,
+    secret: process.env.BETTER_AUTH_SECRET ?? "dev-secret-change-in-production",
+    database: getAuthPool(),
+    user: {
+      additionalFields: {
+        role: {
+          type: "string",
+          required: false,
+          defaultValue: "user",
+          input: false,
+        },
       },
     },
-  },
+    emailAndPassword: { enabled: false },
+    socialProviders: buildSocialProviders(),
+    plugins: [
+      magicLink({
+        sendMagicLink: async ({ email, url }) => {
+          await sendMagicLinkEmail(email, url);
+        },
+        expiresIn: 600,
+      }),
+    ],
+    trustedOrigins: [
+      "https://iivo.ai",
+      "http://localhost:3001",
+      "http://localhost:5173",
+    ],
+  };
+}
 
-  emailAndPassword: { enabled: false },
+const authOptions = buildAuthOptions();
 
-  socialProviders: buildSocialProviders(),
-
-  plugins: [
-    magicLink({
-      sendMagicLink: async ({ email, url }) => {
-        await sendMagicLinkEmail(email, url);
-      },
-      expiresIn: 600,
-    }),
-  ],
-
-  trustedOrigins: [
-    "https://iivo.ai",
-    "http://localhost:3001",
-    "http://localhost:5173",
-  ],
-});
+export const auth = betterAuth(authOptions);
 
 export type Auth = typeof auth;
 
-/** Ensure role column exists and FOUNDER_EMAIL is promoted on startup. */
+/** Run better-auth migrations, role column, and FOUNDER_EMAIL seed on startup. */
 export async function initAuthRoles(): Promise<void> {
   if (!process.env.DATABASE_URL?.trim()) return;
   try {
+    const { runMigrations } = await getMigrations(authOptions);
+    await runMigrations();
+
     const pool = getAuthPool();
     await ensureUserRoleSchema(pool);
     await seedFounderEmail(pool);
+
     const founder = process.env.FOUNDER_EMAIL?.trim();
     if (founder) {
       console.log(`[auth] Founder seed checked for ${founder}`);

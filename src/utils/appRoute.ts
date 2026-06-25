@@ -32,7 +32,9 @@ export function isGlassPublicPath(
     pathname === LANDING_PROTOTYPE_PATH ||
     pathname === INSTALL_PATH ||
     pathname === PRIVACY_PATH ||
-    pathname === TERMS_PATH
+    pathname === TERMS_PATH ||
+    pathname === LOGIN_PATH ||
+    pathname === ACCOUNT_PATH
   );
 }
 

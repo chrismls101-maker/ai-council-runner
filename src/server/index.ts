@@ -228,8 +228,8 @@ if (process.env.NODE_ENV === "production" && !allowedOrigin) {
 }
 app.use(
   allowedOrigin
-    ? cors({ origin: allowedOrigin, credentials: false })
-    : cors(),
+    ? cors({ origin: allowedOrigin, credentials: true })
+    : cors({ credentials: true }),
 );
 
 // ─── Glass connect (before better-auth catch-all — same /api/auth prefix) ───

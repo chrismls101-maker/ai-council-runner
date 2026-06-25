@@ -78,7 +78,7 @@
   aspect-ratio: 16 / 10;
   border-radius: 8px;
   overflow: hidden;
-  background: #000;
+  background: #0e1016;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.8);
 }
 
@@ -172,7 +172,7 @@
 
 .gl-macbook-mock__wallpaper {
   position: absolute;
-  top: 18px;
+  top: calc(18px * var(--mock-u));
   left: 0;
   right: 0;
   bottom: 0;
@@ -188,13 +188,13 @@
     linear-gradient(165deg, #12141a 0%, #0a0a0b 45%, #0e1016 100%);
 }
 
-/* Safari browser — iivo.ai on desktop */
+/* Safari browser — iivo.ai on desktop; page extends behind dock */
 .gl-macbook-mock__browser {
   position: absolute;
   top: 6%;
   left: 5%;
   right: 5%;
-  bottom: calc(var(--mock-dock-zone) + 10px);
+  bottom: calc(var(--mock-dock-zone) - 2px);
   display: flex;
   flex-direction: column;
   border-radius: 8px;
@@ -202,6 +202,7 @@
   background: rgba(14, 16, 22, 0.96);
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45);
   overflow: hidden;
+  z-index: 2;
 }
 
 .gl-macbook-mock__browser-chrome {
@@ -323,8 +324,8 @@
 .gl-macbook-mock__browser-page {
   flex: 1;
   min-height: 0;
-  padding: 10px 12px;
-  background: #0a0a0b;
+  padding: 10px 12px 0;
+  background: linear-gradient(180deg, #12141a 0%, #0e1016 100%);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -420,6 +421,65 @@
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.gl-macbook-mock__site-footer-band {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 4px;
+  padding-bottom: 4px;
+  opacity: 0.55;
+}
+
+.gl-macbook-mock__site-footer-line {
+  display: block;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.gl-macbook-mock__site-footer-line--short {
+  width: 68%;
+}
+
+/* Continuation of iivo.ai page — visible behind macOS dock */
+.gl-macbook-mock__site-bleed {
+  position: absolute;
+  left: 5%;
+  right: 5%;
+  bottom: 0;
+  height: calc(var(--mock-dock-zone) + 14px);
+  z-index: 1;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.gl-macbook-mock__site-bleed-mesh {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(14, 16, 22, 0) 0%, rgba(14, 16, 22, 0.92) 28%, #0e1016 100%),
+    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(125, 212, 216, 0.06), transparent 70%);
+}
+
+.gl-macbook-mock__site-bleed-row {
+  position: absolute;
+  left: 5%;
+  right: 5%;
+  bottom: calc(var(--mock-dock-zone) + 2px);
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  opacity: 0.65;
+}
+
+.gl-macbook-mock__site-bleed-card {
+  height: calc(10px * var(--mock-u));
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 /* macOS Dock — compact, sits at screen bottom below Glass strip */
@@ -538,21 +598,22 @@
 
 .gl-macbook-mock__glass-frame {
   position: absolute;
-  inset: calc(4px * var(--mock-u)) calc(4px * var(--mock-u)) var(--mock-dock-zone) calc(4px * var(--mock-u));
+  inset: calc(4px * var(--mock-u));
   border: 1px solid rgba(255, 255, 255, 0.18);
   box-shadow:
     0 0 0 1px rgba(0, 0, 0, 0.28),
     0 0 24px rgba(255, 255, 255, 0.03),
     inset 0 0 20px rgba(255, 255, 255, 0.02);
+  pointer-events: none;
 }
 
 .gl-macbook-mock__corner {
   position: absolute;
-  width: 14px;
-  height: 14px;
-  border-color: rgba(255, 255, 255, 0.88);
+  width: calc(14px * var(--mock-u));
+  height: calc(14px * var(--mock-u));
+  border-color: rgba(255, 255, 255, 0.85);
   border-style: solid;
-  filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.5));
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.55));
 }
 
 .gl-macbook-mock__corner--tl { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
