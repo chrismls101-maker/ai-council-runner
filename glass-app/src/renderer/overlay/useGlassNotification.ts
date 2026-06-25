@@ -105,6 +105,13 @@ function useToastQueue(state: GlassState, enabled: boolean): QueuedToast | null 
 
   useEffect(() => {
     if (!enabled) return;
+    if (!state.recoveryToast?.trim() || state.recoveryToastNonce == null) return;
+    enqueue(state.recoveryToast.trim(), "info");
+    send({ type: "clear-recovery-toast" });
+  }, [enabled, state.recoveryToast, state.recoveryToastNonce]);
+
+  useEffect(() => {
+    if (!enabled) return;
     if (!seededMomentsRef.current) {
       for (const moment of state.moments) seenMomentsRef.current.add(moment.id);
       seededMomentsRef.current = true;

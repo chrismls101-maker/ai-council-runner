@@ -11,6 +11,7 @@
 
 import type { GlassConfig } from "../shared/config.ts";
 import { captureDisplayById } from "./capture.ts";
+import { resolveAnthropicApiKey } from "./anthropicKeyStore.ts";
 import { optimizeVisualAskImage } from "./visualImageOptimizer.ts";
 import { askIivoGlass } from "./glassAskClient.ts";
 
@@ -53,6 +54,7 @@ export function startScreenDigestLoop(callbacks: ScreenDigestCallbacks): () => v
 
   async function runDigest(): Promise<void> {
     if (running || stopped) return;
+    if (!resolveAnthropicApiKey()) return;
     running = true;
     try {
       const target = callbacks.resolveCaptureTarget();

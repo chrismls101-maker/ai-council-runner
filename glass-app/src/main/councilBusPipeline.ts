@@ -15,7 +15,8 @@ import { agentBus, AgentBus } from "./agentEventBus.ts";
 import type { BusPublishContext } from "./agentEventBus.ts";
 import { resolveAnthropicApiKey, resolveGlassAnthropicModel } from "./anthropicKeyStore.ts";
 import { GlassAskNoAnthropicKeyError } from "./glassAskAnthropic.ts";
-import { hydrateContext } from "./glassMemoryEngine.ts";
+import { enrichGlassAskRequestWithMemory } from "./glassMemoryHelpers.ts";
+import { recordModelCall } from "./modelCallStore.ts";
 import { buildSystemPrompt } from "./glassSystemPrompt.ts";
 
 export interface LocalCouncilResult {
@@ -44,6 +45,9 @@ async function councilMessage(
   model: string,
   system: string,
   user: string,
+  sessionId: string,
+  correlationId: string,
+  runId: string,
   signal?: AbortSignal,
 ): Promise<string> {
   const response = await client.messages.create({
@@ -52,6 +56,22 @@ async function councilMessage(
     system,
     messages: [{ role: "user", content: user }],
   }, { signal });
+
+  const input = response.usage?.input_tokens ?? 0;
+  const output = response.usage?.output_tokens ?? 0;
+  if (input > 0 || output > 0) {
+    recordModelCall({
+      sessionId,
+      source: "council",
+      provider: "anthropic",
+      model,
+      agentId: "council",
+      runId,
+      correlationId,
+      inputTokens: input,
+      outputTokens: output,
+    });
+  }
 
   return response.content
     .filter((block): block is Anthropic.TextBlock => block.type === "text")
@@ -101,10 +121,18 @@ export async function runLocalCouncilDeliberation(
     : prompt;
 
   let memoryCtx;
+  let councilUserPrompt = userPrompt;
   try {
-    memoryCtx = await hydrateContext(prompt, "council");
+    const enriched = await enrichGlassAskRequestWithMemory(
+      { prompt: userPrompt, responseStyle: "full" },
+      "council",
+    );
+    memoryCtx = enriched.memoryContext ?? { userProfile: "", relevantMemories: "", tokenCount: 0 };
+    if (enriched.userContext?.trim()) {
+      councilUserPrompt = `${userPrompt}\n\n--- Passive context ---\n${enriched.userContext.trim()}`;
+    }
   } catch (err) {
-    console.error("[memory] council hydrate failed:", err);
+    console.error("[memory] council enrich failed:", err);
     memoryCtx = { userProfile: "", relevantMemories: "", tokenCount: 0 };
   }
 
@@ -117,7 +145,10 @@ export async function runLocalCouncilDeliberation(
     client,
     model,
     buildSystemPrompt(STRATEGY_SYSTEM, memoryCtx),
-    userPrompt,
+    councilUserPrompt,
+    sessionId,
+    correlationId,
+    runId,
     options?.signal,
   );
   publishSessionEnriched({ ...ctx, sourceAgentId: "strategy" }, "strategy", strategy);
@@ -126,7 +157,10 @@ export async function runLocalCouncilDeliberation(
     client,
     model,
     buildSystemPrompt(CRITIC_SYSTEM, memoryCtx),
-    `Original question/session:\n${userPrompt}\n\n--- Strategy ---\n${strategy}`,
+    `Original question/session:\n${councilUserPrompt}\n\n--- Strategy ---\n${strategy}`,
+    sessionId,
+    correlationId,
+    runId,
     options?.signal,
   );
   publishSessionEnriched({ ...ctx, sourceAgentId: "critic" }, "critic", critic);
@@ -135,7 +169,10 @@ export async function runLocalCouncilDeliberation(
     client,
     model,
     buildSystemPrompt(JUDGE_SYSTEM, memoryCtx),
-    `Question:\n${userPrompt}\n\n--- Strategy ---\n${strategy}\n\n--- Critic ---\n${critic}`,
+    `Question:\n${councilUserPrompt}\n\n--- Strategy ---\n${strategy}\n\n--- Critic ---\n${critic}`,
+    sessionId,
+    correlationId,
+    runId,
     options?.signal,
   );
   publishSessionEnriched({ ...ctx, sourceAgentId: "judge" }, "judge", judge);

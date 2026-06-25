@@ -1023,6 +1023,7 @@ interface AppState {
   blackHoleInstallStatus?: import("../shared/ipc.ts").GlassState["blackHoleInstallStatus"];
   blackHoleInstallProgress?: string;
   iivoAccountLink: import("../shared/iivoAccountLink.ts").IivoAccountLink | null;
+  serverRuntimeFlags: import("../shared/serverRuntimeFlags.ts").ServerRuntimeFlags | null;
   omniParserInstall: import("../shared/omniParserInstall.ts").OmniParserInstallState;
   /** Last known clipboard text content (polled every 2 s, silent). */
   clipboardText?: string;
@@ -3976,6 +3977,7 @@ function snapshot(): GlassState {
     blackHoleInstallStatus: state.blackHoleInstallStatus,
     blackHoleInstallProgress: state.blackHoleInstallProgress,
     iivoAccountLink: state.iivoAccountLink,
+    serverRuntimeFlags: state.serverRuntimeFlags,
     omniParserInstall: state.omniParserInstall,
     meetingIntelligence: isMeetingsModeActive() ? meetingIntelState : undefined,
     iivoApiUrl: config.iivoApiUrl,
@@ -6957,7 +6959,7 @@ async function handleCommand(
             role?: "founder" | "admin" | "user";
             fullBuildLoop?: boolean;
           };
-          const link = {
+          const link: import("../shared/iivoAccountLink.ts").IivoAccountLink = {
             sessionToken: data.sessionToken,
             userId: data.userId,
             email: data.email,
@@ -8886,11 +8888,7 @@ async function runPaletteTerminalFixLast(): Promise<void> {
       block.output,
       block.exitCode ?? 1,
     );
-    const response = await askIivoGlass(config, {
-      prompt,
-      modelPurpose: "default",
-      responseStyle: "full",
-    });
+    const response = await askIivoGlass(config, buildTerminalFixAskRequest(prompt));
     const raw = response.answer?.trim() ?? "";
     if (!raw) {
       state.lastNotice = "Could not generate a fix.";
@@ -8999,6 +8997,23 @@ function isTerminalAutoFixGloballyEnabled(): boolean {
   return state.serverRuntimeFlags?.terminalAutoFixEnabled !== false;
 }
 
+function glassAskSessionForSpend(): import("../shared/glassAskTypes.ts").GlassAskSessionPayload | undefined {
+  const id = sessions.current()?.id?.trim();
+  return id ? { sessionId: id } : undefined;
+}
+
+function buildTerminalFixAskRequest(
+  prompt: string,
+): import("../shared/glassAskTypes.ts").GlassAskRequest {
+  return {
+    prompt,
+    modelPurpose: "default",
+    responseStyle: "full",
+    session: glassAskSessionForSpend(),
+    modelCallSource: "terminal_fix",
+  };
+}
+
 /**
  * Called when the Glass built-in terminal exits with a non-zero code.
  * Uses the strict 3-line format from terminalFixEngine for reliable parsing:
@@ -9032,11 +9047,7 @@ async function handleTerminalAutoFix(
   );
 
   try {
-    const response = await askIivoGlass(config, {
-      prompt,
-      modelPurpose: "default",
-      responseStyle: "full",
-    });
+    const response = await askIivoGlass(config, buildTerminalFixAskRequest(prompt));
     const raw = response.answer?.trim() ?? "";
     if (!raw) return;
 
@@ -12668,11 +12679,7 @@ function registerIpc(): void {
       if (!command) return { error: "command is required" };
       try {
         const prompt = buildTerminalFixPrompt(command, output, exitCode, payload?.context);
-        const response = await askIivoGlass(config, {
-          prompt,
-          modelPurpose: "default",
-          responseStyle: "full",
-        });
+        const response = await askIivoGlass(config, buildTerminalFixAskRequest(prompt));
         const raw = response.answer?.trim() ?? "";
         if (!raw) return { error: "Empty response from AI" };
         const parsed = parseTerminalFixResponse(raw);

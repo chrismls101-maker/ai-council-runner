@@ -11,6 +11,7 @@ import {
   resolveAnthropicApiKey,
   resolveGlassAnthropicModel,
 } from "./anthropicKeyStore.ts";
+import { recordModelCall } from "./modelCallStore.ts";
 import {
   buildGlassAskSystemPrompt,
   buildGlassAskUserText,
@@ -30,7 +31,35 @@ export class GlassAskNoAnthropicKeyError extends Error {
 function createAnthropicClient(): Anthropic {
   const apiKey = resolveAnthropicApiKey();
   if (!apiKey) throw new GlassAskNoAnthropicKeyError();
-  return new Anthropic({ apiKey });
+  const timeoutMs = Number.parseInt(process.env.ANTHROPIC_TIMEOUT_MS?.trim() ?? "", 10);
+  return new Anthropic({
+    apiKey,
+    ...(Number.isFinite(timeoutMs) && timeoutMs > 0 ? { timeout: timeoutMs } : {}),
+  });
+}
+
+function normalizeAnthropicAskError(err: unknown): Error {
+  if (err instanceof GlassAskNoAnthropicKeyError) return err;
+  if (err instanceof Error && /cancel/i.test(err.message)) return err;
+
+  const status =
+    err && typeof err === "object" && "status" in err
+      ? Number((err as { status?: unknown }).status)
+      : undefined;
+
+  if (status === 503) {
+    return new Error("Anthropic API temporarily unavailable (503).");
+  }
+  if (status === 529) {
+    return new Error("Anthropic API overloaded (529).");
+  }
+  if (err instanceof Error) {
+    if (/timed?\s*out|ETIMEDOUT|AbortError/i.test(err.message)) {
+      return new Error("This is taking longer than expected. You can cancel and try again.");
+    }
+    return err;
+  }
+  return new Error(String(err));
 }
 
 function buildMessageContent(
@@ -42,7 +71,7 @@ function buildMessageContent(
   return [image, { type: "text", text }];
 }
 
-function buildGlassAskResponse(
+export function buildGlassAskResponse(
   request: GlassAskRequest,
   model: string,
   answer: string,
@@ -84,14 +113,37 @@ export async function askGlassAnthropic(
     max_tokens: maxTokens,
     system: buildGlassAskSystemPrompt(request),
     messages: [{ role: "user", content: buildMessageContent(request) }],
-  }, { signal });
+  }, { signal }).catch((err: unknown) => {
+    throw normalizeAnthropicAskError(err);
+  });
 
   const text = response.content
     .filter((block): block is Anthropic.TextBlock => block.type === "text")
     .map((block) => block.text)
     .join("");
 
+  recordAskUsage(response, request, model, "ask");
+
   return buildGlassAskResponse(request, model, text);
+}
+
+function recordAskUsage(
+  response: Anthropic.Message,
+  request: GlassAskRequest,
+  model: string,
+  source: "ask" | "ask_stream",
+): void {
+  const input = response.usage?.input_tokens ?? 0;
+  const output = response.usage?.output_tokens ?? 0;
+  if (input === 0 && output === 0) return;
+  recordModelCall({
+    sessionId: request.session?.sessionId,
+    source: request.modelCallSource ?? source,
+    provider: "anthropic",
+    model,
+    inputTokens: input,
+    outputTokens: output,
+  });
 }
 
 export async function askGlassAnthropicStream(
@@ -119,7 +171,12 @@ export async function askGlassAnthropicStream(
     onToken(accumulated);
   });
 
-  await stream.finalMessage();
+  try {
+    const finalMessage = await stream.finalMessage();
+    recordAskUsage(finalMessage, request, model, "ask_stream");
+  } catch (err) {
+    throw normalizeAnthropicAskError(err);
+  }
 
   if (signal?.aborted) throw new Error("Glass ask cancelled");
 
@@ -129,7 +186,11 @@ export async function askGlassAnthropicStream(
 const HAIKU_MODEL = "claude-haiku-4-5-20251001";
 
 /** Fast/cheap Anthropic call for memory extraction and summarization. */
-export async function askAnthropicHaiku(system: string, user: string): Promise<string> {
+export async function askAnthropicHaiku(
+  system: string,
+  user: string,
+  opts?: { sessionId?: string },
+): Promise<string> {
   const client = createAnthropicClient();
   const response = await client.messages.create({
     model: HAIKU_MODEL,
@@ -137,6 +198,19 @@ export async function askAnthropicHaiku(system: string, user: string): Promise<s
     system,
     messages: [{ role: "user", content: user }],
   });
+  const input = response.usage?.input_tokens ?? 0;
+  const output = response.usage?.output_tokens ?? 0;
+  if (input > 0 || output > 0) {
+    recordModelCall({
+      sessionId: opts?.sessionId,
+      source: "memory",
+      provider: "anthropic",
+      model: HAIKU_MODEL,
+      agentId: "memory-engine",
+      inputTokens: input,
+      outputTokens: output,
+    });
+  }
   return response.content
     .filter((block): block is Anthropic.TextBlock => block.type === "text")
     .map((block) => block.text)

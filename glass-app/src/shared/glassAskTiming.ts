@@ -1,6 +1,15 @@
 /** Command-bar / voice ask timeout before showing a fallback error card. */
 export const GLASS_ASK_TIMEOUT_MS = 45_000;
 
+/** Optional dev override: IIVO_GLASS_ASK_TIMEOUT_MS=1000 */
+export function resolveGlassAskTimeoutMs(): number {
+  const raw = process.env.IIVO_GLASS_ASK_TIMEOUT_MS?.trim();
+  if (!raw) return GLASS_ASK_TIMEOUT_MS;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 1_000) return GLASS_ASK_TIMEOUT_MS;
+  return parsed;
+}
+
 /** After this long with no answer, escalate the thinking copy to "Still working…". */
 export const GLASS_ASK_STILL_WORKING_MS = 6_000;
 
@@ -24,7 +33,7 @@ export function voiceAskStatusForElapsed(
   elapsedMs: number,
   phase: GlassAskPhase = "thinking",
 ): string {
-  if (elapsedMs >= GLASS_ASK_TIMEOUT_MS) return VOICE_ASK_STATUS.timeout;
+  if (elapsedMs >= resolveGlassAskTimeoutMs()) return VOICE_ASK_STATUS.timeout;
   if (elapsedMs >= GLASS_ASK_STILL_WORKING_MS) return VOICE_ASK_STATUS.stillWorking;
   return phase === "looking" ? VOICE_ASK_STATUS.looking : VOICE_ASK_STATUS.thinking;
 }

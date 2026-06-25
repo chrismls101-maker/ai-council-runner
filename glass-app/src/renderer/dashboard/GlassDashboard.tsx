@@ -3,13 +3,17 @@ import { ChevronLeft, ChevronRight, Settings } from "lucide-react";
 import type {
   AgentRunRow,
   AgentRunStatus,
+  AgentBusHealthSnapshot,
   GlassDashboardAgentEvent,
   GlassState,
   MessageRow,
+  ModelCallRow,
   RetentionSummary,
   SessionRowWithMeta,
+  SessionSpendSummary,
   UserContextRow,
 } from "../../shared/ipc.ts";
+import { formatCoderRunUsageUsd } from "../../shared/coderAgentModels.ts";
 import { formatRelativeTime } from "../../shared/relativeTime.ts";
 
 type ProviderDot = "ok" | "missing" | "unconfigured";
@@ -205,9 +209,12 @@ export function GlassDashboard({ visible = true, onClose }: GlassDashboardProps)
   const [invokeText, setInvokeText] = useState("");
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [sessionMessages, setSessionMessages] = useState<MessageRow[]>([]);
+  const [sessionSpend, setSessionSpend] = useState<SessionSpendSummary | null>(null);
+  const [sessionCalls, setSessionCalls] = useState<ModelCallRow[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [userContext, setUserContext] = useState<UserContextRow[]>([]);
   const [retentionSummary, setRetentionSummary] = useState<RetentionSummary | null>(null);
+  const [busHealth, setBusHealth] = useState<AgentBusHealthSnapshot | null>(null);
 
   useEffect(() => {
     void window.glass.getState().then(setGlassState);
@@ -227,19 +234,28 @@ export function GlassDashboard({ visible = true, onClose }: GlassDashboardProps)
 
   useEffect(() => {
     void (async () => {
-      const [sessions, councilRows, contextRows, retention] = await Promise.all([
+      const [sessions, councilRows, contextRows, retention, bus] = await Promise.all([
         window.glass.getRecentSessions(),
         window.glass.getLastCouncilRun(),
         window.glass.getUserContext(),
         window.glass.getRetentionSummary(),
+        window.glass.getAgentBusHealth(),
       ]);
       setRecentSessions(sessions);
       setUserContext(contextRows);
       setRetentionSummary(retention);
+      setBusHealth(bus);
       if (councilRows && councilRows.length > 0) {
         setCouncilRun(councilStateFromAgentRuns(councilRows));
       }
     })();
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void window.glass.getAgentBusHealth().then(setBusHealth);
+    }, 10_000);
+    return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
@@ -279,6 +295,14 @@ export function GlassDashboard({ visible = true, onClose }: GlassDashboardProps)
 
   const hasCouncilRun = councilHasVisibleRun(councilRun);
   const hasSessions = recentSessions.length > 0;
+  const busDot: ProviderDot = !busHealth
+    ? "unconfigured"
+    : busHealth.staleSubscribers.length > 0
+      ? "missing"
+      : "ok";
+  const busTitle = busHealth?.staleSubscribers.length
+    ? `Agent bus degraded: ${busHealth.staleSubscribers.join(", ")}`
+    : "Agent bus healthy";
 
   const handleClose = useCallback((): void => {
     if (onClose) {
@@ -292,8 +316,13 @@ export function GlassDashboard({ visible = true, onClose }: GlassDashboardProps)
     setSelectedSessionId(sessionId);
     setLoadingMessages(true);
     try {
-      const msgs = await window.glass.getSessionMessages(sessionId);
+      const [msgs, spend] = await Promise.all([
+        window.glass.getSessionMessages(sessionId),
+        window.glass.getSessionSpend(sessionId),
+      ]);
       setSessionMessages(msgs);
+      setSessionSpend(spend.summary);
+      setSessionCalls(spend.calls);
     } finally {
       setLoadingMessages(false);
     }
@@ -347,6 +376,10 @@ export function GlassDashboard({ visible = true, onClose }: GlassDashboardProps)
           <span className="glass-dashboard__provider-label glass-dashboard__provider-label--muted">
             OpenAI
           </span>
+          <span className={providerDotClass(busDot)} title={busTitle} />
+          <span className="glass-dashboard__provider-label glass-dashboard__provider-label--muted">
+            Bus
+          </span>
         </div>
         <div className="glass-dashboard__pulse-center">{screenLabel}</div>
         <div className="glass-dashboard__pulse-right">
@@ -366,10 +399,36 @@ export function GlassDashboard({ visible = true, onClose }: GlassDashboardProps)
                 onClick={() => {
                   setSelectedSessionId(null);
                   setSessionMessages([]);
+                  setSessionSpend(null);
+                  setSessionCalls([]);
                 }}
               >
                 ← Back
               </button>
+              {sessionSpend && sessionSpend.callCount > 0 ? (
+                <div
+                  className="glass-dashboard__session-spend"
+                  data-testid="glass-dashboard-session-spend"
+                >
+                  <p className="glass-dashboard__section-label">Session spend</p>
+                  <p>
+                    {formatCoderRunUsageUsd(sessionSpend.totalUsd)} · {sessionSpend.callCount}{" "}
+                    model call{sessionSpend.callCount === 1 ? "" : "s"} ·{" "}
+                    {sessionSpend.inputTokens.toLocaleString()} in /{" "}
+                    {sessionSpend.outputTokens.toLocaleString()} out
+                  </p>
+                  {sessionCalls.length > 0 ? (
+                    <ul className="glass-dashboard__spend-calls">
+                      {sessionCalls.slice(0, 8).map((call) => (
+                        <li key={call.id}>
+                          {call.source} · {call.model} ·{" "}
+                          {formatCoderRunUsageUsd(call.estimated_usd)}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              ) : null}
               {loadingMessages ? (
                 <p className="glass-dashboard__loading">Loading…</p>
               ) : sessionMessages.length > 0 ? (
@@ -441,6 +500,11 @@ export function GlassDashboard({ visible = true, onClose }: GlassDashboardProps)
                         <span className="glass-dashboard__session-title">
                           {sessionDisplayLabel(session)}
                         </span>
+                        {(session.spend_usd ?? 0) > 0 ? (
+                          <span className="glass-dashboard__session-spend-pill">
+                            {formatCoderRunUsageUsd(session.spend_usd ?? 0)}
+                          </span>
+                        ) : null}
                       </li>
                     ))}
                   </ul>

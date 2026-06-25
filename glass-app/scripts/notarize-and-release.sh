@@ -172,7 +172,13 @@ build_arch() {
   echo "======================================================="
 
   local SPACE_DMG="$RELEASE_DIR/IIVO Glass-${VERSION}-${arch}.dmg"
+  # electron-builder outputs the native arch to release/mac/ (not release/mac-{arch}/)
+  # Cross-compiled arches go to release/mac-{arch}/ as expected.
   local APP="$RELEASE_DIR/mac-${arch}/IIVO Glass.app"
+  if [[ ! -d "$APP" ]] && [[ -d "$RELEASE_DIR/mac/IIVO Glass.app" ]]; then
+    APP="$RELEASE_DIR/mac/IIVO Glass.app"
+    echo "==> Note: app found at release/mac/ (native arch fallback for ${arch})"
+  fi
   local HYPHEN_DMG="$RELEASE_DIR/IIVO-Glass-${VERSION}-${arch}.dmg"
   # Squirrel auto-update must use the notarized ditto zip (hyphenated) — never
   # the electron-builder space-named zip.

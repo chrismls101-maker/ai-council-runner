@@ -7,7 +7,7 @@ import type { GlassConfig } from "../shared/config.ts";
 import { withIivoApiAuthHeaders } from "../shared/iivoApiAuth.ts";
 import type { SttTranscribeRequest, SttTranscribeResult } from "../shared/sttTypes.ts";
 import { STT_SERVER_UNAVAILABLE_MESSAGE } from "../shared/sttTypes.ts";
-import { markIivoServerDegraded } from "./iivoServerDegradedMain.ts";
+import { markIivoServerDegraded, clearIivoServerDegradedSource } from "./iivoServerDegradedMain.ts";
 import type { FetchLike } from "./sttOpenAI.ts";
 
 export function buildTranscribeAudioUrl(config: GlassConfig): string {
@@ -60,6 +60,8 @@ export async function transcribeViaServer(
   if (!text) {
     throw new Error("Server returned an empty transcript.");
   }
+
+  clearIivoServerDegradedSource("stt");
 
   return {
     text,

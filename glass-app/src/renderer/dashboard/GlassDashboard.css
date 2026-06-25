@@ -324,7 +324,7 @@
 
 .glass-dashboard__session-item {
   display: grid;
-  grid-template-columns: auto auto 1fr;
+  grid-template-columns: auto auto 1fr auto;
   align-items: center;
   gap: 8px;
   padding: 9px 12px;
@@ -505,6 +505,33 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.glass-dashboard__session-spend-pill {
+  font-size: 11px;
+  color: rgba(160, 220, 180, 0.95);
+  background: rgba(80, 180, 120, 0.15);
+  border: 1px solid rgba(120, 220, 160, 0.25);
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.glass-dashboard__session-spend {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(80, 180, 120, 0.08);
+  border: 1px solid rgba(120, 220, 160, 0.15);
+}
+
+.glass-dashboard__spend-calls {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.65);
 }
 
 .glass-dashboard__session-row {

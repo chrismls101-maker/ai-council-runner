@@ -197,6 +197,34 @@ export function estimateCoderRunCostUsd(
   return inputCost + outputCost;
 }
 
+/** Estimate USD for any known API model id (ask, council, memory). */
+export function estimateApiModelCostUsd(
+  apiModel: string,
+  inputTokens: number,
+  outputTokens: number,
+): number {
+  const normalized = apiModel.trim().toLowerCase();
+  const byApiModel = Object.values(CODER_AGENT_MODELS).find(
+    (m) => m.apiModel.toLowerCase() === normalized,
+  );
+  if (byApiModel) {
+    return (
+      (inputTokens / 1_000_000) * byApiModel.inputPerMillionUsd
+      + (outputTokens / 1_000_000) * byApiModel.outputPerMillionUsd
+    );
+  }
+  if (normalized.includes("haiku")) {
+    return estimateCoderRunCostUsd("haiku", inputTokens, outputTokens);
+  }
+  if (normalized.includes("opus")) {
+    return estimateCoderRunCostUsd("opus", inputTokens, outputTokens);
+  }
+  if (normalized.includes("gpt")) {
+    return estimateCoderRunCostUsd("gpt55", inputTokens, outputTokens);
+  }
+  return estimateCoderRunCostUsd("sonnet", inputTokens, outputTokens);
+}
+
 export function formatTokenCount(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 10_000) return `${Math.round(n / 1000)}k`;

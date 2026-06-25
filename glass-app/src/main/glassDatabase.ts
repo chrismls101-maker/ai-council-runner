@@ -6,7 +6,16 @@
 import Database from "better-sqlite3";
 import * as sqliteVec from "sqlite-vec";
 import { app } from "electron";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
+import {
+  checkpointDatabase,
+  detectUncleanShutdown,
+  markSessionClosed,
+  markSessionOpen,
+  quarantineCorruptedDatabaseFiles,
+  runIntegrityCheckOnFile,
+} from "./glassDatabaseStartup.ts";
 import type {
   AgentRunRow,
   AgentRunStatus,
@@ -16,6 +25,7 @@ import type {
   SessionStatus,
   UserContextRow,
 } from "../shared/glassSessionHistory.ts";
+import { GLASS_DB_MIGRATION_V1, GLASS_DB_MIGRATION_V7_MODEL_CALLS } from "./glassDatabaseSchema.ts";
 
 export type {
   AgentRunRow,
@@ -27,57 +37,7 @@ export type {
   UserContextRow,
 } from "../shared/glassSessionHistory.ts";
 
-const MIGRATION_V1 = `
-CREATE TABLE IF NOT EXISTS sessions (
-  id TEXT PRIMARY KEY,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
-  title TEXT,
-  context_app TEXT,
-  context_url TEXT,
-  agent_type TEXT,
-  status TEXT NOT NULL DEFAULT 'active',
-  token_count INTEGER NOT NULL DEFAULT 0
-);
-
-CREATE TABLE IF NOT EXISTS messages (
-  id TEXT PRIMARY KEY,
-  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-  role TEXT NOT NULL,
-  content TEXT NOT NULL,
-  created_at INTEGER NOT NULL,
-  agent_id TEXT,
-  token_count INTEGER NOT NULL DEFAULT 0
-);
-
-CREATE TABLE IF NOT EXISTS agent_runs (
-  id TEXT PRIMARY KEY,
-  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-  agent_id TEXT NOT NULL,
-  run_order INTEGER NOT NULL DEFAULT 0,
-  status TEXT NOT NULL,
-  input TEXT,
-  output TEXT,
-  started_at INTEGER,
-  completed_at INTEGER,
-  error TEXT,
-  correlation_id TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS user_context (
-  key TEXT PRIMARY KEY,
-  value TEXT NOT NULL,
-  source TEXT NOT NULL,
-  confidence REAL NOT NULL DEFAULT 1,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at DESC);
-CREATE INDEX IF NOT EXISTS idx_agent_runs_correlation ON agent_runs(correlation_id);
-CREATE INDEX IF NOT EXISTS idx_agent_runs_session ON agent_runs(session_id);
-`;
+const MIGRATION_V1 = GLASS_DB_MIGRATION_V1;
 
 const MIGRATION_V2_MEMORIES = `
 CREATE TABLE IF NOT EXISTS memories (
@@ -158,6 +118,37 @@ CREATE INDEX IF NOT EXISTS idx_retention_events_name ON retention_events(event_n
 CREATE INDEX IF NOT EXISTS idx_retention_events_session ON retention_events(session_id);
 CREATE INDEX IF NOT EXISTS idx_retention_events_time ON retention_events(created_at);
 `;
+
+const MIGRATION_V6_SESSION_TOMBSTONE = `
+CREATE TABLE IF NOT EXISTS app_session_tombstone (
+  singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+  status TEXT NOT NULL,
+  opened_at INTEGER NOT NULL,
+  closed_at INTEGER
+);
+INSERT OR IGNORE INTO app_session_tombstone (singleton, status, opened_at, closed_at)
+VALUES (1, 'session_closed', 0, 0);
+`;
+
+const MIGRATION_V7_MODEL_CALLS = GLASS_DB_MIGRATION_V7_MODEL_CALLS;
+
+export type { SessionTombstoneStatus } from "./glassDatabaseStartup.ts";
+export {
+  checkpointDatabase,
+  detectUncleanShutdown,
+  markSessionClosed,
+  markSessionOpen,
+  parseIntegrityCheckResult,
+  quarantineCorruptedDatabaseFiles,
+  runIntegrityCheckOnFile,
+} from "./glassDatabaseStartup.ts";
+
+export interface DatabaseInitResult {
+  enabled: boolean;
+  recoveredFromCorruption: boolean;
+  recoveredFromUncleanExit: boolean;
+  corruptionBackupPath?: string;
+}
 
 let _db: Database.Database | null = null;
 let _dbDisabled = false;
@@ -252,6 +243,22 @@ function applyMigrations(db: Database.Database): void {
       console.error("[glassDatabase] V5 retention_events schema failed:", err);
     }
   }
+  if (current < 6) {
+    try {
+      db.exec(MIGRATION_V6_SESSION_TOMBSTONE);
+      db.prepare("INSERT INTO schema_version (version) VALUES (?)").run(6);
+    } catch (err) {
+      console.error("[glassDatabase] V6 session tombstone schema failed:", err);
+    }
+  }
+  if (current < 7) {
+    try {
+      db.exec(MIGRATION_V7_MODEL_CALLS);
+      db.prepare("INSERT INTO schema_version (version) VALUES (?)").run(7);
+    } catch (err) {
+      console.error("[glassDatabase] V7 model_calls schema failed:", err);
+    }
+  }
 }
 
 function loadVecExtension(db: Database.Database): void {
@@ -264,33 +271,68 @@ function loadVecExtension(db: Database.Database): void {
   }
 }
 
-export function initDatabase(): void {
-  if (_db || _dbDisabled) return;
+export function initDatabase(): DatabaseInitResult {
+  const empty: DatabaseInitResult = {
+    enabled: false,
+    recoveredFromCorruption: false,
+    recoveredFromUncleanExit: false,
+  };
+  if (_db || _dbDisabled) {
+    return { ...empty, enabled: isDatabaseEnabled() };
+  }
+
+  const result: DatabaseInitResult = { ...empty };
+  const path = dbFilePath();
+
+  if (existsSync(path)) {
+    const integrity = runIntegrityCheckOnFile(path);
+    if (!integrity.ok) {
+      console.error("[glassDatabase] integrity_check failed:", integrity.detail);
+      result.recoveredFromCorruption = true;
+      result.corruptionBackupPath = quarantineCorruptedDatabaseFiles(path);
+    }
+  }
+
   try {
-    const db = new Database(dbFilePath());
+    const db = new Database(path);
     db.pragma("journal_mode = WAL");
     db.pragma("synchronous = NORMAL");
     db.pragma("foreign_keys = ON");
     db.pragma("cache_size = -32000");
     loadVecExtension(db);
     applyMigrations(db);
+    result.recoveredFromUncleanExit = detectUncleanShutdown(db);
+    markSessionOpen(db);
     _db = db;
+    result.enabled = true;
   } catch (err) {
     _dbDisabled = true;
     console.error("[glassDatabase] init failed — session history disabled:", err);
   }
+  return result;
 }
 
 export function getDb(): Database.Database | null {
   if (_db) return _db;
   if (_dbDisabled) return null;
-  initDatabase();
-  return _db;
+  const result = initDatabase();
+  return result.enabled ? _db : null;
+}
+
+export function gracefulDatabaseShutdown(): void {
+  if (!_db) return;
+  try {
+    markSessionClosed(_db);
+    checkpointDatabase(_db);
+  } catch (err) {
+    console.error("[glassDatabase] graceful shutdown failed:", err);
+  }
 }
 
 export function closeDatabase(): void {
   if (_db) {
     try {
+      gracefulDatabaseShutdown();
       _db.close();
     } catch (err) {
       console.error("[glassDatabase] close error:", err);

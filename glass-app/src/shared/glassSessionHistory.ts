@@ -18,6 +18,9 @@ export interface SessionRow {
 export interface SessionRowWithMeta extends SessionRow {
   message_count: number;
   first_message_preview: string | null;
+  /** Sum of estimated_usd from model_calls for this session. */
+  spend_usd?: number;
+  model_call_count?: number;
 }
 
 export interface MessageRow {
@@ -42,6 +45,29 @@ export interface AgentRunRow {
   completed_at: number | null;
   error: string | null;
   correlation_id: string;
+}
+
+export interface SessionSpendSummary {
+  sessionId: string;
+  callCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalUsd: number;
+}
+
+export interface ModelCallRow {
+  id: string;
+  session_id: string;
+  source: string;
+  provider: string | null;
+  model: string;
+  agent_id: string | null;
+  run_id: string | null;
+  correlation_id: string | null;
+  input_tokens: number;
+  output_tokens: number;
+  estimated_usd: number;
+  created_at: number;
 }
 
 export interface UserContextRow {

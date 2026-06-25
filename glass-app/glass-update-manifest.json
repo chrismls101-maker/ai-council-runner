@@ -1,7 +1,7 @@
 {
   "version": "0.8.2",
-  "buildId": "20260625020421",
-  "releasedAt": "2026-06-25T02:04:21.430Z",
+  "buildId": "20260625034622",
+  "releasedAt": "2026-06-25T03:46:22.236Z",
   "title": "NEW SYSTEM UPDATE",
   "notes": "IIVO Glass v0.8.2 is ready to install.\n\n• Deepgram streaming falls back to Whisper when translate audio drops.\n• System audio routing restores on relaunch after quit.\n• Panel shows when the IIVO server is offline.\n• IDE shows when Ollama semantic search is offline.",
   "downloadUrl": "https://iivo.ai/api/glass/update/download/IIVO-Glass-0.8.2-arm64.dmg",

@@ -37,9 +37,14 @@ export async function fetchGlassServerHealth(
   config: GlassConfig,
   signal?: AbortSignal,
 ): Promise<GlassServerHealthFetchResult> {
+  const timeoutSignal = AbortSignal.timeout(12_000);
+  const merged =
+    signal != null
+      ? AbortSignal.any([signal, timeoutSignal])
+      : timeoutSignal;
   try {
     const res = await fetch(`${config.iivoApiUrl}/api/health`, {
-      signal,
+      signal: merged,
       headers: iivoApiAuthHeaders(),
     });
     if (!res.ok) {
@@ -54,7 +59,10 @@ export async function fetchGlassServerHealth(
       return {
         snapshot: null,
         httpStatus: res.status,
-        error: `Health check failed (HTTP ${res.status}).`,
+        error:
+          res.status === 503
+            ? "IIVO server temporarily unavailable (HTTP 503)."
+            : `Health check failed (HTTP ${res.status}).`,
       };
     }
     return { snapshot: (await res.json()) as GlassServerHealthSnapshot };

@@ -8,7 +8,7 @@
  * Architecture: see glass-app/docs/architecture/GLASS_ARCHITECTURE.md
  */
 
-import { Subject, filter, share } from "rxjs";
+import { Subject, filter, share, catchError, EMPTY, type Subscription } from "rxjs";
 import { randomUUID } from "crypto";
 import type { GlassAgentId } from "../shared/ipc.ts";
 
@@ -55,7 +55,8 @@ export type BusEventType =
   | "delivery.complete"
   | "bus.dlq.event"
   | "bus.circuit.open"
-  | "bus.circuit.closed";
+  | "bus.circuit.closed"
+  | "bus.heartbeat";
 
 export type AgentLifecyclePhase = "started" | "complete" | "error";
 
@@ -118,6 +119,11 @@ export interface CircuitBreakerPayload {
   error?: string;
 }
 
+export interface BusHeartbeatPayload {
+  seq: number;
+  timestamp: string;
+}
+
 export interface IntentPayload {
   confidence: number;
   app?: string;
@@ -153,6 +159,8 @@ export interface MeetingSessionPayload {
 // ── Circuit Breaker ────────────────────────────────────────────────────────────
 
 const CIRCUIT_OPEN_ERROR = "Circuit breaker open — agent temporarily disabled";
+
+export const MISSED_HEARTBEAT_UNHEALTHY_THRESHOLD = 3;
 
 type CircuitBreakerHooks = {
   onOpen?: () => void;
@@ -301,10 +309,34 @@ export interface BusPublishContext {
   sourceAgentId: string;
 }
 
+export interface AgentBusSubscriberHealth {
+  subscriberId: string;
+  consecutiveMissedHeartbeats: number;
+  healthy: boolean;
+  lastAckSeq: number;
+}
+
+export interface AgentBusHealthSnapshot {
+  healthy: boolean;
+  dlqDepth: number;
+  openBreakers: string[];
+  heartbeatSeq: number;
+  subscribers: AgentBusSubscriberHealth[];
+  staleSubscribers: string[];
+}
+
+type ResilientSubscriptionOptions = {
+  skipBreaker?: boolean;
+};
+
 export class AgentBus {
   private sequences = new Map<string, number>();
   private breakers = new Map<string, CircuitBreaker>();
   private devObserverCleanup?: () => void;
+  private heartbeatTimer?: ReturnType<typeof setInterval>;
+  private heartbeatSeq = 0;
+  private readonly subscriberHealth = new Map<string, { lastAckSeq: number; consecutiveMisses: number }>();
+  private readonly subscriberRefCounts = new Map<string, number>();
   readonly dlq = new DeadLetterQueue();
   readonly store = new EventStore();
 
@@ -342,26 +374,56 @@ export class AgentBus {
     subscriberId: string,
     handler: (event: BusEvent<T>) => Promise<void> | void,
   ): () => void {
-    const breaker = this.getOrCreateBreaker(subscriberId);
+    this.retainSubscriber(subscriberId);
 
-    const sub = this.events$.pipe(
-      filter((e) => e.type === type),
-    ).subscribe(async (event) => {
-      try {
-        await breaker.execute(() => Promise.resolve(handler(event as BusEvent<T>)));
-      } catch (err) {
-        if (isCircuitBreakerRejection(err)) return;
-        const errorMsg = err instanceof Error ? err.message : String(err);
-        this.dlq.push(event, errorMsg);
-      }
-    });
+    const unsubMain = this.createResilientSubscription(
+      type,
+      subscriberId,
+      handler,
+    );
+    const unsubHeartbeat = this.createResilientSubscription(
+      "bus.heartbeat",
+      subscriberId,
+      (event) => {
+        const payload = event.payload as BusHeartbeatPayload;
+        console.log(
+          `[AgentBus] heartbeat ack | subscriber:${subscriberId} | type:bus.heartbeat | corr:${event.correlationId} | seq:${payload.seq}`,
+        );
+        this.recordHeartbeatAck(subscriberId);
+      },
+      { skipBreaker: true },
+    );
 
-    return () => sub.unsubscribe();
+    return () => {
+      unsubMain();
+      unsubHeartbeat();
+      this.releaseSubscriber(subscriberId);
+    };
   }
 
-  observe(observer: (event: BusEvent) => void): () => void {
-    const sub = this.events$.subscribe(observer);
-    return () => sub.unsubscribe();
+  observe(
+    observer: (event: BusEvent) => void,
+    subscriberId = "bus-observer",
+  ): () => void {
+    this.retainSubscriber(subscriberId);
+    const unsub = this.createResilientObserve(observer, subscriberId);
+    const unsubHeartbeat = this.createResilientSubscription(
+      "bus.heartbeat",
+      subscriberId,
+      (event) => {
+        const payload = event.payload as BusHeartbeatPayload;
+        console.log(
+          `[AgentBus] heartbeat ack | subscriber:${subscriberId} | type:bus.heartbeat | corr:${event.correlationId} | seq:${payload.seq}`,
+        );
+        this.recordHeartbeatAck(subscriberId);
+      },
+      { skipBreaker: true },
+    );
+    return () => {
+      unsub();
+      unsubHeartbeat();
+      this.releaseSubscriber(subscriberId);
+    };
   }
 
   streamOf<T>(type: BusEventType) {
@@ -374,14 +436,49 @@ export class AgentBus {
     return randomUUID();
   }
 
-  healthCheck(): { healthy: boolean; dlqDepth: number; openBreakers: string[] } {
+  startHeartbeat(intervalMs = 30_000): void {
+    if (this.heartbeatTimer) return;
+    this.heartbeatTimer = setInterval(() => this.pulseHeartbeat(), intervalMs);
+  }
+
+  stopHeartbeat(): void {
+    if (!this.heartbeatTimer) return;
+    clearInterval(this.heartbeatTimer);
+    this.heartbeatTimer = undefined;
+  }
+
+  getHealthSnapshot(): AgentBusHealthSnapshot {
     const openBreakers = [...this.breakers.entries()]
-      .filter(([, b]) => b.isOpen)
+      .filter(([, breaker]) => breaker.isOpen)
       .map(([id]) => id);
+    const subscribers: AgentBusSubscriberHealth[] = [...this.subscriberHealth.entries()].map(
+      ([subscriberId, health]) => ({
+        subscriberId,
+        consecutiveMissedHeartbeats: health.consecutiveMisses,
+        healthy: health.consecutiveMisses < MISSED_HEARTBEAT_UNHEALTHY_THRESHOLD,
+        lastAckSeq: health.lastAckSeq,
+      }),
+    );
+    const staleSubscribers = subscribers
+      .filter((row) => !row.healthy)
+      .map((row) => row.subscriberId);
+    const dlqDepth = this.dlq.size();
     return {
-      healthy: this.dlq.size() < 10 && openBreakers.length === 0,
-      dlqDepth: this.dlq.size(),
+      healthy: staleSubscribers.length === 0 && dlqDepth < 10 && openBreakers.length === 0,
+      dlqDepth,
       openBreakers,
+      heartbeatSeq: this.heartbeatSeq,
+      subscribers,
+      staleSubscribers,
+    };
+  }
+
+  healthCheck(): { healthy: boolean; dlqDepth: number; openBreakers: string[] } {
+    const snapshot = this.getHealthSnapshot();
+    return {
+      healthy: snapshot.healthy,
+      dlqDepth: snapshot.dlqDepth,
+      openBreakers: snapshot.openBreakers,
     };
   }
 
@@ -392,12 +489,181 @@ export class AgentBus {
       console.log(
         `[AgentBus] ${event.type} | src:${event.sourceAgentId} | corr:${event.correlationId.slice(0, 8)} | seq:${event.sequence}`,
       );
-    });
+    }, "dev-observer");
   }
 
   disableDevObserver(): void {
     this.devObserverCleanup?.();
     this.devObserverCleanup = undefined;
+  }
+
+  pulseHeartbeat(): void {
+    const previousSeq = this.heartbeatSeq;
+    this.heartbeatSeq += 1;
+
+    for (const [, health] of this.subscriberHealth) {
+      if (previousSeq > 0 && health.lastAckSeq < previousSeq) {
+        health.consecutiveMisses += 1;
+      } else if (health.lastAckSeq >= previousSeq) {
+        health.consecutiveMisses = 0;
+      }
+    }
+
+    this.publish(
+      "bus.heartbeat",
+      { seq: this.heartbeatSeq, timestamp: new Date().toISOString() },
+      {
+        runId: "bus",
+        sessionId: "bus",
+        correlationId: `heartbeat-${this.heartbeatSeq}`,
+        sourceAgentId: "agent-bus",
+      },
+    );
+  }
+
+  private recordHeartbeatAck(subscriberId: string): void {
+    const health = this.subscriberHealth.get(subscriberId);
+    if (!health) return;
+    health.lastAckSeq = this.heartbeatSeq;
+    health.consecutiveMisses = 0;
+  }
+
+  private retainSubscriber(subscriberId: string): void {
+    const count = (this.subscriberRefCounts.get(subscriberId) ?? 0) + 1;
+    this.subscriberRefCounts.set(subscriberId, count);
+    if (count === 1) {
+      this.subscriberHealth.set(subscriberId, { lastAckSeq: 0, consecutiveMisses: 0 });
+    }
+  }
+
+  private releaseSubscriber(subscriberId: string): void {
+    const count = (this.subscriberRefCounts.get(subscriberId) ?? 1) - 1;
+    if (count <= 0) {
+      this.subscriberRefCounts.delete(subscriberId);
+      this.subscriberHealth.delete(subscriberId);
+      return;
+    }
+    this.subscriberRefCounts.set(subscriberId, count);
+  }
+
+  private logSubscriberStreamError(
+    subscriberId: string,
+    eventType: BusEventType | "*",
+    correlationId: string | undefined,
+    err: unknown,
+  ): void {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[AgentBus] stream error | subscriber:${subscriberId} | type:${eventType} | corr:${correlationId ?? "n/a"} | ${message}`,
+    );
+  }
+
+  private logSubscriberHandlerError(
+    subscriberId: string,
+    event: BusEvent,
+    err: unknown,
+  ): void {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[AgentBus] handler error | subscriber:${subscriberId} | type:${event.type} | corr:${event.correlationId} | ${message}`,
+    );
+  }
+
+  private scheduleResubscribe(connect: () => void, destroyed: () => boolean): void {
+    if (destroyed()) return;
+    queueMicrotask(connect);
+  }
+
+  private createResilientSubscription<T>(
+    type: BusEventType,
+    subscriberId: string,
+    handler: (event: BusEvent<T>) => Promise<void> | void,
+    options: ResilientSubscriptionOptions = {},
+  ): () => void {
+    let destroyed = false;
+    let subscription: Subscription | undefined;
+    const breaker = options.skipBreaker ? null : this.getOrCreateBreaker(subscriberId);
+
+    const connect = (): void => {
+      if (destroyed) return;
+      subscription?.unsubscribe();
+
+      subscription = this.events$.pipe(
+        filter((event) => event.type === type),
+        catchError((err) => {
+          this.logSubscriberStreamError(subscriberId, type, undefined, err);
+          this.scheduleResubscribe(connect, () => destroyed);
+          return EMPTY;
+        }),
+      ).subscribe({
+        next: (event) => {
+          void (async () => {
+            try {
+              const runHandler = () => Promise.resolve(handler(event as BusEvent<T>));
+              if (breaker) {
+                await breaker.execute(runHandler);
+              } else {
+                await runHandler();
+              }
+            } catch (err) {
+              if (isCircuitBreakerRejection(err)) return;
+              this.logSubscriberHandlerError(subscriberId, event, err);
+              this.dlq.push(event, err instanceof Error ? err.message : String(err));
+            }
+          })();
+        },
+        error: (err) => {
+          this.logSubscriberStreamError(subscriberId, type, undefined, err);
+          this.scheduleResubscribe(connect, () => destroyed);
+        },
+      });
+    };
+
+    connect();
+    return () => {
+      destroyed = true;
+      subscription?.unsubscribe();
+    };
+  }
+
+  private createResilientObserve(
+    observer: (event: BusEvent) => void,
+    subscriberId: string,
+  ): () => void {
+    let destroyed = false;
+    let subscription: Subscription | undefined;
+
+    const connect = (): void => {
+      if (destroyed) return;
+      subscription?.unsubscribe();
+
+      subscription = this.events$.pipe(
+        catchError((err) => {
+          this.logSubscriberStreamError(subscriberId, "*", undefined, err);
+          this.scheduleResubscribe(connect, () => destroyed);
+          return EMPTY;
+        }),
+      ).subscribe({
+        next: (event) => {
+          try {
+            observer(event);
+          } catch (err) {
+            this.logSubscriberHandlerError(subscriberId, event, err);
+            this.dlq.push(event, err instanceof Error ? err.message : String(err));
+          }
+        },
+        error: (err) => {
+          this.logSubscriberStreamError(subscriberId, "*", undefined, err);
+          this.scheduleResubscribe(connect, () => destroyed);
+        },
+      });
+    };
+
+    connect();
+    return () => {
+      destroyed = true;
+      subscription?.unsubscribe();
+    };
   }
 
   private getOrCreateBreaker(subscriberId: string): CircuitBreaker {

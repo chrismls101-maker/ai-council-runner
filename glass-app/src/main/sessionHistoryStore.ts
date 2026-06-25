@@ -68,21 +68,26 @@ export function addMessage(opts: AddMessageOpts): void {
   if (!db) return;
   const now = Date.now();
   const tokenCount = opts.tokenCount ?? 0;
-  db.prepare(
+  const insert = db.prepare(
     `INSERT INTO messages (id, session_id, role, content, created_at, agent_id, token_count)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    opts.id,
-    opts.sessionId,
-    opts.role,
-    opts.content,
-    now,
-    opts.agentId ?? null,
-    tokenCount,
   );
-  db.prepare(
+  const touch = db.prepare(
     `UPDATE sessions SET updated_at = ?, token_count = token_count + ? WHERE id = ?`,
-  ).run(now, tokenCount, opts.sessionId);
+  );
+  const write = db.transaction(() => {
+    insert.run(
+      opts.id,
+      opts.sessionId,
+      opts.role,
+      opts.content,
+      now,
+      opts.agentId ?? null,
+      tokenCount,
+    );
+    touch.run(now, tokenCount, opts.sessionId);
+  });
+  write();
 }
 
 export function archiveSession(sessionId: string): void {
@@ -114,7 +119,14 @@ export function getRecentSessions(limit = 20): SessionRowWithMeta[] {
           WHERE m2.session_id = s.id
           ORDER BY m2.created_at ASC
           LIMIT 1
-        ) AS first_message_preview
+        ) AS first_message_preview,
+        (
+          SELECT COALESCE(SUM(mc.estimated_usd), 0)
+          FROM model_calls mc WHERE mc.session_id = s.id
+        ) AS spend_usd,
+        (
+          SELECT COUNT(*) FROM model_calls mc WHERE mc.session_id = s.id
+        ) AS model_call_count
       FROM sessions s
       ORDER BY s.updated_at DESC
       LIMIT ?`,

@@ -357,6 +357,20 @@ const glassApi = {
   getRetentionSummary(): Promise<RetentionSummary> {
     return ipcRenderer.invoke(IPC.getRetentionSummary) as Promise<RetentionSummary>;
   },
+  getAgentBusHealth(): Promise<import("../shared/ipc.ts").AgentBusHealthSnapshot> {
+    return ipcRenderer.invoke(IPC.getAgentBusHealth) as Promise<
+      import("../shared/ipc.ts").AgentBusHealthSnapshot
+    >;
+  },
+  getSessionSpend(sessionId: string): Promise<{
+    summary: import("../shared/glassSessionHistory.ts").SessionSpendSummary | null;
+    calls: import("../shared/glassSessionHistory.ts").ModelCallRow[];
+  }> {
+    return ipcRenderer.invoke(IPC.getSessionSpend, sessionId) as Promise<{
+      summary: import("../shared/glassSessionHistory.ts").SessionSpendSummary | null;
+      calls: import("../shared/glassSessionHistory.ts").ModelCallRow[];
+    }>;
+  },
   activationSetPresentation(
     mode: import("../shared/ipc.ts").ActivationPresentation,
   ): Promise<{ ok: boolean; presentation?: import("../shared/ipc.ts").ActivationPresentation }> {

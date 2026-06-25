@@ -202,12 +202,19 @@ function upsertSessionMemoryRow(opts: {
   });
 }
 
-async function summarizeTranscript(transcript: string): Promise<{ summary: string; provider: string }> {
+async function summarizeTranscript(
+  transcript: string,
+  sessionId?: string,
+): Promise<{ summary: string; provider: string }> {
   if (!hasAnthropicKeyForMemory()) {
     return { summary: buildLocalSessionSummary(transcript), provider: "local" };
   }
   try {
-    const summary = await askAnthropicHaiku(SESSION_SUMMARY_SYSTEM, transcript.slice(0, 8000));
+    const summary = await askAnthropicHaiku(
+      SESSION_SUMMARY_SYSTEM,
+      transcript.slice(0, 8000),
+      { sessionId },
+    );
     if (summary.trim()) {
       return { summary: summary.trim(), provider: "haiku" };
     }
@@ -243,7 +250,7 @@ async function applySessionExtraction(opts: {
 
   await ensureEmbedderReady(90_000);
 
-  const { summary, provider } = await summarizeTranscript(transcript);
+  const { summary, provider } = await summarizeTranscript(transcript, sessionId);
   if (!summary.trim()) return;
 
   if (!(existing?.provider === "haiku" && provider === "local")) {
@@ -252,7 +259,7 @@ async function applySessionExtraction(opts: {
   }
 
   if (hasAnthropicKeyForMemory()) {
-    const facts = await extractUserFacts(transcript);
+    const facts = await extractUserFacts(transcript, sessionId);
     for (const fact of facts) {
       if (fact.confidence >= 0.8) {
         upsertUserContext(fact);
@@ -545,12 +552,16 @@ export async function hydrateContext(
   }
 }
 
-export async function extractUserFacts(transcript: string): Promise<ExtractedFact[]> {
+export async function extractUserFacts(
+  transcript: string,
+  sessionId?: string,
+): Promise<ExtractedFact[]> {
   if (!transcript.trim()) return [];
   try {
     const raw = await askAnthropicHaiku(
       EXTRACTION_PROMPT,
       transcript.slice(0, 12_000),
+      { sessionId },
     );
     const jsonText = raw.trim().replace(/^```json\s*/i, "").replace(/```\s*$/i, "").trim();
     const parsed = JSON.parse(jsonText) as unknown;

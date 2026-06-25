@@ -71,6 +71,8 @@ export interface GlassAskRequest {
   suppressUserProfile?: boolean;
   /** Local memory hydration (user profile + episodic memories). */
   memoryContext?: import("./glassMemory.ts").HydratedContext;
+  /** SQLite model_calls.source override (default: ask / ask_stream). */
+  modelCallSource?: "ask" | "ask_stream" | "terminal_fix" | "other";
 }
 
 export interface GlassAskResponse {

@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   DEFAULT_CODER_AGENT_MODEL,
+  estimateApiModelCostUsd,
   estimateCoderRunCostUsd,
   formatCoderRunUsageLine,
   parseCoderAgentModelId,
@@ -41,6 +42,11 @@ test("estimateCoderRunCostUsd scales with tokens", () => {
   const sonnet = estimateCoderRunCostUsd("sonnet", 10_000, 2_000);
   const opus = estimateCoderRunCostUsd("opus", 10_000, 2_000);
   assert.ok(opus > sonnet);
+});
+
+test("estimateApiModelCostUsd resolves sonnet API slug", () => {
+  const usd = estimateApiModelCostUsd("claude-sonnet-4-6", 1_000_000, 0);
+  assert.ok(usd > 2.9 && usd < 3.1);
 });
 
 test("formatCoderRunUsageLine includes model and cost", () => {

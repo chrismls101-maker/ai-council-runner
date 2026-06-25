@@ -277,9 +277,47 @@ export function getByIdsInOrder(ids: number[]): ScrollbackResult[] {
   return ids.map((id) => byId.get(id)).filter((row): row is ScrollbackResult => row != null);
 }
 
+/** Most recent failed command from encrypted scrollback (survives app restart). */
+export function getLastScrollbackError(): ScrollbackResult | null {
+  try {
+    const db = getDb();
+    if (!db) return null;
+    const row = db
+      .prepare(
+        `SELECT id, command_enc, output_enc, exit_code, status, cwd, started_at, duration_ms, session_id
+         FROM commands WHERE status = 'error'
+         ORDER BY started_at DESC LIMIT 1`,
+      )
+      .get() as
+      | {
+          id: number;
+          command_enc: Buffer;
+          output_enc: Buffer;
+          exit_code: number | null;
+          status: string;
+          cwd: string | null;
+          started_at: number;
+          duration_ms: number | null;
+          session_id: string;
+        }
+      | undefined;
+    return row ? rowToScrollbackResult(row) : null;
+  } catch (e) {
+    console.error("[scrollback] getLastScrollbackError error:", e);
+    return null;
+  }
+}
+
 export function closeDb(): void {
   try {
-    _db?.close();
+    if (_db) {
+      try {
+        _db.pragma("wal_checkpoint(TRUNCATE)");
+      } catch {
+        /* best-effort */
+      }
+      _db.close();
+    }
   } catch {
     /* best-effort on quit */
   }

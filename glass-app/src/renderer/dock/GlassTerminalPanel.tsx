@@ -1351,9 +1351,11 @@ function fmtDuration(startedAt: number, finishedAt?: number): string {
 function CommandBlock({
   block,
   termId,
+  autoFixOnError = true,
 }: {
   block: TerminalBlock;
   termId?: string;
+  autoFixOnError?: boolean;
 }): JSX.Element {
   const [copied, setCopied] = useState<"cmd" | "out" | null>(null);
   const [collapsed, setCollapsed] = useState(false);
@@ -1376,7 +1378,7 @@ function CommandBlock({
     copyTimerRef.current = setTimeout(() => setCopied(null), 1500);
   };
 
-  const handleFix = (): void => {
+  const handleFix = useCallback((): void => {
     if (fixPhase !== "idle") {
       // Toggle dismiss if card already open
       setFixPhase("idle");
@@ -1399,7 +1401,23 @@ function CommandBlock({
         setFixResult({ error: err instanceof Error ? err.message : "Fix failed" });
         setFixPhase("error");
       });
-  };
+  }, [block.command, block.exitCode, block.output, fixPhase]);
+
+  const autoFixTriggeredRef = useRef(false);
+
+  useEffect(() => {
+    autoFixTriggeredRef.current = false;
+  }, [block.id]);
+
+  useEffect(() => {
+    if (!autoFixOnError || block.status !== "error" || autoFixTriggeredRef.current) return;
+    const timer = window.setTimeout(() => {
+      if (autoFixTriggeredRef.current) return;
+      autoFixTriggeredRef.current = true;
+      handleFix();
+    }, 1_200);
+    return () => window.clearTimeout(timer);
+  }, [autoFixOnError, block.status, block.id, handleFix]);
 
   const handleFixDismiss = (): void => {
     setFixPhase("idle");

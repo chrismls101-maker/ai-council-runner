@@ -18,7 +18,7 @@ function sanitizeUnknownArg(arg: unknown): unknown {
   }
   try {
     const json = JSON.stringify(arg);
-    if (json && (json.includes("sk-ant-") || json.includes("sk-") || /Bearer\s+\S+/i.test(json))) {
+    if (json) {
       return JSON.parse(sanitizeLogTextWithEnvSecrets(json)) as unknown;
     }
   } catch {
@@ -35,9 +35,10 @@ function patchStreamWrite(stream: NodeJS.WriteStream, sanitizer: (chunk: string)
     }
     if (Buffer.isBuffer(chunk)) {
       const text = chunk.toString("utf8");
-      if (text.includes("sk-") || /Bearer\s+\S+/i.test(text)) {
+      const sanitized = sanitizer(text);
+      if (sanitized !== text) {
         return originalWrite(
-          Buffer.from(sanitizer(text), "utf8"),
+          Buffer.from(sanitized, "utf8"),
           encoding as BufferEncoding,
           callback as (() => void) | undefined,
         );

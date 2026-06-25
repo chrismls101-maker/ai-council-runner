@@ -28,7 +28,7 @@ import {
   type AgentRunResult,
 } from "./agentRunLifecycle.ts";
 import { AGENT_SYSTEM_PROMPTS, AGENT_TOOLS } from "./agents/definitions.ts";
-import { hydrateContext } from "./glassMemoryEngine.ts";
+import { enrichGlassAskRequestWithMemory } from "./glassMemoryHelpers.ts";
 import { resolveAgentSessionId } from "./glassMemoryPure.ts";
 import { buildSystemPrompt } from "./glassSystemPrompt.ts";
 import { applyCodeToFile, readFileForDiff, runShellCommand } from "./glassActions.ts";
@@ -55,6 +55,7 @@ import {
   resolveCoderAgentModelId,
   resolveCoderAgentProvider,
 } from "../shared/coderAgentModels.ts";
+import { recordModelCall } from "./modelCallStore.ts";
 import {
   CODER_PLAN_MODE_SYSTEM_APPENDIX,
   CODER_PLAN_MODE_TOOL_NAMES,
@@ -957,17 +958,29 @@ function memoryAgentType(agentId: GlassAgentId): string {
   return agentId;
 }
 
+function appendPassiveUserContext(userMessage: string, passiveContext?: string): string {
+  const ctx = passiveContext?.trim();
+  if (!ctx) return userMessage;
+  return `${userMessage}\n\n--- Passive context ---\n${ctx}`;
+}
+
 async function systemPromptWithMemory(
   basePrompt: string,
   userPrompt: string,
   agentId: GlassAgentId,
-): Promise<string> {
+): Promise<{ systemPrompt: string; passiveUserContext?: string }> {
   try {
-    const ctx = await hydrateContext(userPrompt, memoryAgentType(agentId));
-    return buildSystemPrompt(basePrompt, ctx);
+    const enriched = await enrichGlassAskRequestWithMemory(
+      { prompt: userPrompt, responseStyle: "full" },
+      memoryAgentType(agentId),
+    );
+    const systemPrompt = enriched.memoryContext
+      ? buildSystemPrompt(basePrompt, enriched.memoryContext)
+      : basePrompt;
+    return { systemPrompt, passiveUserContext: enriched.userContext };
   } catch (err) {
-    console.error(`[memory] ${agentId} hydrate failed:`, err);
-    return basePrompt;
+    console.error(`[memory] ${agentId} enrich failed:`, err);
+    return { systemPrompt: basePrompt };
   }
 }
 
@@ -1214,11 +1227,18 @@ async function runResearchWithPerplexity(options: AgentRunOptions): Promise<Agen
   });
 
   let researchSystem = PERPLEXITY_RESEARCH_SYSTEM;
+  let researchUserPrompt = prompt;
   try {
-    const ctx = await hydrateContext(prompt, "research");
-    researchSystem = buildSystemPrompt(PERPLEXITY_RESEARCH_SYSTEM, ctx);
+    const enriched = await enrichGlassAskRequestWithMemory(
+      { prompt, responseStyle: "full" },
+      "research",
+    );
+    if (enriched.memoryContext) {
+      researchSystem = buildSystemPrompt(PERPLEXITY_RESEARCH_SYSTEM, enriched.memoryContext);
+    }
+    researchUserPrompt = appendPassiveUserContext(prompt, enriched.userContext);
   } catch (err) {
-    console.error("[memory] research hydrate failed:", err);
+    console.error("[memory] research enrich failed:", err);
   }
 
   let response: Response;
@@ -1399,7 +1419,7 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentRunResult
     });
   };
 
-  const trackedOptions: AgentRunOptions = { ...options, onEvent: trackedOnEvent };
+  const trackedOptions: AgentRunOptions = { ...options, sessionId, onEvent: trackedOnEvent };
 
   let result: AgentRunResult;
   try {
@@ -1460,7 +1480,10 @@ async function runOpenAICoderLoop(options: AgentRunOptions): Promise<AgentRunRes
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
 
-  const emitUsage = (): void => {
+  const emitUsage = (roundIn: number, roundOut: number): void => {
+    if (roundIn <= 0 && roundOut <= 0) return;
+    totalInputTokens += roundIn;
+    totalOutputTokens += roundOut;
     emit(onEvent, runId, agentId, "usage", {
       usageInputTokens: totalInputTokens,
       usageOutputTokens: totalOutputTokens,
@@ -1472,6 +1495,18 @@ async function runOpenAICoderLoop(options: AgentRunOptions): Promise<AgentRunRes
         totalOutputTokens,
         prompt,
       ),
+    });
+    recordModelCall({
+      sessionId: options.sessionId,
+      source: "coder",
+      provider: "openai",
+      model: openaiModel,
+      agentId,
+      runId,
+      correlationId: options.correlationId,
+      inputTokens: roundIn,
+      outputTokens: roundOut,
+      estimatedUsd: estimateCoderRunCostUsd(coderModelId, roundIn, roundOut, prompt),
     });
   };
 
@@ -1489,15 +1524,22 @@ async function runOpenAICoderLoop(options: AgentRunOptions): Promise<AgentRunRes
   emitNarrate(onEvent, runId, agentId, narrateAgentStarting(agentId));
 
   const { systemPrompt: baseSystemPrompt, toolDefs } = resolveAgentSystemAndTools(agentId, composerMode);
-  const systemPrompt = await systemPromptWithMemory(baseSystemPrompt, prompt, agentId);
+  const { systemPrompt, passiveUserContext } = await systemPromptWithMemory(
+    baseSystemPrompt,
+    prompt,
+    agentId,
+  );
   const openaiTools = anthropicToolsToOpenAI(toolDefs);
   const messages: OpenAIChatMessage[] = [{
     role: "user",
-    content: buildInitialUserMessage(
-      agentId,
-      prompt,
-      options.codeWorkspaceRoot,
-      options.coderBootstrapContext,
+    content: appendPassiveUserContext(
+      buildInitialUserMessage(
+        agentId,
+        prompt,
+        options.codeWorkspaceRoot,
+        options.coderBootstrapContext,
+      ),
+      passiveUserContext,
     ),
   }];
 
@@ -1599,9 +1641,7 @@ async function runOpenAICoderLoop(options: AgentRunOptions): Promise<AgentRunRes
     }
 
     if (roundInputTokens > 0 || roundOutputTokens > 0) {
-      totalInputTokens += roundInputTokens;
-      totalOutputTokens += roundOutputTokens;
-      emitUsage();
+      emitUsage(roundInputTokens, roundOutputTokens);
     }
 
     const toolCalls = [...toolCallsByIndex.values()].filter((call) => call.id && call.function.name);
@@ -1735,7 +1775,10 @@ async function runAgentLoop(options: AgentRunOptions): Promise<AgentRunResult> {
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
 
-  const emitUsage = (): void => {
+  const emitUsage = (roundIn: number, roundOut: number): void => {
+    if (roundIn <= 0 && roundOut <= 0) return;
+    totalInputTokens += roundIn;
+    totalOutputTokens += roundOut;
     emit(onEvent, runId, agentId, "usage", {
       usageInputTokens: totalInputTokens,
       usageOutputTokens: totalOutputTokens,
@@ -1747,6 +1790,18 @@ async function runAgentLoop(options: AgentRunOptions): Promise<AgentRunResult> {
         totalOutputTokens,
         prompt,
       ),
+    });
+    recordModelCall({
+      sessionId: options.sessionId,
+      source: "coder",
+      provider: "anthropic",
+      model: anthropicModel,
+      agentId,
+      runId,
+      correlationId: options.correlationId,
+      inputTokens: roundIn,
+      outputTokens: roundOut,
+      estimatedUsd: estimateCoderRunCostUsd(coderModelId, roundIn, roundOut, prompt),
     });
   };
 
@@ -1764,14 +1819,21 @@ async function runAgentLoop(options: AgentRunOptions): Promise<AgentRunResult> {
   emitNarrate(onEvent, runId, agentId, narrateAgentStarting(agentId));
 
   const { systemPrompt: baseSystemPrompt, toolDefs } = resolveAgentSystemAndTools(agentId, composerMode);
-  const systemPrompt = await systemPromptWithMemory(baseSystemPrompt, prompt, agentId);
+  const { systemPrompt, passiveUserContext } = await systemPromptWithMemory(
+    baseSystemPrompt,
+    prompt,
+    agentId,
+  );
   const messages: AnthropicMessage[] = [{
     role: "user",
-    content: buildInitialUserMessage(
-      agentId,
-      prompt,
-      options.codeWorkspaceRoot,
-      options.coderBootstrapContext,
+    content: appendPassiveUserContext(
+      buildInitialUserMessage(
+        agentId,
+        prompt,
+        options.codeWorkspaceRoot,
+        options.coderBootstrapContext,
+      ),
+      passiveUserContext,
     ),
   }];
   let runOutputPath: string | undefined;
@@ -1897,9 +1959,7 @@ async function runAgentLoop(options: AgentRunOptions): Promise<AgentRunResult> {
     flushCurrentBlock();
 
     if (roundInputTokens > 0 || roundOutputTokens > 0) {
-      totalInputTokens += roundInputTokens;
-      totalOutputTokens += roundOutputTokens;
-      emitUsage();
+      emitUsage(roundInputTokens, roundOutputTokens);
     }
 
     if (stopReason === "end_turn") {

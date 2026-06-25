@@ -52,7 +52,7 @@ function forwardAgentEventToDashboard(event: BusEvent): void {
 
 export function initGlassDashboard(): void {
   if (!busObserverCleanup) {
-    busObserverCleanup = agentBus.observe(forwardAgentEventToDashboard);
+    busObserverCleanup = agentBus.observe(forwardAgentEventToDashboard, "dashboard-relay");
   }
 }
 

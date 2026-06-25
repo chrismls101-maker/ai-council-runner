@@ -12,7 +12,7 @@ import type {
   LiveTranslateWorkflowMode,
 } from "../shared/liveTranslateTypes.ts";
 import { isIivoServerUnreachableError } from "../shared/iivoServerDegraded.ts";
-import { markIivoServerDegraded } from "./iivoServerDegradedMain.ts";
+import { markIivoServerDegraded, clearIivoServerDegradedSource } from "./iivoServerDegradedMain.ts";
 
 export interface TranslateViaServerRequest {
   text: string;
@@ -86,6 +86,8 @@ export async function translateViaServer(
   if (!translated) {
     throw new Error("Empty translation from server.");
   }
+
+  clearIivoServerDegradedSource("translate");
 
   return {
     translated,

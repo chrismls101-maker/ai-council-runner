@@ -4,7 +4,7 @@
 
 import { iivoApiAuthHeaders } from "./iivoApiAuth.ts";
 import { isIivoServerUnreachableError } from "./iivoServerDegraded.ts";
-import { reportIivoServerDegraded } from "./iivoServerDegradedHooks.ts";
+import { reportIivoServerDegraded, reportIivoServerRecovered } from "./iivoServerDegradedHooks.ts";
 
 export interface GlassMemorySaveInput {
   apiUrl: string;
@@ -94,4 +94,6 @@ export async function saveResponseToMemoryVault(input: GlassMemorySaveInput): Pr
     }
     throw new Error(message);
   }
+
+  reportIivoServerRecovered("memory");
 }

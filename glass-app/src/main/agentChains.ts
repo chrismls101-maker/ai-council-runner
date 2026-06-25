@@ -568,10 +568,12 @@ export function initAgentChains(config: ChainConfig): void {
   );
 
   console.log(`[AgentChains] ${cleanups.length} chain subscriptions active`);
+  agentBus.startHeartbeat();
 }
 
 export function teardownAgentChains(): void {
   if (!chainsInitialized) return;
+  agentBus.stopHeartbeat();
   cleanups.forEach((fn) => fn());
   cleanups.length = 0;
   chainsInitialized = false;

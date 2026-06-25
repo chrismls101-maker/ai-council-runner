@@ -90,3 +90,12 @@ test("store and chain correlation events", () => {
   const chain = bus.store.getChain(corr);
   assert.equal(chain.length, 2);
 });
+
+test("getHealthSnapshot reports subscriber heartbeat rows", async () => {
+  const bus = new AgentBus();
+  bus.subscribe("agent.coder.started", "health-row", () => {});
+  bus.pulseHeartbeat();
+  await new Promise((r) => setTimeout(r, 15));
+  const snap = bus.getHealthSnapshot();
+  assert.ok(snap.subscribers.some((row) => row.subscriberId === "health-row"));
+});

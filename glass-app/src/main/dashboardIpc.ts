@@ -5,13 +5,10 @@
 import { ipcMain, type WebContents } from "electron";
 import { IPC } from "../shared/ipc.ts";
 import { getAgentRunsByCorrelation, getLastCouncilRun } from "./agentRunStore.ts";
-import {
-  getRecentSessions,
-  getSessionMessages,
-  getUserContext,
-  deleteUserContextKey,
-} from "./sessionHistoryStore.ts";
+import { getRecentSessions, getSessionMessages, getUserContext, deleteUserContextKey } from "./sessionHistoryStore.ts";
+import { getSessionSpendSummary, getSessionModelCalls } from "./modelCallStore.ts";
 import { getRetentionSummary } from "./glassRetentionEvents.ts";
+import { agentBus } from "./agentEventBus.ts";
 
 let isDashboardIpcSender: (sender: WebContents) => boolean = () => false;
 
@@ -104,6 +101,51 @@ export function registerDashboardIpc(): void {
         autofixAcceptanceRate: 0,
         buildLoopSuccessRate: 0,
       };
+    }
+  });
+
+  ipcMain.handle(IPC.getAgentBusHealth, (event) => {
+    if (!isDashboardIpcSender(event.sender)) {
+      return {
+        healthy: true,
+        dlqDepth: 0,
+        openBreakers: [],
+        heartbeatSeq: 0,
+        subscribers: [],
+        staleSubscribers: [],
+      };
+    }
+    try {
+      return agentBus.getHealthSnapshot();
+    } catch (err) {
+      console.error("[dashboardIpc] getAgentBusHealth:", err);
+      return {
+        healthy: false,
+        dlqDepth: 0,
+        openBreakers: [],
+        heartbeatSeq: 0,
+        subscribers: [],
+        staleSubscribers: [],
+      };
+    }
+  });
+
+  ipcMain.handle(IPC.getSessionSpend, (event, sessionId: unknown) => {
+    if (!isDashboardIpcSender(event.sender)) {
+      return { summary: null, calls: [] };
+    }
+    if (typeof sessionId !== "string" || !sessionId.trim()) {
+      return { summary: null, calls: [] };
+    }
+    try {
+      const id = sessionId.trim();
+      return {
+        summary: getSessionSpendSummary(id),
+        calls: getSessionModelCalls(id, 100),
+      };
+    } catch (err) {
+      console.error("[dashboardIpc] getSessionSpend:", err);
+      return { summary: null, calls: [] };
     }
   });
 }

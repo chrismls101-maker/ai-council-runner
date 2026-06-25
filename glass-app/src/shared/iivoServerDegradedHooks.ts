@@ -17,3 +17,15 @@ export function reportIivoServerDegraded(
 ): void {
   reporter?.(source, reason);
 }
+
+let recoverReporter: ((source: IivoServerDegradedSource) => void) | null = null;
+
+export function registerIivoServerRecoveredReporter(
+  fn: (source: IivoServerDegradedSource) => void,
+): void {
+  recoverReporter = fn;
+}
+
+export function reportIivoServerRecovered(source: IivoServerDegradedSource): void {
+  recoverReporter?.(source);
+}
