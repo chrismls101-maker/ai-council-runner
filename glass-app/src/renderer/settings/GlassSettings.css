@@ -1,322 +1,595 @@
-.glass-settings {
-  --gs-bg: rgba(12, 12, 16, 0.98);
-  --gs-border: rgba(255, 255, 255, 0.1);
-  --gs-text: rgba(255, 255, 255, 0.92);
-  --gs-muted: rgba(255, 255, 255, 0.45);
+/* Settings-specific — shell uses shared panel chrome from glassPanelChrome.css */
 
-  box-sizing: border-box;
-  width: 100%;
-  height: 100%;
+html.glass-panel-window body.glass-body--panel #root {
+  padding: 0 4px 2px;
+}
+
+.glass-settings.panel {
+  --glass-panel-frost-solid: rgba(6, 7, 11, 0.98);
+  border-radius: 0 0 10px 10px;
   display: flex;
   flex-direction: column;
-  background: var(--gs-bg);
-  color: var(--gs-text);
-  font-family: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  border: 1px solid var(--gs-border);
-  overflow: hidden;
+  min-height: 0;
+  background: linear-gradient(180deg, rgba(8, 9, 14, 0.99) 0%, rgba(4, 5, 9, 0.99) 100%);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 24px 56px rgba(0, 0, 0, 0.52);
 }
 
-.glass-settings__titlebar {
-  flex-shrink: 0;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--gs-border);
-  -webkit-app-region: drag;
-}
-
-.glass-settings__title {
-  font-size: 14px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.82);
-}
-
-.glass-settings__close {
-  -webkit-app-region: no-drag;
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 20px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.glass-settings__close:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.9);
-}
-
-.glass-settings__body {
+.glass-settings .panel__shell {
   flex: 1;
   min-height: 0;
-  display: flex;
 }
 
-.glass-settings__nav {
-  width: 160px;
-  flex-shrink: 0;
+.glass-settings__stage {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 12px 8px;
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  min-height: 0;
 }
 
-.glass-settings__nav-item {
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.55);
-  font-size: 13px;
-  font-weight: 500;
-  text-align: left;
-  padding: 8px 10px;
+.glass-settings__page-head {
+  flex-shrink: 0;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.04) 0%,
+    transparent 100%
+  );
+}
+
+.glass-settings__page-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: rgba(255, 255, 255, 0.96);
+  line-height: 1.2;
+}
+
+.glass-settings__page-body {
+  padding-top: 16px !important;
+}
+
+/* ── Choice cards (Context, utility rows) ─────────────────────────────────── */
+
+.glass-settings__choice-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (max-width: 720px) {
+  .glass-settings__choice-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.glass-settings__choice-grid--2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 720px) {
+  .glass-settings__choice-grid--2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.glass-settings__choice-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-height: 118px;
+  padding: 16px 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.06) 0%,
+    rgba(255, 255, 255, 0.02) 48%,
+    rgba(0, 0, 0, 0.12) 100%
+  );
+  color: rgba(220, 230, 245, 0.88);
   cursor: pointer;
+  text-align: center;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.12s ease;
 }
 
-.glass-settings__nav-item:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: rgba(255, 255, 255, 0.82);
+.glass-settings__choice-card:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.09) 0%,
+    rgba(255, 255, 255, 0.03) 100%
+  );
 }
 
-.glass-settings__nav-item--active {
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.95);
+.glass-settings__choice-card--selected {
+  border-color: rgba(125, 211, 252, 0.45);
+  background: linear-gradient(
+    165deg,
+    rgba(56, 189, 248, 0.14) 0%,
+    rgba(255, 255, 255, 0.04) 100%
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 8px 24px rgba(0, 0, 0, 0.22);
+  color: rgba(255, 255, 255, 0.96);
 }
 
-.glass-settings__content {
-  flex: 1;
-  min-width: 0;
-  overflow-y: auto;
-  padding: 20px 22px;
+.glass-settings__choice-card--disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
-.glass-settings__section-title {
-  margin: 0 0 8px;
-  font-size: 16px;
-  font-weight: 600;
+.glass-settings__choice-status {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.glass-settings__choice-status--ok {
+  background: #3dd68c;
+  box-shadow: 0 0 8px rgba(61, 214, 140, 0.65);
+}
+
+.glass-settings__choice-status--warn {
+  background: #fbbf24;
+  box-shadow: 0 0 8px rgba(251, 191, 36, 0.55);
+}
+
+.glass-settings__choice-status--error {
+  background: #f87171;
+}
+
+.glass-settings__choice-status--idle {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.glass-settings__choice-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.22);
+  color: rgba(186, 230, 253, 0.92);
+}
+
+.glass-settings__choice-card--selected .glass-settings__choice-icon {
+  background: rgba(56, 189, 248, 0.18);
+  color: rgba(224, 242, 254, 1);
+}
+
+.glass-settings__choice-label {
+  font-size: 13px;
+  font-weight: 700;
   letter-spacing: -0.01em;
 }
 
-.glass-settings__hint {
-  margin: 0 0 16px;
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--gs-muted);
+.glass-settings__choice-desc {
+  font-size: 11px;
+  line-height: 1.35;
+  color: rgba(190, 200, 218, 0.78);
 }
 
-.glass-settings__privacy {
-  margin: 12px 0 0;
-  font-size: 12px;
-  line-height: 1.45;
-  color: rgba(255, 255, 255, 0.38);
+.glass-settings__choice-card--selected .glass-settings__choice-desc {
+  color: rgba(224, 242, 254, 0.72);
 }
 
-.glass-settings__row {
+/* ── Context tab blocks ───────────────────────────────────────────────────── */
+
+.glass-settings__context {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.glass-settings__block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.glass-settings__block--compact {
+  gap: 8px;
+}
+
+.glass-settings__block-label {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(190, 200, 218, 0.65);
+}
+
+.glass-settings__block-sub {
+  margin: -4px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(190, 200, 218, 0.78);
+}
+
+.glass-settings__block-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(190, 200, 218, 0.72);
+}
+
+.glass-settings__inline-btn {
+  align-self: flex-start;
+  margin-top: 4px;
+}
+
+.glass-settings__toggle-card {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  min-height: 56px;
-  padding: 12px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
 }
 
-.glass-settings__row-main {
-  flex: 1;
-  min-width: 0;
+.glass-settings__toggle-card input {
+  margin-top: 3px;
+  width: 16px;
+  height: 16px;
+  accent-color: rgba(125, 211, 252, 0.85);
+}
+
+.glass-settings__toggle-card strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(236, 244, 255, 0.94);
+}
+
+.glass-settings__toggle-card small {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: rgba(190, 200, 218, 0.72);
+}
+
+.glass-settings__pill-row {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
-.glass-settings__row-head {
+.glass-settings__pill {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.2);
+  color: rgba(220, 230, 245, 0.82);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.glass-settings__pill:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.glass-settings__pill--active {
+  border-color: rgba(125, 211, 252, 0.45);
+  background: rgba(56, 189, 248, 0.12);
+  color: rgba(224, 242, 254, 0.98);
+}
+
+/* ── Audio pipeline cards ─────────────────────────────────────────────────── */
+
+.glass-settings__audio {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.glass-settings__audio-lede {
+  margin: 0 0 4px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(190, 200, 218, 0.88);
+}
+
+.glass-settings__audio-card {
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.05) 0%,
+    rgba(0, 0, 0, 0.14) 100%
+  );
+  padding: 14px 16px 16px;
+}
+
+.glass-settings__audio-card-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
-.glass-settings__row-label {
-  font-size: 14px;
-  font-weight: 600;
+.glass-settings__audio-step {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(125, 211, 252, 0.85);
 }
 
-.glass-settings__row-status {
-  font-size: 11px;
-  color: var(--gs-muted);
+.glass-settings__audio-status {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 999px;
 }
 
-.glass-settings__masked {
-  font-size: 12px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: rgba(255, 255, 255, 0.55);
+.glass-settings__audio-status--ok {
+  color: #6ee7b7;
+  background: rgba(16, 185, 129, 0.14);
 }
 
-.glass-settings__row-actions {
+.glass-settings__audio-status--warn {
+  color: #fcd34d;
+  background: rgba(245, 158, 11, 0.14);
+}
+
+.glass-settings__audio-status--error {
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.14);
+}
+
+.glass-settings__audio-status--idle {
+  color: rgba(190, 200, 218, 0.72);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.glass-settings__audio-card-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.glass-settings__audio-icon {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.28);
+  color: rgba(186, 230, 253, 0.95);
+}
+
+.glass-settings__audio-copy {
+  min-width: 0;
+}
+
+.glass-settings__audio-title {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.glass-settings__audio-summary {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(190, 200, 218, 0.82);
+}
+
+.glass-settings__audio-card-body {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.glass-settings__audio-detail {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(236, 244, 255, 0.9);
+}
+
+.glass-settings__audio-actions {
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
-.glass-settings__input {
-  flex: 1;
-  min-width: 0;
-  height: 34px;
+.glass-settings__audio-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: rgba(190, 200, 218, 0.78);
+}
+
+.glass-settings__audio-field select {
+  height: 36px;
   padding: 0 10px;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(0, 0, 0, 0.28);
-  color: var(--gs-text);
+  color: rgba(236, 244, 255, 0.94);
   font-size: 13px;
-  outline: none;
 }
 
-.glass-settings__input:focus {
-  border-color: rgba(255, 255, 255, 0.28);
-}
-
-.glass-settings__input--block {
-  width: 100%;
-  margin-bottom: 8px;
-}
-
-.glass-settings__btn {
-  flex-shrink: 0;
-  height: 34px;
-  padding: 0 14px;
-  border: none;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.92);
-  color: #0c1018;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.glass-settings__btn:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-.glass-settings__btn--ghost {
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.82);
-}
-
-.glass-settings__btn--danger {
-  margin-top: 20px;
-  background: rgba(239, 68, 68, 0.16);
-  color: rgba(252, 165, 165, 0.95);
-  border: 1px solid rgba(239, 68, 68, 0.35);
-}
-
-.glass-settings__btn--danger:hover {
-  background: rgba(239, 68, 68, 0.24);
-}
-
-.glass-settings__link-btn {
+.glass-settings__audio-meter {
   margin-top: 12px;
-  border: none;
-  background: transparent;
-  color: rgba(125, 211, 252, 0.9);
-  font-size: 13px;
-  cursor: pointer;
-  text-align: left;
-  padding: 0;
-}
-
-.glass-settings__link-btn:hover {
-  color: rgba(186, 230, 253, 1);
-  text-decoration: underline;
-}
-
-.glass-settings__error {
-  margin: 0;
-  font-size: 12px;
-  color: #f87171;
-}
-
-.glass-settings__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  margin-top: 6px;
-  flex-shrink: 0;
-}
-
-.glass-settings__dot--ok {
-  background: #3dd68c;
-  box-shadow: 0 0 6px rgba(61, 214, 140, 0.65);
-}
-
-.glass-settings__dot--error {
-  background: #ff6b6b;
-  box-shadow: 0 0 6px rgba(255, 107, 107, 0.55);
-}
-
-.glass-settings__dot--muted {
-  background: rgba(255, 255, 255, 0.28);
-}
-
-.glass-settings__custom {
-  margin-top: 16px;
-  padding: 14px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.glass-settings__custom-title {
-  margin: 0 0 10px;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.glass-settings__shortcut-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 10px;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.glass-settings__shortcut {
+.glass-settings__audio-utility {
+  margin-top: 4px;
+  padding-top: 8px;
+}
+
+/* ── Providers tab ────────────────────────────────────────────────────────── */
+
+.glass-settings__providers {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.glass-settings__providers-agents {
+  margin-top: 8px;
+  gap: 14px;
+}
+
+.glass-settings__providers-input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 999px;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.62);
-  font-size: 11px;
-  padding: 4px 10px;
-  cursor: pointer;
+  background: rgba(0, 0, 0, 0.28);
+  color: rgba(236, 244, 255, 0.94);
+  font-size: 13px;
 }
 
-.glass-settings__shortcut--active {
-  border-color: rgba(125, 211, 252, 0.45);
+.glass-settings__path-btn {
+  justify-content: flex-start;
+  text-align: left;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Account tab ──────────────────────────────────────────────────────────── */
+
+.glass-settings__account,
+.glass-settings__components {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.glass-settings__account-connected {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 4px;
+}
+
+.glass-settings__account-avatar {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  font-weight: 700;
   color: rgba(186, 230, 253, 0.95);
-  background: rgba(56, 189, 248, 0.1);
+  background: rgba(56, 189, 248, 0.14);
+  border: 1px solid rgba(125, 211, 252, 0.35);
+}
+
+.glass-settings__account-name {
+  margin: 0 0 2px;
+  font-size: 15px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.glass-settings__account-email {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(190, 200, 218, 0.88);
+}
+
+.glass-settings__account-steps {
+  margin: 0 0 10px;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: rgba(190, 200, 218, 0.82);
+}
+
+.glass-settings__inline-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: rgba(125, 211, 252, 0.95);
+  font-size: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.glass-settings__account .panel-profile-editor .section-title:first-child,
+.glass-settings__account .panel-profile-editor > .hint:first-of-type {
+  display: none;
+}
+
+.glass-settings__account .panel-profile-editor {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.glass-settings .panel-tab-view .section-title:first-child {
+  margin-top: 0;
 }
 
 .glass-settings__toggle-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 56px;
-  font-size: 14px;
+  min-height: 44px;
+  font-size: 13px;
   cursor: pointer;
 }
 
 .glass-settings__toggle-row input {
   width: 16px;
   height: 16px;
+  accent-color: rgba(125, 211, 252, 0.85);
+}
+
+.glass-settings__privacy {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(190, 200, 218, 0.72);
 }
 
 .glass-settings__shortcut-list {
   list-style: none;
-  margin: 0;
+  margin: 8px 0 0;
   padding: 0;
 }
 
@@ -351,12 +624,39 @@
 
 .glass-settings__about-label {
   min-width: 72px;
-  color: var(--gs-muted);
+  color: rgba(190, 200, 218, 0.72);
 }
 
 .glass-settings__about-links {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 6px;
   margin: 16px 0 0;
+}
+
+.glass-settings__link-btn {
+  font-size: 13px;
+  padding: 6px 10px;
+}
+
+.glass-settings__quit {
+  margin-top: 20px;
+}
+
+/* Embedded panel components — normalize spacing inside settings body */
+.glass-settings .panel-tab-view .providers-settings,
+.glass-settings .panel-tab-view .panel-audio-settings,
+.glass-settings .panel-tab-view .panel__settings,
+.glass-settings .panel-tab-view .status-grid {
+  margin-top: 4px;
+}
+
+.glass-settings .panel-tab-view .summary-box {
+  margin-top: 10px;
+}
+
+.glass-settings .panel-tab-view .panel-profile-editor,
+.glass-settings .panel-tab-view .setup-section {
+  margin-bottom: 4px;
 }

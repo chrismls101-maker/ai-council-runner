@@ -8,7 +8,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BrowserWindow, globalShortcut, Menu, screen, shell, type WebContents } from "electron";
+import { BrowserWindow, app, globalShortcut, Menu, screen, shell, type WebContents } from "electron";
 import { GLASS_BOOT_SOUND_ENABLED } from "../shared/bootSound.ts";
 import type { GlassConfig } from "../shared/config.ts";
 import {
@@ -51,6 +51,7 @@ import {
   glassLayoutContentBottomY,
   OVERLAY_CHAT_STACK_FALLBACK_PX,
   overlayLayoutFromDisplay,
+  type PanelLayout,
 } from "../shared/glassLayoutMath.ts";
 import {
   isFollowMouseTrackingActive,
@@ -184,10 +185,14 @@ let overlayPointerOverBuilderStrip = false;
 /** Glass IDE session open — keep overlay OS-interactive for splits, tree, composer. */
 let overlayIdeActive = false;
 let overlayPointerOverIde = false;
+let overlayPointerOverExitControl = false;
 let overlayResearchExplorerActive = false;
 let overlayCodeAnalystExplorerActive = false;
 let overlayWritingStudioActive = false;
 let overlayGlassDashboardActive = false;
+/** Increment when a full-screen workspace opens; focus overlay only on epoch change. */
+let overlayWorkspaceFocusEpoch = 0;
+let overlayWorkspaceFocusAppliedEpoch = -1;
 let builderStripPanelOpen = false;
 let commandPaletteOpen = false;
 let powersMenuOpen = false;
@@ -272,6 +277,15 @@ function overlayIdeInteractive(): boolean {
   return overlayIdeActive || overlayPointerOverIde || overlayFullscreenWorkspaceActive();
 }
 
+function markOverlayWorkspaceOpened(): void {
+  overlayWorkspaceFocusEpoch += 1;
+}
+
+function transitionOverlayWorkspaceFlag(current: boolean, next: boolean): boolean {
+  if (next && !current) markOverlayWorkspaceOpened();
+  return next;
+}
+
 /** Full-screen workspace (Research / Code Analyst) — OS must accept clicks + keyboard. */
 function applyFullscreenWorkspaceOverlayMode(): void {
   if (!windows?.overlay || windows.overlay.isDestroyed()) return;
@@ -283,8 +297,12 @@ function applyFullscreenWorkspaceOverlayMode(): void {
   debugSetIgnoreMouseEvents(overlay, "overlay", false);
   overlay.setFocusable(true);
   overlay.show();
-  overlay.focus();
-  overlay.webContents.focus();
+  // Focus only when a workspace first opens — not on every state push / relayout.
+  if (overlayWorkspaceFocusAppliedEpoch !== overlayWorkspaceFocusEpoch) {
+    overlayWorkspaceFocusAppliedEpoch = overlayWorkspaceFocusEpoch;
+    overlay.focus();
+    overlay.webContents.focus();
+  }
 }
 
 function applyBuilderStripOverlayInteractivity(): void {
@@ -301,6 +319,7 @@ function applyBuilderStripOverlayInteractivity(): void {
   const interactive =
     overlayIdeInteractive()
     || overlayPointerOverBuilderStrip
+    || overlayPointerOverExitControl
     || builderStripPanelOpen
     || overlayPointerOverDebriefPanel;
   if (!interactive) {
@@ -324,25 +343,28 @@ export function setOverlayIdeActive(active: boolean): void {
 
 /** Main: Research Explorer open — full-screen overlay must receive clicks. */
 export function setOverlayResearchExplorerActive(active: boolean): void {
-  overlayResearchExplorerActive = active;
+  overlayResearchExplorerActive = transitionOverlayWorkspaceFlag(overlayResearchExplorerActive, active);
   syncFullscreenWorkspaceOverlay();
 }
 
 /** Main: Code Analyst workspace open — full-screen overlay must receive clicks. */
 export function setOverlayCodeAnalystExplorerActive(active: boolean): void {
-  overlayCodeAnalystExplorerActive = active;
+  overlayCodeAnalystExplorerActive = transitionOverlayWorkspaceFlag(
+    overlayCodeAnalystExplorerActive,
+    active,
+  );
   syncFullscreenWorkspaceOverlay();
 }
 
 /** Main: Writing Studio open — full-screen overlay must receive clicks. */
 export function setOverlayWritingStudioActive(active: boolean): void {
-  overlayWritingStudioActive = active;
+  overlayWritingStudioActive = transitionOverlayWorkspaceFlag(overlayWritingStudioActive, active);
   syncFullscreenWorkspaceOverlay();
 }
 
 /** Main: Glass Dashboard open — full-screen overlay above builder strip. */
 export function setOverlayGlassDashboardActive(active: boolean): void {
-  overlayGlassDashboardActive = active;
+  overlayGlassDashboardActive = transitionOverlayWorkspaceFlag(overlayGlassDashboardActive, active);
   syncFullscreenWorkspaceOverlay();
 }
 
@@ -351,6 +373,7 @@ function syncFullscreenWorkspaceOverlay(): void {
     applyFullscreenWorkspaceOverlayMode();
     return;
   }
+  overlayWorkspaceFocusAppliedEpoch = -1;
   if (windows?.overlay && !windows.overlay.isDestroyed()) {
     windows.overlay.setFocusable(false);
   }
@@ -392,6 +415,12 @@ export function setOverlayPointerOverDebriefPanel(over: boolean): void {
 /** Renderer reports pointer over the builder strip (Prompts / Keys tabs). */
 export function setOverlayPointerOverBuilderStrip(over: boolean): void {
   overlayPointerOverBuilderStrip = over;
+  applyBuilderStripOverlayInteractivity();
+}
+
+/** Renderer reports pointer over the Exit Glass control (top-right quit). */
+export function setOverlayPointerOverExitControl(over: boolean): void {
+  overlayPointerOverExitControl = over;
   applyBuilderStripOverlayInteractivity();
 }
 
@@ -641,12 +670,21 @@ function attachOverlayCursorClickThrough(overlay: BrowserWindow): void {
         debugSetIgnoreMouseEvents(overlay, "overlay", false);
         return;
       }
-      // Glass IDE / builder strip: stay OS-interactive for splits, tree, tab buttons.
+      // Glass IDE / builder strip / exit control: stay OS-interactive for chrome hits.
       if (
         overlayIdeInteractive()
         || overlayPointerOverBuilderStrip
+        || overlayPointerOverExitControl
         || builderStripPanelOpen
+        || overlayPointerOverDebriefPanel
       ) {
+        if (passthroughTimer !== null) { clearTimeout(passthroughTimer); passthroughTimer = null; }
+        debugSetIgnoreMouseEvents(overlay, "overlay", false);
+        return;
+      }
+      logGlassClickDebug("cursor-changed-passive", { window: "overlay", type });
+      const passiveInteractiveCursor = type === "pointer" || type === "hand";
+      if (passiveInteractiveCursor) {
         if (passthroughTimer !== null) { clearTimeout(passthroughTimer); passthroughTimer = null; }
         debugSetIgnoreMouseEvents(overlay, "overlay", false);
         return;
@@ -661,16 +699,7 @@ function attachOverlayCursorClickThrough(overlay: BrowserWindow): void {
       return;
     }
     logGlassClickDebug("cursor-changed", { window: "overlay", type });
-    const interactiveCursor =
-      type === "pointer" ||
-      type === "hand" ||
-      type === "text" ||
-      type === "ibeam" ||
-      type === "vertical-text" ||
-      type === "col-resize" ||
-      type === "row-resize" ||
-      type === "ew-resize" ||
-      type === "ns-resize";
+    const interactiveCursor = type === "pointer" || type === "hand";
     if (interactiveCursor) {
       setInteractive();
     } else if (!overlayIdeInteractive()) {
@@ -1193,17 +1222,23 @@ function stopMacVisibleFrameWatch(): void {
   layoutManager?.clearMacVisibleWorkArea();
 }
 
+/** macOS Dock autohide — poll native visibleFrame; slower in dev to avoid main-process churn. */
+const MAC_VISIBLE_FRAME_POLL_MS = app.isPackaged ? 1500 : 8000;
+
 function startMacVisibleFrameWatch(): void {
   if (process.platform !== "darwin") return;
   stopMacVisibleFrameWatch();
-  syncMacVisibleWorkAreaFromNative();
+  // Async only — sync swift spawn blocks the main process and can lag keyboard input app-wide.
+  void refreshMacVisibleWorkAreaAsync().then((changed) => {
+    if (changed) relayoutAllWindows({ resetDock: false });
+  });
   macVisibleFrameWatchTimer = setInterval(() => {
     void (async () => {
       if (!(await refreshMacVisibleWorkAreaAsync())) return;
       relayoutAllWindows({ resetDock: false });
       scheduleMacVisibleFrameFollowUp();
     })();
-  }, 450);
+  }, MAC_VISIBLE_FRAME_POLL_MS);
 }
 
 function isDockRail(): boolean {
@@ -1256,6 +1291,7 @@ function applyDockLayout(resetPosition = false): void {
     return;
   }
   windows.dock.setBounds(next);
+  syncPanelToDockAttachment();
 }
 
 function commandBarStackHeightPx(): number {
@@ -1417,6 +1453,29 @@ export function syncChromeLayoutFromSettings(
   applyChromeMovability();
 }
 
+/** Panel window bounds — dock-attached, above the builder strip. */
+export function getPanelLayoutBounds(): PanelLayout | null {
+  if (!layoutManager) return null;
+  const dockBounds =
+    windows?.dock && !windows.dock.isDestroyed()
+      ? windows.dock.getBounds()
+      : null;
+  return layoutManager.getPanelLayout({
+    dockBounds,
+    dockPlacement,
+  });
+}
+
+/** Settings window bounds — full-width dashboard band above the builder strip. */
+export function getSettingsLayoutBounds(): PanelLayout | null {
+  if (!layoutManager) return null;
+  return layoutManager.getSettingsLayout();
+}
+
+function relayoutGlassSettingsWindow(): void {
+  void import("./glassSettingsWindow.ts").then((mod) => mod.syncGlassSettingsLayout());
+}
+
 function relayoutAllWindows(options?: { resetDock?: boolean }): void {
   if (!windows || !layoutManager) return;
 
@@ -1431,7 +1490,8 @@ function relayoutAllWindows(options?: { resetDock?: boolean }): void {
   }
 
   if (!windows.panel.isDestroyed()) {
-    windows.panel.setBounds(layoutManager.getPanelLayout());
+    const panelLayout = getPanelLayoutBounds();
+    if (panelLayout) windows.panel.setBounds(panelLayout);
   }
 
   if (!windows.commandBar.isDestroyed()) {
@@ -1448,6 +1508,7 @@ function relayoutAllWindows(options?: { resetDock?: boolean }): void {
   stackGlassWindows(windows);
   logDiagnostics();
   notifyCommandBarLayoutChanged();
+  relayoutGlassSettingsWindow();
 }
 
 function wireWindowStacking(w: GlassWindows): void {
@@ -1544,7 +1605,7 @@ function createDockWindow(): BrowserWindow {
 }
 
 function createPanelWindow(): BrowserWindow {
-  const layout = layoutManager!.getPanelLayout();
+  const layout = getPanelLayoutBounds() ?? layoutManager!.getPanelLayout();
   const panel = new BrowserWindow({
     x: layout.x,
     y: layout.y,
@@ -2118,7 +2179,13 @@ export function setOverlayMode(mode: OverlayMode): void {
 
 export function ensurePanelLayout(): void {
   if (!windows?.panel || windows.panel.isDestroyed() || !layoutManager) return;
-  windows.panel.setBounds(layoutManager.getPanelLayout());
+  const layout = getPanelLayoutBounds();
+  if (layout) windows.panel.setBounds(layout);
+}
+
+function syncPanelToDockAttachment(): void {
+  if (!windows?.panel?.isVisible()) return;
+  ensurePanelLayout();
 }
 
 export function openPanel(): void {
@@ -2197,6 +2264,7 @@ export function resizeDockWindow(
   }
   windows.dock.setBounds(next, false);
   syncGlassTerminalWindowPosition();
+  syncPanelToDockAttachment();
   stackGlassWindows(windows);
 }
 
@@ -2522,7 +2590,7 @@ export function getDisplayLayoutSummary(): string {
   const layoutDisplay = layoutManager.getDisplay();
   const overlay = layoutManager.getOverlayLayout();
   const bar = layoutManager.getCommandBarLayout();
-  const panelLayout = layoutManager.getPanelLayout();
+  const panelLayout = getPanelLayoutBounds() ?? layoutManager.getPanelLayout();
   return buildDisplayDiagnosticsSummary({
     target: activeDisplayTarget,
     layoutDisplay,

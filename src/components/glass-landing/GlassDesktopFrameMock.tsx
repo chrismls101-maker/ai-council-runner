@@ -33,13 +33,13 @@ const BROWSER_TABS = [
 ] as const;
 
 const BUILDER_LEFT_TABS = [
-  { icon: "▦", label: "Dashboard", dashboard: true },
-  { icon: "⌥", label: "Prompts" },
-  { icon: "⚡", label: "Prompt Gen" },
-  { icon: "🗝", label: "API Keys" },
-  { icon: "💸", label: "Spend" },
-  { icon: "⬡", label: "Extract" },
-  { icon: ">_", label: "Terminal", terminal: true },
+  { icon: "▦", label: "Dashboard", kind: "dashboard" },
+  { icon: "⌥", label: "Prompts", kind: "prompts" },
+  { icon: "⚡", label: "Prompt Gen", kind: "power-prompt" },
+  { icon: "🗝", label: "API Keys", kind: "keys" },
+  { icon: "💸", label: "Spend", kind: "spend" },
+  { icon: "⬡", label: "Extract", kind: "extract" },
+  { icon: ">_", label: "Terminal", kind: "terminal" },
 ] as const;
 
 const BUILDER_RIGHT_TABS = [
@@ -195,7 +195,7 @@ export default function GlassDesktopFrameMock(): JSX.Element {
                   {BUILDER_LEFT_TABS.map((tab) => (
                     <span
                       key={tab.label}
-                      className={`gl-macbook-mock__builder-tab${"dashboard" in tab && tab.dashboard ? " gl-macbook-mock__builder-tab--dashboard" : ""}${"terminal" in tab && tab.terminal ? " gl-macbook-mock__builder-tab--terminal" : ""}`}
+                      className={`gl-macbook-mock__builder-tab gl-macbook-mock__builder-tab--${tab.kind}`}
                     >
                       <span className="gl-macbook-mock__builder-tab-icon" aria-hidden="true">
                         {tab.icon}

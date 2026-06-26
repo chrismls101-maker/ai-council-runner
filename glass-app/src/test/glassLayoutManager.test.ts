@@ -14,7 +14,9 @@ import {
   glassLayoutContentBottomY,
   OVERLAY_CHAT_STACK_FALLBACK_PX,
   overlayLayoutFromDisplay,
+  panelContentBottomY,
   panelLayoutFromDisplay,
+  PANEL_DOCK_GAP_PX,
   type DisplayLayoutContext,
 } from "../shared/glassLayoutMath.ts";
 import { parseLayoutPreset } from "../shared/glassLayoutTypes.ts";
@@ -41,16 +43,19 @@ test("overlay uses selected display workArea", () => {
   assert.equal(layout.height, glassLayoutContentBottomY(macBook13) - macBook13.workArea.y);
 });
 
-test("panel uses workArea and responsive width", () => {
+test("panel attaches to left dock rail and sits above builder strip", () => {
+  const rail = dockLeftRailLayoutFromDisplay(macBook13);
   const layout = panelLayoutFromDisplay(macBook13);
+  assert.equal(layout.x, rail.x + rail.width + PANEL_DOCK_GAP_PX);
+  assert.equal(layout.y, macBook13.workArea.y + DOCK_TOP_MARGIN);
   assert.equal(layout.width, 1800);
-  assert.equal(layout.height, macBook13.workArea.height - 40 - 24);
+  assert.equal(layout.height, panelContentBottomY(macBook13) - layout.y);
   assert.ok(layout.x + layout.width <= macBook13.workArea.x + macBook13.workArea.width);
 });
 
-test("panel uses most of external display width", () => {
+test("panel uses most of external display width beside dock rail", () => {
   const layout = panelLayoutFromDisplay(externalMonitor);
-  assert.equal(layout.width, 1498);
+  assert.equal(layout.width, 1800);
 });
 
 test("panel width scales down on narrow display", () => {
@@ -59,7 +64,10 @@ test("panel width scales down on narrow display", () => {
     workArea: { x: 0, y: 0, width: 900, height: 700 },
   };
   const layout = panelLayoutFromDisplay(narrow);
-  assert.equal(layout.width, 720);
+  const rail = dockLeftRailLayoutFromDisplay(narrow);
+  const available =
+    narrow.workArea.x + narrow.workArea.width - 24 - (rail.x + rail.width + PANEL_DOCK_GAP_PX);
+  assert.equal(layout.width, available);
 });
 
 test("dock compact preset is horizontally centered and top-anchored", () => {

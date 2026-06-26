@@ -1,59 +1,48 @@
 import { useCallback, useEffect, useState } from "react";
-import type { ApiKeyMeta } from "../../shared/ipc.ts";
-import {
-  GLASS_ANTHROPIC_KEY_ID,
-  GLASS_OPENAI_KEY_ID,
-} from "../../shared/glassProviderKeys.ts";
-import { isAnthropicKeyFormatValid } from "../../shared/anthropicKeyFormat.ts";
-import { isOpenAiKeyFormatValid } from "../../shared/openaiKeyFormat.ts";
-import {
-  PROVIDER_BASE_URL_SHORTCUTS,
-  PROVIDER_SHORTCUT_NAMES,
-} from "../../shared/providerPresets.ts";
+import type { GlassSettingsSection } from "../../shared/panelTabRouting.ts";
+import { useGlassState } from "../useGlassState.ts";
+import { ServerUrlEditor } from "../panel/PanelSetupSections.tsx";
+import { SettingsAudioSection } from "../panel/SettingsAudioSection.tsx";
+import { SettingsContextSection } from "./SettingsContextSection.tsx";
+import { SettingsProvidersSection } from "./SettingsProvidersSection.tsx";
+import { SettingsAccountSection } from "./SettingsAccountSection.tsx";
+import { SettingsComponentsSection } from "./SettingsComponentsSection.tsx";
 
-type SettingsSection = "providers" | "context" | "shortcuts" | "about";
+const IS_DEV = process.env.NODE_ENV !== "production";
 
-function providerDotClass(connected: boolean, optional = false): string {
-  if (connected) return "glass-settings__dot glass-settings__dot--ok";
-  if (optional) return "glass-settings__dot glass-settings__dot--muted";
-  return "glass-settings__dot glass-settings__dot--error";
-}
+const NAV_SECTIONS: { id: GlassSettingsSection; label: string; devOnly?: boolean }[] = [
+  { id: "providers", label: "Providers" },
+  { id: "context", label: "Context" },
+  { id: "audio", label: "Audio" },
+  { id: "components", label: "Components" },
+  { id: "account", label: "Account" },
+  { id: "dev", label: "Dev", devOnly: true },
+  { id: "shortcuts", label: "Shortcuts" },
+  { id: "about", label: "About" },
+];
 
-function generateCustomId(): string {
-  return `key_custom_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-}
+const SECTION_PAGE_TITLE: Record<GlassSettingsSection, string> = {
+  providers: "Providers",
+  context: "Context",
+  audio: "Audio",
+  components: "Components",
+  account: "Account",
+  dev: "Developer",
+  shortcuts: "Shortcuts",
+  about: "About",
+};
 
 export function GlassSettings(): JSX.Element {
-  const [section, setSection] = useState<SettingsSection>("providers");
-  const [anthropicMasked, setAnthropicMasked] = useState<string | null>(null);
-  const [openAiMasked, setOpenAiMasked] = useState<string | null>(null);
-  const [anthropicKey, setAnthropicKey] = useState("");
-  const [openAiKey, setOpenAiKey] = useState("");
-  const [anthropicLoading, setAnthropicLoading] = useState(false);
-  const [openAiLoading, setOpenAiLoading] = useState(false);
-  const [anthropicError, setAnthropicError] = useState<string | null>(null);
-  const [openAiError, setOpenAiError] = useState<string | null>(null);
+  const glassState = useGlassState();
+  const [section, setSection] = useState<GlassSettingsSection>("providers");
   const [screenContextEnabled, setScreenContextEnabled] = useState(true);
   const [appVersion, setAppVersion] = useState("—");
-  const [customOpen, setCustomOpen] = useState(false);
-  const [customName, setCustomName] = useState("");
-  const [customBaseUrl, setCustomBaseUrl] = useState("");
-  const [customKey, setCustomKey] = useState("");
-  const [customShortcut, setCustomShortcut] = useState("");
-  const [customError, setCustomError] = useState<string | null>(null);
-  const [customLoading, setCustomLoading] = useState(false);
 
-  const refreshMasked = useCallback(async (): Promise<void> => {
-    const [anthropic, openai] = await Promise.all([
-      window.glass.apiKeyGetMasked(GLASS_ANTHROPIC_KEY_ID),
-      window.glass.apiKeyGetMasked(GLASS_OPENAI_KEY_ID),
-    ]);
-    setAnthropicMasked(anthropic.masked);
-    setOpenAiMasked(openai.masked);
+  useEffect(() => {
+    void window.glass.getSettingsInitialSection().then(setSection);
   }, []);
 
   useEffect(() => {
-    void refreshMasked();
     void window.glass.getAppVersion().then(setAppVersion);
     void window.glass.getState().then((state) => {
       setScreenContextEnabled(state.glassSettings.screenContextEnabled !== false);
@@ -61,66 +50,7 @@ export function GlassSettings(): JSX.Element {
     return window.glass.onState((state) => {
       setScreenContextEnabled(state.glassSettings.screenContextEnabled !== false);
     });
-  }, [refreshMasked]);
-
-  const handleAnthropicReconnect = useCallback(async (): Promise<void> => {
-    const trimmed = anthropicKey.trim();
-    if (!isAnthropicKeyFormatValid(trimmed)) {
-      setAnthropicError("Anthropic keys start with sk-ant-");
-      return;
-    }
-    setAnthropicLoading(true);
-    setAnthropicError(null);
-    try {
-      const res = await window.glass.anthropicKeyConnect(trimmed);
-      if (!res.ok) {
-        setAnthropicError(res.error ?? "Key not recognized — check it and try again");
-        return;
-      }
-      setAnthropicKey("");
-      await refreshMasked();
-    } catch {
-      setAnthropicError("Could not connect key.");
-    } finally {
-      setAnthropicLoading(false);
-    }
-  }, [anthropicKey, refreshMasked]);
-
-  const handleOpenAiConnect = useCallback(async (): Promise<void> => {
-    const trimmed = openAiKey.trim();
-    if (!isOpenAiKeyFormatValid(trimmed)) {
-      setOpenAiError("OpenAI keys start with sk-");
-      return;
-    }
-    setOpenAiLoading(true);
-    setOpenAiError(null);
-    try {
-      const res = await window.glass.openaiKeyConnect(trimmed);
-      if (!res.ok) {
-        setOpenAiError(res.error ?? "Key not recognized — check it and try again");
-        return;
-      }
-      setOpenAiKey("");
-      await refreshMasked();
-    } catch {
-      setOpenAiError("Could not connect key.");
-    } finally {
-      setOpenAiLoading(false);
-    }
-  }, [openAiKey, refreshMasked]);
-
-  const handleOpenAiDisconnect = useCallback(async (): Promise<void> => {
-    setOpenAiLoading(true);
-    setOpenAiError(null);
-    try {
-      await window.glass.apiKeyDelete(GLASS_OPENAI_KEY_ID);
-      await refreshMasked();
-    } catch {
-      setOpenAiError("Could not disconnect.");
-    } finally {
-      setOpenAiLoading(false);
-    }
-  }, [refreshMasked]);
+  }, []);
 
   const handleScreenContextToggle = useCallback((enabled: boolean): void => {
     setScreenContextEnabled(enabled);
@@ -130,333 +60,138 @@ export function GlassSettings(): JSX.Element {
     });
   }, []);
 
-  const handleCustomShortcut = useCallback((name: string): void => {
-    setCustomShortcut(name);
-    setCustomName(name);
-    setCustomBaseUrl(PROVIDER_BASE_URL_SHORTCUTS[name] ?? "");
-  }, []);
-
-  const handleTestCustom = useCallback(async (): Promise<void> => {
-    setCustomLoading(true);
-    setCustomError(null);
-    try {
-      const res = await window.glass.providerTestConnection({
-        baseUrl: customBaseUrl,
-        apiKey: customKey,
-      });
-      if (!res.ok) {
-        setCustomError(res.error ?? "Connection failed.");
-        return;
-      }
-      const meta: ApiKeyMeta = {
-        id: generateCustomId(),
-        service: customName.trim() || "Custom",
-        label: customBaseUrl.trim(),
-        environment: "any",
-        createdAt: Date.now(),
-        lastUsedAt: null,
-      };
-      const saveRes = await window.glass.apiKeySave({ meta, value: customKey.trim() });
-      if (!saveRes.ok) {
-        setCustomError(saveRes.error ?? "Could not save provider.");
-        return;
-      }
-      setCustomOpen(false);
-      setCustomName("");
-      setCustomBaseUrl("");
-      setCustomKey("");
-      setCustomShortcut("");
-    } catch {
-      setCustomError("Connection failed.");
-    } finally {
-      setCustomLoading(false);
-    }
-  }, [customBaseUrl, customKey, customName]);
-
   const handleClose = useCallback((): void => {
     window.glass.closeSettings();
   }, []);
 
-  const anthropicConnected = Boolean(anthropicMasked);
-  const openAiConnected = Boolean(openAiMasked);
+  const visibleSections = NAV_SECTIONS.filter((s) => !s.devOnly || IS_DEV);
+  const pageTitle = SECTION_PAGE_TITLE[section];
 
   return (
-    <div className="glass-settings" data-testid="glass-settings">
-      <header className="glass-settings__titlebar">
-        <span className="glass-settings__title">Settings</span>
+    <div className="panel glass-settings" data-testid="glass-settings">
+      <header className="panel__header">
+        <div className="panel__brand">
+          <span className="dock__logo" />
+          <div>
+            <div className="panel__title">Settings</div>
+            <div className="panel__subtitle">Glass preferences</div>
+          </div>
+        </div>
         <button
           type="button"
-          className="glass-settings__close"
+          className="gbtn gbtn--ghost panel__close"
           aria-label="Close settings"
+          data-testid="glass-settings-close"
           onClick={handleClose}
         >
-          ×
+          ✕
         </button>
       </header>
 
-      <div className="glass-settings__body">
-        <nav className="glass-settings__nav" aria-label="Settings sections">
-          {(
-            [
-              ["providers", "Providers"],
-              ["context", "Context"],
-              ["shortcuts", "Shortcuts"],
-              ["about", "About"],
-            ] as const
-          ).map(([id, label]) => (
+      <div className="panel__shell">
+        <nav className="panel__nav" aria-label="Settings sections">
+          {visibleSections.map((item) => (
             <button
-              key={id}
+              key={item.id}
               type="button"
-              className={`glass-settings__nav-item${section === id ? " glass-settings__nav-item--active" : ""}`}
-              onClick={() => setSection(id)}
+              className={`panel__nav-tab${section === item.id ? " panel__nav-tab--active" : ""}`}
+              data-testid={`glass-settings-nav-${item.id}`}
+              aria-current={section === item.id ? "page" : undefined}
+              onClick={() => setSection(item.id)}
             >
-              {label}
+              {item.label}
             </button>
           ))}
         </nav>
 
-        <div className="glass-settings__content">
-          {section === "providers" ? (
-            <div className="glass-settings__section">
-              <h2 className="glass-settings__section-title">Providers</h2>
-              <p className="glass-settings__hint">
-                API keys are encrypted on this Mac. Values are never shown after saving.
-              </p>
+        <div className="panel__stage glass-settings__stage">
+          <header className="glass-settings__page-head">
+            <h1 className="glass-settings__page-title">{pageTitle}</h1>
+          </header>
+          <div className="panel__body panel-tab-view glass-settings__page-body">
+            {section === "providers" ? (
+              <SettingsProvidersSection state={glassState} />
+            ) : null}
 
-              <div className="glass-settings__row">
-                <span className={providerDotClass(anthropicConnected)} aria-hidden="true" />
-                <div className="glass-settings__row-main">
-                  <div className="glass-settings__row-head">
-                    <span className="glass-settings__row-label">Anthropic</span>
-                    <span className="glass-settings__row-status">
-                      {anthropicConnected ? "Connected" : "Not connected"}
-                    </span>
-                  </div>
-                  {anthropicMasked ? (
-                    <span className="glass-settings__masked">{anthropicMasked}</span>
-                  ) : null}
-                  <div className="glass-settings__row-actions">
-                    <input
-                      className="glass-settings__input"
-                      type="password"
-                      placeholder="sk-ant-..."
-                      value={anthropicKey}
-                      autoComplete="off"
-                      spellCheck={false}
-                      disabled={anthropicLoading}
-                      onChange={(e) => {
-                        setAnthropicKey(e.target.value);
-                        if (anthropicError) setAnthropicError(null);
-                      }}
-                    />
-                    <button
-                      type="button"
-                      className="glass-settings__btn"
-                      disabled={!anthropicKey.trim() || anthropicLoading}
-                      onClick={() => void handleAnthropicReconnect()}
-                    >
-                      {anthropicLoading ? "Connecting…" : "Re-connect"}
-                    </button>
-                  </div>
-                  {anthropicError ? <p className="glass-settings__error">{anthropicError}</p> : null}
+            {section === "context" ? (
+              <SettingsContextSection
+                state={glassState}
+                screenContextEnabled={screenContextEnabled}
+                onScreenContextToggle={handleScreenContextToggle}
+              />
+            ) : null}
+
+            {section === "audio" ? <SettingsAudioSection state={glassState} /> : null}
+
+            {section === "components" ? <SettingsComponentsSection /> : null}
+
+            {section === "account" ? <SettingsAccountSection state={glassState} /> : null}
+
+            {section === "dev" && IS_DEV ? (
+              <>
+                <ServerUrlEditor state={glassState} />
+                {glassState.operationDiagnostics.displayInfo ? (
+                  <p className="hint panel__display-diag">
+                    {glassState.operationDiagnostics.displayInfo}
+                  </p>
+                ) : null}
+              </>
+            ) : null}
+
+            {section === "shortcuts" ? (
+              <>
+                <p className="hint">Coming soon: editable shortcuts</p>
+                <ul className="glass-settings__shortcut-list">
+                  <li>
+                    <kbd>⌘⇧Space</kbd>
+                    <span>Open command bar</span>
+                  </li>
+                  <li>
+                    <kbd>⌘⇧D</kbd>
+                    <span>Open dashboard</span>
+                  </li>
+                </ul>
+              </>
+            ) : null}
+
+            {section === "about" ? (
+              <>
+                <div className="glass-settings__about-row">
+                  <span className="glass-settings__about-label">App</span>
+                  <span>Glass</span>
                 </div>
-              </div>
-
-              <div className="glass-settings__row">
-                <span className={providerDotClass(openAiConnected, true)} aria-hidden="true" />
-                <div className="glass-settings__row-main">
-                  <div className="glass-settings__row-head">
-                    <span className="glass-settings__row-label">OpenAI</span>
-                    <span className="glass-settings__row-status">
-                      {openAiConnected ? "Connected" : "Not connected"}
-                    </span>
-                  </div>
-                  {openAiMasked ? (
-                    <span className="glass-settings__masked">{openAiMasked}</span>
-                  ) : null}
-                  <div className="glass-settings__row-actions">
-                    <input
-                      className="glass-settings__input"
-                      type="password"
-                      placeholder="sk-..."
-                      value={openAiKey}
-                      autoComplete="off"
-                      spellCheck={false}
-                      disabled={openAiLoading}
-                      onChange={(e) => {
-                        setOpenAiKey(e.target.value);
-                        if (openAiError) setOpenAiError(null);
-                      }}
-                    />
-                    {openAiConnected ? (
-                      <button
-                        type="button"
-                        className="glass-settings__btn glass-settings__btn--ghost"
-                        disabled={openAiLoading}
-                        onClick={() => void handleOpenAiDisconnect()}
-                      >
-                        Disconnect
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className="glass-settings__btn"
-                        disabled={!openAiKey.trim() || openAiLoading}
-                        onClick={() => void handleOpenAiConnect()}
-                      >
-                        {openAiLoading ? "Connecting…" : "Connect"}
-                      </button>
-                    )}
-                  </div>
-                  {openAiError ? <p className="glass-settings__error">{openAiError}</p> : null}
+                <div className="glass-settings__about-row">
+                  <span className="glass-settings__about-label">Version</span>
+                  <span>{appVersion}</span>
                 </div>
-              </div>
-
-              {!customOpen ? (
+                <div className="glass-settings__about-links">
+                  <button
+                    type="button"
+                    className="gbtn gbtn--ghost glass-settings__link-btn"
+                    onClick={() =>
+                      void window.glass.settingsOpenExternal("https://console.anthropic.com")
+                    }
+                  >
+                    console.anthropic.com
+                  </button>
+                  <button
+                    type="button"
+                    className="gbtn gbtn--ghost glass-settings__link-btn"
+                    onClick={() => void window.glass.settingsOpenExternal("https://iivo.ai/privacy")}
+                  >
+                    Privacy Policy
+                  </button>
+                </div>
                 <button
                   type="button"
-                  className="glass-settings__link-btn"
-                  onClick={() => setCustomOpen(true)}
+                  className="gbtn gbtn--danger glass-settings__quit"
+                  onClick={() => window.glass.send({ type: "glass-quit" })}
                 >
-                  Add custom provider
+                  Quit Glass
                 </button>
-              ) : (
-                <div className="glass-settings__custom">
-                  <p className="glass-settings__custom-title">Custom provider</p>
-                  <div className="glass-settings__shortcut-row">
-                    {PROVIDER_SHORTCUT_NAMES.map((name) => (
-                      <button
-                        key={name}
-                        type="button"
-                        className={`glass-settings__shortcut${customShortcut === name ? " glass-settings__shortcut--active" : ""}`}
-                        onClick={() => handleCustomShortcut(name)}
-                      >
-                        {name}
-                      </button>
-                    ))}
-                  </div>
-                  <input
-                    className="glass-settings__input glass-settings__input--block"
-                    placeholder="Provider name"
-                    value={customName}
-                    onChange={(e) => setCustomName(e.target.value)}
-                  />
-                  <input
-                    className="glass-settings__input glass-settings__input--block"
-                    placeholder="Base URL"
-                    value={customBaseUrl}
-                    onChange={(e) => setCustomBaseUrl(e.target.value)}
-                  />
-                  <input
-                    className="glass-settings__input glass-settings__input--block"
-                    type="password"
-                    placeholder="API key"
-                    value={customKey}
-                    autoComplete="off"
-                    onChange={(e) => setCustomKey(e.target.value)}
-                  />
-                  <div className="glass-settings__row-actions">
-                    <button
-                      type="button"
-                      className="glass-settings__btn"
-                      disabled={customLoading || !customBaseUrl.trim() || !customKey.trim()}
-                      onClick={() => void handleTestCustom()}
-                    >
-                      {customLoading ? "Testing…" : "Test connection"}
-                    </button>
-                    <button
-                      type="button"
-                      className="glass-settings__btn glass-settings__btn--ghost"
-                      disabled={customLoading}
-                      onClick={() => {
-                        setCustomOpen(false);
-                        setCustomError(null);
-                      }}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                  {customError ? <p className="glass-settings__error">{customError}</p> : null}
-                </div>
-              )}
-            </div>
-          ) : null}
-
-          {section === "context" ? (
-            <div className="glass-settings__section">
-              <h2 className="glass-settings__section-title">Context</h2>
-              <label className="glass-settings__toggle-row">
-                <input
-                  type="checkbox"
-                  checked={screenContextEnabled}
-                  onChange={(e) => handleScreenContextToggle(e.target.checked)}
-                />
-                <span>Enable screen context</span>
-              </label>
-              <p className="glass-settings__hint">
-                Glass reads your screen with your permission to give IIVO live context.
-              </p>
-              <p className="glass-settings__privacy">
-                Screen content is never stored or sent to AI without your action.
-              </p>
-            </div>
-          ) : null}
-
-          {section === "shortcuts" ? (
-            <div className="glass-settings__section">
-              <h2 className="glass-settings__section-title">Shortcuts</h2>
-              <p className="glass-settings__hint">Coming soon: editable shortcuts</p>
-              <ul className="glass-settings__shortcut-list">
-                <li>
-                  <kbd>⌘⇧Space</kbd>
-                  <span>Open command bar</span>
-                </li>
-                <li>
-                  <kbd>⌘⇧D</kbd>
-                  <span>Open dashboard</span>
-                </li>
-              </ul>
-            </div>
-          ) : null}
-
-          {section === "about" ? (
-            <div className="glass-settings__section">
-              <h2 className="glass-settings__section-title">About</h2>
-              <div className="glass-settings__about-row">
-                <span className="glass-settings__about-label">App</span>
-                <span>Glass</span>
-              </div>
-              <div className="glass-settings__about-row">
-                <span className="glass-settings__about-label">Version</span>
-                <span>{appVersion}</span>
-              </div>
-              <div className="glass-settings__about-links">
-                <button
-                  type="button"
-                  className="glass-settings__link-btn"
-                  onClick={() =>
-                    void window.glass.settingsOpenExternal("https://console.anthropic.com")
-                  }
-                >
-                  console.anthropic.com
-                </button>
-                <button
-                  type="button"
-                  className="glass-settings__link-btn"
-                  onClick={() => void window.glass.settingsOpenExternal("https://iivo.ai/privacy")}
-                >
-                  Privacy Policy
-                </button>
-              </div>
-              <button
-                type="button"
-                className="glass-settings__btn glass-settings__btn--danger"
-                onClick={() => window.glass.send({ type: "glass-quit" })}
-              >
-                Quit Glass
-              </button>
-            </div>
-          ) : null}
+              </>
+            ) : null}
+          </div>
         </div>
       </div>
     </div>

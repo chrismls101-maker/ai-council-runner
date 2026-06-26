@@ -226,7 +226,13 @@ export function BuilderStrip({
             type="button"
             className={`builder-tab builder-tab--dashboard${glassState.glassDashboardActive ? " builder-tab--active" : ""}`}
             data-testid="glass-builder-strip-dashboard"
-            onClick={() => window.glass.openDashboard()}
+            onClick={() => {
+              if (glassState.glassDashboardActive) {
+                window.glass.closeDashboard();
+              } else {
+                window.glass.openDashboard();
+              }
+            }}
             aria-label="Open Glass Dashboard"
             aria-pressed={glassState.glassDashboardActive === true}
           >

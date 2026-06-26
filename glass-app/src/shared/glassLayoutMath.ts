@@ -45,10 +45,13 @@ export interface DockSizeLimits {
 
 const EDGE_MARGIN = 24;
 const TOP_INSET = 40;
-const PANEL_WIDTH_MIN = 720;
+const PANEL_WIDTH_MIN = 840;
 /** Wide setup dashboard — use most of the display without covering the whole screen. */
 const PANEL_WIDTH_MAX = 1800;
-const PANEL_WIDTH_RATIO = 0.78;
+/** Gap between dock edge and panel left edge. */
+export const PANEL_DOCK_GAP_PX = 4;
+/** Gap between panel bottom and builder strip top. */
+export const PANEL_ABOVE_BUILDER_STRIP_GAP_PX = 8;
 const LISTEN_NOTES_PANEL_WIDTH_MIN = 320;
 const LISTEN_NOTES_PANEL_WIDTH_MAX = 420;
 const LISTEN_NOTES_PANEL_WIDTH_RATIO = 0.26;
@@ -236,21 +239,83 @@ export function commandBarMaxBottomY(
   return overlay.y + overlay.height - COMMAND_BAR_BOTTOM_MARGIN - Math.max(0, bottomReservePx);
 }
 
+export type PanelLayoutOptions = {
+  /** Live dock window bounds when available. */
+  dockBounds?: LayoutRect | null;
+  dockPlacement?: "left-rail" | "top";
+};
+
+/** Panel bottom Y — flush above the in-overlay builder strip band. */
+export function panelContentBottomY(ctx: DisplayLayoutContext): number {
+  return (
+    glassLayoutContentBottomY(ctx) -
+    builderStripTopFromBottomPx() -
+    PANEL_ABOVE_BUILDER_STRIP_GAP_PX
+  );
+}
+
+/** Settings window — full work-area width, same vertical band as Glass Dashboard. */
+export function settingsLayoutFromDisplay(ctx: DisplayLayoutContext): PanelLayout {
+  const overlay = overlayLayoutFromDisplay(ctx);
+  const bottomY = panelContentBottomY(ctx);
+  return {
+    x: overlay.x,
+    y: overlay.y,
+    width: overlay.width,
+    height: Math.max(480, bottomY - overlay.y),
+  };
+}
+
+/**
+ * Side panel — emerges from the dock, spans to just above the builder strip.
+ * Default: left-rail dock → panel opens to the right of the rail at full available width.
+ */
 export function panelLayoutFromDisplay(
   ctx: DisplayLayoutContext,
   _preset: GlassLayoutPreset = DEFAULT_GLASS_LAYOUT_PRESET,
+  options?: PanelLayoutOptions,
 ): PanelLayout {
+  const placement = options?.dockPlacement ?? "left-rail";
+  const panelBottomY = panelContentBottomY(ctx);
+  const rightEdge = ctx.workArea.x + ctx.workArea.width - EDGE_MARGIN;
+
+  if (placement === "top") {
+    const dock =
+      options?.dockBounds ??
+      dockLayoutFromDisplay(ctx, _preset);
+    const x = Math.max(ctx.workArea.x + EDGE_MARGIN, dock.x);
+    const y = dock.y + dock.height + PANEL_DOCK_GAP_PX;
+    const availableWidth = rightEdge - x;
+    const width = Math.min(
+      PANEL_WIDTH_MAX,
+      Math.max(Math.min(PANEL_WIDTH_MIN, availableWidth), availableWidth),
+    );
+    const height = Math.max(480, panelBottomY - y);
+    return {
+      x: Math.round(x),
+      y: Math.round(y),
+      width: Math.round(width),
+      height: Math.round(height),
+    };
+  }
+
+  const defaultRail = dockLeftRailLayoutFromDisplay(ctx);
+  const dockX = options?.dockBounds?.x ?? defaultRail.x;
+  const dockW = options?.dockBounds?.width ?? defaultRail.width;
+  const x = dockX + dockW + PANEL_DOCK_GAP_PX;
+  const y = ctx.workArea.y + DOCK_TOP_MARGIN;
+  const availableWidth = rightEdge - x;
   const width = Math.min(
     PANEL_WIDTH_MAX,
-    Math.max(PANEL_WIDTH_MIN, Math.round(ctx.workArea.width * PANEL_WIDTH_RATIO)),
+    Math.max(Math.min(PANEL_WIDTH_MIN, availableWidth), availableWidth),
   );
-  const height = Math.max(PANEL_WIDTH_MIN, ctx.workArea.height - TOP_INSET - EDGE_MARGIN);
+  const height = Math.max(480, panelBottomY - y);
 
   return {
-    x: ctx.workArea.x + ctx.workArea.width - width - EDGE_MARGIN,
-    y: ctx.workArea.y + TOP_INSET,
-    width,
-    height,
+    x: Math.round(x),
+    y: Math.round(y),
+    width: Math.round(width),
+    height: Math.round(height),
   };
 }
 

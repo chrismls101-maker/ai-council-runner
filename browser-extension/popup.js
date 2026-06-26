@@ -3,10 +3,12 @@
  */
 
 const DIRECT_API = "https://iivo.ai";
+const LOCAL_API = "http://localhost:3001";
+const LOCAL_WEB = "http://localhost:5173";
 
 /** Resolved at runtime — production API with optional stored auth. */
 let apiBase = DIRECT_API;
-let webBase = "https://iivo.ai";
+let webBase = DIRECT_API;
 /** @type {Record<string, string>} */
 let apiAuthHeaders = {};
 const LENS_CAPTURED_VIA = "browser_lens";
@@ -154,10 +156,16 @@ async function discoverEndpoints() {
   const headers = secret ? { Authorization: `Bearer ${secret}` } : {};
   if (await probeHealth(DIRECT_API, headers)) {
     apiBase = DIRECT_API;
+    webBase = DIRECT_API;
     apiAuthHeaders = headers;
     return true;
   }
-
+  if (await probeHealth(LOCAL_API, headers)) {
+    apiBase = LOCAL_API;
+    webBase = LOCAL_WEB;
+    apiAuthHeaders = headers;
+    return true;
+  }
   return false;
 }
 

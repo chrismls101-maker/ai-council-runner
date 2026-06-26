@@ -21,13 +21,13 @@ import {
 const TRY_COMMANDS = ["agents", "privacy", "memory"] as const;
 
 const BUILDER_LEFT = [
-  { icon: "▦", label: "Dashboard" },
-  { icon: "⌥", label: "Prompts" },
-  { icon: "⚡", label: "Prompt Gen" },
-  { icon: "🗝", label: "API Keys" },
-  { icon: "💸", label: "Spend" },
-  { icon: "⬡", label: "Extract" },
-  { icon: ">_", label: "Terminal" },
+  { icon: "▦", label: "Dashboard", kind: "dashboard" },
+  { icon: "⌥", label: "Prompts", kind: "prompts" },
+  { icon: "⚡", label: "Prompt Gen", kind: "power-prompt" },
+  { icon: "🗝", label: "API Keys", kind: "keys" },
+  { icon: "💸", label: "Spend", kind: "spend" },
+  { icon: "⬡", label: "Extract", kind: "extract" },
+  { icon: ">_", label: "Terminal", kind: "terminal" },
 ] as const;
 
 const BUILDER_RIGHT = [
@@ -296,7 +296,11 @@ export default function GlassBrowseOverlay(): JSX.Element | null {
       <div className="glass-browse__strip" data-testid="glass-browse-builder-strip">
         <div className="glass-browse__strip-group glass-browse__strip-group--left">
           {BUILDER_LEFT.map((tab) => (
-            <button key={tab.label} type="button" className="glass-browse__strip-tab">
+            <button
+              key={tab.label}
+              type="button"
+              className={`glass-browse__strip-tab glass-browse__strip-tab--${tab.kind}`}
+            >
               <span className="glass-browse__strip-icon">{tab.icon}</span>
               <span>{tab.label}</span>
             </button>

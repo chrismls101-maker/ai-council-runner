@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Settings } from "lucide-react";
+import {
+  Brain,
+  GitBranch,
+  History,
+  LayoutGrid,
+  MessageSquare,
+  PlugZap,
+  Settings,
+  Shield,
+} from "lucide-react";
 import type {
   AgentRunRow,
   AgentRunStatus,
@@ -15,10 +24,18 @@ import type {
 } from "../../shared/ipc.ts";
 import { formatCoderRunUsageUsd } from "../../shared/coderAgentModels.ts";
 import { formatRelativeTime } from "../../shared/relativeTime.ts";
+import { parseGlassDashboardNav } from "../../shared/glassDashboardNav.ts";
+import { send } from "../useGlassState.ts";
+import FounderTab from "../panel/FounderTab.tsx";
+import { GlassHoverTooltip } from "../components/GlassHoverTooltip.tsx";
+import { DashboardSetupView } from "./DashboardSetupView.tsx";
+import { armDashboardOverlayPointer } from "../glassTextInteraction.ts";
+import "../styles/glass.css";
 
 type ProviderDot = "ok" | "missing" | "unconfigured";
 type CouncilRole = "strategy" | "critic" | "judge";
 type StepStatus = "pending" | "active" | "done" | "failed";
+type DashboardNav = "setup" | "overview" | "sessions" | "council" | "memory" | "ask" | "founder";
 
 interface CouncilStepState {
   status: StepStatus;
@@ -205,7 +222,7 @@ export function GlassDashboard({ visible = true, onClose }: GlassDashboardProps)
   const [councilRun, setCouncilRun] = useState<CouncilRunState | null>(null);
   const [recentSessions, setRecentSessions] = useState<SessionRowWithMeta[]>([]);
   const [expandedStep, setExpandedStep] = useState<CouncilRole | null>(null);
-  const [councilPanelExpanded, setCouncilPanelExpanded] = useState(true);
+  const [activeNav, setActiveNav] = useState<DashboardNav>("setup");
   const [invokeText, setInvokeText] = useState("");
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [sessionMessages, setSessionMessages] = useState<MessageRow[]>([]);
@@ -220,6 +237,24 @@ export function GlassDashboard({ visible = true, onClose }: GlassDashboardProps)
     void window.glass.getState().then(setGlassState);
     return window.glass.onState(setGlassState);
   }, []);
+
+  useEffect(() => {
+    if (!visible) return;
+    document.body.classList.add("glass-body--workspace-active");
+    armDashboardOverlayPointer();
+    return () => {
+      document.body.classList.remove("glass-body--workspace-active");
+    };
+  }, [visible]);
+
+  useEffect(() => {
+    if (!visible || !glassState?.glassDashboardNav) return;
+    const nav = parseGlassDashboardNav(glassState.glassDashboardNav);
+    if (nav) {
+      setActiveNav(nav);
+      send({ type: "clear-dashboard-nav" });
+    }
+  }, [visible, glassState?.glassDashboardNav]);
 
   useEffect(() => {
     void (async () => {
@@ -303,6 +338,7 @@ export function GlassDashboard({ visible = true, onClose }: GlassDashboardProps)
   const busTitle = busHealth?.staleSubscribers.length
     ? `Agent bus degraded: ${busHealth.staleSubscribers.join(", ")}`
     : "Agent bus healthy";
+  const isFounder = glassState?.iivoAccountLink?.role === "founder";
 
   const handleClose = useCallback((): void => {
     if (onClose) {
@@ -311,6 +347,13 @@ export function GlassDashboard({ visible = true, onClose }: GlassDashboardProps)
     }
     window.glass.closeDashboard();
   }, [onClose]);
+
+  const clearSessionDetail = useCallback((): void => {
+    setSelectedSessionId(null);
+    setSessionMessages([]);
+    setSessionSpend(null);
+    setSessionCalls([]);
+  }, []);
 
   const handleSelectSession = useCallback(async (sessionId: string): Promise<void> => {
     setSelectedSessionId(sessionId);
@@ -333,6 +376,16 @@ export function GlassDashboard({ visible = true, onClose }: GlassDashboardProps)
     setUserContext((prev) => prev.filter((row) => row.key !== key));
   }, []);
 
+  const handleNavSelect = useCallback(
+    (nav: DashboardNav): void => {
+      setActiveNav(nav);
+      if (nav !== "sessions") {
+        clearSessionDetail();
+      }
+    },
+    [clearSessionDetail],
+  );
+
   function contextSourceClass(source: string): string {
     if (source === "onboarding" || source === "explicit") {
       return "glass-dashboard__context-source glass-dashboard__context-source--explicit";
@@ -340,300 +393,384 @@ export function GlassDashboard({ visible = true, onClose }: GlassDashboardProps)
     return "glass-dashboard__context-source glass-dashboard__context-source--inferred";
   }
 
+  const navItems: { id: DashboardNav; label: string; tooltip: string; icon: JSX.Element }[] = [
+    {
+      id: "setup",
+      label: "Setup",
+      tooltip: "Setup & connections",
+      icon: <PlugZap size={20} strokeWidth={2} aria-hidden="true" />,
+    },
+    {
+      id: "overview",
+      label: "Overview",
+      tooltip: "Overview & live activity",
+      icon: <LayoutGrid size={20} strokeWidth={2} aria-hidden="true" />,
+    },
+    {
+      id: "sessions",
+      label: "Sessions",
+      tooltip: "Session history",
+      icon: <History size={20} strokeWidth={2} aria-hidden="true" />,
+    },
+    {
+      id: "council",
+      label: "Council",
+      tooltip: "Council deliberation",
+      icon: <GitBranch size={20} strokeWidth={2} aria-hidden="true" />,
+    },
+    {
+      id: "memory",
+      label: "Memory",
+      tooltip: "What IIVO knows",
+      icon: <Brain size={20} strokeWidth={2} aria-hidden="true" />,
+    },
+    {
+      id: "ask",
+      label: "Ask",
+      tooltip: "Ask IIVO",
+      icon: <MessageSquare size={20} strokeWidth={2} aria-hidden="true" />,
+    },
+  ];
+
+  if (isFounder) {
+    navItems.push({
+      id: "founder",
+      label: "Founder",
+      tooltip: "Founder operations",
+      icon: <Shield size={20} strokeWidth={2} aria-hidden="true" />,
+    });
+  }
+
+  const renderCouncilRail = (): JSX.Element => {
+    if (!hasCouncilRun) {
+      return (
+        <div className="glass-dashboard__empty glass-dashboard__empty--compact">
+          <p>No council runs yet</p>
+        </div>
+      );
+    }
+
+    return (
+      <ol className="glass-dashboard__council-rail">
+        {COUNCIL_ORDER.map((role, index) => {
+          const step = councilRun!.steps[role];
+          const expanded = expandedStep === role;
+          return (
+            <li
+              key={role}
+              className={`glass-dashboard__council-step glass-dashboard__council-step--${step.status}`}
+            >
+              {index > 0 ? (
+                <span className="glass-dashboard__council-line" aria-hidden="true" />
+              ) : null}
+              <button
+                type="button"
+                className="glass-dashboard__council-node"
+                disabled={step.status !== "done" || !step.content}
+                onClick={() => setExpandedStep((prev) => (prev === role ? null : role))}
+              >
+                <span className="glass-dashboard__council-marker" aria-hidden="true">
+                  {councilMarker(step)}
+                </span>
+                <span className="glass-dashboard__council-name">{COUNCIL_LABELS[role]}</span>
+              </button>
+              {expanded && step.content ? (
+                <pre className="glass-dashboard__council-output">{step.content}</pre>
+              ) : null}
+            </li>
+          );
+        })}
+      </ol>
+    );
+  };
+
+  const renderSessionList = (): JSX.Element => (
+    <section className="glass-dashboard__sessions">
+      <p className="glass-dashboard__section-label">Recent sessions</p>
+      {hasSessions ? (
+        <ul className="glass-dashboard__session-list" data-testid="glass-dashboard-session-list">
+          {recentSessions.map((session) => (
+            <li
+              key={session.id}
+              className="glass-dashboard__session-item glass-dashboard__session-item--clickable"
+              data-testid="glass-dashboard-session-row"
+              onClick={() => void handleSelectSession(session.id)}
+            >
+              <span className="glass-dashboard__session-time">
+                {formatRelativeTime(session.updated_at)}
+              </span>
+              {session.agent_type ? (
+                <span className="glass-dashboard__session-badge">{session.agent_type}</span>
+              ) : null}
+              <span className="glass-dashboard__session-title">{sessionDisplayLabel(session)}</span>
+              {(session.spend_usd ?? 0) > 0 ? (
+                <span className="glass-dashboard__session-spend-pill">
+                  {formatCoderRunUsageUsd(session.spend_usd ?? 0)}
+                </span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="glass-dashboard__empty" data-testid="glass-dashboard-sessions-empty">
+          <span className="glass-dashboard__empty-icon" aria-hidden="true">
+            ◌
+          </span>
+          <p>No sessions yet</p>
+        </div>
+      )}
+    </section>
+  );
+
+  const renderSessionDetail = (): JSX.Element => (
+    <section className="glass-dashboard__session-detail">
+      <button type="button" className="glass-dashboard__back" onClick={clearSessionDetail}>
+        ← Back
+      </button>
+      {sessionSpend && sessionSpend.callCount > 0 ? (
+        <div
+          className="glass-dashboard__session-spend"
+          data-testid="glass-dashboard-session-spend"
+        >
+          <p className="glass-dashboard__section-label">Session spend</p>
+          <p>
+            {formatCoderRunUsageUsd(sessionSpend.totalUsd)} · {sessionSpend.callCount} model call
+            {sessionSpend.callCount === 1 ? "" : "s"} ·{" "}
+            {sessionSpend.inputTokens.toLocaleString()} in /{" "}
+            {sessionSpend.outputTokens.toLocaleString()} out
+          </p>
+          {sessionCalls.length > 0 ? (
+            <ul className="glass-dashboard__spend-calls">
+              {sessionCalls.slice(0, 8).map((call) => (
+                <li key={call.id}>
+                  {call.source} · {call.model} · {formatCoderRunUsageUsd(call.estimated_usd)}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+      {loadingMessages ? (
+        <p className="glass-dashboard__loading">Loading…</p>
+      ) : sessionMessages.length > 0 ? (
+        <ul className="glass-dashboard__message-list">
+          {sessionMessages.map((msg) => (
+            <li
+              key={msg.id}
+              className={`glass-dashboard__message glass-dashboard__message--${msg.role}`}
+            >
+              <span className="glass-dashboard__message-role">{msg.role}</span>
+              <p className="glass-dashboard__message-content">{msg.content}</p>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="glass-dashboard__empty glass-dashboard__empty--compact">
+          <p>No messages in this session yet</p>
+        </div>
+      )}
+    </section>
+  );
+
+  const renderMemoryTable = (): JSX.Element => (
+    <section className="glass-dashboard__memory glass-dashboard__memory--view">
+      <p className="glass-dashboard__section-label">What IIVO knows</p>
+      {userContext.length > 0 ? (
+        <ul className="glass-dashboard__context-list">
+          {userContext.map((entry) => (
+            <li key={entry.key} className="glass-dashboard__context-item">
+              <span className="glass-dashboard__context-key">{entry.key.replace(/_/g, " ")}</span>
+              <span className="glass-dashboard__context-value">{entry.value}</span>
+              <span className={contextSourceClass(entry.source)}>{entry.source}</span>
+              <button
+                type="button"
+                className="glass-dashboard__context-delete"
+                aria-label={`Remove ${entry.key}`}
+                onClick={() => void handleDeleteContext(entry.key)}
+              >
+                ×
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="glass-dashboard__empty glass-dashboard__empty--compact">
+          <p>Nothing learned yet</p>
+        </div>
+      )}
+    </section>
+  );
+
+  const renderMainContent = (): JSX.Element => {
+    if (activeNav === "setup") {
+      if (!glassState) {
+        return (
+          <div className="glass-dashboard__empty glass-dashboard__empty--compact">
+            <p>Loading setup status…</p>
+          </div>
+        );
+      }
+      return <DashboardSetupView state={glassState} />;
+    }
+
+    if (activeNav === "overview") {
+      return (
+        <>
+          <div className="glass-dashboard__pulse" data-testid="glass-dashboard-pulse">
+            <div className="glass-dashboard__pulse-left">
+              <span className={providerDotClass(anthropicDot)} title="Anthropic" />
+              <span className="glass-dashboard__provider-label">Anthropic</span>
+              <span className={providerDotClass(openAiDot)} title="OpenAI" />
+              <span className="glass-dashboard__provider-label glass-dashboard__provider-label--muted">
+                OpenAI
+              </span>
+              <span className={providerDotClass(busDot)} title={busTitle} />
+              <span className="glass-dashboard__provider-label glass-dashboard__provider-label--muted">
+                Bus
+              </span>
+            </div>
+            <div className="glass-dashboard__pulse-center">{screenLabel}</div>
+            <div className="glass-dashboard__pulse-right">
+              {activeAgent ? (
+                <span className="glass-dashboard__agent-active">{activeAgent}</span>
+              ) : null}
+            </div>
+          </div>
+
+          {retentionSummary ? (
+            <section
+              className="glass-dashboard__retention"
+              data-testid="glass-dashboard-retention"
+            >
+              <p className="glass-dashboard__section-label">Activity (7 days)</p>
+              <ul className="glass-dashboard__retention-stats">
+                <li>Sessions: {retentionSummary.sessionsLast7Days}</li>
+                <li>Workflows / session: {retentionSummary.workflowsPerSession}</li>
+                <li>
+                  Autofix acceptance: {Math.round(retentionSummary.autofixAcceptanceRate * 100)}%
+                </li>
+                <li>
+                  Build loop success: {Math.round(retentionSummary.buildLoopSuccessRate * 100)}%
+                </li>
+              </ul>
+            </section>
+          ) : null}
+        </>
+      );
+    }
+
+    if (activeNav === "sessions") {
+      return selectedSessionId ? renderSessionDetail() : renderSessionList();
+    }
+
+    if (activeNav === "council") {
+      return (
+        <section className="glass-dashboard__council-view">
+          <p className="glass-dashboard__section-label">Council</p>
+          {renderCouncilRail()}
+        </section>
+      );
+    }
+
+    if (activeNav === "memory") {
+      return renderMemoryTable();
+    }
+
+    if (activeNav === "ask") {
+      return (
+        <section className="glass-dashboard__ask-view">
+          <div className="glass-dashboard__ask-inner">
+            <p className="glass-dashboard__section-label glass-dashboard__section-label--centered">
+              Ask IIVO
+            </p>
+            <form className="glass-dashboard__invoke" onSubmit={submitInvoke}>
+              <input
+                type="text"
+                className="glass-dashboard__invoke-input"
+                placeholder="Ask IIVO anything…"
+                value={invokeText}
+                onChange={(e) => setInvokeText(e.target.value)}
+                aria-label="Ask IIVO"
+              />
+              <button
+                type="submit"
+                className="glass-dashboard__invoke-send"
+                disabled={!invokeText.trim()}
+              >
+                Send
+              </button>
+            </form>
+          </div>
+        </section>
+      );
+    }
+
+    if (activeNav === "founder" && isFounder && glassState?.iivoAccountLink) {
+      return (
+        <section className="glass-dashboard__founder-view">
+          <FounderTab state={glassState} link={glassState.iivoAccountLink} />
+        </section>
+      );
+    }
+
+    return <></>;
+  };
+
   return (
     <div
       className={`glass-dashboard-shell${visible ? "" : " glass-dashboard-shell--hidden"}`}
       data-testid="glass-dashboard-shell"
     >
       <div className="glass-dashboard" data-testid="glass-dashboard">
-      <header className="glass-dashboard__titlebar" data-testid="glass-dashboard-titlebar">
-        <span className="glass-dashboard__title">Glass Dashboard</span>
-        <div className="glass-dashboard__titlebar-actions">
-          <button
-            type="button"
-            className="glass-dashboard__settings-btn"
-            aria-label="Open Settings"
-            onClick={() => window.glass.openSettings()}
-          >
-            <Settings size={22} strokeWidth={2} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="glass-dashboard__close"
-            aria-label="Close dashboard"
-            onClick={handleClose}
-          >
-            ×
-          </button>
-        </div>
-      </header>
-
-      <div className="glass-dashboard__pulse" data-testid="glass-dashboard-pulse">
-        <div className="glass-dashboard__pulse-left">
-          <span className={providerDotClass(anthropicDot)} title="Anthropic" />
-          <span className="glass-dashboard__provider-label">Anthropic</span>
-          <span className={providerDotClass(openAiDot)} title="OpenAI" />
-          <span className="glass-dashboard__provider-label glass-dashboard__provider-label--muted">
-            OpenAI
-          </span>
-          <span className={providerDotClass(busDot)} title={busTitle} />
-          <span className="glass-dashboard__provider-label glass-dashboard__provider-label--muted">
-            Bus
-          </span>
-        </div>
-        <div className="glass-dashboard__pulse-center">{screenLabel}</div>
-        <div className="glass-dashboard__pulse-right">
-          {activeAgent ? <span className="glass-dashboard__agent-active">{activeAgent}</span> : null}
-        </div>
-      </div>
-
-      <div
-        className={`glass-dashboard__body${councilPanelExpanded ? "" : " glass-dashboard__body--council-collapsed"}`}
-      >
-        <main className="glass-dashboard__main">
-          {selectedSessionId ? (
-            <section className="glass-dashboard__session-detail">
+        <header className="glass-dashboard__titlebar" data-testid="glass-dashboard-titlebar">
+          <span className="glass-dashboard__title">Glass Dashboard</span>
+          <div className="glass-dashboard__titlebar-actions">
+            <GlassHoverTooltip label="Close dashboard" placement="bottom">
               <button
                 type="button"
-                className="glass-dashboard__back"
-                onClick={() => {
-                  setSelectedSessionId(null);
-                  setSessionMessages([]);
-                  setSessionSpend(null);
-                  setSessionCalls([]);
-                }}
+                className="glass-dashboard__close"
+                aria-label="Close dashboard"
+                onClick={handleClose}
               >
-                ← Back
+                ×
               </button>
-              {sessionSpend && sessionSpend.callCount > 0 ? (
-                <div
-                  className="glass-dashboard__session-spend"
-                  data-testid="glass-dashboard-session-spend"
-                >
-                  <p className="glass-dashboard__section-label">Session spend</p>
-                  <p>
-                    {formatCoderRunUsageUsd(sessionSpend.totalUsd)} · {sessionSpend.callCount}{" "}
-                    model call{sessionSpend.callCount === 1 ? "" : "s"} ·{" "}
-                    {sessionSpend.inputTokens.toLocaleString()} in /{" "}
-                    {sessionSpend.outputTokens.toLocaleString()} out
-                  </p>
-                  {sessionCalls.length > 0 ? (
-                    <ul className="glass-dashboard__spend-calls">
-                      {sessionCalls.slice(0, 8).map((call) => (
-                        <li key={call.id}>
-                          {call.source} · {call.model} ·{" "}
-                          {formatCoderRunUsageUsd(call.estimated_usd)}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </div>
-              ) : null}
-              {loadingMessages ? (
-                <p className="glass-dashboard__loading">Loading…</p>
-              ) : sessionMessages.length > 0 ? (
-                <ul className="glass-dashboard__message-list">
-                  {sessionMessages.map((msg) => (
-                    <li
-                      key={msg.id}
-                      className={`glass-dashboard__message glass-dashboard__message--${msg.role}`}
-                    >
-                      <span className="glass-dashboard__message-role">{msg.role}</span>
-                      <p className="glass-dashboard__message-content">{msg.content}</p>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="glass-dashboard__empty glass-dashboard__empty--compact">
-                  <p>No messages in this session yet</p>
-                </div>
-              )}
-            </section>
-          ) : (
-            <>
-              <section className="glass-dashboard__suggestions">
-                <p className="glass-dashboard__section-label">Suggestions</p>
-                <div className="glass-dashboard__chips">
-                  <span className="glass-dashboard__chip">Coming soon</span>
-                  <span className="glass-dashboard__chip">Coming soon</span>
-                </div>
-              </section>
-
-              {retentionSummary ? (
-                <section
-                  className="glass-dashboard__retention"
-                  data-testid="glass-dashboard-retention"
-                >
-                  <p className="glass-dashboard__section-label">Activity (7 days)</p>
-                  <ul className="glass-dashboard__retention-stats">
-                    <li>Sessions: {retentionSummary.sessionsLast7Days}</li>
-                    <li>Workflows / session: {retentionSummary.workflowsPerSession}</li>
-                    <li>
-                      Autofix acceptance:{" "}
-                      {Math.round(retentionSummary.autofixAcceptanceRate * 100)}%
-                    </li>
-                    <li>
-                      Build loop success:{" "}
-                      {Math.round(retentionSummary.buildLoopSuccessRate * 100)}%
-                    </li>
-                  </ul>
-                </section>
-              ) : null}
-
-              <section className="glass-dashboard__sessions">
-                <p className="glass-dashboard__section-label">Recent sessions</p>
-                {hasSessions ? (
-                  <ul className="glass-dashboard__session-list" data-testid="glass-dashboard-session-list">
-                    {recentSessions.map((session) => (
-                      <li
-                        key={session.id}
-                        className="glass-dashboard__session-item glass-dashboard__session-item--clickable"
-                        data-testid="glass-dashboard-session-row"
-                        onClick={() => void handleSelectSession(session.id)}
-                      >
-                        <span className="glass-dashboard__session-time">
-                          {formatRelativeTime(session.updated_at)}
-                        </span>
-                        {session.agent_type ? (
-                          <span className="glass-dashboard__session-badge">{session.agent_type}</span>
-                        ) : null}
-                        <span className="glass-dashboard__session-title">
-                          {sessionDisplayLabel(session)}
-                        </span>
-                        {(session.spend_usd ?? 0) > 0 ? (
-                          <span className="glass-dashboard__session-spend-pill">
-                            {formatCoderRunUsageUsd(session.spend_usd ?? 0)}
-                          </span>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <div className="glass-dashboard__empty" data-testid="glass-dashboard-sessions-empty">
-                    <span className="glass-dashboard__empty-icon" aria-hidden="true">
-                      ◌
-                    </span>
-                    <p>No sessions yet</p>
-                  </div>
-                )}
-              </section>
-            </>
-          )}
-
-          <form className="glass-dashboard__invoke" onSubmit={submitInvoke}>
-            <input
-              type="text"
-              className="glass-dashboard__invoke-input"
-              placeholder="Ask IIVO anything…"
-              value={invokeText}
-              onChange={(e) => setInvokeText(e.target.value)}
-              aria-label="Ask IIVO"
-            />
-            <button type="submit" className="glass-dashboard__invoke-send" disabled={!invokeText.trim()}>
-              Send
-            </button>
-          </form>
-        </main>
-
-        <aside
-          className={`glass-dashboard__agents${councilPanelExpanded ? "" : " glass-dashboard__agents--collapsed"}`}
-        >
-          <div className="glass-dashboard__agents-header">
-            <p
-              className={`glass-dashboard__section-label${councilPanelExpanded ? "" : " glass-dashboard__section-label--rail"}`}
-            >
-              Council
-            </p>
-            <button
-              type="button"
-              className="glass-dashboard__agents-collapse"
-              onClick={() => setCouncilPanelExpanded((v) => !v)}
-              aria-expanded={councilPanelExpanded}
-              aria-label={councilPanelExpanded ? "Collapse council panel" : "Expand council panel"}
-              title={councilPanelExpanded ? "Collapse panel" : "Expand panel"}
-            >
-              {councilPanelExpanded ? (
-                <ChevronRight size={15} strokeWidth={2} aria-hidden="true" />
-              ) : (
-                <ChevronLeft size={15} strokeWidth={2} aria-hidden="true" />
-              )}
-            </button>
+            </GlassHoverTooltip>
           </div>
+        </header>
 
-          {councilPanelExpanded ? (
-            hasCouncilRun ? (
-              <ol className="glass-dashboard__council-rail">
-                {COUNCIL_ORDER.map((role, index) => {
-                  const step = councilRun!.steps[role];
-                  const expanded = expandedStep === role;
-                  return (
-                    <li
-                      key={role}
-                      className={`glass-dashboard__council-step glass-dashboard__council-step--${step.status}`}
-                    >
-                      {index > 0 ? (
-                        <span className="glass-dashboard__council-line" aria-hidden="true" />
-                      ) : null}
-                      <button
-                        type="button"
-                        className="glass-dashboard__council-node"
-                        disabled={step.status !== "done" || !step.content}
-                        onClick={() =>
-                          setExpandedStep((prev) => (prev === role ? null : role))
-                        }
-                      >
-                        <span className="glass-dashboard__council-marker" aria-hidden="true">
-                          {councilMarker(step)}
-                        </span>
-                        <span className="glass-dashboard__council-name">{COUNCIL_LABELS[role]}</span>
-                      </button>
-                      {expanded && step.content ? (
-                        <pre className="glass-dashboard__council-output">{step.content}</pre>
-                      ) : null}
-                    </li>
-                  );
-                })}
-              </ol>
-            ) : (
-              <div className="glass-dashboard__empty glass-dashboard__empty--compact">
-                <p>No council runs yet</p>
-              </div>
-            )
-          ) : null}
+        <div className="glass-dashboard__body">
+          <nav className="glass-dashboard__nav" aria-label="Dashboard navigation">
+            {navItems.map((item) => (
+              <GlassHoverTooltip key={item.id} label={item.tooltip} placement="right">
+                <button
+                  type="button"
+                  className={`glass-dashboard__nav-item${activeNav === item.id ? " glass-dashboard__nav-item--active" : ""}`}
+                  aria-label={item.label}
+                  aria-current={activeNav === item.id ? "page" : undefined}
+                  onClick={() => handleNavSelect(item.id)}
+                >
+                  {item.icon}
+                </button>
+              </GlassHoverTooltip>
+            ))}
+            <div className="glass-dashboard__nav-footer">
+              <GlassHoverTooltip label="Glass settings" placement="right">
+                <button
+                  type="button"
+                  className="glass-dashboard__nav-item glass-dashboard__nav-item--settings"
+                  aria-label="Glass settings"
+                  data-testid="glass-dashboard-settings"
+                  onClick={() => window.glass.openSettings()}
+                >
+                  <Settings size={20} strokeWidth={2} aria-hidden="true" />
+                </button>
+              </GlassHoverTooltip>
+            </div>
+          </nav>
 
-          {councilPanelExpanded ? (
-            <section className="glass-dashboard__memory">
-              <p className="glass-dashboard__section-label">What IIVO knows</p>
-              {userContext.length > 0 ? (
-                <ul className="glass-dashboard__context-list">
-                  {userContext.map((entry) => (
-                    <li key={entry.key} className="glass-dashboard__context-item">
-                      <span className="glass-dashboard__context-key">
-                        {entry.key.replace(/_/g, " ")}
-                      </span>
-                      <span className="glass-dashboard__context-value">{entry.value}</span>
-                      <span className={contextSourceClass(entry.source)}>{entry.source}</span>
-                      <button
-                        type="button"
-                        className="glass-dashboard__context-delete"
-                        aria-label={`Remove ${entry.key}`}
-                        onClick={() => void handleDeleteContext(entry.key)}
-                      >
-                        ×
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="glass-dashboard__empty glass-dashboard__empty--compact">
-                  <p>Nothing learned yet</p>
-                </div>
-              )}
-            </section>
-          ) : null}
-        </aside>
+          <main className="glass-dashboard__main">{renderMainContent()}</main>
+        </div>
       </div>
-    </div>
     </div>
   );
 }

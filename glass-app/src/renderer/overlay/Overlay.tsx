@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { armCodeAnalystOverlayPointer, armDashboardOverlayPointer, armResearchOverlayPointer, armWritingStudioOverlayPointer, ensureOverlayInteractive } from "../glassTextInteraction.ts";
+import "./OverlayExitGlass.css";
 import { BuilderStrip } from "../builder/BuilderStrip.tsx";
 import { shouldShowBuilderStrip } from "../../shared/builderStripVisibility.ts";
 import type { GlassState } from "../../shared/ipc.ts";
@@ -33,7 +34,9 @@ import { ResearchExplorer } from "../research/ResearchExplorer.tsx";
 import { CodeAnalystExplorer } from "../code-analyst/CodeAnalystExplorer.tsx";
 import { WritingStudio } from "../writing/WritingStudio.tsx";
 import { GlassDashboard } from "../dashboard/GlassDashboard.tsx";
+import { resolveOverlayPanelNavigation } from "../../shared/panelTabRouting.ts";
 import "../dashboard/GlassDashboard.css";
+import "../settings/GlassSettings.css";
 import {
   applyCoderTranscriptEvent,
   type CoderTranscriptItem,
@@ -238,6 +241,17 @@ function GlassDashboardLayer({ state }: { state: GlassState }): JSX.Element | nu
   );
 }
 
+function OverlayWorkspaceLayers({ state }: { state: GlassState }): JSX.Element {
+  return (
+    <>
+      <ResearchExplorerLayer state={state} />
+      <CodeAnalystExplorerLayer state={state} />
+      <WritingStudioLayer state={state} />
+      <GlassDashboardLayer state={state} />
+    </>
+  );
+}
+
 function fullscreenWorkspaceActive(state: GlassState): boolean {
   return state.researchExplorerActive === true
     || state.codeAnalystExplorerActive === true
@@ -277,43 +291,37 @@ function shouldShowExitGlassButton(state: GlassState): boolean {
 }
 
 function ExitGlassButton({ state }: { state: GlassState }): JSX.Element | null {
-  if (!shouldShowExitGlassButton(state)) return null;
+  const show = shouldShowExitGlassButton(state);
+
+  useEffect(() => {
+    return () => {
+      window.glass?.setOverlayPointerOverExitControl?.(false);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!show) {
+      window.glass?.setOverlayPointerOverExitControl?.(false);
+    }
+  }, [show]);
+
+  if (!show) return null;
+
+  const armExitPointer = (over: boolean): void => {
+    window.glass?.setOverlayPointerOverExitControl?.(over);
+    if (over) ensureOverlayInteractive();
+  };
+
   return (
     <button
       type="button"
-      onMouseEnter={ensureOverlayInteractive}
+      className="overlay-exit-glass"
+      data-testid="glass-exit-control"
+      aria-label="Exit Glass"
+      onPointerEnter={() => armExitPointer(true)}
+      onPointerLeave={() => armExitPointer(false)}
+      onPointerDownCapture={() => armExitPointer(true)}
       onClick={() => send({ type: "glass-quit" })}
-      style={{
-        position: "fixed",
-        top: 16,
-        right: 16,
-        zIndex: 99999,
-        background: "transparent",
-        border: "1px solid rgba(239, 68, 68, 0.65)",
-        borderRadius: 6,
-        color: "rgba(239, 68, 68, 0.9)",
-        fontSize: 11,
-        fontWeight: 500,
-        letterSpacing: "0.04em",
-        padding: "4px 10px",
-        cursor: "pointer",
-        backdropFilter: "blur(8px)",
-        WebkitBackdropFilter: "blur(8px)",
-        userSelect: "none",
-        lineHeight: 1.4,
-        pointerEvents: "auto",
-        transition: "border-color 0.15s, color 0.15s, background 0.15s",
-      }}
-      onMouseOver={(e) => {
-        (e.currentTarget as HTMLButtonElement).style.background = "rgba(239, 68, 68, 0.12)";
-        (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(239, 68, 68, 1)";
-        (e.currentTarget as HTMLButtonElement).style.color = "rgba(239, 68, 68, 1)";
-      }}
-      onMouseOut={(e) => {
-        (e.currentTarget as HTMLButtonElement).style.background = "transparent";
-        (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(239, 68, 68, 0.65)";
-        (e.currentTarget as HTMLButtonElement).style.color = "rgba(239, 68, 68, 0.9)";
-      }}
     >
       Exit Glass
     </button>
@@ -932,10 +940,7 @@ export function Overlay(): JSX.Element {
           <PaletteLayer state={state} lastTerminalBlock={lastTerminalBlock} />
           <GlassDebriefPanel />
           {responsePanel}
-          <ResearchExplorerLayer state={state} />
-          <CodeAnalystExplorerLayer state={state} />
-          <WritingStudioLayer state={state} />
-          <GlassDashboardLayer state={state} />
+          <OverlayWorkspaceLayers state={state} />
           <ExitGlassButton state={state} />
         </div>
       );
@@ -955,6 +960,7 @@ export function Overlay(): JSX.Element {
           "overlay-root",
           "overlay-root--captions-only",
           translateFocusActive && "overlay-root--translate-active",
+          fullscreenWorkspaceActive(state) && "overlay-root--workspace-active",
         )}
         data-testid="glass-overlay-root"
       >
@@ -970,13 +976,21 @@ export function Overlay(): JSX.Element {
           onEnterInteractive={enterInteractive}
           onLeaveInteractive={leaveInteractive}
         />
+        <OverlayWorkspaceLayers state={state} />
       </div>
     );
   }
 
   if (!overlayContentVisible && !countdownVisible && updateVisible) {
     return (
-      <div className="overlay-root overlay-root--update-only" data-testid="glass-overlay-root">
+      <div
+        className={overlayRootClassName(
+          "overlay-root",
+          "overlay-root--update-only",
+          fullscreenWorkspaceActive(state) && "overlay-root--workspace-active",
+        )}
+        data-testid="glass-overlay-root"
+      >
         <GlassUpdateOverlay
           appUpdate={state.appUpdate}
           enterInteractive={enterInteractive}
@@ -987,19 +1001,28 @@ export function Overlay(): JSX.Element {
           onEnterInteractive={enterInteractive}
           onLeaveInteractive={leaveInteractive}
         />
+        <OverlayWorkspaceLayers state={state} />
       </div>
     );
   }
 
   if (!overlayContentVisible && countdownVisible && !updateVisible) {
     return (
-      <div className="overlay-root overlay-root--countdown-only" data-testid="glass-overlay-root">
+      <div
+        className={overlayRootClassName(
+          "overlay-root",
+          "overlay-root--countdown-only",
+          fullscreenWorkspaceActive(state) && "overlay-root--workspace-active",
+        )}
+        data-testid="glass-overlay-root"
+      >
         <ListenCountdownOverlay seconds={state.listenCountdownSeconds!} />
         <BuilderStripLayer
           state={state}
           onEnterInteractive={enterInteractive}
           onLeaveInteractive={leaveInteractive}
         />
+        <OverlayWorkspaceLayers state={state} />
       </div>
     );
   }
@@ -1013,7 +1036,11 @@ export function Overlay(): JSX.Element {
   ) {
     return (
       <div
-        className="overlay-root overlay-root--notice-only"
+        className={overlayRootClassName(
+          "overlay-root",
+          "overlay-root--notice-only",
+          fullscreenWorkspaceActive(state) && "overlay-root--workspace-active",
+        )}
         data-testid="glass-overlay-root"
         style={overlayLayoutStyle(state)}
       >
@@ -1031,6 +1058,7 @@ export function Overlay(): JSX.Element {
           onLeaveInteractive={leaveInteractive}
         />
         <GlassDebriefPanel />
+        <OverlayWorkspaceLayers state={state} />
       </div>
     );
   }
@@ -1100,7 +1128,13 @@ export function Overlay(): JSX.Element {
                   type="button"
                   className="gbtn gbtn--primary"
                   onClick={() => {
-                    send({ type: "set-tab", tab: card.kind === "insight" ? "insights" : "session" });
+                    const nav = resolveOverlayPanelNavigation(
+                      card.kind === "insight" ? "insights" : "session",
+                    );
+                    send({ type: "set-tab", tab: nav.panelTab });
+                    if (nav.captureSubTab) {
+                      send({ type: "set-capture-sub-tab", subTab: nav.captureSubTab });
+                    }
                     if (!state.panelVisible) send({ type: "toggle-panel" });
                   }}
                 >
@@ -1158,10 +1192,7 @@ export function Overlay(): JSX.Element {
           onLaunchConsumed={() => setIdeCoderLaunch(null)}
         />
       ) : null}
-      <ResearchExplorerLayer state={state} />
-      <CodeAnalystExplorerLayer state={state} />
-      <WritingStudioLayer state={state} />
-      <GlassDashboardLayer state={state} />
+      <OverlayWorkspaceLayers state={state} />
       <ExitGlassButton state={state} />
     </div>
   );

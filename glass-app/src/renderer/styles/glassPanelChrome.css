@@ -99,7 +99,7 @@ html.glass-panel-window body.glass-body--panel {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  width: 108px;
+  width: 124px;
   gap: 6px;
   overflow-y: auto;
   background: rgba(255, 255, 255, 0.02);
@@ -178,6 +178,23 @@ html.glass-panel-window body.glass-body--panel {
 .panel .section-title {
   color: rgba(200, 214, 236, 0.72);
   letter-spacing: 0.08em;
+}
+
+.panel-tab-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 0;
+}
+
+.panel-tab-view > .section-title {
+  margin: 0 0 12px;
+  flex-shrink: 0;
+}
+
+.panel__nav-tab--settings {
+  margin-top: auto;
 }
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {

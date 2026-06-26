@@ -4,6 +4,10 @@
  */
 
 import { contextBridge, ipcRenderer } from "electron";
+
+// Dashboard + overlay + dock each subscribe to state; avoid dev MaxListeners warnings.
+ipcRenderer.setMaxListeners(25);
+
 import {
   IPC,
   type GlassCommand,
@@ -134,6 +138,9 @@ const glassApi = {
   },
   setOverlayPointerOverBuilderStrip(over: boolean): void {
     ipcRenderer.send(IPC.overlayPointerOverBuilderStrip, over);
+  },
+  setOverlayPointerOverExitControl(over: boolean): void {
+    ipcRenderer.send(IPC.overlayPointerOverExitControl, over);
   },
   setOverlayPointerOverIde(over: boolean): void {
     ipcRenderer.send(IPC.overlayPointerOverIde, over);
@@ -290,14 +297,19 @@ const glassApi = {
   activationQuit(): Promise<{ ok: boolean }> {
     return ipcRenderer.invoke(IPC.activationQuit) as Promise<{ ok: boolean }>;
   },
-  openDashboard(): void {
-    ipcRenderer.send(IPC.openGlassDashboard);
+  openDashboard(nav?: import("../shared/glassDashboardNav.ts").GlassDashboardNav): void {
+    ipcRenderer.send(IPC.openGlassDashboard, nav);
   },
   closeDashboard(): void {
     ipcRenderer.send(IPC.closeGlassDashboard);
   },
-  openSettings(): void {
-    ipcRenderer.send(IPC.openGlassSettings);
+  openSettings(section?: import("../shared/panelTabRouting.ts").GlassSettingsSection): void {
+    ipcRenderer.send(IPC.openGlassSettings, section);
+  },
+  getSettingsInitialSection(): Promise<import("../shared/panelTabRouting.ts").GlassSettingsSection> {
+    return ipcRenderer.invoke(IPC.getSettingsInitialSection) as Promise<
+      import("../shared/panelTabRouting.ts").GlassSettingsSection
+    >;
   },
   closeSettings(): void {
     ipcRenderer.send(IPC.closeGlassSettings);

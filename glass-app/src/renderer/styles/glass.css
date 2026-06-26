@@ -1730,6 +1730,40 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
   padding: 0;
 }
 
+.panel-capture {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  pointer-events: auto;
+}
+
+.panel-capture__tabs {
+  -webkit-app-region: no-drag;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.12);
+  position: relative;
+  z-index: 2;
+}
+
+.panel-capture__tab {
+  flex-shrink: 0;
+}
+
+.panel-capture__body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  pointer-events: auto;
+}
+
 .section-title {
   font-size: 11px;
   text-transform: uppercase;
@@ -2040,6 +2074,7 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
 .overlay-root--workspace-active .research-explorer,
 .overlay-root--workspace-active .code-analyst-explorer,
 .overlay-root--workspace-active .writing-studio,
+.overlay-root--workspace-active .glass-dashboard-shell,
 .overlay-root--research-active .research-explorer {
   pointer-events: auto;
 }
@@ -4955,6 +4990,9 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
 
 .status-grid {
   margin-bottom: 12px;
+}
+.status-grid--dashboard {
+  margin-bottom: 0;
 }
 .status-grid__cells {
   display: grid;

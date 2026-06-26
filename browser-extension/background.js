@@ -2,11 +2,10 @@
  * IIVO Lens — background service worker (opens IIVO app tabs).
  */
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.type === "IIVO_LENS_OPEN_APP") {
-    const url = message.url || "https://iivo.ai/";
-    chrome.tabs.create({ url }, () => sendResponse({ ok: true }));
-    return true;
-  }
-  return false;
-});
+importScripts("lib/backgroundLogic.js");
+
+chrome.runtime.onMessage.addListener(
+  createOpenAppHandler((props, cb) => {
+    chrome.tabs.create(props, cb);
+  }),
+);

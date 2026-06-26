@@ -97,10 +97,15 @@ async function runNodeTest(file) {
   return new Promise((resolve, reject) => {
     const child = spawn(
       process.execPath,
-      ["--experimental-strip-types", "--test", file],
+      ["--experimental-strip-types", "--test", "--test-timeout", "15000", file],
       { cwd: glassAppDir, stdio: "inherit" },
     );
+    const killTimer = setTimeout(() => {
+      child.kill("SIGTERM");
+      reject(new Error(`${file} timed out after 20s — refusing to hang`));
+    }, 20_000);
     child.on("exit", (code) => {
+      clearTimeout(killTimer);
       if (code === 0) resolve();
       else reject(new Error(`${file} failed (${code})`));
     });

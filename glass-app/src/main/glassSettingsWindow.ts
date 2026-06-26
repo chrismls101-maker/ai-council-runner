@@ -1,23 +1,30 @@
 /**
- * Glass Settings — standalone settings window.
+ * Glass Settings — standalone settings window (full-width, same band as Glass Dashboard).
  */
 
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BrowserWindow, app, ipcMain, screen, shell } from "electron";
+import { BrowserWindow, app, ipcMain, shell } from "electron";
 import { IPC } from "../shared/ipc.ts";
+import type { GlassSettingsSection } from "../shared/panelTabRouting.ts";
+import { getSettingsLayoutBounds } from "./windows.ts";
 
 const isDev = !!process.env.ELECTRON_RENDERER_URL;
 const mainDir = dirname(fileURLToPath(import.meta.url));
 const preloadPath = join(mainDir, "../preload/index.mjs");
 
-const SETTINGS_WIDTH = 640;
-const SETTINGS_HEIGHT = 520;
 /** Above overlay + dock/command bar so settings stays visible over the dashboard. */
 const SETTINGS_ALWAYS_ON_TOP_RELATIVE = 18;
 
 let settingsWindow: BrowserWindow | null = null;
 let settingsIpcRegistered = false;
+let pendingSettingsSection: GlassSettingsSection | undefined;
+
+export function takePendingSettingsSection(): GlassSettingsSection | undefined {
+  const section = pendingSettingsSection;
+  pendingSettingsSection = undefined;
+  return section;
+}
 
 function loadSettingsRenderer(win: BrowserWindow): void {
   if (isDev && process.env.ELECTRON_RENDERER_URL) {
@@ -32,22 +39,37 @@ export function isSettingsIpcSender(sender: Electron.WebContents): boolean {
   return sender.id === settingsWindow.webContents.id;
 }
 
-function centerSettingsBounds(): Electron.Rectangle {
-  const area = screen.getPrimaryDisplay().workArea;
-  return {
-    x: area.x + Math.round((area.width - SETTINGS_WIDTH) / 2),
-    y: area.y + Math.round((area.height - SETTINGS_HEIGHT) / 2),
-    width: SETTINGS_WIDTH,
-    height: SETTINGS_HEIGHT,
-  };
+function resolveSettingsBounds(): Electron.Rectangle {
+  const layout = getSettingsLayoutBounds();
+  if (layout) return { ...layout };
+  return { x: 0, y: 0, width: 1280, height: 800 };
 }
 
 function registerSettingsIpc(): void {
   if (settingsIpcRegistered) return;
   settingsIpcRegistered = true;
 
-  ipcMain.on(IPC.openGlassSettings, () => {
+  ipcMain.on(IPC.openGlassSettings, (_event, section: unknown) => {
+    const validSections: GlassSettingsSection[] = [
+      "providers",
+      "context",
+      "audio",
+      "components",
+      "account",
+      "dev",
+      "shortcuts",
+      "about",
+    ];
+    pendingSettingsSection =
+      typeof section === "string" && validSections.includes(section as GlassSettingsSection)
+        ? (section as GlassSettingsSection)
+        : undefined;
     showGlassSettings();
+  });
+
+  ipcMain.handle(IPC.getSettingsInitialSection, (event) => {
+    if (!isSettingsIpcSender(event.sender)) return "providers" as GlassSettingsSection;
+    return takePendingSettingsSection() ?? ("providers" as GlassSettingsSection);
   });
 
   ipcMain.on(IPC.closeGlassSettings, (event) => {
@@ -77,15 +99,20 @@ function raiseGlassSettingsWindow(win: BrowserWindow): void {
 }
 
 function createGlassSettingsWindow(): BrowserWindow {
-  const bounds = centerSettingsBounds();
+  const bounds = resolveSettingsBounds();
   const win = new BrowserWindow({
     ...bounds,
     frame: false,
-    resizable: false,
-    transparent: false,
+    transparent: true,
+    resizable: true,
+    minWidth: 720,
+    minHeight: 480,
+    movable: true,
     show: false,
     alwaysOnTop: true,
-    backgroundColor: "#0c0c10",
+    skipTaskbar: true,
+    hasShadow: false,
+    backgroundColor: "#00000000",
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
@@ -93,10 +120,6 @@ function createGlassSettingsWindow(): BrowserWindow {
       sandbox: false,
     },
   });
-
-  if (process.platform === "darwin") {
-    win.setVibrancy("under-window");
-  }
 
   raiseGlassSettingsWindow(win);
 
@@ -113,9 +136,18 @@ function createGlassSettingsWindow(): BrowserWindow {
   return win;
 }
 
-export function showGlassSettings(): void {
+export function syncGlassSettingsLayout(): void {
+  if (!settingsWindow || settingsWindow.isDestroyed()) return;
+  settingsWindow.setBounds(resolveSettingsBounds());
+}
+
+export function showGlassSettings(section?: GlassSettingsSection): void {
+  if (section) {
+    pendingSettingsSection = section;
+  }
   registerSettingsIpc();
   if (settingsWindow && !settingsWindow.isDestroyed()) {
+    syncGlassSettingsLayout();
     raiseGlassSettingsWindow(settingsWindow);
     return;
   }

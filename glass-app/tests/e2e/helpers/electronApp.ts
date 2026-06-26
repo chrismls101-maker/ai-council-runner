@@ -107,18 +107,20 @@ export async function openPanelTab(
   await panel.locator(`[data-testid="glass-panel-tab-${tab}"]`).click();
 }
 
-/** Click Setup → CONNECT IIVO GLASS and wait for server + simulated system audio (E2E stub). */
+/** Open dashboard Setup and CONNECT IIVO GLASS; wait for server + simulated system audio (E2E stub). */
 export async function connectIivoGlassForE2e(browser: Browser): Promise<void> {
-  const { command, dock, panel } = await getGlassWindows(browser);
+  const { command, overlay } = await getGlassWindows(browser);
   const state = await readGlassState(command);
   const serverOnline =
     state.setupCapabilities?.find((row) => row.id === "server")?.label === "Online";
   if (serverOnline && state.systemAudioStatus === "available") return;
 
-  await dock.locator('[data-testid="glass-dock-open-panel"]').click();
-  await openPanelTab(panel, "setup");
-  await expect(panel.locator('[data-testid="glass-panel-setup"]')).toBeVisible();
-  await panel.locator('[data-testid="glass-run-setup-check"]').click();
+  await overlay.evaluate(() => window.glass.openDashboard("setup"));
+  await expect(overlay.locator('[data-testid="glass-dashboard-setup"]')).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(overlay.locator('[data-testid="glass-panel-setup"]')).toBeVisible();
+  await overlay.locator('[data-testid="glass-run-setup-check"]').click();
 
   await expect
     .poll(async () => {

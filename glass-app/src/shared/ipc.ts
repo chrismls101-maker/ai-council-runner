@@ -85,6 +85,8 @@ export const IPC = {
   overlayPointerOverBuilderStrip: "glass:overlay-pointer-over-builder-strip",
   /** Renderer → main: pointer entered/left the Glass IDE shell (splits, tree, composer). */
   overlayPointerOverIde: "glass:overlay-pointer-over-ide",
+  /** Renderer → main: pointer entered/left the Exit Glass control (top-right). */
+  overlayPointerOverExitControl: "glass:overlay-pointer-over-exit-control",
   /** Renderer → main: builder strip panel (Prompts/Keys) open — keep overlay interactive. */
   builderStripPanelOpen: "glass:builder-strip-panel-open",
   /** Renderer → main: Glass Response Panel open — keep overlay interactive. */
@@ -311,6 +313,8 @@ export const IPC = {
   getAgentBusHealth: "glass:get-agent-bus-health",
   /** Dashboard → main: per-session model spend from SQLite. */
   getSessionSpend: "glass:get-session-spend",
+  /** Settings renderer → main: initial section when opened via deep link. */
+  getSettingsInitialSection: "glass:get-settings-initial-section",
   /** Renderer → main: open Glass Settings window. */
   openGlassSettings: "glass:open-glass-settings",
   /** Renderer → main: close Glass Settings window. */
@@ -829,6 +833,8 @@ export type GlassCommand =
   | { type: "remove-command-feed-item"; id: string }
   | { type: "open-chat" }
   | { type: "set-tab"; tab: PanelTab }
+  | { type: "clear-dashboard-nav" }
+  | { type: "set-capture-sub-tab"; subTab: import("./panelTabRouting.ts").CaptureSubTab }
   | { type: "toggle-panel" }
   | { type: "hide-notes-pad" }
   | { type: "toggle-overlay" }
@@ -1134,6 +1140,7 @@ export interface GlassState {
   notes: ExtractedNotes;
   moments: SavedMoment[];
   panelTab: PanelTab;
+  captureSubTab?: import("./panelTabRouting.ts").CaptureSubTab;
   config: GlassConfig;
   lastError?: string;
   lastNotice?: string;
@@ -1219,6 +1226,8 @@ export interface GlassState {
   writingStudioPrompt?: string;
   /** Glass Dashboard — full-screen overlay above builder strip; hides dock + command bar. */
   glassDashboardActive?: boolean;
+  /** One-shot nav target when opening the dashboard (cleared after mount). */
+  glassDashboardNav?: import("./glassDashboardNav.ts").GlassDashboardNav | null;
   /** IDE live preview — auto-detected or user-set localhost URL. */
   glassIdePreviewUrl?: string | null;
   /** Bumped after Coder Apply to reload the preview webview. */

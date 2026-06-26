@@ -153,8 +153,6 @@ function EnrichedNoteSection({
   );
 }
 
-// ─── Status bar ───────────────────────────────────────────────────────────────
-
 function ListenStatusBar({ state }: { state: GlassState }): JSX.Element {
   const notes = state.listenLiveNotes;
   const sessionListening = state.privacy.listening;
@@ -196,8 +194,6 @@ function ListenStatusBar({ state }: { state: GlassState }): JSX.Element {
     </div>
   );
 }
-
-// ─── Notes content ────────────────────────────────────────────────────────────
 
 function LiveNotesContent({ state }: { state: GlassState }): JSX.Element {
   const notes = state.listenLiveNotes!;
@@ -248,8 +244,6 @@ function LiveNotesContent({ state }: { state: GlassState }): JSX.Element {
     </>
   );
 }
-
-// ─── Transcript content ───────────────────────────────────────────────────────
 
 function LiveTranscriptContent({ state }: { state: GlassState }): JSX.Element {
   const notes = state.listenLiveNotes!;
@@ -411,3 +405,5 @@ export function LiveNotesTab({ state, showTranslate = true }: { state: GlassStat
     </div>
   );
 }
+
+export { ListenStatusBar, LiveNotesContent, LiveTranscriptContent };

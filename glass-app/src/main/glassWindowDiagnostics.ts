@@ -49,8 +49,12 @@ export function formatGlassWindowDiagnostics(opts: {
 }
 
 export function logGlassWindowDiagnostics(line: string): void {
+  if (line === lastLoggedDiagnosticsLine) return;
+  lastLoggedDiagnosticsLine = line;
   console.log(`Glass windows: ${line}`);
 }
+
+let lastLoggedDiagnosticsLine = "";
 
 export function rectFromWindow(win: BrowserWindow | null | undefined): LayoutRect | null {
   if (!win || win.isDestroyed()) return null;

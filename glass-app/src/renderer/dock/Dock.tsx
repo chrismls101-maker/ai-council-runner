@@ -113,8 +113,9 @@ export function Dock(): JSX.Element {
     terminalActive,
   ], rail);
 
-  const togglePanelTab = (tab: PanelTab = "copilot"): void => {
-    if (state.panelVisible && state.panelTab === tab) {
+  const togglePanelTab = (tab: PanelTab = "session"): void => {
+    // Capture stays open while switching sub-tabs — only Session toggles closed on repeat dock tap.
+    if (state.panelVisible && state.panelTab === tab && tab !== "capture") {
       send({ type: "toggle-panel" });
       return;
     }
@@ -123,10 +124,10 @@ export function Dock(): JSX.Element {
   };
 
   const panelToggleLabel = resolvePanelLabel(
-    state.panelVisible && state.panelTab === "copilot",
+    state.panelVisible && state.panelTab === "session",
   );
   const notesToggleLabel =
-    state.panelVisible && state.panelTab === "live-notes" ? "Close Panel" : "Live notes";
+    state.panelVisible && state.panelTab === "capture" ? "Close Panel" : "Live notes";
 
   const handleModePillClick = (): void => {
     if (audioLive) {
@@ -196,9 +197,9 @@ export function Dock(): JSX.Element {
             <DockTip label={panelToggleLabel} rail={rail}>
               <button
                 type="button"
-                className={`gbtn dock__cta${rail ? " dock__rail-btn" : ""}${state.panelVisible && state.panelTab === "copilot" ? " dock__rail-btn--active" : ""}`}
+                className={`gbtn dock__cta${rail ? " dock__rail-btn" : ""}${state.panelVisible && state.panelTab === "session" ? " dock__rail-btn--active" : ""}`}
                 data-testid="glass-dock-open-panel"
-                onClick={() => togglePanelTab("copilot")}
+                onClick={() => togglePanelTab("session")}
               >
                 {rail ? <LayoutGrid className="dock__rail-icon" aria-hidden="true" /> : "Open Panel"}
               </button>
@@ -266,9 +267,9 @@ export function Dock(): JSX.Element {
             <DockTip label={panelToggleLabel} rail={rail}>
               <button
                 type="button"
-                className={`gbtn dock__btn-tool${rail ? " dock__rail-btn" : ""}${state.panelVisible && state.panelTab === "copilot" ? " dock__rail-btn--active" : ""}`}
+                className={`gbtn dock__btn-tool${rail ? " dock__rail-btn" : ""}${state.panelVisible && state.panelTab === "session" ? " dock__rail-btn--active" : ""}`}
                 data-testid="glass-dock-open-panel"
-                onClick={() => togglePanelTab("copilot")}
+                onClick={() => togglePanelTab("session")}
               >
                 {rail ? <LayoutGrid className="dock__rail-icon" aria-hidden="true" /> : "Panel"}
               </button>
@@ -291,9 +292,9 @@ export function Dock(): JSX.Element {
           <DockTip label={notesToggleLabel} rail={rail}>
             <button
               type="button"
-              className={`gbtn dock__btn-tool${rail ? " dock__rail-btn" : ""}${state.panelVisible && state.panelTab === "live-notes" ? " dock__rail-btn--active" : ""}`}
+              className={`gbtn dock__btn-tool${rail ? " dock__rail-btn" : ""}${state.panelVisible && state.panelTab === "capture" ? " dock__rail-btn--active" : ""}`}
               data-testid="glass-dock-notes"
-              onClick={() => togglePanelTab("live-notes")}
+              onClick={() => togglePanelTab("capture")}
             >
               {rail ? <StickyNote className="dock__rail-icon" aria-hidden="true" /> : "📝"}
             </button>
@@ -363,7 +364,7 @@ export function Dock(): JSX.Element {
         <button
           type="button"
           className="dock__meeting-strip"
-          onClick={() => togglePanelTab("copilot")}
+          onClick={() => togglePanelTab("session")}
           title="Open Meeting Intelligence"
         >
           {meetingIntel.classification ? (

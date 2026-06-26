@@ -121,6 +121,22 @@ Technical details appear in a collapsed **Details** section.
 
 ## Troubleshooting
 
+### ERR_FILE_NOT_FOUND when clicking the extension icon
+
+Chrome shows this when the unpacked extension folder was **moved, renamed, or deleted** after you loaded it. The toolbar icon can remain, but the popup path is stale.
+
+1. Open `chrome://extensions`
+2. **Remove** the old **IIVO Lens** entry
+3. Click **Load unpacked**
+4. Select **`browser-extension/`** inside this repo (the folder that contains `manifest.json` and `popup.html`)
+5. Confirm the extension card shows **no errors** (red “Errors” link)
+
+Validate files before loading:
+
+```bash
+cd browser-extension && npm run validate
+```
+
 ### IIVO not running
 
 Run `npm run dev` from the project root. Confirm `http://localhost:3001/api/health` responds, then click **Retry connection** in the popup.

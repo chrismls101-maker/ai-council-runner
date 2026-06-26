@@ -14,6 +14,7 @@ import {
   listenNotesPadLayoutFromDisplay,
   overlayLayoutFromDisplay,
   panelLayoutFromDisplay,
+  settingsLayoutFromDisplay,
   repositionDockInWorkArea,
   type CommandBarLayout,
   type DisplayLayoutContext,
@@ -22,6 +23,7 @@ import {
   type OverlayLayout,
   type PanelLayout,
 } from "../shared/glassLayoutMath.ts";
+import type { PanelLayoutOptions } from "../shared/glassLayoutMath.ts";
 import {
   DEFAULT_GLASS_LAYOUT_PRESET,
   type GlassLayoutPreset,
@@ -133,8 +135,16 @@ export class GlassLayoutManager {
     return overlayLayoutFromDisplay(this.getDisplay());
   }
 
-  getPanelLayout(): PanelLayout {
-    return panelLayoutFromDisplay(this.getDisplay(), this.preset);
+  getPanelLayout(options?: PanelLayoutOptions & { dockPlacement?: DockPlacement }): PanelLayout {
+    const placement = options?.dockPlacement ?? "left-rail";
+    return panelLayoutFromDisplay(this.getDisplay(), this.preset, {
+      dockBounds: options?.dockBounds,
+      dockPlacement: placement === "left-rail" ? "left-rail" : "top",
+    });
+  }
+
+  getSettingsLayout(): PanelLayout {
+    return settingsLayoutFromDisplay(this.getDisplay());
   }
 
   getNotesPadLayout(): PanelLayout {

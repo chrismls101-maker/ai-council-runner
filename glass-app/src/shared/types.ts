@@ -17,6 +17,7 @@ export type PanelTab =
   | "copilot"
   | "setup"
   | "session"
+  | "capture"
   | "audio"
   | "live-notes"
   | "insights"

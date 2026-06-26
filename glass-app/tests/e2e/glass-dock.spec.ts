@@ -21,7 +21,7 @@ let commandPage: import("@playwright/test").Page;
 async function ensureGlassSetupGreen(browser: Browser): Promise<void> {
   await connectIivoGlassForE2e(browser);
 
-  const { command, dock, panel } = await getGlassWindows(browser);
+  const { command, overlay } = await getGlassWindows(browser);
   await command.evaluate(() => {
     window.glass.send({
       type: "e2e-set-capture-probes",
@@ -30,19 +30,19 @@ async function ensureGlassSetupGreen(browser: Browser): Promise<void> {
     });
   });
 
-  await dock.locator('[data-testid="glass-dock-open-panel"]').click();
-  await openPanelTab(panel, "setup");
-  await expect(panel.locator('[data-testid="glass-panel-setup"]')).toBeVisible();
+  await overlay.evaluate(() => window.glass.openDashboard("setup"));
+  await expect(overlay.locator('[data-testid="glass-dashboard-setup"]')).toBeVisible();
+  await expect(overlay.locator('[data-testid="glass-panel-setup"]')).toBeVisible();
 
-  const connectBtn = panel.locator('[data-testid="glass-run-setup-check"]');
+  const connectBtn = overlay.locator('[data-testid="glass-run-setup-check"]');
   await expect(connectBtn).toHaveAttribute("data-connected", "true");
   await expect(connectBtn).toContainText("IIVO GLASS CONNECTED");
   await expect(connectBtn.locator(".connect-glass__dot--on")).toBeVisible();
 
-  await expect(panel.locator('[data-testid="glass-setup-row-server"] .status-dot--ok')).toBeVisible();
-  await expect(panel.locator('[data-testid="glass-setup-row-vision"] .status-dot--ok')).toBeVisible();
+  await expect(overlay.locator('[data-testid="glass-setup-row-server"] .status-dot--ok')).toBeVisible();
+  await expect(overlay.locator('[data-testid="glass-setup-row-vision"] .status-dot--ok')).toBeVisible();
   await expect(
-    panel.locator('[data-testid="glass-setup-row-screenRecording"] .status-dot--ok'),
+    overlay.locator('[data-testid="glass-setup-row-screenRecording"] .status-dot--ok'),
   ).toBeVisible();
 
   const state = await readGlassState(command);
@@ -50,6 +50,7 @@ async function ensureGlassSetupGreen(browser: Browser): Promise<void> {
   expect(state.systemAudioStatus).toBe("available");
 
   if (state.panelVisible) {
+    const { dock } = await getGlassWindows(browser);
     await dock.locator('[data-testid="glass-dock-open-panel"]').click();
     await expect
       .poll(async () => (await readGlassState(command)).panelVisible)

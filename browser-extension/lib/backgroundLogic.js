@@ -51,8 +51,15 @@ function createOpenAppHandler(tabsCreate) {
   };
 }
 
-module.exports = {
-  DEFAULT_APP_URL,
-  sanitizeAppUrl,
-  createOpenAppHandler,
-};
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {
+    DEFAULT_APP_URL,
+    sanitizeAppUrl,
+    createOpenAppHandler,
+  };
+}
+
+if (typeof self !== "undefined") {
+  self.sanitizeAppUrl = sanitizeAppUrl;
+  self.createOpenAppHandler = createOpenAppHandler;
+}

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="glass-panel-window">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -8,12 +8,8 @@
       content="default-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; worker-src blob:; script-src 'self' 'unsafe-eval'"
     />
     <title>Glass Settings</title>
-    <style>
-      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-      html, body, #root { width: 100%; height: 100%; background: #0c0c10; overflow: hidden; }
-    </style>
   </head>
-  <body>
+  <body class="glass-body glass-body--panel">
     <div id="root"></div>
     <script type="module" src="./src/renderer/settings/main.tsx"></script>
   </body>

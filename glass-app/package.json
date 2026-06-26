@@ -44,6 +44,7 @@
     "qa:overnight": "node scripts/glass-overnight-qa.mjs",
     "qa:overnight:quick": "node scripts/glass-overnight-qa.mjs --mode quick",
     "qa:smoke": "node --experimental-strip-types --test src/test/glassE2eSmoke.test.ts src/test/followMouseDisplay.test.ts src/test/glassHotkeySettings.test.ts",
+    "launch:smoke": "node scripts/launch-mode-smoke.mjs",
     "display:diag": "env -u ELECTRON_RUN_AS_NODE electron scripts/glass-display-diagnostic.cjs",
     "e2e": "npm run build && playwright test -c playwright.electron.config.ts",
     "e2e:repeat": "node scripts/glass-e2e-repeat.mjs",

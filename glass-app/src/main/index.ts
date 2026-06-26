@@ -233,6 +233,7 @@ import {
   setBuilderStripVisible,
   setBuilderStripLayoutReserve,
   setOverlayPointerOverBuilderStrip,
+  setOverlayPointerOverExitControl,
   setOverlayPointerOverIde,
   setOverlayIdeActive,
   setOverlayResearchExplorerActive,
@@ -289,7 +290,9 @@ import {
 } from "./boot.ts";
 import { isActivationIpcSender, openActivationWindowDev } from "./activationWindow.ts";
 import { configureGlassDashboardRuntime, initGlassDashboard, teardownGlassDashboard } from "./glassDashboardWindow.ts";
-import { initGlassSettings, isSettingsIpcSender, teardownGlassSettings } from "./glassSettingsWindow.ts";
+import { parseGlassDashboardNav } from "../shared/glassDashboardNav.ts";
+import { resolvePanelNavigation } from "../shared/panelTabRouting.ts";
+import { initGlassSettings, isSettingsIpcSender, showGlassSettings, teardownGlassSettings } from "./glassSettingsWindow.ts";
 import { registerDashboardIpc, setDashboardIpcAuth, isDashboardIpcSender } from "./dashboardIpc.ts";
 import { closeDatabase, gracefulDatabaseShutdown, initDatabase } from "./glassDatabase.ts";
 import {
@@ -920,6 +923,7 @@ interface AppState {
   privacy: PrivacyState;
   transcript: string;
   panelTab: PanelTab;
+  captureSubTab?: import("../shared/panelTabRouting.ts").CaptureSubTab;
   lastError?: string;
   lastNotice?: string;
   recoveryToast?: string;
@@ -996,6 +1000,7 @@ interface AppState {
   writingStudioActive?: boolean;
   writingStudioPrompt?: string;
   glassDashboardActive?: boolean;
+  glassDashboardNav?: import("../shared/glassDashboardNav.ts").GlassDashboardNav | null;
   indexState: import("../shared/ipc.ts").GlassIndexState;
   ollamaAvailable: boolean;
   projectMemoryState: import("../shared/ipc.ts").ProjectMemoryState | null;
@@ -1259,7 +1264,8 @@ let glassUserSettings: GlassUserSettings = { ...DEFAULT_GLASS_USER_SETTINGS };
 const state: AppState = {
   privacy: { ...initialPrivacyState },
   transcript: "",
-  panelTab: "setup",
+  panelTab: "session",
+  captureSubTab: undefined,
   sessionActionStatus: "idle",
   transcriptionMode: "manual",
   systemAudioStatus: resolveInitialSystemAudioStatus(
@@ -3868,6 +3874,7 @@ function snapshot(): GlassState {
     notes: state.transcript.trim() ? extractNotes(state.transcript) : emptyNotes(),
     moments: moments.list(),
     panelTab: state.panelTab,
+    captureSubTab: state.captureSubTab,
     config,
     lastError: state.lastError,
     lastNotice: state.lastNotice,
@@ -3940,6 +3947,7 @@ function snapshot(): GlassState {
     writingStudioActive: state.writingStudioActive === true,
     writingStudioPrompt: state.writingStudioPrompt,
     glassDashboardActive: state.glassDashboardActive === true,
+    glassDashboardNav: state.glassDashboardNav ?? null,
     glassIdePreviewUrl: state.glassIdePreviewUrl,
     glassIdePreviewReloadNonce: state.glassIdePreviewReloadNonce,
     glassIdeTerminalExpanded: state.glassIdeTerminalExpanded,
@@ -4156,8 +4164,7 @@ function syncIdeChromeFromState(): void {
       || state.coderWorkspaceActive
       || state.researchExplorerActive
       || state.codeAnalystExplorerActive
-      || state.writingStudioActive
-      || state.glassDashboardActive,
+      || state.writingStudioActive,
     ),
   );
   setOverlayIdeActive(state.glassIdeActive === true);
@@ -6076,7 +6083,7 @@ async function handleCommand(
     }
     case "open-translate-setup": {
       if (!isPanelVisible()) togglePanel();
-      state.panelTab = "copilot";
+      state.panelTab = "session";
       state.translateSetupRequestId += 1;
       push();
       return;
@@ -6418,7 +6425,8 @@ async function handleCommand(
       return;
     }
     case "ask-iivo":
-      state.panelTab = "summary";
+      state.panelTab = "capture";
+      state.captureSubTab = "summary";
       if (!isPanelVisible()) togglePanel();
       if (state.transcript.trim()) {
         await sendTranscript();
@@ -6776,11 +6784,33 @@ async function handleCommand(
     case "open-chat":
       await shell.openExternal(buildIivoChatUrl(config));
       return;
-    case "set-tab":
-      state.panelTab = command.tab;
+    case "set-tab": {
+      const nav = resolvePanelNavigation(command.tab);
+      if (nav.openDashboardNav) {
+        state.glassDashboardActive = true;
+        state.glassDashboardNav = nav.openDashboardNav;
+      }
+      if (nav.openSettings) {
+        showGlassSettings(nav.settingsSection);
+      }
+      state.panelTab = nav.panelTab;
+      state.captureSubTab = nav.captureSubTab;
       if (isPanelVisible()) {
         ensurePanelLayout();
       }
+      push();
+      return;
+    }
+    case "clear-dashboard-nav":
+      state.glassDashboardNav = null;
+      push();
+      return;
+    case "set-capture-sub-tab":
+      if (state.panelTab === "capture" && state.captureSubTab === command.subTab) {
+        return;
+      }
+      state.panelTab = "capture";
+      state.captureSubTab = command.subTab;
       push();
       return;
     case "clear-last-notice":
@@ -7572,14 +7602,15 @@ async function handleCommand(
       return;
     }
     case "test-microphone":
-      state.panelTab = "setup";
+      state.panelTab = "audio";
       if (!isPanelVisible()) togglePanel();
       broadcastTranscriptionControl({ type: "probe-microphone" });
       state.lastNotice = "Testing microphone — approve the macOS prompt if shown.";
       push();
       return;
     case "test-system-audio":
-      state.panelTab = "setup";
+      showGlassSettings("audio");
+      state.panelTab = "audio";
       if (!isPanelVisible()) togglePanel();
       broadcastTranscriptionControl({ type: "test-system-audio" });
       state.lastNotice =
@@ -11441,9 +11472,13 @@ function registerIpc(): void {
   });
 
   // ── Glass Dashboard full-screen overlay ────────────────────────────────────
-  ipcMain.on(IPC.openGlassDashboard, (event) => {
+  ipcMain.on(IPC.openGlassDashboard, (event, nav: unknown) => {
     if (!isOverlayIpcSender(event.sender)) return;
     state.glassDashboardActive = true;
+    const parsed = parseGlassDashboardNav(nav);
+    if (parsed) {
+      state.glassDashboardNav = parsed;
+    }
     syncIdeChromeFromState();
     push();
     setImmediate(() => notifyGlassDashboardMounted());
@@ -12839,6 +12874,10 @@ function registerIpc(): void {
     setOverlayPointerOverBuilderStrip(!!over);
   });
 
+  ipcMain.on(IPC.overlayPointerOverExitControl, (_event, over: boolean) => {
+    setOverlayPointerOverExitControl(!!over);
+  });
+
   ipcMain.on(IPC.overlayPointerOverIde, (_event, over: boolean) => {
     setOverlayPointerOverIde(!!over);
   });
@@ -13061,13 +13100,9 @@ app.whenReady().then(() =>
   } catch {
     // safeStorage unavailable or file unreadable — stay at defaults
   }
-  if (!app.isPackaged && process.env.IIVO_GLASS_E2E !== "1") {
-    glassUserSettings = { ...glassUserSettings, displayTarget: "primary" };
-  }
-  let glassOnboardingState = await loadGlassOnboardingState();
   const bootPrepared = await prepareBootOnboarding({ e2e: process.env.IIVO_GLASS_E2E === "1" });
   glassUserSettings = bootPrepared.glassUserSettings;
-  glassOnboardingState = bootPrepared.glassOnboardingState;
+  const glassOnboardingState = bootPrepared.glassOnboardingState;
   const needsSortingHat = bootPrepared.needsSortingHat;
   if (bootPrepared.e2eFastOnboarding) {
     state.e2eFastOnboarding = true;
