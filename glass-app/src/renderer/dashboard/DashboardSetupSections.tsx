@@ -19,6 +19,7 @@ import { send, useGlassState } from "../useGlassState.ts";
 import { connectIivoGlass, isIivoGlassConnected, resolveConnectBlockerMessage } from "../panel/connectIivoGlass.ts";
 import { SettingsChoiceCard, SettingsChoiceGrid } from "../settings/SettingsChoiceCard.tsx";
 import { StatusGrid } from "../panel/PanelSetupSections.tsx";
+import { ApiKeyManagerPanel } from "../builder/ApiKeyManagerPanel.tsx";
 
 type CardStatus = "ok" | "warn" | "idle" | "error";
 
@@ -432,10 +433,9 @@ function DuplicateAppNotice(): JSX.Element | null {
 
 function AdvancedDetails(): JSX.Element | null {
   const state = useGlassState();
+  const [open, setOpen] = useState(false);
   const id = state.appIdentityReport;
   if (!id) return null;
-
-  const [open, setOpen] = useState(false);
 
   return (
     <section className="glass-settings__block glass-settings__block--compact">
@@ -488,6 +488,14 @@ export function DashboardSetupContent({ state }: DashboardSetupContentProps): JS
       ) : null}
 
       <PermissionsGrid />
+
+      {/* L3.2 — API Keys always visible in Glass Setup regardless of glass.strip.minimalPublic.
+          The flag only hides the strip shortcut; the capability itself is always accessible here. */}
+      <section className="glass-settings__block" data-testid="glass-setup-api-keys">
+        <p className="glass-settings__block-label">API Keys</p>
+        <p className="glass-settings__block-sub">Manage API keys for Claude, OpenAI, and other providers. Keys are stored securely in macOS Keychain.</p>
+        <ApiKeyManagerPanel onClose={() => { /* no-op: inline section has no close action */ }} />
+      </section>
 
       <section className="glass-settings__block">
         <p className="glass-settings__block-label">Live session</p>

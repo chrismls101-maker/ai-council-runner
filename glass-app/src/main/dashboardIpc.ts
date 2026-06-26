@@ -9,6 +9,7 @@ import { getRecentSessions, getSessionMessages, getUserContext, deleteUserContex
 import { getSessionSpendSummary, getSessionModelCalls } from "./modelCallStore.ts";
 import { getRetentionSummary } from "./glassRetentionEvents.ts";
 import { agentBus } from "./agentEventBus.ts";
+import { deleteAletheiaSessions } from "./aletheiaSessionStore.ts";
 
 let isDashboardIpcSender: (sender: WebContents) => boolean = () => false;
 
@@ -146,6 +147,22 @@ export function registerDashboardIpc(): void {
     } catch (err) {
       console.error("[dashboardIpc] getSessionSpend:", err);
       return { summary: null, calls: [] };
+    }
+  });
+
+  /**
+   * Glass Memory admin — wipe all Aletheia companion session rows.
+   * GLASS DASHBOARD ONLY. This handler must never be mirrored in
+   * aletheiaDashboardIpc.ts — deletion is a Glass Memory admin operation.
+   */
+  ipcMain.handle(IPC.deleteAletheiaSessionHistory, (event) => {
+    if (!isDashboardIpcSender(event.sender)) return { ok: false };
+    try {
+      deleteAletheiaSessions();
+      return { ok: true };
+    } catch (err) {
+      console.error("[dashboardIpc] deleteAletheiaSessionHistory:", err);
+      return { ok: false };
     }
   });
 }

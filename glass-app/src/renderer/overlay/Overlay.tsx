@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import { armCodeAnalystOverlayPointer, armDashboardOverlayPointer, armResearchOverlayPointer, armWritingStudioOverlayPointer, ensureOverlayInteractive } from "../glassTextInteraction.ts";
+import { armAletheiaDashboardOverlayPointer, armCodeAnalystOverlayPointer, armDashboardOverlayPointer, armResearchOverlayPointer, armWritingStudioOverlayPointer, ensureOverlayInteractive } from "../glassTextInteraction.ts";
 import "./OverlayExitGlass.css";
 import { BuilderStrip } from "../builder/BuilderStrip.tsx";
+import { armBuilderStripInteractive } from "../builder/useBuilderStripClickThrough.ts";
 import { shouldShowBuilderStrip } from "../../shared/builderStripVisibility.ts";
 import type { GlassState } from "../../shared/ipc.ts";
 import type { OverlayMode } from "../../shared/glassWindowTypes.ts";
@@ -18,6 +19,7 @@ import { OverlayGlassFrame } from "../shared/OverlayGlassFrame.tsx";
 import { GlassOnboardingOverlay } from "./GlassOnboardingOverlay.tsx";
 import { SortingHatScreen } from "../onboarding/SortingHatScreen.tsx";
 import { LanguagePickerScreen } from "../onboarding/LanguagePickerScreen.tsx";
+import { ConsentStep, allConsentGiven } from "../onboarding/ConsentStep.tsx";
 import { isUiLocaleChosen, parseUiLocaleSetting } from "../../shared/glassLocale.ts";
 import { LiveTranslateCaptionsOverlay } from "./LiveTranslateCaptionsOverlay.tsx";
 import { useGlassNotification } from "./useGlassNotification.ts";
@@ -34,8 +36,10 @@ import { ResearchExplorer } from "../research/ResearchExplorer.tsx";
 import { CodeAnalystExplorer } from "../code-analyst/CodeAnalystExplorer.tsx";
 import { WritingStudio } from "../writing/WritingStudio.tsx";
 import { GlassDashboard } from "../dashboard/GlassDashboard.tsx";
+import { AletheiaDashboard } from "../dashboard/AletheiaDashboard.tsx";
 import { resolveOverlayPanelNavigation } from "../../shared/panelTabRouting.ts";
 import "../dashboard/GlassDashboard.css";
+import "../dashboard/AletheiaDashboard.css";
 import "../settings/GlassSettings.css";
 import {
   applyCoderTranscriptEvent,
@@ -152,7 +156,7 @@ function ResearchExplorerLayer({ state }: { state: GlassState }): JSX.Element | 
     if (!state.researchExplorerActive) return;
     armResearchOverlayPointer();
     return () => {
-      window.glass?.setOverlayPointerOverBuilderStrip?.(false);
+      armBuilderStripInteractive();
     };
   }, [state.researchExplorerActive]);
 
@@ -177,7 +181,7 @@ function CodeAnalystExplorerLayer({ state }: { state: GlassState }): JSX.Element
     if (!state.codeAnalystExplorerActive) return;
     armCodeAnalystOverlayPointer();
     return () => {
-      window.glass?.setOverlayPointerOverBuilderStrip?.(false);
+      armBuilderStripInteractive();
     };
   }, [state.codeAnalystExplorerActive]);
 
@@ -202,7 +206,7 @@ function WritingStudioLayer({ state }: { state: GlassState }): JSX.Element | nul
     if (!state.writingStudioActive) return;
     armWritingStudioOverlayPointer();
     return () => {
-      window.glass?.setOverlayPointerOverBuilderStrip?.(false);
+      armBuilderStripInteractive();
     };
   }, [state.writingStudioActive]);
 
@@ -217,6 +221,31 @@ function WritingStudioLayer({ state }: { state: GlassState }): JSX.Element | nul
   );
 }
 
+function AletheiaDashboardLayer({ state }: { state: GlassState }): JSX.Element | null {
+  const everOpenedRef = useRef(false);
+  if (state.aletheiaDashboardActive) {
+    everOpenedRef.current = true;
+  }
+
+  useEffect(() => {
+    if (!state.aletheiaDashboardActive) return;
+    armAletheiaDashboardOverlayPointer();
+    return () => {
+      // Keep strip OS-interactive after dashboard closes (avoid strip "vanish" race).
+      armBuilderStripInteractive();
+    };
+  }, [state.aletheiaDashboardActive]);
+
+  if (!everOpenedRef.current && !state.aletheiaDashboardActive) return null;
+
+  return (
+    <AletheiaDashboard
+      visible={state.aletheiaDashboardActive === true}
+      onClose={() => window.glass.closeAletheiaDashboard()}
+    />
+  );
+}
+
 function GlassDashboardLayer({ state }: { state: GlassState }): JSX.Element | null {
   const everOpenedRef = useRef(false);
   if (state.glassDashboardActive) {
@@ -227,7 +256,7 @@ function GlassDashboardLayer({ state }: { state: GlassState }): JSX.Element | nu
     if (!state.glassDashboardActive) return;
     armDashboardOverlayPointer();
     return () => {
-      window.glass?.setOverlayPointerOverBuilderStrip?.(false);
+      armBuilderStripInteractive();
     };
   }, [state.glassDashboardActive]);
 
@@ -248,6 +277,7 @@ function OverlayWorkspaceLayers({ state }: { state: GlassState }): JSX.Element {
       <CodeAnalystExplorerLayer state={state} />
       <WritingStudioLayer state={state} />
       <GlassDashboardLayer state={state} />
+      <AletheiaDashboardLayer state={state} />
     </>
   );
 }
@@ -256,7 +286,8 @@ function fullscreenWorkspaceActive(state: GlassState): boolean {
   return state.researchExplorerActive === true
     || state.codeAnalystExplorerActive === true
     || state.writingStudioActive === true
-    || state.glassDashboardActive === true;
+    || state.glassDashboardActive === true
+    || state.aletheiaDashboardActive === true;
 }
 
 function builderStripVisibleForState(state: GlassState): boolean {
@@ -264,6 +295,7 @@ function builderStripVisibleForState(state: GlassState): boolean {
     onboardingComplete: state.onboardingComplete,
     persona: state.persona,
     glassDevMode: state.glassDevMode ?? import.meta.env.DEV,
+    aletheiaStripForAllPersonas: true,
   });
 }
 
@@ -287,6 +319,7 @@ function shouldShowExitGlassButton(state: GlassState): boolean {
     && !state.codeAnalystExplorerActive
     && !state.writingStudioActive
     && !state.glassDashboardActive
+    && !state.aletheiaDashboardActive
     && !state.glassIdeActive;
 }
 
@@ -888,6 +921,31 @@ export function Overlay(): JSX.Element {
     !onboardingOpen &&
     chosenUiLocale
   ) {
+    // L2.4 — Consent gate: show ConsentStep before Sorting Hat if user has
+    // not yet acknowledged all four consent checkpoints.
+    // consentState uses {micAck, screenAck, recordingAck, tosAck} — remap to ConsentFlags shape.
+    const consentAsFlags = state.consentState
+      ? {
+          consentMicAck: state.consentState.micAck,
+          consentScreenAck: state.consentState.screenAck,
+          consentRecordingAck: state.consentState.recordingAck,
+          consentTosAck: state.consentState.tosAck,
+        }
+      : undefined;
+    if (!allConsentGiven(consentAsFlags)) {
+      return (
+        <div className="overlay-root overlay-root--consent-step" data-testid="glass-overlay-root">
+          <ConsentStep
+            initialFlags={consentAsFlags}
+            onComplete={() => {
+              // No local navigation needed — state.consentState will be pushed
+              // by main after persist-consent-flags; this overlay re-evaluates.
+            }}
+          />
+        </div>
+      );
+    }
+
     return (
       <div className="overlay-root overlay-root--sorting-hat" data-testid="glass-overlay-root">
         <SortingHatScreen

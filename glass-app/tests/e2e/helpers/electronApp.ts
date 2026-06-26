@@ -116,6 +116,9 @@ export async function connectIivoGlassForE2e(browser: Browser): Promise<void> {
   if (serverOnline && state.systemAudioStatus === "available") return;
 
   await overlay.evaluate(() => window.glass.openDashboard("setup"));
+  await expect(overlay.locator('[data-testid="glass-dashboard-shell"]')).toBeVisible({
+    timeout: 15_000,
+  });
   await expect(overlay.locator('[data-testid="glass-dashboard-setup"]')).toBeVisible({
     timeout: 15_000,
   });
@@ -130,8 +133,13 @@ export async function connectIivoGlassForE2e(browser: Browser): Promise<void> {
     }, { timeout: 20_000 })
     .toBe(true);
 
-  await expect(panel.locator('[data-testid="glass-run-setup-check"]')).toHaveAttribute(
+  await expect(overlay.locator('[data-testid="glass-run-setup-check"]')).toHaveAttribute(
     "data-connected",
     "true",
   );
+
+  await overlay.evaluate(() => {
+    window.glass.closeDashboard();
+    window.glass?.setOverlayPointerOverBuilderStrip?.(true);
+  });
 }

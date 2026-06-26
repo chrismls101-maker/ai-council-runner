@@ -607,7 +607,7 @@ function HistoryView({ onBack }: { onBack: () => void }): JSX.Element {
 // Panel
 // ---------------------------------------------------------------------------
 
-export function SpendTrackerPanel({ onClose }: { onClose: () => void }): JSX.Element {
+export function SpendTrackerPanel({ onClose }: { onClose?: () => void }): JSX.Element {
   const [view, setView] = useState<"main" | "history">("main");
   const [snapshot, setSnapshot] = useState<SpendSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
@@ -687,7 +687,9 @@ export function SpendTrackerPanel({ onClose }: { onClose: () => void }): JSX.Ele
           >
             {loading ? <span className="sp-spinner" /> : "↺"}
           </button>
-          <button type="button" className="sp-btn-close" onClick={onClose} aria-label="Close">✕</button>
+          {onClose && (
+            <button type="button" className="sp-btn-close" onClick={onClose} aria-label="Close">✕</button>
+          )}
         </div>
       </div>
 

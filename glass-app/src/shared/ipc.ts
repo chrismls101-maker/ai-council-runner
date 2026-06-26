@@ -300,6 +300,12 @@ export const IPC = {
   closeGlassDashboard: "glass:close-glass-dashboard",
   /** Renderer → main: dashboard mounted — assert overlay focus. */
   glassDashboardMounted: "glass:glass-dashboard-mounted",
+  /** Renderer → main: open Aletheia Dashboard fullscreen in overlay. */
+  openAletheiaDashboard: "glass:open-aletheia-dashboard",
+  /** Renderer → main: close Aletheia Dashboard overlay. */
+  closeAletheiaDashboard: "glass:close-aletheia-dashboard",
+  /** Renderer → main: Aletheia dashboard mounted — assert overlay focus. */
+  aletheiaDashboardMounted: "glass:aletheia-dashboard-mounted",
   /** Dashboard → main: recent sessions from SQLite. */
   getRecentSessions: "glass:get-recent-sessions",
   getSessionMessages: "glass:get-session-messages",
@@ -313,6 +319,21 @@ export const IPC = {
   getAgentBusHealth: "glass:get-agent-bus-health",
   /** Dashboard → main: per-session model spend from SQLite. */
   getSessionSpend: "glass:get-session-spend",
+  // ── Aletheia Dashboard IPC (distinct from Glass Dashboard channels) ─────
+  /** Aletheia dashboard → main: recent sessions (last 10, no privileged fields). */
+  getAletheiaRecentSessions: "glass:aletheia-get-recent-sessions",
+  /** Aletheia dashboard → main: session messages for continuity context. */
+  getAletheiaSessionMessages: "glass:aletheia-get-session-messages",
+  /**
+   * Aletheia dashboard → main: Aletheia companion session history for recap panel.
+   * Returns recent AletheiaSessionRow list (max 20). Gated to Aletheia window only.
+   */
+  getAletheiaSessionHistory: "glass:aletheia-get-session-history",
+  /**
+   * Glass Memory admin → main: wipe all Aletheia companion session rows.
+   * GLASS DASHBOARD ONLY — must never be registered in aletheiaDashboardIpc.ts.
+   */
+  deleteAletheiaSessionHistory: "glass:aletheia-delete-session-history",
   /** Settings renderer → main: initial section when opened via deep link. */
   getSettingsInitialSection: "glass:get-settings-initial-section",
   /** Renderer → main: open Glass Settings window. */
@@ -892,6 +913,21 @@ export type GlassCommand =
   | { type: "complete-glass-onboarding"; profile?: import("./glassUserProfile.ts").GlassUserProfile }
   | { type: "set-glass-server-urls"; apiUrl: string; webUrl: string }
   | { type: "skip-glass-onboarding" }
+  /**
+   * L2.4 — Persist one or more consent checkpoint flags.
+   * Renderer sends this when the user checks/unchecks a consent box.
+   * Main merges the flags into glassOnboardingStore without touching profile
+   * or completion state.
+   */
+  | {
+      type: "persist-consent-flags";
+      flags: Partial<{
+        consentMicAck: boolean;
+        consentScreenAck: boolean;
+        consentRecordingAck: boolean;
+        consentTosAck: boolean;
+      }>;
+    }
   | { type: "session-start"; title?: string }
   | { type: "session-pause" }
   | { type: "session-resume" }
@@ -1050,6 +1086,10 @@ export type GlassCommand =
   | { type: "companion-privacy-start"; durationMs?: number }
   /** End companion privacy mode early. */
   | { type: "companion-privacy-end" }
+  /** Aletheia → Glass System: open Setup (closes Aletheia dashboard when mutual exclusion on). */
+  | { type: "open-glass-setup" }
+  /** Aletheia → Glass System: open Memory (closes Aletheia dashboard when mutual exclusion on). */
+  | { type: "open-glass-memory" }
   /** Clear ephemeral Companion overlay manifestations. */
   | { type: "clear-companion-presence" }
   // ── Fix injection into editor (#160) ─────────────────────────────────────
@@ -1228,6 +1268,8 @@ export interface GlassState {
   glassDashboardActive?: boolean;
   /** One-shot nav target when opening the dashboard (cleared after mount). */
   glassDashboardNav?: import("./glassDashboardNav.ts").GlassDashboardNav | null;
+  /** Aletheia Dashboard — Aletheia-centered control surface above builder strip. */
+  aletheiaDashboardActive?: boolean;
   /** IDE live preview — auto-detected or user-set localhost URL. */
   glassIdePreviewUrl?: string | null;
   /** Bumped after Coder Apply to reload the preview webview. */
@@ -1280,6 +1322,20 @@ export interface GlassState {
   onboardingOpen: boolean;
   /** Whether first-launch onboarding has been completed. */
   onboardingComplete?: boolean;
+  /**
+   * Consent checkpoint flags — read from glassOnboardingStore at boot.
+   * Architecture law: no mic, screen-capture, or recording capability may
+   * activate without the corresponding flag being true. These are read-only
+   * in the renderer; mutations go through persistConsentFlags() in main.
+   * Exposed here so Aletheia trust panel and Glass setup UI can render
+   * permission status without issuing privileged IPC calls.
+   */
+  consentState?: {
+    micAck: boolean;
+    screenAck: boolean;
+    recordingAck: boolean;
+    tosAck: boolean;
+  };
   /** Boot splash finished — Sorting Hat must not mount or speak until true. */
   glassBootComplete?: boolean;
   /** The persona assigned during onboarding. */

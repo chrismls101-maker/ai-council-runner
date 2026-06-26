@@ -30,6 +30,7 @@ import FounderTab from "../panel/FounderTab.tsx";
 import { GlassHoverTooltip } from "../components/GlassHoverTooltip.tsx";
 import { DashboardSetupView } from "./DashboardSetupView.tsx";
 import { armDashboardOverlayPointer } from "../glassTextInteraction.ts";
+import { SpendTrackerPanel } from "../builder/SpendTrackerPanel.tsx";
 import "../styles/glass.css";
 
 type ProviderDot = "ok" | "missing" | "unconfigured";
@@ -655,6 +656,14 @@ export function GlassDashboard({ visible = true, onClose }: GlassDashboardProps)
               </ul>
             </section>
           ) : null}
+
+          <section
+            className="glass-dashboard__spend-overview"
+            data-testid="glass-dashboard-spend-overview"
+          >
+            <p className="glass-dashboard__section-label">AI Spend</p>
+            <SpendTrackerPanel />
+          </section>
         </>
       );
     }

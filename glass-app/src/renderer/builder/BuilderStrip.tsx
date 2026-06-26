@@ -12,10 +12,14 @@ import {
   syncBuilderStripPanelOpen,
   useBuilderStripClickThrough,
 } from "./useBuilderStripClickThrough.ts";
+import { dispatchAletheiaCommand } from "../../shared/aletheiaAuthority.ts";
+import { ensureAletheiaDispatchRegistered } from "../aletheia/registerAletheiaDispatch.ts";
 import { send, useGlassState } from "../useGlassState.ts";
+import { showPowerUserTabs } from "../../shared/minimalPublicFlag.ts";
 import { useGlassTerminalToggle } from "../useGlassTerminalToggle.ts";
 import { useGlassCompanion } from "../companion/GlassCompanionProvider.tsx";
 import { GlassHoverTooltip } from "../components/GlassHoverTooltip.tsx";
+import { AletheiaStripMenu } from "./AletheiaStripMenu.tsx";
 import "./BuilderStrip.css";
 
 type BuilderTab = "prompts" | "keys" | "power-prompt" | "spend" | "extract" | "agents";
@@ -38,7 +42,12 @@ export function BuilderStrip({
   const companion = useGlassCompanion();
   const glassState = useGlassState();
   const agentRunning = glassState.agentRun?.status === "running";
+  const minimalPublic = glassState.serverRuntimeFlags?.minimalPublic === true;
+  const glassDevMode = glassState.glassDevMode === true;
+  // Founder/dev mode always overrides minimalPublic — power tabs stay visible.
+  const showPowerUserTabsValue = showPowerUserTabs({ minimalPublic, glassDevMode });
   const [aletheiaSweeping, setAletheiaSweeping] = useState(false);
+  const [aletheiaMenuOpen, setAletheiaMenuOpen] = useState(false);
   const aletheiaSweepGenRef = useRef(0);
 
   const replayAletheiaTruthSweep = useCallback((): void => {
@@ -63,9 +72,11 @@ export function BuilderStrip({
     return () => window.clearTimeout(timer);
   }, [aletheiaSweeping, handleAletheiaSweepEnd]);
 
-  const companionTooltip = companion.active
-    ? `${companion.statusLabel} — tap to turn off`
-    : "Aletheia — Glass voice presence · tap to activate";
+  const companionTooltip = aletheiaMenuOpen
+    ? "Aletheia — choose Activate or Dashboard"
+    : companion.active
+      ? `${companion.statusLabel} — tap for Activate or Dashboard`
+      : "Aletheia — Glass voice presence · tap for Activate or Dashboard";
 
   useBuilderStripClickThrough(activeTab !== null);
 
@@ -74,20 +85,34 @@ export function BuilderStrip({
     setActiveTab(null);
   }, []);
 
-  const dismissOverlayMenus = useCallback((): void => {
+  const dismissPowersAndPalette = useCallback((): void => {
     if (glassState.powersMenuOpen) send({ type: "dismiss-powers-menu" });
     if (glassState.commandPaletteOpen) send({ type: "dismiss-command-palette" });
   }, [glassState.commandPaletteOpen, glassState.powersMenuOpen]);
 
-  // Keep agents / powers / palette mutually exclusive — only one overlay at a time.
+  const dismissOverlayMenus = useCallback((): void => {
+    dismissPowersAndPalette();
+    setAletheiaMenuOpen(false);
+  }, [dismissPowersAndPalette]);
+
+  // Keep agents / powers / palette / Aletheia menu mutually exclusive — only one overlay at a time.
   useEffect(() => {
     if ((glassState.powersMenuOpen || glassState.commandPaletteOpen) && activeTab !== null) {
       closeBuilderPanel();
     }
+    if (glassState.powersMenuOpen || glassState.commandPaletteOpen) {
+      setAletheiaMenuOpen(false);
+    }
   }, [activeTab, closeBuilderPanel, glassState.commandPaletteOpen, glassState.powersMenuOpen]);
+
+  useEffect(() => {
+    if (!glassState.aletheiaDashboardActive) return;
+    setAletheiaMenuOpen(false);
+  }, [glassState.aletheiaDashboardActive]);
 
   // Safety: ensure overlay OS click-through on mount; reset on unmount.
   useEffect(() => {
+    ensureAletheiaDispatchRegistered();
     window.glass.setBuilderStripVisible(true);
     return () => window.glass.setBuilderStripVisible(false);
   }, []);
@@ -143,6 +168,44 @@ export function BuilderStrip({
   const agentsTabTooltip = agentRunning
     ? "Agent running — tap to stop"
     : "AI Agents — research, write files, and automate tasks with Claude";
+
+  const handleAletheiaClick = useCallback((): void => {
+    armBuilderStripInteractive();
+    dismissPowersAndPalette();
+    if (activeTab !== null) {
+      closeBuilderPanel();
+    }
+    setAletheiaMenuOpen((open) => !open);
+  }, [activeTab, closeBuilderPanel, dismissPowersAndPalette]);
+
+  const handleAletheiaActivate = useCallback((): void => {
+    armBuilderStripInteractive();
+    setAletheiaMenuOpen(false);
+    if (!companion.active) {
+      dispatchAletheiaCommand("toggle-companion-mode");
+    }
+  }, [companion.active]);
+
+  const handleAletheiaDashboard = useCallback((): void => {
+    armBuilderStripInteractive();
+    setAletheiaMenuOpen(false);
+    if (glassState.aletheiaDashboardActive) {
+      window.glass.closeAletheiaDashboard();
+    } else {
+      window.glass.openAletheiaDashboard();
+    }
+  }, [glassState.aletheiaDashboardActive]);
+
+  const handleAletheiaDeactivate = useCallback((): void => {
+    armBuilderStripInteractive();
+    setAletheiaMenuOpen(false);
+    if (!companion.active) return;
+    if (agentRunning) {
+      dispatchAletheiaCommand("stop-everything");
+      return;
+    }
+    dispatchAletheiaCommand("toggle-companion-mode");
+  }, [agentRunning, companion.active]);
 
   const handleClosePanel = useCallback((): void => {
     closeBuilderPanel();
@@ -221,7 +284,7 @@ export function BuilderStrip({
         onPointerLeave={handlePointerLeave}
         onPointerDownCapture={handlePointerDownCapture}
       >
-        <GlassHoverTooltip label="Glass Dashboard — system pulse, sessions, and council" placement="auto">
+        <GlassHoverTooltip label="Glass System — setup, providers, sessions, and council" placement="auto">
           <button
             type="button"
             className={`builder-tab builder-tab--dashboard${glassState.glassDashboardActive ? " builder-tab--active" : ""}`}
@@ -233,11 +296,11 @@ export function BuilderStrip({
                 window.glass.openDashboard();
               }
             }}
-            aria-label="Open Glass Dashboard"
+            aria-label="Open Glass System dashboard"
             aria-pressed={glassState.glassDashboardActive === true}
           >
             <LayoutGrid className="builder-tab__icon builder-tab__icon--lucide" size={14} strokeWidth={2} aria-hidden="true" />
-            Dashboard
+            System
           </button>
         </GlassHoverTooltip>
 
@@ -271,35 +334,41 @@ export function BuilderStrip({
           </button>
         </GlassHoverTooltip>
 
-        <GlassHoverTooltip
-          label="API Key Manager — store keys for Claude, OpenAI, and more"
-          placement="auto"
-        >
-          <button
-            type="button"
-            className={`builder-tab${activeTab === "keys" ? " builder-tab--active" : ""}`}
-            onClick={() => handleTabClick("keys")}
-            aria-label="API Key Manager"
+        {/* L3.1 — hidden by glass.strip.minimalPublic flag; visible when showPowerUserTabs */}
+        {showPowerUserTabsValue && (
+          <GlassHoverTooltip
+            label="API Key Manager — store keys for Claude, OpenAI, and more"
+            placement="auto"
           >
-            <span className="builder-tab__icon">🗝</span>
-            API Keys
-          </button>
-        </GlassHoverTooltip>
+            <button
+              type="button"
+              className={`builder-tab${activeTab === "keys" ? " builder-tab--active" : ""}`}
+              onClick={() => handleTabClick("keys")}
+              aria-label="API Key Manager"
+            >
+              <span className="builder-tab__icon">🗝</span>
+              API Keys
+            </button>
+          </GlassHoverTooltip>
+        )}
 
-        <GlassHoverTooltip
-          label="AI Spend Tracker — usage and cost across providers"
-          placement="auto"
-        >
-          <button
-            type="button"
-            className={`builder-tab${activeTab === "spend" ? " builder-tab--active" : ""}`}
-            onClick={() => handleTabClick("spend")}
-            aria-label="AI Spend Tracker"
+        {/* L3.1 — hidden by glass.strip.minimalPublic flag; visible when showPowerUserTabs */}
+        {showPowerUserTabsValue && (
+          <GlassHoverTooltip
+            label="AI Spend Tracker — usage and cost across providers"
+            placement="auto"
           >
-            <span className="builder-tab__icon">💸</span>
-            Spend
-          </button>
-        </GlassHoverTooltip>
+            <button
+              type="button"
+              className={`builder-tab${activeTab === "spend" ? " builder-tab--active" : ""}`}
+              onClick={() => handleTabClick("spend")}
+              aria-label="AI Spend Tracker"
+            >
+              <span className="builder-tab__icon">💸</span>
+              Spend
+            </button>
+          </GlassHoverTooltip>
+        )}
 
         <GlassHoverTooltip
           label="Watch any build video you care about — extract their plan into a launch-ready master prompt · one-click to Glass, Cursor, or Claude"
@@ -335,33 +404,46 @@ export function BuilderStrip({
         <div className="builder-strip__divider" aria-hidden="true" />
 
         <GlassHoverTooltip label={companionTooltip} placement="auto">
-          <button
-            type="button"
-            className={`builder-tab builder-tab--aletheia${companion.active ? " builder-tab--companion--active" : ""}${aletheiaSweeping ? " builder-tab--aletheia--revealing" : ""}`}
-            onClick={companion.toggle}
-            onPointerEnter={replayAletheiaTruthSweep}
-            aria-label={companion.active ? "Turn off Aletheia" : "Turn on Aletheia"}
-            aria-pressed={companion.active}
-            data-testid="glass-companion-toggle"
-          >
-            <span
-              className={`builder-tab__glass-sweep${aletheiaSweeping ? " builder-tab__glass-sweep--active" : ""}`}
-              aria-hidden="true"
+          <div className="builder-strip__aletheia-wrap">
+            <button
+              type="button"
+              className={`builder-tab builder-tab--aletheia${companion.active ? " builder-tab--companion--active" : ""}${aletheiaSweeping ? " builder-tab--aletheia--revealing" : ""}${aletheiaMenuOpen ? " builder-tab--aletheia-menu-open" : ""}${glassState.aletheiaDashboardActive ? " builder-tab--active" : ""}`}
+              onClick={handleAletheiaClick}
+              onPointerEnter={replayAletheiaTruthSweep}
+              aria-label="Aletheia — Activate or Dashboard"
+              aria-haspopup="menu"
+              aria-expanded={aletheiaMenuOpen}
+              aria-pressed={aletheiaMenuOpen || glassState.aletheiaDashboardActive === true}
+              data-testid="glass-companion-toggle"
             >
               <span
-                className="builder-tab__glass-sweep-bar"
-                onAnimationEnd={handleAletheiaSweepEnd}
+                className={`builder-tab__glass-sweep${aletheiaSweeping ? " builder-tab__glass-sweep--active" : ""}`}
+                aria-hidden="true"
+              >
+                <span
+                  className="builder-tab__glass-sweep-bar"
+                  onAnimationEnd={handleAletheiaSweepEnd}
+                />
+              </span>
+              <span
+                className={`builder-companion-toggle__dot${companion.active ? " builder-companion-toggle__dot--live" : ""}`}
+                aria-hidden="true"
               />
-            </span>
-            <span
-              className={`builder-companion-toggle__dot${companion.active ? " builder-companion-toggle__dot--live" : ""}`}
-              aria-hidden="true"
+              <span className="builder-tab__aletheia-label" aria-hidden="true">
+                <span className="builder-tab__aletheia-label-glow">Aletheia</span>
+                <span className="builder-tab__aletheia-label-face">Aletheia</span>
+              </span>
+            </button>
+            <AletheiaStripMenu
+              open={aletheiaMenuOpen}
+              companionActive={companion.active}
+              dashboardActive={glassState.aletheiaDashboardActive === true}
+              onClose={() => setAletheiaMenuOpen(false)}
+              onActivate={handleAletheiaActivate}
+              onDeactivate={handleAletheiaDeactivate}
+              onDashboard={handleAletheiaDashboard}
             />
-            <span className="builder-tab__aletheia-label" aria-hidden="true">
-              <span className="builder-tab__aletheia-label-glow">Aletheia</span>
-              <span className="builder-tab__aletheia-label-face">Aletheia</span>
-            </span>
-          </button>
+          </div>
         </GlassHoverTooltip>
 
         <GlassHoverTooltip

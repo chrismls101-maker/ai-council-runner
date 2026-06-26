@@ -190,6 +190,7 @@ let overlayResearchExplorerActive = false;
 let overlayCodeAnalystExplorerActive = false;
 let overlayWritingStudioActive = false;
 let overlayGlassDashboardActive = false;
+let overlayAletheiaDashboardActive = false;
 /** Increment when a full-screen workspace opens; focus overlay only on epoch change. */
 let overlayWorkspaceFocusEpoch = 0;
 let overlayWorkspaceFocusAppliedEpoch = -1;
@@ -246,7 +247,8 @@ function overlayFullscreenWorkspaceActive(): boolean {
   return overlayResearchExplorerActive
     || overlayCodeAnalystExplorerActive
     || overlayWritingStudioActive
-    || overlayGlassDashboardActive;
+    || overlayGlassDashboardActive
+    || overlayAletheiaDashboardActive;
 }
 
 /** Native macOS dialogs must not sit behind the always-on-top overlay. */
@@ -368,16 +370,29 @@ export function setOverlayGlassDashboardActive(active: boolean): void {
   syncFullscreenWorkspaceOverlay();
 }
 
+/** Main: Aletheia Dashboard open — full-screen overlay above builder strip. */
+export function setOverlayAletheiaDashboardActive(active: boolean): void {
+  overlayAletheiaDashboardActive = transitionOverlayWorkspaceFlag(
+    overlayAletheiaDashboardActive,
+    active,
+  );
+  syncFullscreenWorkspaceOverlay();
+}
+
 function syncFullscreenWorkspaceOverlay(): void {
   if (overlayFullscreenWorkspaceActive()) {
     applyFullscreenWorkspaceOverlayMode();
+    if (windows) raiseChromeAboveOverlay(windows);
     return;
   }
   overlayWorkspaceFocusAppliedEpoch = -1;
   if (windows?.overlay && !windows.overlay.isDestroyed()) {
     windows.overlay.setFocusable(false);
   }
+  // Playwright clicks rarely hover the strip — keep it OS-interactive after workspace closes.
+  overlayPointerOverBuilderStrip = true;
   applyBuilderStripOverlayInteractivity();
+  if (windows) raiseChromeAboveOverlay(windows);
 }
 
 /** Renderer mounted Research Explorer — re-assert focus + click capture. */
@@ -397,6 +412,11 @@ export function notifyWritingStudioMounted(): void {
 
 /** Renderer mounted Glass Dashboard — re-assert focus + click capture. */
 export function notifyGlassDashboardMounted(): void {
+  applyFullscreenWorkspaceOverlayMode();
+}
+
+/** Renderer mounted Aletheia Dashboard — re-assert focus + click capture. */
+export function notifyAletheiaDashboardMounted(): void {
   applyFullscreenWorkspaceOverlayMode();
 }
 

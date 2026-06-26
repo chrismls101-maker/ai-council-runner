@@ -2,7 +2,7 @@
  * Onboarding boot flags (no Electron imports — testable in Node).
  */
 
-import type { GlassUserSettings } from "../shared/glassSettings.ts";
+import { e2eChromeLayoutSettings, type GlassUserSettings } from "../shared/glassSettings.ts";
 import {
   loadGlassOnboardingState,
 } from "./glassOnboardingStore.ts";
@@ -41,7 +41,10 @@ export async function prepareBootOnboarding(
 
   if (e2e) {
     glassOnboardingState = { ...glassOnboardingState, completed: true };
-    glassUserSettings = { ...glassUserSettings, onboardingComplete: true };
+    glassUserSettings = e2eChromeLayoutSettings({
+      ...glassUserSettings,
+      onboardingComplete: true,
+    });
   }
 
   if (glassOnboardingState.completed && !glassUserSettings.onboardingComplete) {

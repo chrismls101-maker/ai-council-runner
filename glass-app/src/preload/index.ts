@@ -303,6 +303,12 @@ const glassApi = {
   closeDashboard(): void {
     ipcRenderer.send(IPC.closeGlassDashboard);
   },
+  openAletheiaDashboard(): void {
+    ipcRenderer.send(IPC.openAletheiaDashboard);
+  },
+  closeAletheiaDashboard(): void {
+    ipcRenderer.send(IPC.closeAletheiaDashboard);
+  },
   openSettings(section?: import("../shared/panelTabRouting.ts").GlassSettingsSection): void {
     ipcRenderer.send(IPC.openGlassSettings, section);
   },
@@ -326,6 +332,9 @@ const glassApi = {
   notifyGlassDashboardMounted(): void {
     ipcRenderer.send(IPC.glassDashboardMounted);
   },
+  notifyAletheiaDashboardMounted(): void {
+    ipcRenderer.send(IPC.aletheiaDashboardMounted);
+  },
   onDashboardAgentEvent(
     listener: (event: import("../shared/ipc.ts").GlassDashboardAgentEvent) => void,
   ): () => void {
@@ -343,6 +352,16 @@ const glassApi = {
   },
   getSessionMessages(sessionId: string): Promise<import("../shared/ipc.ts").MessageRow[]> {
     return ipcRenderer.invoke(IPC.getSessionMessages, sessionId) as Promise<
+      import("../shared/ipc.ts").MessageRow[]
+    >;
+  },
+  getAletheiaRecentSessions(): Promise<import("../shared/ipc.ts").SessionRowWithMeta[]> {
+    return ipcRenderer.invoke(IPC.getAletheiaRecentSessions) as Promise<
+      import("../shared/ipc.ts").SessionRowWithMeta[]
+    >;
+  },
+  getAletheiaSessionMessages(sessionId: string): Promise<import("../shared/ipc.ts").MessageRow[]> {
+    return ipcRenderer.invoke(IPC.getAletheiaSessionMessages, sessionId) as Promise<
       import("../shared/ipc.ts").MessageRow[]
     >;
   },

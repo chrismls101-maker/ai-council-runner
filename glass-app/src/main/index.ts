@@ -29,6 +29,8 @@ import {
 import {
   clearCompanionSessionMemory,
   updateCompanionSessionMemory,
+  beginAletheiaSession,
+  finalizeAletheiaSession,
 } from "./companionSessionStore.ts";
 import {
   canReuseCompanionCapture,
@@ -240,10 +242,12 @@ import {
   setOverlayCodeAnalystExplorerActive,
   setOverlayWritingStudioActive,
   setOverlayGlassDashboardActive,
+  setOverlayAletheiaDashboardActive,
   notifyResearchExplorerMounted,
   notifyCodeAnalystExplorerMounted,
   notifyWritingStudioMounted,
   notifyGlassDashboardMounted,
+  notifyAletheiaDashboardMounted,
   setBuilderStripPanelOpen,
   setResponsePanelOpen,
   setCopilotOverlayCardOpen,
@@ -257,6 +261,15 @@ import {
 } from "./windows.ts";
 import { computeCommandBarOverlayClearancePx, builderStripLayoutReservePx, glassLayoutContentBottomY } from "../shared/glassLayoutMath.ts";
 import { shouldShowBuilderStrip } from "../shared/builderStripVisibility.ts";
+import {
+  glassPublicArchitectureFlags,
+  oppositeDashboardToClose,
+} from "../shared/glassPublicArchitecture.ts";
+import {
+  canActivateListenCapture,
+  canActivateMicRecording,
+  canActivateScreenCapture,
+} from "../shared/glassConsentGates.ts";
 import { logGlassClickDebug } from "./glassClickDebug.ts";
 import {
   listApiKeys,
@@ -294,7 +307,9 @@ import { parseGlassDashboardNav } from "../shared/glassDashboardNav.ts";
 import { resolvePanelNavigation } from "../shared/panelTabRouting.ts";
 import { initGlassSettings, isSettingsIpcSender, showGlassSettings, teardownGlassSettings } from "./glassSettingsWindow.ts";
 import { registerDashboardIpc, setDashboardIpcAuth, isDashboardIpcSender } from "./dashboardIpc.ts";
+import { registerAletheiaDashboardIpc, setAletheiaDashboardIpcAuth } from "./aletheiaDashboardIpc.ts";
 import { closeDatabase, gracefulDatabaseShutdown, initDatabase } from "./glassDatabase.ts";
+import { createAletheiaSessionsTable } from "./aletheiaSessionStore.ts";
 import {
   logSessionStart,
   logSessionEnd,
@@ -324,6 +339,7 @@ import { resolveAgentOutputFolder } from "./agents/paths.ts";
 import {
   completeGlassOnboardingStore,
   loadGlassOnboardingState,
+  persistConsentFlags,
   persistGlassUserProfile,
 } from "./glassOnboardingStore.ts";
 import { normalizeGlassUserProfile, type GlassUserProfile } from "../shared/glassUserProfile.ts";
@@ -638,6 +654,7 @@ import { shouldCaptureScreenForGlassAsk } from "../shared/glassVisualIntent.ts";
 import { resolveScreenshotForVisualAsk } from "./glassVisualAskCapture.ts";
 import {
   DEFAULT_GLASS_USER_SETTINGS,
+  e2eChromeLayoutSettings,
   type GlassUserSettings,
 } from "../shared/glassSettings.ts";
 import { parseUiLocale, isUiLocaleChosen, deepgramLanguageCode } from "../shared/glassLocale.ts";
@@ -1001,6 +1018,7 @@ interface AppState {
   writingStudioPrompt?: string;
   glassDashboardActive?: boolean;
   glassDashboardNav?: import("../shared/glassDashboardNav.ts").GlassDashboardNav | null;
+  aletheiaDashboardActive?: boolean;
   indexState: import("../shared/ipc.ts").GlassIndexState;
   ollamaAvailable: boolean;
   projectMemoryState: import("../shared/ipc.ts").ProjectMemoryState | null;
@@ -1081,6 +1099,17 @@ interface AppState {
   customCommandsWarnings?: string[];
   /** Whether first-launch onboarding has been completed (Sorting Hat). */
   onboardingComplete?: boolean;
+  /**
+   * Consent checkpoint flags — loaded from glassOnboardingStore at boot and
+   * updated via persistConsentFlags(). Pushed into GlassState so renderers can
+   * read permission status without privileged IPC calls.
+   */
+  consentState: {
+    micAck: boolean;
+    screenAck: boolean;
+    recordingAck: boolean;
+    tosAck: boolean;
+  };
   /** Boot splash finished — Sorting Hat must not mount until true. */
   glassBootComplete?: boolean;
   /** The persona assigned during Sorting Hat onboarding. */
@@ -1337,6 +1366,13 @@ const state: AppState = {
   iivoAccountLink: null,
   serverRuntimeFlags: null,
   omniParserInstall: getOmniParserInstallState(),
+  // Consent flags — all false until loaded from glassOnboardingStore at boot.
+  consentState: {
+    micAck: false,
+    screenAck: false,
+    recordingAck: false,
+    tosAck: false,
+  },
 };
 
 const ideChromeOrchestrator = new IdeChromeOrchestrator({
@@ -1506,12 +1542,25 @@ function completeListenCountdown(): void {
 }
 
 function beginListenCapture(mode?: TranscriptionMode): void {
+  const effectiveMode = mode ?? state.transcriptionMode;
+  if (!canActivateListenCapture(state.consentState, effectiveMode)) {
+    console.warn(
+      `[glass] listen capture blocked — consent not given for mode=${effectiveMode}`,
+    );
+    push();
+    return;
+  }
   cancelListenCountdown();
   broadcastTranscriptionControl(mode ? { type: "start", mode } : { type: "start" });
 }
 
 /** Atomically start a Listen-mode session and kick off system-audio capture. */
 function activateListenMode(): void {
+  if (!canActivateListenCapture(state.consentState, "system_audio")) {
+    console.warn("[glass] activate-listen-mode blocked — system audio consent not given");
+    push();
+    return;
+  }
   const preset = GLASS_MODE_PRESETS.listen;
   if (!sessionIsLive()) {
     sessions.startSession("Listen");
@@ -3948,6 +3997,7 @@ function snapshot(): GlassState {
     writingStudioPrompt: state.writingStudioPrompt,
     glassDashboardActive: state.glassDashboardActive === true,
     glassDashboardNav: state.glassDashboardNav ?? null,
+    aletheiaDashboardActive: state.aletheiaDashboardActive === true,
     glassIdePreviewUrl: state.glassIdePreviewUrl,
     glassIdePreviewReloadNonce: state.glassIdePreviewReloadNonce,
     glassIdeTerminalExpanded: state.glassIdeTerminalExpanded,
@@ -3975,6 +4025,7 @@ function snapshot(): GlassState {
     liveTranslate: isTranslateActive() ? liveTranslateRuntime : undefined,
     onboardingOpen: state.onboardingOpen,
     onboardingComplete: state.onboardingComplete,
+    consentState: state.consentState,
     glassBootComplete: state.glassBootComplete,
     persona: state.persona,
     ttsAudio: state.ttsAudio,
@@ -4065,10 +4116,12 @@ async function finishGlassOnboarding(profile: GlassUserProfile | null): Promise<
 }
 
 function syncBuilderStripLayoutReserve(): void {
+  const flags = glassPublicArchitectureFlags();
   const reserve = shouldShowBuilderStrip({
     onboardingComplete: state.onboardingComplete,
     persona: state.persona,
     glassDevMode: !app.isPackaged,
+    aletheiaStripForAllPersonas: flags.aletheiaStripForAllPersonas,
   })
     ? builderStripLayoutReservePx()
     : 0;
@@ -4097,6 +4150,13 @@ async function finishSortingHatOnboarding(persona?: GlassState["persona"]): Prom
 
   const stored = await completeGlassOnboardingStore(state.glassUserProfile);
   state.glassUserProfile = stored.profile;
+  // Sync consent state from the persisted store so GlassState stays consistent.
+  state.consentState = {
+    micAck: stored.consentMicAck,
+    screenAck: stored.consentScreenAck,
+    recordingAck: stored.consentRecordingAck,
+    tosAck: stored.consentTosAck,
+  };
   seedUserContextFromProfile(state.glassUserProfile);
   glassUserSettings = await markOnboardingComplete(glassUserSettings);
   state.glassSettings = glassUserSettings;
@@ -4172,6 +4232,7 @@ function syncIdeChromeFromState(): void {
   setOverlayCodeAnalystExplorerActive(state.codeAnalystExplorerActive === true);
   setOverlayWritingStudioActive(state.writingStudioActive === true);
   setOverlayGlassDashboardActive(state.glassDashboardActive === true);
+  setOverlayAletheiaDashboardActive(state.aletheiaDashboardActive === true);
 }
 
 function push(): void {
@@ -4360,6 +4421,12 @@ async function persistEphemeralVisualToSession(): Promise<boolean> {
 }
 
 async function handleCapture(): Promise<string | undefined> {
+  if (!canActivateScreenCapture(state.consentState)) {
+    console.warn("[glass] screen capture blocked — screen/tos consent not given");
+    state.lastNotice = "Screen capture requires consent — complete Glass setup first.";
+    push();
+    return undefined;
+  }
   state.lastError = undefined;
   const captureTarget = resolveCaptureDisplay(state.glassSettings.displayTarget);
   state.operationDiagnostics = {
@@ -5189,6 +5256,21 @@ async function submitCommand(
   let visualAsk413Retried = false;
 
   if (wantsVisualCapture) {
+    if (!canActivateScreenCapture(state.consentState)) {
+      state.askInFlight = false;
+      state.askStatus = "done";
+      const msg = "Screen capture requires consent — complete Glass setup first.";
+      state.lastAskResponse = {
+        prompt: text,
+        answer: msg,
+        fullAnswer: msg,
+        at: new Date().toISOString(),
+        routeUsed: "glass_direct",
+      };
+      pushFeed(createCommandFeedItem("response", msg, { prompt: text, fullBody: msg }));
+      push();
+      return;
+    }
     state.visualAskPayloadDiagnostics = null;
     state.visualAskDiagnostics = null;
 
@@ -6057,6 +6139,7 @@ async function handleCommand(
       }
 
       setListenNotesPadVisible(false);
+      finalizeAletheiaSession();
       state.companionModeActive = false;
       state.companionPresence = null;
       state.companionMemory = clearCompanionSessionMemory();
@@ -6680,9 +6763,19 @@ async function handleCommand(
       push();
       return;
     case "toggle-companion-mode": {
+      // L2.4 consent gate — activation only. Deactivation is always permitted.
+      // If the user has not acknowledged mic consent during onboarding, block
+      // activation silently and push state so the renderer can surface the
+      // consent-required condition (e.g., open Aletheia dashboard → Permissions).
+      if (!state.companionModeActive && !canActivateMicRecording(state.consentState)) {
+        console.warn("[glass] toggle-companion-mode blocked — mic/tos consent not given");
+        push();
+        return;
+      }
       state.companionModeActive = !state.companionModeActive;
       state.companionModeToggleNonce += 1;
       if (!state.companionModeActive) {
+        finalizeAletheiaSession();
         state.companionPresence = null;
         state.companionMemory = clearCompanionSessionMemory();
         state.companionWarmupPhase = "none";
@@ -6691,6 +6784,7 @@ async function handleCommand(
         stopCompanionDeepgramSession();
         stopCompanionAnchorWatch();
       } else {
+        beginAletheiaSession(state.activeApp);
         // Release command-bar Voice Mode mic before Aletheia listens in overlay.
         broadcastTranscriptionControl({ type: "stop" });
         state.companionWarmupPhase = "none";
@@ -6732,6 +6826,20 @@ async function handleCommand(
     case "companion-privacy-end": {
       clearCompanionPrivacyState();
       push();
+      return;
+    }
+    case "open-glass-setup":
+    case "open-glass-memory": {
+      const nav = command.type === "open-glass-setup" ? "setup" : "memory";
+      const flags = glassPublicArchitectureFlags();
+      if (oppositeDashboardToClose("glass", flags) === "aletheiaDashboardActive") {
+        state.aletheiaDashboardActive = false;
+      }
+      state.glassDashboardActive = true;
+      state.glassDashboardNav = nav;
+      syncIdeChromeFromState();
+      push();
+      setImmediate(() => notifyGlassDashboardMounted());
       return;
     }
     case "clear-companion-presence":
@@ -7647,6 +7755,18 @@ async function handleCommand(
     case "skip-glass-onboarding":
       await finishGlassOnboarding(null);
       return;
+    case "persist-consent-flags": {
+      // L2.4 — persist consent checkpoints; update live state so renderer stays in sync.
+      const updated = await persistConsentFlags(command.flags);
+      state.consentState = {
+        micAck: updated.consentMicAck,
+        screenAck: updated.consentScreenAck,
+        recordingAck: updated.consentRecordingAck,
+        tosAck: updated.consentTosAck,
+      };
+      push();
+      return;
+    }
     case "e2e-reset-setup-state":
       if (process.env.IIVO_GLASS_E2E === "1") {
         state.micPermission = "not_requested";
@@ -7658,14 +7778,28 @@ async function handleCommand(
         state.systemAudioDetail = "System audio probe skipped.";
         state.lastError = undefined;
         state.glassIdeActive = false;
-        state.glassSettings = {
+        state.coderWorkspaceActive = false;
+        state.researchExplorerActive = false;
+        state.codeAnalystExplorerActive = false;
+        state.writingStudioActive = false;
+        state.glassDashboardActive = false;
+        state.glassDashboardNav = null;
+        state.aletheiaDashboardActive = false;
+        const layoutSettings = e2eChromeLayoutSettings({
           ...state.glassSettings,
           agentCodeWorkspaceRoot: undefined,
+        });
+        state.glassSettings = layoutSettings;
+        glassUserSettings = {
+          ...glassUserSettings,
+          agentCodeWorkspaceRoot: undefined,
         };
-        glassUserSettings = state.glassSettings;
-        void persistGlassUserSettings(state.glassSettings);
+        void persistGlassUserSettings(glassUserSettings);
+        applyGlassUserSettings(layoutSettings);
+        resetChromeLayoutOrigins();
         refreshSetupCapabilities();
         state.setupCheckSummary = formatSetupCheckSummary(state.setupCapabilities);
+        syncIdeChromeFromState();
         push();
       }
       return;
@@ -10318,8 +10452,13 @@ function isValidPtySessionId(termId: unknown): termId is string {
 
 function enableCompanionModeForAgent(): void {
   if (state.companionModeActive) return;
+  if (!canActivateMicRecording(state.consentState)) {
+    console.warn("[glass] enableCompanionModeForAgent blocked — mic/tos consent not given");
+    return;
+  }
   state.companionModeActive = true;
   state.companionModeToggleNonce += 1;
+  beginAletheiaSession(state.activeApp);
   broadcastTranscriptionControl({ type: "stop" });
   state.companionWarmupPhase = "none";
   warmOmniParserSidecarWithCallbacks({
@@ -10382,6 +10521,11 @@ function registerIpc(): void {
     (sender) => state.glassDashboardActive === true && isOverlayIpcSender(sender),
   );
   registerDashboardIpc();
+
+  setAletheiaDashboardIpcAuth(
+    (sender) => state.aletheiaDashboardActive === true && isOverlayIpcSender(sender),
+  );
+  registerAletheiaDashboardIpc();
 
   ipcMain.handle(IPC.getSentryDsn, (event) => {
     if (!isGlassRendererSender(event.sender)) return null;
@@ -11106,7 +11250,9 @@ function registerIpc(): void {
       activeAgentRun = { controller, runId, agentId };
 
       // Coder in IDE uses agent narrate without toggling Aletheia companion on.
-      if (agentId !== "coder") {
+      // agentsAutoActivate flag (default: false) guards public builds from
+      // auto-activating companion mode. Must be explicitly enabled server-side.
+      if (agentId !== "coder" && state.serverRuntimeFlags?.agentsAutoActivate === true) {
         enableCompanionModeForAgent();
       }
 
@@ -11474,6 +11620,10 @@ function registerIpc(): void {
   // ── Glass Dashboard full-screen overlay ────────────────────────────────────
   ipcMain.on(IPC.openGlassDashboard, (event, nav: unknown) => {
     if (!isOverlayIpcSender(event.sender)) return;
+    const flags = glassPublicArchitectureFlags();
+    if (oppositeDashboardToClose("glass", flags) === "aletheiaDashboardActive") {
+      state.aletheiaDashboardActive = false;
+    }
     state.glassDashboardActive = true;
     const parsed = parseGlassDashboardNav(nav);
     if (parsed) {
@@ -11495,6 +11645,33 @@ function registerIpc(): void {
     if (!isOverlayIpcSender(event.sender)) return;
     if (state.glassDashboardActive !== true) return;
     notifyGlassDashboardMounted();
+  });
+
+  // ── Aletheia Dashboard full-screen overlay ─────────────────────────────────
+  ipcMain.on(IPC.openAletheiaDashboard, (event) => {
+    if (!isOverlayIpcSender(event.sender)) return;
+    const flags = glassPublicArchitectureFlags();
+    if (oppositeDashboardToClose("aletheia", flags) === "glassDashboardActive") {
+      state.glassDashboardActive = false;
+      state.glassDashboardNav = null;
+    }
+    state.aletheiaDashboardActive = true;
+    syncIdeChromeFromState();
+    push();
+    setImmediate(() => notifyAletheiaDashboardMounted());
+  });
+
+  ipcMain.on(IPC.closeAletheiaDashboard, (event) => {
+    if (!isOverlayIpcSender(event.sender)) return;
+    state.aletheiaDashboardActive = false;
+    syncIdeChromeFromState();
+    push();
+  });
+
+  ipcMain.on(IPC.aletheiaDashboardMounted, (event) => {
+    if (!isOverlayIpcSender(event.sender)) return;
+    if (state.aletheiaDashboardActive !== true) return;
+    notifyAletheiaDashboardMounted();
   });
 
   ipcMain.on(IPC.glassIdeOpen, (event) => {
@@ -13041,6 +13218,7 @@ app.whenReady().then(() =>
   migrateAnthropicKeyFromEnv();
 
   const dbInit = initDatabase();
+  createAletheiaSessionsTable();
   if (dbInit.recoveredFromCorruption) {
     const backupName = dbInit.corruptionBackupPath
       ? dbInit.corruptionBackupPath.split(/[/\\]/).pop() ?? "glass-corrupted.db"
@@ -13108,6 +13286,14 @@ app.whenReady().then(() =>
     state.e2eFastOnboarding = true;
   }
   state.glassUserProfile = glassOnboardingState.profile;
+  // L2.4 — load persisted consent flags into GlassState so renderer can read them.
+  // Architecture law: mutations only through persistConsentFlags() in main; renderer is read-only.
+  state.consentState = {
+    micAck: glassOnboardingState.consentMicAck,
+    screenAck: glassOnboardingState.consentScreenAck,
+    recordingAck: glassOnboardingState.consentRecordingAck,
+    tosAck: glassOnboardingState.consentTosAck,
+  };
   state.iivoAccountLink = await loadIivoAccountLink();
   void refreshServerRuntimeFlags();
   setInterval(() => { void refreshServerRuntimeFlags(); }, 5 * 60_000);
@@ -13133,7 +13319,10 @@ app.whenReady().then(() =>
     await persistGlassUserSettings(glassUserSettings);
   }
   if (process.env.IIVO_GLASS_E2E === "1") {
-    glassUserSettings = { ...glassUserSettings, hotkeyPreset: "disabled" };
+    glassUserSettings = {
+      ...e2eChromeLayoutSettings(glassUserSettings),
+      hotkeyPreset: "disabled",
+    };
   }
   state.glassSettings = glassUserSettings;
   state.onboardingComplete = state.glassSettings.onboardingComplete ?? false;
@@ -13216,6 +13405,9 @@ app.whenReady().then(() =>
   });
   createWindows(config, glassUserSettings.displayTarget);
   applyGlassUserSettings(glassUserSettings);
+  if (process.env.IIVO_GLASS_E2E === "1") {
+    resetChromeLayoutOrigins();
+  }
   void restoreMacOutputFromSettings(glassUserSettings);
   broadcastStartupAudioRestore();
   registerGlobalHotkeys();
