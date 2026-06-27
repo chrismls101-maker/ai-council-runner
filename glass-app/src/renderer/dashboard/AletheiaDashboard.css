@@ -540,3 +540,40 @@
   line-height: 1.5;
   color: rgba(226, 232, 240, 0.42);
 }
+
+.aletheia-dashboard__advice-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.aletheia-dashboard__advice-card {
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(167, 139, 250, 0.22);
+  background: rgba(124, 58, 237, 0.08);
+}
+
+.aletheia-dashboard__advice-headline {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(248, 250, 252, 0.94);
+}
+
+.aletheia-dashboard__advice-body {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(226, 232, 240, 0.82);
+}
+
+.aletheia-dashboard__advice-question {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(196, 181, 253, 0.95);
+}

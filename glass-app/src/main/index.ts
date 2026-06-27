@@ -367,6 +367,15 @@ import {
   buildAletheiaAmbientSynthesis,
   type AletheiaAmbientSynthesisSnapshot,
 } from "../shared/aletheiaAmbientSynthesis.ts";
+import {
+  adviceApprovalAckSpeech,
+  adviceDismissAckSpeech,
+  approveAletheiaAdvice,
+  dismissAletheiaAdvice,
+  resolveVoiceAdviceResponse,
+  type AletheiaPendingAdviceSnapshot,
+} from "../shared/aletheiaPendingAdvice.ts";
+import { refreshAletheiaPendingAdvicePlane } from "./aletheiaPendingAdvicePlane.ts";
 import { ensurePtySpawnHelperExecutable } from "./glassTerminal.ts";
 import {
   logSessionStart,
@@ -1157,6 +1166,10 @@ interface AppState {
   aletheiaActivation?: AletheiaActivationState;
   /** B1.3 — cross-signal ambient synthesis snapshot. */
   aletheiaAmbientSynthesis?: AletheiaAmbientSynthesisSnapshot;
+  /** B2.1 — pending advice cards awaiting user go/no-go. */
+  aletheiaPendingAdvice?: AletheiaPendingAdviceSnapshot;
+  /** B2.1 — one-shot companion speech after advice approve/dismiss. */
+  aletheiaAdviceSpeak?: { text: string; nonce: number };
   /** Whether the dock terminal panel is open. */
   glassDockTerminalOpen?: boolean;
   /** Active PTY session id. */
@@ -4071,7 +4084,54 @@ function refreshAletheiaAmbientSynthesisState(): AletheiaAmbientSynthesisSnapsho
     observationMode: state.aletheiaObservationPlane?.mode,
   });
   state.aletheiaAmbientSynthesis = snapshot;
+  refreshAletheiaPendingAdvicePlane({
+    getCompanionModeActive: () => state.companionModeActive,
+    getCompanionPrivacyActive: () => state.companionPrivacy?.active === true,
+    getActivation: () => state.aletheiaActivation,
+    getAmbientSynthesis: () => state.aletheiaAmbientSynthesis,
+    getSnapshot: () => state.aletheiaPendingAdvice,
+    setSnapshot: (plane) => {
+      state.aletheiaPendingAdvice = plane;
+    },
+    push,
+  });
   return snapshot;
+}
+
+function speakAletheiaAdviceAck(text: string): void {
+  state.aletheiaAdviceSpeak = {
+    text,
+    nonce: (state.aletheiaAdviceSpeak?.nonce ?? 0) + 1,
+  };
+}
+
+function handleAletheiaAdviceDecision(
+  adviceId: string,
+  decision: "approve" | "dismiss",
+): void {
+  const snapshot = state.aletheiaPendingAdvice;
+  if (!snapshot) return;
+
+  const card = snapshot.cards.find((row) => row.id === adviceId && row.status === "pending");
+  if (!card) return;
+
+  state.aletheiaPendingAdvice =
+    decision === "approve"
+      ? approveAletheiaAdvice(snapshot, adviceId)
+      : dismissAletheiaAdvice(snapshot, adviceId);
+
+  speakAletheiaAdviceAck(
+    decision === "approve" ? adviceApprovalAckSpeech(card) : adviceDismissAckSpeech(),
+  );
+  push();
+}
+
+function tryHandleVoiceAdviceResponse(text: string): boolean {
+  if (!state.companionModeActive || state.companionPrivacy?.active) return false;
+  const resolution = resolveVoiceAdviceResponse(text, state.aletheiaPendingAdvice);
+  if (!resolution) return false;
+  handleAletheiaAdviceDecision(resolution.adviceId, resolution.decision);
+  return true;
 }
 
 function beginAletheiaActivationState(): void {
@@ -4465,6 +4525,8 @@ function snapshot(): GlassState {
     aletheiaObservationPlane: state.aletheiaObservationPlane,
     aletheiaActivation: state.aletheiaActivation,
     aletheiaAmbientSynthesis: state.aletheiaAmbientSynthesis,
+    aletheiaPendingAdvice: state.aletheiaPendingAdvice,
+    aletheiaAdviceSpeak: state.aletheiaAdviceSpeak,
     glassDockTerminalOpen: state.glassDockTerminalOpen,
     glassDockTerminalId: state.glassDockTerminalId,
     glassDockTerminalTabs: state.glassDockTerminalTabs,
@@ -5447,6 +5509,10 @@ async function submitCommand(
   const text = (contextPrefix + rawText).trim();
 
   if (state.companionPrivacy?.active) {
+    return;
+  }
+
+  if (tryHandleVoiceAdviceResponse(rawText.trim())) {
     return;
   }
 
@@ -8430,6 +8496,16 @@ async function handleCommand(
       return;
     }
 
+    case "approve-aletheia-advice": {
+      handleAletheiaAdviceDecision(command.adviceId, "approve");
+      return;
+    }
+
+    case "dismiss-aletheia-advice": {
+      handleAletheiaAdviceDecision(command.adviceId, "dismiss");
+      return;
+    }
+
     case "glass-preview-diff": {
       // Immediately push "loading" so the renderer shows a spinner
       if (!state.pendingDiffs) state.pendingDiffs = {};
@@ -10928,6 +11004,8 @@ function deactivateCompanionMode(): void {
   aletheiaSidecarManager.setCompanionActive(false);
   finalizeAletheiaSession();
   clearAletheiaActivationState();
+  state.aletheiaPendingAdvice = undefined;
+  state.aletheiaAdviceSpeak = undefined;
   state.companionPresence = null;
   state.companionMemory = clearCompanionSessionMemory();
   state.companionWarmupPhase = "none";

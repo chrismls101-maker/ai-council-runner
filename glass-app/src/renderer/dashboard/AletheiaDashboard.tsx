@@ -7,6 +7,8 @@ import type { PermissionDomainRow } from "../../shared/aletheiaPermissionControl
 import type { ObservationSignalRow as ObservationSignalRowData } from "../../shared/aletheiaObservationSignals.ts";
 import { observationSignalStatusLabel } from "../../shared/aletheiaObservationSignals.ts";
 import { activationPhaseLabel } from "../../shared/aletheiaActivationPolicy.ts";
+import { pendingAletheiaAdviceCards } from "../../shared/aletheiaPendingAdvice.ts";
+import type { AletheiaAdviceCard } from "../../shared/aletheiaPendingAdvice.ts";
 import type { SidecarServiceRow } from "../../shared/aletheiaSidecarManager.ts";
 import type { DependencyRow } from "../../shared/aletheiaDependencyManifest.ts";
 import { send, useGlassState } from "../useGlassState.ts";
@@ -116,6 +118,15 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
   const observationPlane = glassState.aletheiaObservationPlane;
   const activation = glassState.aletheiaActivation;
   const ambientSynthesis = glassState.aletheiaAmbientSynthesis;
+  const pendingAdvice = glassState.aletheiaPendingAdvice;
+
+  const handleApproveAdvice = useCallback((adviceId: string): void => {
+    dispatchAletheiaCommand("approve-aletheia-advice", { adviceId });
+  }, []);
+
+  const handleDismissAdvice = useCallback((adviceId: string): void => {
+    dispatchAletheiaCommand("dismiss-aletheia-advice", { adviceId });
+  }, []);
 
   return (
     <div
@@ -269,6 +280,12 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
               activation={activation}
               ambientSynthesis={ambientSynthesis}
               companionActive={companionActive}
+            />
+            <PendingAdvicePanel
+              companionActive={companionActive}
+              pendingAdvice={pendingAdvice}
+              onApprove={handleApproveAdvice}
+              onDismiss={handleDismissAdvice}
             />
             <PermissionsPanel
               permissionPlane={permissionPlane}
@@ -509,6 +526,87 @@ function SidecarServiceInstrumentRow({ row }: { row: SidecarServiceRow }): JSX.E
       <p className="aletheia-dashboard__permission-impact">
         {ok ? row.withIt : row.withoutIt}
       </p>
+    </li>
+  );
+}
+
+function PendingAdvicePanel({
+  companionActive,
+  pendingAdvice,
+  onApprove,
+  onDismiss,
+}: {
+  companionActive: boolean;
+  pendingAdvice?: GlassState["aletheiaPendingAdvice"];
+  onApprove: (adviceId: string) => void;
+  onDismiss: (adviceId: string) => void;
+}): JSX.Element {
+  const pending = pendingAletheiaAdviceCards(pendingAdvice);
+
+  return (
+    <section className="aletheia-dashboard__panel" data-testid="aletheia-dashboard-pending-advice">
+      <p className="aletheia-dashboard__panel-label">Pending actions</p>
+      {!companionActive ? (
+        <p className="aletheia-dashboard__panel-copy">
+          Activate Aletheia to receive advice — she waits for your go before acting.
+        </p>
+      ) : pending.length === 0 ? (
+        <p className="aletheia-dashboard__panel-copy" data-testid="aletheia-dashboard-pending-advice-empty">
+          No pending advice — Aletheia will queue recommendations here when she observes something worth suggesting.
+        </p>
+      ) : (
+        <ul className="aletheia-dashboard__advice-list" data-testid="aletheia-dashboard-pending-advice-list">
+          {pending.map((card) => (
+            <PendingAdviceCard
+              key={card.id}
+              card={card}
+              onApprove={() => onApprove(card.id)}
+              onDismiss={() => onDismiss(card.id)}
+            />
+          ))}
+        </ul>
+      )}
+      {companionActive && pending.length > 0 ? (
+        <p className="aletheia-dashboard__panel-footnote">
+          Say yes or no — or tap approve / dismiss. Aletheia will not act until you decide.
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+function PendingAdviceCard({
+  card,
+  onApprove,
+  onDismiss,
+}: {
+  card: AletheiaAdviceCard;
+  onApprove: () => void;
+  onDismiss: () => void;
+}): JSX.Element {
+  return (
+    <li className="aletheia-dashboard__advice-card" data-testid="aletheia-dashboard-advice-card">
+      <p className="aletheia-dashboard__advice-headline">{card.headline}</p>
+      <p className="aletheia-dashboard__advice-body">{card.body}</p>
+      <p className="aletheia-dashboard__advice-question">{card.question}</p>
+      <div className="aletheia-dashboard__panel-actions">
+        <button
+          type="button"
+          className="aletheia-dashboard__activate"
+          data-testid="aletheia-dashboard-advice-approve"
+          onClick={onApprove}
+        >
+          Approve
+        </button>
+        <button
+          type="button"
+          className="aletheia-dashboard__secondary-btn"
+          data-testid="aletheia-dashboard-advice-dismiss"
+          onClick={onDismiss}
+        >
+          Dismiss
+        </button>
+      </div>
     </li>
   );
 }

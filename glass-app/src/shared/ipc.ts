@@ -1034,6 +1034,10 @@ export type GlassCommand =
   | { type: "dismiss-aletheia-sidecar-alert" }
   /** P0.5 — re-run Aletheia dependency bootstrap pass. */
   | { type: "run-aletheia-bootstrap" }
+  /** B2.1 — approve a pending Aletheia advice card (does not execute — waits for B2.2). */
+  | { type: "approve-aletheia-advice"; adviceId: string }
+  /** B2.1 — dismiss a pending Aletheia advice card without acting. */
+  | { type: "dismiss-aletheia-advice"; adviceId: string }
   // ── Glass built-in terminal (PTY) ─────────────────────────────────────────
   | { type: "glass-terminal-open" }
   | { type: "glass-terminal-close" }
@@ -1471,6 +1475,10 @@ export interface GlassState {
   aletheiaActivation?: import("./aletheiaActivationPolicy.ts").AletheiaActivationState;
   /** B1.3 — cross-signal ambient synthesis snapshot. */
   aletheiaAmbientSynthesis?: import("./aletheiaAmbientSynthesis.ts").AletheiaAmbientSynthesisSnapshot;
+  /** B2.1 — pending advice cards awaiting user go/no-go. */
+  aletheiaPendingAdvice?: import("./aletheiaPendingAdvice.ts").AletheiaPendingAdviceSnapshot;
+  /** B2.1 — one-shot companion speech after advice approve/dismiss. */
+  aletheiaAdviceSpeak?: { text: string; nonce: number };
   // ── Design-to-Code Bridge (#163) ─────────────────────────────────────────
   /** Active design capture cards keyed by feed item id. */
   designCaptures?: Record<string, {

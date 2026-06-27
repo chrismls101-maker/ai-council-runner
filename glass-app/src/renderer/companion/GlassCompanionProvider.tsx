@@ -97,6 +97,7 @@ function useGlassCompanionSession(): GlassCompanionController {
   const wasVisualAskRef = useRef(false);
   const thinkingSpeechSentRef = useRef(false);
   const lastWarmupSpeakNonceRef = useRef(0);
+  const lastAdviceSpeakNonceRef = useRef(0);
   const machineAudioDisclosureSpokenRef = useRef(false);
   const pendingMachineAudioDisclosureRef = useRef(false);
   const prevSystemAudioActiveRef = useRef(false);
@@ -427,6 +428,17 @@ function useGlassCompanionSession(): GlassCompanionController {
     tts,
     speakTracked,
   ]);
+
+  useEffect(() => {
+    if (!companionActive || !state.active) return;
+    const payload = glass.aletheiaAdviceSpeak;
+    if (!payload?.text || !payload.nonce) return;
+    if (payload.nonce === lastAdviceSpeakNonceRef.current) return;
+    lastAdviceSpeakNonceRef.current = payload.nonce;
+    setSpeaking(true);
+    lastTtsTextRef.current = payload.text;
+    void speakTracked(payload.text).finally(() => setSpeaking(false));
+  }, [companionActive, state.active, glass.aletheiaAdviceSpeak, speakTracked]);
 
   useEffect(() => {
     if (!state.active) return;

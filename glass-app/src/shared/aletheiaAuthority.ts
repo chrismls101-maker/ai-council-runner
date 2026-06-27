@@ -30,6 +30,10 @@ export const ALETHEIA_ALLOWED_COMMANDS = new Set([
   // Navigation — L2 (opens Glass surfaces, never executes privileged ops)
   "open-glass-setup",           // Deep-link to Glass System → Setup
   "open-glass-memory",          // Deep-link to Glass System → Memory
+
+  // B2.1 — advise-then-wait queue (session control, not Glass infra)
+  "approve-aletheia-advice",    // User tapped approve on pending advice card
+  "dismiss-aletheia-advice",    // User tapped dismiss on pending advice card
 ] as const);
 
 export type AletheiaAllowedCommand = typeof ALETHEIA_ALLOWED_COMMANDS extends Set<infer T>
