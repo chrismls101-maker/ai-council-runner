@@ -13,6 +13,7 @@ import {
   dockLeftRailLayoutFromDisplay,
   listenNotesPadLayoutFromDisplay,
   overlayLayoutFromDisplay,
+  overlayLayoutSpanningDisplays,
   panelLayoutFromDisplay,
   settingsLayoutFromDisplay,
   repositionDockInWorkArea,
@@ -61,6 +62,10 @@ export function getPrimaryDisplayContext(): DisplayLayoutContext {
 
 export function listDisplayIds(): number[] {
   return screen.getAllDisplays().map((d) => d.id);
+}
+
+export function listAllDisplayContexts(): DisplayLayoutContext[] {
+  return screen.getAllDisplays().map(displayContextFromDisplay);
 }
 
 export function resolveDisplayContext(target: GlassDisplayTarget): DisplayLayoutContext {
@@ -132,6 +137,12 @@ export class GlassLayoutManager {
   }
 
   getOverlayLayout(): OverlayLayout {
+    if (this.displayTarget === "all_displays") {
+      const all = listAllDisplayContexts();
+      if (all.length > 1) {
+        return overlayLayoutSpanningDisplays(all);
+      }
+    }
     return overlayLayoutFromDisplay(this.getDisplay());
   }
 

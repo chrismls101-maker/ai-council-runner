@@ -48,6 +48,9 @@ export interface ComputerUseRouteInput {
   hasVisionTarget?: boolean;
   /** Plain-text typing (vs shortcut chord). */
   isPlainText?: boolean;
+  /** Display Aletheia should act on for coordinate clicks (multi-monitor). */
+  targetDisplayId?: number | null;
+  targetDisplayLabel?: string | null;
 }
 
 export interface ComputerUseRouteDecision {
@@ -76,8 +79,14 @@ export function isAppleScriptCapableApp(appName: string | undefined): boolean {
   );
 }
 
+function displayRouteHint(input: ComputerUseRouteInput): string {
+  if (!input.targetDisplayLabel?.trim()) return "";
+  return ` Target display: ${input.targetDisplayLabel.trim()}.`;
+}
+
 export function selectComputerUseRoute(input: ComputerUseRouteInput): ComputerUseRouteDecision {
   const app = input.targetApp?.trim() || input.frontApp?.trim();
+  const displayHint = displayRouteHint(input);
 
   switch (input.operation) {
     case "activate_app":
@@ -111,7 +120,7 @@ export function selectComputerUseRoute(input: ComputerUseRouteInput): ComputerUs
         return {
           tier: "accessibility",
           method: "AX element click",
-          reason: "Click resolved AX target in front window.",
+          reason: `Click resolved AX target in front window.${displayHint}`,
           fallbackTier: input.hasVisionTarget ? "vision" : "cgevent",
         };
       }
@@ -119,14 +128,14 @@ export function selectComputerUseRoute(input: ComputerUseRouteInput): ComputerUs
         return {
           tier: "vision",
           method: "OmniParser coordinate click",
-          reason: "AX tree incomplete — click vision mark coordinates.",
+          reason: `AX tree incomplete — click vision mark coordinates.${displayHint}`,
           fallbackTier: "cgevent",
         };
       }
       return {
         tier: "cgevent",
         method: "Screen coordinate click",
-        reason: "No AX/vision target — attempt coordinate click via System Events.",
+        reason: `No AX/vision target — attempt coordinate click via System Events.${displayHint}`,
         fallbackTier: "vision",
       };
 

@@ -1,4 +1,4 @@
-import { Eye, EyeOff, Laptop, LayoutPanelLeft, MousePointer2, Monitor, PanelTop } from "lucide-react";
+import { Eye, EyeOff, Laptop, LayoutGrid, LayoutPanelLeft, MousePointer2, Monitor, PanelTop } from "lucide-react";
 import type { GlassState } from "../../shared/ipc.ts";
 import {
   formatDisplayTargetLabel,
@@ -96,7 +96,7 @@ export function SettingsContextSection({
         <p className="glass-settings__block-sub">
           Where the overlay, dock, and command bar appear
           {connected.length > 1
-            ? ` · active: ${formatDisplayTargetLabel(currentTarget, state.availableDisplayIds)}`
+            ? ` · ${connected.length} monitors connected · active: ${formatDisplayTargetLabel(currentTarget, state.availableDisplayIds)}`
             : ""}
         </p>
         <SettingsChoiceGrid>
@@ -124,10 +124,23 @@ export function SettingsContextSection({
           <SettingsChoiceCard
             icon={<MousePointer2 size={28} strokeWidth={1.75} />}
             label="Follow mouse"
-            description="Moves with your cursor across displays"
+            description="Overlay and chrome move with your cursor"
             selected={currentTarget === "follow_mouse"}
             testId="glass-settings-display-follow-mouse"
             onClick={() => selectDisplay("follow_mouse")}
+          />
+          <SettingsChoiceCard
+            icon={<LayoutGrid size={28} strokeWidth={1.75} />}
+            label="Multi-display"
+            description={
+              connected.length > 1
+                ? "Glass on every connected monitor"
+                : "Connect a second monitor to enable"
+            }
+            selected={currentTarget === "all_displays"}
+            disabled={connected.length <= 1}
+            testId="glass-settings-display-all-displays"
+            onClick={() => selectDisplay("all_displays")}
           />
         </SettingsChoiceGrid>
         {externalDisplays.length > 1 && externalSelected ? (

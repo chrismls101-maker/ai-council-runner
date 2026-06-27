@@ -797,7 +797,7 @@ export type GlassCommand =
   | { type: "start-listening" }
   | { type: "pause"; reason?: "user" | "auto" }
   | { type: "stop" }
-  | { type: "stop-everything" }
+  | { type: "stop-everything"; origin?: "strip" }
   | { type: "request-start-listening" }
   | { type: "activate-listen-mode" }
   | { type: "append-transcript"; text: string }
@@ -1106,7 +1106,7 @@ export type GlassCommand =
   | { type: "open-answer-panel" }
   // ── Glass Companion (strip-toggle voice presence) ─────────────────────────
   /** Toggle Companion session on/off from the builder strip. */
-  | { type: "toggle-companion-mode" }
+  | { type: "toggle-companion-mode"; origin?: "strip" }
   /** Enter companion privacy mode (timed silence). */
   | { type: "companion-privacy-start"; durationMs?: number }
   /** End companion privacy mode early. */

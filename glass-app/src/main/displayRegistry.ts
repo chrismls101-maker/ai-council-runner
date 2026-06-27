@@ -90,11 +90,13 @@ export function buildDisplayDiagnosticsSummary(opts: {
   const targetLabel = formatDisplayTargetLabelFromSnapshots(opts.target, snapshots);
   const cursorId = cursorDisplayIdFromSnapshots(snapshots);
   const followInfo =
-    opts.target === "follow_mouse" && opts.followMouseActive
-      ? ` · cursor id${getLastFollowMouseDisplayId() ?? cursorId ?? "?"}`
-      : cursorId != null
-        ? ` · cursor id${cursorId}`
-        : "";
+    opts.target === "all_displays"
+      ? " · multi-display overlay"
+      : opts.target === "follow_mouse" && opts.followMouseActive
+        ? ` · cursor id${getLastFollowMouseDisplayId() ?? cursorId ?? "?"}`
+        : cursorId != null
+          ? ` · cursor id${cursorId}`
+          : "";
   const panelPart = opts.panelVisible && opts.panelBounds
     ? ` · panel x${opts.panelBounds.x},y${opts.panelBounds.y}`
     : "";

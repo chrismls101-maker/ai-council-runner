@@ -10,6 +10,7 @@ import {
 import {
   commandBarLayoutFromDisplay,
   overlayLayoutFromDisplay,
+  overlayLayoutSpanningDisplays,
   panelLayoutFromDisplay,
   type DisplayLayoutContext,
 } from "../shared/glassLayoutMath.ts";
@@ -80,6 +81,14 @@ test("normalizeDisplayTarget falls back when display removed", () => {
 test("normalizeDisplayTarget preserves all_displays with multiple monitors", () => {
   assert.equal(normalizeDisplayTarget("all_displays", [1, 2]), "all_displays");
   assert.equal(normalizeDisplayTarget("all_displays", [1]), "primary");
+});
+
+test("overlay spans all displays in multi-display glass mode", () => {
+  const overlay = overlayLayoutSpanningDisplays([primary, tv]);
+  assert.equal(overlay.x, primary.workArea.x);
+  assert.equal(overlay.y, tv.workArea.y);
+  assert.equal(overlay.width, tv.workArea.x + tv.workArea.width - primary.workArea.x);
+  assert.ok(overlay.height >= primary.workArea.height);
 });
 
 test("overlay uses selected display workArea", () => {

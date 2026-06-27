@@ -19,6 +19,7 @@ import {
   stopEverythingCommand,
 } from "../../shared/voiceModeActions.ts";
 import { companionOrVoiceSubmitPlan, companionBargeInSubmitPlan } from "../../shared/companionActions.ts";
+import { spokenTextForSurface } from "../../shared/aletheiaSurfaceDoctrine.ts";
 import { isLikelyEcho } from "../../shared/companionEchoDetect.ts";
 import {
   detectPrivacyIntent,
@@ -413,14 +414,20 @@ function useGlassCompanionSession(): GlassCompanionController {
           : null;
     if (!line) return;
 
+    const spoken = spokenTextForSurface(line, {
+      surface: "companion",
+      companionModeActive: true,
+      personaBehavior: glass.aletheiaPersonaBehavior,
+    });
+
     // Ready intro waits until mic is live — not only OmniParser warm complete.
     if (phase === "ready" && state.status !== "listening") return;
 
     lastWarmupSpeakNonceRef.current = nonce;
 
     setSpeaking(true);
-    lastTtsTextRef.current = line;
-    void speakTracked(line).finally(() => setSpeaking(false));
+    lastTtsTextRef.current = spoken;
+    void speakTracked(spoken).finally(() => setSpeaking(false));
   }, [
     companionActive,
     state.active,

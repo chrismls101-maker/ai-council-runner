@@ -196,7 +196,7 @@ export function BuilderStrip({
     armBuilderStripInteractive();
     setAletheiaMenuOpen(false);
     if (!companion.active) {
-      dispatchAletheiaCommand("toggle-companion-mode");
+      dispatchAletheiaCommand("toggle-companion-mode", { origin: "strip" });
     }
   }, [companion.active]);
 
@@ -215,10 +215,10 @@ export function BuilderStrip({
     setAletheiaMenuOpen(false);
     if (!companion.active) return;
     if (agentRunning) {
-      dispatchAletheiaCommand("stop-everything");
+      dispatchAletheiaCommand("stop-everything", { origin: "strip" });
       return;
     }
-    dispatchAletheiaCommand("toggle-companion-mode");
+    dispatchAletheiaCommand("toggle-companion-mode", { origin: "strip" });
   }, [agentRunning, companion.active]);
 
   const handleClosePanel = useCallback((): void => {

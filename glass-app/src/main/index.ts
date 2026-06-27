@@ -230,6 +230,7 @@ import {
   registerOnboardingEmergencyShortcut,
   unregisterOnboardingEmergencyShortcut,
   setCommandBarLayoutChangedHandler,
+  setGlassDisplayLayoutChangedHandler,
   hideGlassWindowsForCapture,
   restoreGlassWindowsAfterCapture,
   syncCommandBarWindowToStackHeight,
@@ -338,12 +339,14 @@ import {
 } from "../shared/aletheiaRelationshipThread.ts";
 import {
   buildAletheiaDisplayAwareness,
+  displayAwarenessSnapshotsEqual,
   formatAletheiaDisplayContext,
 } from "../shared/aletheiaDisplayAwareness.ts";
 import {
   buildAletheiaSurfaceContext,
   resolveAletheiaSurface,
   spokenTextForSurface,
+  type AletheiaSurface,
 } from "../shared/aletheiaSurfaceDoctrine.ts";
 import {
   AletheiaActionOrchestrator,
@@ -1969,6 +1972,7 @@ const aletheiaDelegatedPresenceHost: AletheiaDelegatedPresenceHost = {
     };
   },
   getScreenDigest: () => (isDigestFresh(latestDigest) ? latestDigest.text : undefined),
+  getDisplayAwareness: () => state.aletheiaDisplayAwareness,
 };
 
 let pendingLoopDecisionResolver: ((decision: LoopDecision) => void) | null = null;
@@ -2023,6 +2027,7 @@ const aletheiaDelegatedLoopHost: AletheiaDelegatedLoopHost = {
   getAnthropicModel: () =>
     resolveCoderAgentApiModel(resolveCoderAgentModelId(state.glassSettings?.coderAgentModel)),
   getOutputDir: () => resolveAgentOutputFolder(state.glassSettings),
+  getDisplayAwareness: () => state.aletheiaDisplayAwareness,
   awaitLoopDecision: awaitAletheiaLoopDecision,
   shouldCancelLoop: () => loopCancelRequested,
 };
@@ -4294,6 +4299,7 @@ function buildAletheiaObservationPlaneInput() {
 function refreshAletheiaObservationPlaneState(options?: { forcePush?: boolean; forcePersist?: boolean }) {
   const previousObservation = state.aletheiaObservationPlane;
   const previousAmbient = state.aletheiaAmbientSynthesis;
+  const previousDisplayAwareness = state.aletheiaDisplayAwareness;
 
   const snapshot = refreshAletheiaObservationPlane(
     {
@@ -4310,14 +4316,19 @@ function refreshAletheiaObservationPlaneState(options?: { forcePush?: boolean; f
 
   const observationChanged = !observationSnapshotsEqual(previousObservation, snapshot);
   const ambientChanged = !ambientSynthesisSnapshotsEqual(previousAmbient, ambient);
-  if (options?.forcePush || (ambientChanged && !observationChanged)) {
+  const displayAwarenessChanged = !displayAwarenessSnapshotsEqual(
+    previousDisplayAwareness,
+    state.aletheiaDisplayAwareness,
+  );
+  if (options?.forcePush || (ambientChanged && !observationChanged) || displayAwarenessChanged) {
     push();
   }
 
   return snapshot;
 }
 
-function refreshAletheiaDisplayAwarenessState(): void {
+function refreshAletheiaDisplayAwarenessState(): boolean {
+  const previous = state.aletheiaDisplayAwareness;
   const displays = getConnectedDisplays();
   state.aletheiaDisplayAwareness = buildAletheiaDisplayAwareness({
     connectedDisplays: displays,
@@ -4325,6 +4336,13 @@ function refreshAletheiaDisplayAwarenessState(): void {
     overlayDisplayId: resolveActiveDisplayId(state.glassSettings.displayTarget),
     activeApp: state.activeApp,
   }) ?? undefined;
+  return !displayAwarenessSnapshotsEqual(previous, state.aletheiaDisplayAwareness);
+}
+
+function refreshAletheiaDisplayAwarenessAndPush(): void {
+  if (refreshAletheiaDisplayAwarenessState() && state.companionModeActive) {
+    push();
+  }
 }
 
 function refreshAletheiaAmbientSynthesisState(): AletheiaAmbientSynthesisSnapshot {
@@ -4356,6 +4374,12 @@ function refreshAletheiaAmbientSynthesisState(): AletheiaAmbientSynthesisSnapsho
 
 /** Dedupes terminal error rows in the relationship thread. */
 let lastRelationshipTerminalErrorKey = "";
+/** Next speakAletheiaAdviceAck uses strip surface doctrine when set from strip UI. */
+let pendingAletheiaSpeakSurface: AletheiaSurface | undefined;
+
+function noteAletheiaCommandOrigin(origin?: "strip"): void {
+  if (origin === "strip") pendingAletheiaSpeakSurface = "strip";
+}
 
 function recordAletheiaRelationshipEvent(
   input: Parameters<typeof appendRelationshipEvent>[1],
@@ -4365,6 +4389,7 @@ function recordAletheiaRelationshipEvent(
     state.aletheiaRelationshipThread,
     input,
   );
+  push();
 }
 
 function handleCompanionAppSwitch(fromApp: string, toApp: string): void {
@@ -4416,7 +4441,6 @@ function maybeRecordTerminalErrorForRelationship(): void {
     summary: `Terminal error on ${block.command}`,
     detail: block.output.slice(0, 240),
   });
-  push();
 }
 
 function refreshAletheiaPersonaBehaviorState(now = Date.now()): void {
@@ -4491,10 +4515,13 @@ function captureAletheiaSessionNote(input: AppendAletheiaNoteInput): void {
 }
 
 function speakAletheiaAdviceAck(text: string): void {
-  const surface = resolveAletheiaSurface({
-    companionModeActive: state.companionModeActive,
-    aletheiaDashboardActive: state.aletheiaDashboardActive,
-  });
+  const surface =
+    pendingAletheiaSpeakSurface
+    ?? resolveAletheiaSurface({
+      companionModeActive: state.companionModeActive,
+      aletheiaDashboardActive: state.aletheiaDashboardActive,
+    });
+  pendingAletheiaSpeakSurface = undefined;
   const spoken = spokenTextForSurface(text, {
     surface,
     companionModeActive: state.companionModeActive,
@@ -4538,9 +4565,7 @@ async function handleAletheiaCoordination(intent: CoordinationIntent): Promise<v
     if (op.signal.aborted) return;
 
     if (result.ok && result.answer) {
-      const spoken =
-        result.answer.length > 420 ? `${result.answer.slice(0, 417)}…` : result.answer;
-      speakAletheiaAdviceAck(spoken);
+      speakAletheiaAdviceAck(result.answer);
       state.lastAskResponse = {
         prompt: intent.prompt,
         answer: result.answer,
@@ -4593,9 +4618,7 @@ async function handleAletheiaDelegatedPresence(intent: DelegatedPresenceIntent):
     if (op.signal.aborted) return;
 
       if (result.ok && result.report) {
-      const spoken =
-        result.report.length > 420 ? `${result.report.slice(0, 417)}…` : result.report;
-      speakAletheiaAdviceAck(spoken);
+      speakAletheiaAdviceAck(result.report);
       state.lastAskResponse = {
         prompt: intent.goal,
         answer: result.report,
@@ -4655,9 +4678,7 @@ async function handleAletheiaDelegatedLoop(intent: DelegatedLoopIntent): Promise
         category: "observation",
         source: "loop",
       });
-      const spoken =
-        result.handoff.length > 420 ? `${result.handoff.slice(0, 417)}…` : result.handoff;
-      speakAletheiaAdviceAck(spoken);
+      speakAletheiaAdviceAck(result.handoff);
       state.lastAskResponse = {
         prompt: intent.goal,
         answer: result.handoff,
@@ -4718,9 +4739,7 @@ async function handleAletheiaResearchConversation(intent: ResearchConversationIn
 
       if (result.ok && result.answer) {
       const citationCount = state.aletheiaResearchConversation?.citations.length ?? 0;
-      const spokenBody =
-        result.answer.length > 360 ? `${result.answer.slice(0, 357)}…` : result.answer;
-      speakAletheiaAdviceAck(`${researchCompleteSpeech(citationCount)} ${spokenBody}`);
+      speakAletheiaAdviceAck(`${researchCompleteSpeech(citationCount)} ${result.answer}`);
       state.lastAskResponse = {
         prompt: intent.query,
         answer: result.answer,
@@ -4765,9 +4784,7 @@ async function handleAletheiaResearchFollowUp(action: ResearchFollowUpAction): P
     if (op.signal.aborted) return;
 
       if (result.ok && result.answer) {
-      const spoken =
-        result.answer.length > 420 ? `${result.answer.slice(0, 417)}…` : result.answer;
-      speakAletheiaAdviceAck(spoken);
+      speakAletheiaAdviceAck(result.answer);
       state.lastAskResponse = {
         prompt: `Research follow-up: ${action}`,
         answer: result.answer,
@@ -7435,6 +7452,9 @@ async function handleCommand(
       return;
     case "stop":
     case "stop-everything": {
+      noteAletheiaCommandOrigin(
+        "origin" in command && command.origin === "strip" ? "strip" : undefined,
+      );
       cancelListenCountdown();
       cancelGlassAsk();
       state.visualAskPhase = "idle";
@@ -7936,6 +7956,7 @@ async function handleCommand(
       glassUserSettings = state.glassSettings;
       await persistGlassUserSettings(glassUserSettings);
       applyGlassUserSettings(glassUserSettings);
+      refreshAletheiaDisplayAwarenessState();
       push();
       return;
     }
@@ -8029,7 +8050,7 @@ async function handleCommand(
     }
     case "refresh-glass-layout":
       refreshGlassDisplayLayout();
-      refreshAletheiaDisplayAwarenessState();
+      refreshAletheiaDisplayAwarenessAndPush();
       push();
       return;
     case "chrome-window-drag": {
@@ -8117,6 +8138,9 @@ async function handleCommand(
       push();
       return;
     case "toggle-companion-mode": {
+      noteAletheiaCommandOrigin(
+        "origin" in command && command.origin === "strip" ? "strip" : undefined,
+      );
       if (!state.companionModeActive) {
         const block = await ensureCompanionModeCanActivate();
         if (block) {
@@ -8143,6 +8167,9 @@ async function handleCommand(
         durationMs,
       };
       resetCompanionAmbientState();
+      if (state.aletheiaRelationshipThread) {
+        state.aletheiaRelationshipThread = clearCompanionAway(state.aletheiaRelationshipThread);
+      }
       clearCompanionPrivacyTimer();
       companionPrivacyTimer = setTimeout(() => {
         if (!state.companionPrivacy?.active) return;
@@ -14928,6 +14955,9 @@ app.whenReady().then(() =>
     if (refreshCommandBarOverlayClearance()) {
       push();
     }
+  });
+  setGlassDisplayLayoutChangedHandler(() => {
+    refreshAletheiaDisplayAwarenessAndPush();
   });
   createWindows(config, glassUserSettings.displayTarget);
   applyGlassUserSettings(glassUserSettings);

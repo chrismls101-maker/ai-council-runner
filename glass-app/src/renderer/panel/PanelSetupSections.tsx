@@ -402,8 +402,8 @@ export function GlassLayoutSettings({ state }: { state: GlassState }): JSX.Eleme
     { target: "follow_mouse", label: "Follow Mouse" },
     {
       target: "all_displays",
-      label: "All Displays Overlay (coming soon)",
-      disabled: true,
+      label: "Multi-Display Glass",
+      disabled: connected.length <= 1,
     },
   ];
 
@@ -448,9 +448,10 @@ export function GlassLayoutSettings({ state }: { state: GlassState }): JSX.Eleme
           }
           onChange={(e) => {
             const value = e.target.value;
-            if (value === "all_displays") return;
             const target: GlassDisplayTarget =
-              value === "primary" || value === "follow_mouse" ? value : Number(value);
+              value === "primary" || value === "follow_mouse" || value === "all_displays"
+                ? value
+                : Number(value);
             send({ type: "set-glass-display", target });
           }}
         >
@@ -467,8 +468,10 @@ export function GlassLayoutSettings({ state }: { state: GlassState }): JSX.Eleme
       </label>
       {connected.length > 1 ? (
         <p className="hint panel__display-list">
-          {connected.length} connected displays — select HDMI / external display to move Glass off
-          the MacBook screen.
+          {connected.length} monitors connected
+          {settings.displayTarget === "all_displays"
+            ? " — Glass overlay is on every display; dock and command bar follow your cursor."
+            : " — select HDMI / external display to move Glass, or choose Multi-Display Glass."}
         </p>
       ) : null}
       <button type="button" className="gbtn gbtn--ghost" onClick={() => send({ type: "refresh-glass-layout" })}>

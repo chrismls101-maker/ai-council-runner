@@ -3,9 +3,19 @@ import assert from "node:assert/strict";
 import {
   appendRelationshipEvent,
   buildRelationshipReturnBrief,
+  clearCompanionAway,
   emptyAletheiaRelationshipThread,
   markCompanionAway,
 } from "../shared/aletheiaRelationshipThread.ts";
+
+test("clearCompanionAway resets away timing for privacy resume", () => {
+  const now = Date.now();
+  const away = markCompanionAway(emptyAletheiaRelationshipThread(now - 60_000), "Safari", now - 60_000);
+  const cleared = clearCompanionAway(away, now);
+  assert.equal(cleared.awayApp, undefined);
+  assert.equal(cleared.awaySince, undefined);
+  assert.equal(buildRelationshipReturnBrief(cleared, "Cursor", now), null);
+});
 
 test("buildRelationshipReturnBrief summarizes queued events after meaningful away time", () => {
   const now = Date.now();

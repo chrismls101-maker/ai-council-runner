@@ -219,6 +219,29 @@ export function glassLayoutContentBottomY(ctx: DisplayLayoutContext): number {
   return boundsBottom - macDockClearancePx(ctx);
 }
 
+/** Union of layout rectangles (virtual desktop span). */
+export function boundsUnion(rects: readonly LayoutRect[]): LayoutRect {
+  if (rects.length === 0) {
+    return { x: 0, y: 0, width: 0, height: 0 };
+  }
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const rect of rects) {
+    minX = Math.min(minX, rect.x);
+    minY = Math.min(minY, rect.y);
+    maxX = Math.max(maxX, rect.x + rect.width);
+    maxY = Math.max(maxY, rect.y + rect.height);
+  }
+  return {
+    x: minX,
+    y: minY,
+    width: Math.max(0, maxX - minX),
+    height: Math.max(0, maxY - minY),
+  };
+}
+
 /** Visible desktop region — align overlay above the macOS dock, not under it. */
 export function overlayLayoutFromDisplay(ctx: DisplayLayoutContext): OverlayLayout {
   const contentBottom = glassLayoutContentBottomY(ctx);
@@ -227,6 +250,27 @@ export function overlayLayoutFromDisplay(ctx: DisplayLayoutContext): OverlayLayo
     y: ctx.workArea.y,
     width: ctx.workArea.width,
     height: Math.max(0, contentBottom - ctx.workArea.y),
+  };
+}
+
+/**
+ * Multi-display Glass — one overlay spanning every connected monitor.
+ * Chrome (dock, command bar) lays out on the cursor display separately.
+ */
+export function overlayLayoutSpanningDisplays(contexts: readonly DisplayLayoutContext[]): OverlayLayout {
+  if (contexts.length === 0) {
+    return { x: 0, y: 0, width: 0, height: 0 };
+  }
+  if (contexts.length === 1) {
+    return overlayLayoutFromDisplay(contexts[0]!);
+  }
+  const union = boundsUnion(contexts.map((ctx) => ctx.workArea));
+  const maxContentBottom = Math.max(...contexts.map((ctx) => glassLayoutContentBottomY(ctx)));
+  return {
+    x: union.x,
+    y: union.y,
+    width: union.width,
+    height: Math.max(0, maxContentBottom - union.y),
   };
 }
 

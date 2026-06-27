@@ -31,6 +31,7 @@ export interface AletheiaDelegatedPresenceHost {
   resolveCaptureTarget: () => { id: number; label: string };
   getWindowContext: () => { appName?: string; windowTitle?: string };
   getScreenDigest: () => string | undefined;
+  getDisplayAwareness?: () => import("../shared/aletheiaDisplayAwareness.ts").AletheiaDisplayAwarenessSnapshot | undefined;
 }
 
 function delay(ms: number): Promise<void> {
@@ -164,7 +165,10 @@ export async function observeDelegatedAppReport(
   return observeTargetApp(host, intent, signal);
 }
 
-export async function focusDelegatedApp(targetApp: string): Promise<{
+export async function focusDelegatedApp(
+  targetApp: string,
+  displayAwareness?: import("../shared/aletheiaDisplayAwareness.ts").AletheiaDisplayAwarenessSnapshot,
+): Promise<{
   ok: boolean;
   message: string;
   method: string;
@@ -172,6 +176,7 @@ export async function focusDelegatedApp(targetApp: string): Promise<{
   const focus = await executeComputerUse({
     operation: "activate_app",
     targetApp,
+    displayAwareness,
   });
   return { ok: focus.ok, message: focus.message, method: focus.method };
 }
@@ -195,9 +200,12 @@ export async function runAletheiaDelegatedPresence(
   snapshot = markDelegatedPresencePhase(snapshot, "focusing");
   setSnapshot(host, snapshot, signal);
 
+  const displayAwareness = host.getDisplayAwareness?.();
+
   const focus = await executeComputerUse({
     operation: "activate_app",
     targetApp: intent.targetApp,
+    displayAwareness,
   });
 
   snapshot = appendDelegatedPresenceAudit(snapshot, {

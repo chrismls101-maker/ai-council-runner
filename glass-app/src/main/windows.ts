@@ -133,6 +133,7 @@ const ONBOARDING_ESCAPE_ACCEL = "Escape";
 let onboardingEmergencyHandler: (() => void) | null = null;
 
 let onCommandBarLayoutChanged: (() => void) | null = null;
+let onGlassDisplayLayoutChanged: (() => void) | null = null;
 let macVisibleFrameWatchTimer: ReturnType<typeof setInterval> | null = null;
 let lastMacVisibleWorkAreaKey = "";
 let macVisibleFrameRefreshInFlight = false;
@@ -142,8 +143,17 @@ export function setCommandBarLayoutChangedHandler(handler: (() => void) | null):
   onCommandBarLayoutChanged = handler;
 }
 
+/** Main process hook — refresh Aletheia display awareness when layout/display changes. */
+export function setGlassDisplayLayoutChangedHandler(handler: (() => void) | null): void {
+  onGlassDisplayLayoutChanged = handler;
+}
+
 function notifyCommandBarLayoutChanged(): void {
   onCommandBarLayoutChanged?.();
+}
+
+function notifyGlassDisplayLayoutChanged(): void {
+  onGlassDisplayLayoutChanged?.();
 }
 
 function loadRenderer(
@@ -1496,18 +1506,18 @@ function relayoutGlassSettingsWindow(): void {
   void import("./glassSettingsWindow.ts").then((mod) => mod.syncGlassSettingsLayout());
 }
 
-function relayoutAllWindows(options?: { resetDock?: boolean }): void {
-  if (!windows || !layoutManager) return;
-
-  if (!windows.overlay.isDestroyed()) {
-    windows.overlay.setBounds(layoutManager.getOverlayLayout());
-    // macOS resets setIgnoreMouseEvents as a side effect of repositioning.
-    if (onboardingPending) {
-      ensureOnboardingOverlayClickThrough();
-    } else {
-      configureOverlayClickThrough(windows.overlay);
-    }
+function relayoutOverlayWindow(): void {
+  if (!windows?.overlay || windows.overlay.isDestroyed() || !layoutManager) return;
+  windows.overlay.setBounds(layoutManager.getOverlayLayout());
+  if (onboardingPending) {
+    ensureOnboardingOverlayClickThrough();
+  } else {
+    configureOverlayClickThrough(windows.overlay);
   }
+}
+
+function relayoutChromeWindows(options?: { resetDock?: boolean }): void {
+  if (!windows || !layoutManager) return;
 
   if (!windows.panel.isDestroyed()) {
     const panelLayout = getPanelLayoutBounds();
@@ -1524,11 +1534,20 @@ function relayoutAllWindows(options?: { resetDock?: boolean }): void {
     windows.notesPad.setBounds(layoutManager.getNotesPadLayout());
   }
 
+  notifyCommandBarLayoutChanged();
+  notifyGlassDisplayLayoutChanged();
+  relayoutGlassSettingsWindow();
+}
+
+function relayoutAllWindows(options?: { resetDock?: boolean }): void {
+  if (!windows || !layoutManager) return;
+
+  relayoutOverlayWindow();
+  relayoutChromeWindows(options);
+
   ensureVisibleOnAllWorkspaces();
   stackGlassWindows(windows);
   logDiagnostics();
-  notifyCommandBarLayoutChanged();
-  relayoutGlassSettingsWindow();
 }
 
 function wireWindowStacking(w: GlassWindows): void {
@@ -2624,8 +2643,10 @@ export function getDisplayLayoutSummary(): string {
 
 function syncFollowMouseMode(): void {
   stopFollowMouseTracking();
-  if (activeDisplayTarget === "follow_mouse" || activeDisplayTarget === "all_displays") {
+  if (activeDisplayTarget === "follow_mouse") {
     startFollowMouseTracking(activeDisplayTarget, () => relayoutAllWindows());
+  } else if (activeDisplayTarget === "all_displays") {
+    startFollowMouseTracking(activeDisplayTarget, () => relayoutChromeWindows());
   }
 }
 

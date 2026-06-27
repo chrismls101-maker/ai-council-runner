@@ -6,6 +6,12 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { injectKeystrokes } from "./glassActions.ts";
 import { probeAletheiaOsPermissions } from "./aletheiaPermissionProbe.ts";
+import { listConnectedDisplaySnapshots } from "./displayRegistry.ts";
+import {
+  resolveAletheiaActionDisplayId,
+  validateClickOnTargetDisplay,
+  type AletheiaDisplayAwarenessSnapshot,
+} from "../shared/aletheiaDisplayAwareness.ts";
 import {
   formatComputerUseRouteNarration,
   selectComputerUseRoute,
@@ -67,6 +73,8 @@ async function executeTier(
     clickX?: number;
     clickY?: number;
     axLabel?: string;
+    targetDisplayId?: number | null;
+    targetDisplayLabel?: string | null;
   },
 ): Promise<ComputerUseExecutionResult> {
   const methodBase = selectComputerUseRoute({
@@ -76,7 +84,30 @@ async function executeTier(
     hasAxTarget: Boolean(input.axLabel),
     hasVisionTarget: input.clickX != null && input.clickY != null,
     isPlainText: Boolean(input.text),
+    targetDisplayId: input.targetDisplayId,
+    targetDisplayLabel: input.targetDisplayLabel,
   }).method;
+
+  if (
+    input.operation === "click_target"
+    && input.clickX != null
+    && input.clickY != null
+  ) {
+    const validation = validateClickOnTargetDisplay(
+      input.clickX,
+      input.clickY,
+      input.targetDisplayId,
+      listConnectedDisplaySnapshots(),
+    );
+    if (!validation.ok) {
+      return {
+        ok: false,
+        message: validation.message,
+        tier,
+        method: methodBase,
+      };
+    }
+  }
 
   try {
     switch (tier) {
@@ -222,23 +253,40 @@ export async function executeComputerUse(input: {
   clickX?: number;
   clickY?: number;
   axLabel?: string;
+  displayAwareness?: AletheiaDisplayAwarenessSnapshot | null;
 }): Promise<ComputerUseExecutionResult> {
-  const accessibilityGranted = probeAletheiaOsPermissions().accessibilityGranted;
-  const decision = selectComputerUseRoute({
+  const targetDisplayId =
+    input.displayAwareness != null
+      ? resolveAletheiaActionDisplayId(input.displayAwareness)
+      : null;
+  const targetDisplayLabel =
+    input.displayAwareness?.cursorDisplayLabel
+    ?? input.displayAwareness?.overlayDisplayLabel
+    ?? null;
+  const routeInput = {
     operation: input.operation,
     targetApp: input.targetApp,
-    accessibilityGranted,
+    accessibilityGranted: probeAletheiaOsPermissions().accessibilityGranted,
     hasAxTarget: Boolean(input.axLabel),
     hasVisionTarget: input.clickX != null && input.clickY != null,
     isPlainText: Boolean(input.text),
-  });
+    targetDisplayId,
+    targetDisplayLabel,
+  };
+  const tierInput = {
+    ...input,
+    targetDisplayId,
+    targetDisplayLabel,
+  };
 
-  const primary = await executeTier(decision.tier, input);
+  const decision = selectComputerUseRoute(routeInput);
+
+  const primary = await executeTier(decision.tier, tierInput);
   if (primary.ok || !decision.fallbackTier) {
     return primary;
   }
 
-  const fallback = await executeTier(decision.fallbackTier, input);
+  const fallback = await executeTier(decision.fallbackTier, tierInput);
   return {
     ...fallback,
     fallbackUsed: true,

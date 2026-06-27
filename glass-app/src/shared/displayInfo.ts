@@ -92,7 +92,7 @@ export function formatDisplayTargetLabelFromSnapshots(
 ): string {
   if (target === "primary") return "Primary Display";
   if (target === "follow_mouse") return "Follow Mouse";
-  if (target === "all_displays") return "All Displays Overlay";
+  if (target === "all_displays") return "Multi-Display Glass";
   const match = snapshots.find((s) => s.id === target);
   if (match) return match.label;
   return `Display id ${target}`;

@@ -348,7 +348,7 @@ export function formatDisplayTargetLabel(
 ): string {
   if (target === "primary") return "Primary Display";
   if (target === "follow_mouse") return "Follow Mouse";
-  if (target === "all_displays") return "All Displays Overlay";
+  if (target === "all_displays") return "Multi-Display Glass";
   const index = displayIds.indexOf(target);
   if (index >= 0) return `Display ${index + 1}`;
   return `Display id ${target}`;

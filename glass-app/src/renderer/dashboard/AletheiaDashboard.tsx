@@ -17,6 +17,7 @@ import type { AletheiaAttentionRecoverySnapshot } from "../../shared/aletheiaAtt
 import type { AletheiaRelationshipThreadSnapshot } from "../../shared/aletheiaRelationshipThread.ts";
 import { relationshipEventKindLabel } from "../../shared/aletheiaRelationshipThread.ts";
 import type { AletheiaDisplayAwarenessSnapshot } from "../../shared/aletheiaDisplayAwareness.ts";
+import type { ConnectedDisplaySnapshot } from "../../shared/displayInfo.ts";
 import { resolveAletheiaSurface } from "../../shared/aletheiaSurfaceDoctrine.ts";
 import { pendingAletheiaAdviceCards } from "../../shared/aletheiaPendingAdvice.ts";
 import type { AletheiaAdviceCard } from "../../shared/aletheiaPendingAdvice.ts";
@@ -365,12 +366,12 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
             <DisplayAwarenessPanel
               companionActive={companionActive}
               awareness={displayAwareness}
+              connectedDisplays={glassState.connectedDisplays}
             />
             <PersonaBehaviorPanel
               companionActive={companionActive}
               personaBehavior={personaBehavior}
               persona={glassState.persona}
-              aletheiaDashboardActive
             />
             <PendingAdvicePanel
               companionActive={companionActive}
@@ -519,16 +520,32 @@ function RelationshipThreadPanel({
 function DisplayAwarenessPanel({
   companionActive,
   awareness,
+  connectedDisplays,
 }: {
   companionActive: boolean;
   awareness?: AletheiaDisplayAwarenessSnapshot;
+  connectedDisplays: ConnectedDisplaySnapshot[];
 }): JSX.Element | null {
-  if (!companionActive || !awareness || awareness.displayCount <= 1) return null;
+  if (connectedDisplays.length <= 1) return null;
+
+  const monitorSummary = connectedDisplays
+    .map((d) => `${d.label}${d.cursorInside ? " (cursor)" : ""}`)
+    .join(" · ");
 
   return (
     <section className="aletheia-dashboard__panel" data-testid="aletheia-dashboard-display-awareness">
       <p className="aletheia-dashboard__panel-label">Displays</p>
-      <p className="aletheia-dashboard__panel-copy">{awareness.contextBlock}</p>
+      <p className="aletheia-dashboard__panel-meta" data-testid="aletheia-dashboard-display-count">
+        {connectedDisplays.length} monitors connected
+      </p>
+      <p className="aletheia-dashboard__panel-copy">{monitorSummary}</p>
+      {companionActive && awareness ? (
+        <p className="aletheia-dashboard__panel-footnote">{awareness.contextBlock}</p>
+      ) : (
+        <p className="aletheia-dashboard__panel-footnote">
+          Activate companion for full display-aware context during sessions.
+        </p>
+      )}
     </section>
   );
 }
@@ -537,16 +554,14 @@ function PersonaBehaviorPanel({
   companionActive,
   personaBehavior,
   persona,
-  aletheiaDashboardActive,
 }: {
   companionActive: boolean;
   personaBehavior: ReturnType<typeof resolveAletheiaPersonaBehavior>;
   persona?: GlassState["persona"];
-  aletheiaDashboardActive?: boolean;
 }): JSX.Element {
   const surface = resolveAletheiaSurface({
     companionModeActive: companionActive,
-    aletheiaDashboardActive,
+    aletheiaDashboardActive: true,
   });
   return (
     <section className="aletheia-dashboard__panel" data-testid="aletheia-dashboard-persona-behavior">
