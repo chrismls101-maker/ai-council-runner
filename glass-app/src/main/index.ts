@@ -311,8 +311,8 @@ import { initGlassSettings, isSettingsIpcSender, showGlassSettings, teardownGlas
 import { registerDashboardIpc, setDashboardIpcAuth, isDashboardIpcSender } from "./dashboardIpc.ts";
 import { registerAletheiaDashboardIpc, setAletheiaDashboardIpcAuth } from "./aletheiaDashboardIpc.ts";
 import { closeDatabase, gracefulDatabaseShutdown, initDatabase } from "./glassDatabase.ts";
-import { createAletheiaSessionsTable } from "./aletheiaSessionStore.ts";
-import { createAletheiaActionLedgerTable } from "./aletheiaActionLedgerStore.ts";
+import { createAletheiaSessionsTable, getRecentAletheiaSessions } from "./aletheiaSessionStore.ts";
+import { createAletheiaActionLedgerTable, getRecentActionLedgerEntries } from "./aletheiaActionLedgerStore.ts";
 import {
   appendAletheiaNote,
   createAletheiaNotesTable,
@@ -325,6 +325,7 @@ import {
   selectRelevantAletheiaNotes,
   type AppendAletheiaNoteInput,
 } from "../shared/aletheiaNotes.ts";
+import { buildAletheiaAttentionRecovery } from "../shared/aletheiaAttentionRecovery.ts";
 import {
   AletheiaActionOrchestrator,
   currentAletheiaActionSessionId,
@@ -384,6 +385,7 @@ import {
   adviceDismissAckSpeech,
   approveAletheiaAdvice,
   dismissAletheiaAdvice,
+  pendingAletheiaAdviceCards,
   resolveVoiceAdviceResponse,
   type AletheiaPendingAdviceSnapshot,
 } from "../shared/aletheiaPendingAdvice.ts";
@@ -1260,6 +1262,8 @@ interface AppState {
   aletheiaPersonaBehavior?: import("../shared/aletheiaPersonaBehavior.ts").AletheiaPersonaBehaviorSnapshot;
   /** B4.2 — Aletheia session notes. */
   aletheiaNotes?: import("../shared/aletheiaNotes.ts").AletheiaNotesSnapshot;
+  /** B4.3 — attention recovery brief after a meaningful gap. */
+  aletheiaAttentionRecovery?: import("../shared/aletheiaAttentionRecovery.ts").AletheiaAttentionRecoverySnapshot;
   /** Whether the dock terminal panel is open. */
   glassDockTerminalOpen?: boolean;
   /** Active PTY session id. */
@@ -2245,6 +2249,10 @@ let companionSpeakerChangeCount = 0;
 let companionLastResponseAt = 0;
 
 let companionPrivacyTimer: ReturnType<typeof setTimeout> | null = null;
+/** When companion mode last deactivated — used for B4.3 attention recovery. */
+let lastCompanionDeactivatedAt = 0;
+/** When privacy pause started — used for B4.3 attention recovery on resume. */
+let companionPrivacyStartedAt = 0;
 
 function clearCompanionPrivacyTimer(): void {
   if (companionPrivacyTimer) {
@@ -4333,6 +4341,51 @@ function refreshAletheiaNotesState(): void {
   state.aletheiaNotes = listAletheiaNotes(50);
 }
 
+function refreshAletheiaAttentionRecoveryState(gapMs: number): void {
+  const sessions = getRecentAletheiaSessions(1);
+  const last = sessions[0];
+  const ctx = getCachedWindowContext();
+  const recovery = buildAletheiaAttentionRecovery({
+    gapMs,
+    frontApp: state.activeApp ?? ctx?.appName,
+    windowTitle: ctx?.windowTitle,
+    lastSession: last
+      ? {
+          endedAt: last.ended_at,
+          turnCount: last.turn_count,
+          frontApp: last.front_app,
+          summary: last.summary,
+        }
+      : null,
+    agentRun: state.agentRun
+      ? {
+          agentId: state.agentRun.agentId,
+          status: state.agentRun.status,
+          updatedAt: state.agentRun.updatedAt,
+        }
+      : null,
+    pendingAdviceCount: pendingAletheiaAdviceCards(state.aletheiaPendingAdvice).length,
+    ledgerEntries: getRecentActionLedgerEntries(12).map((row) => ({
+      summary: row.summary,
+      narration: row.narration,
+      ok: row.ok,
+      createdAt: row.createdAt,
+    })),
+    personaBehavior: state.aletheiaPersonaBehavior,
+  });
+  state.aletheiaAttentionRecovery = recovery ?? undefined;
+}
+
+function maybeRefreshAttentionRecoveryAfterPrivacyEnd(): void {
+  if (!state.companionModeActive || !companionPrivacyStartedAt) return;
+  const gapMs = Date.now() - companionPrivacyStartedAt;
+  companionPrivacyStartedAt = 0;
+  refreshAletheiaAttentionRecoveryState(gapMs);
+  if (state.aletheiaAttentionRecovery) {
+    speakAletheiaAdviceAck(state.aletheiaAttentionRecovery.spokenBrief);
+  }
+}
+
 function captureAletheiaSessionNote(input: AppendAletheiaNoteInput): void {
   appendAletheiaNote({
     ...input,
@@ -5173,6 +5226,7 @@ function snapshot(): GlassState {
     aletheiaResearchConversation: state.aletheiaResearchConversation,
     aletheiaPersonaBehavior: state.aletheiaPersonaBehavior,
     aletheiaNotes: state.aletheiaNotes,
+    aletheiaAttentionRecovery: state.aletheiaAttentionRecovery,
     glassDockTerminalOpen: state.glassDockTerminalOpen,
     glassDockTerminalId: state.glassDockTerminalId,
     glassDockTerminalTabs: state.glassDockTerminalTabs,
@@ -7969,6 +8023,7 @@ async function handleCommand(
     }
     case "companion-privacy-start": {
       const durationMs = command.durationMs ?? 10 * 60 * 1000;
+      companionPrivacyStartedAt = Date.now();
       state.companionPrivacy = {
         active: true,
         resumeAt: Date.now() + durationMs,
@@ -7979,6 +8034,7 @@ async function handleCommand(
       companionPrivacyTimer = setTimeout(() => {
         if (!state.companionPrivacy?.active) return;
         state.companionPrivacy = undefined;
+        maybeRefreshAttentionRecoveryAfterPrivacyEnd();
         push();
         broadcast(IPC.companionPrivacyResumed, {});
       }, durationMs);
@@ -7987,6 +8043,7 @@ async function handleCommand(
     }
     case "companion-privacy-end": {
       clearCompanionPrivacyState();
+      maybeRefreshAttentionRecoveryAfterPrivacyEnd();
       refreshAletheiaObservationPlaneState({ forcePush: true, forcePersist: true });
       return;
     }
@@ -11721,6 +11778,9 @@ function applyCompanionModeActivation(): void {
   state.companionModeToggleNonce += 1;
   refreshAletheiaPersonaBehaviorState();
   refreshAletheiaNotesState();
+  const gapMs = lastCompanionDeactivatedAt > 0 ? Date.now() - lastCompanionDeactivatedAt : 0;
+  refreshAletheiaAttentionRecoveryState(gapMs);
+  lastCompanionDeactivatedAt = 0;
   aletheiaPermissionMonitor.setCompanionActive(true);
   aletheiaSidecarManager.setCompanionActive(true);
   beginAletheiaSession(state.activeApp);
@@ -11744,6 +11804,7 @@ function applyCompanionModeActivation(): void {
 }
 
 function deactivateCompanionMode(): void {
+  lastCompanionDeactivatedAt = Date.now();
   state.companionModeActive = false;
   state.companionModeToggleNonce += 1;
   aletheiaPermissionMonitor.setCompanionActive(false);
@@ -11758,6 +11819,7 @@ function deactivateCompanionMode(): void {
   clearAletheiaDelegatedLoopState(aletheiaDelegatedLoopHost);
   clearAletheiaResearchConversationState(aletheiaResearchConversationHost);
   state.aletheiaPersonaBehavior = undefined;
+  state.aletheiaAttentionRecovery = undefined;
   abortAletheiaCompanionOperation();
   pendingLoopDecisionResolver = null;
   loopCancelRequested = false;

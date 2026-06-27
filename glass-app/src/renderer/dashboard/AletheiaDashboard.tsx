@@ -13,6 +13,7 @@ import {
 } from "../../shared/aletheiaPersonaBehavior.ts";
 import { categoryLabel } from "../../shared/aletheiaNotes.ts";
 import type { AletheiaNote } from "../../shared/aletheiaNotes.ts";
+import type { AletheiaAttentionRecoverySnapshot } from "../../shared/aletheiaAttentionRecovery.ts";
 import { pendingAletheiaAdviceCards } from "../../shared/aletheiaPendingAdvice.ts";
 import type { AletheiaAdviceCard } from "../../shared/aletheiaPendingAdvice.ts";
 import { formatActionConfirmationCard } from "../../shared/aletheiaActionConfirmation.ts";
@@ -133,6 +134,7 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
   const delegatedLoop = glassState.aletheiaDelegatedLoop;
   const researchConversation = glassState.aletheiaResearchConversation;
   const aletheiaNotes = glassState.aletheiaNotes;
+  const attentionRecovery = glassState.aletheiaAttentionRecovery;
   const personaBehavior = useMemo(
     () =>
       glassState.aletheiaPersonaBehavior
@@ -346,6 +348,10 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
               ambientSynthesis={ambientSynthesis}
               companionActive={companionActive}
             />
+            <AttentionRecoveryPanel
+              companionActive={companionActive}
+              recovery={attentionRecovery}
+            />
             <PersonaBehaviorPanel
               companionActive={companionActive}
               personaBehavior={personaBehavior}
@@ -419,6 +425,30 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
         </div>
       </div>
     </div>
+  );
+}
+
+function AttentionRecoveryPanel({
+  companionActive,
+  recovery,
+}: {
+  companionActive: boolean;
+  recovery?: AletheiaAttentionRecoverySnapshot;
+}): JSX.Element | null {
+  if (!companionActive || !recovery) return null;
+
+  return (
+    <section className="aletheia-dashboard__panel" data-testid="aletheia-dashboard-attention-recovery">
+      <p className="aletheia-dashboard__panel-label">Catch-up</p>
+      <p className="aletheia-dashboard__panel-copy">{recovery.spokenBrief}</p>
+      <ul className="aletheia-dashboard__recovery-list" data-testid="aletheia-dashboard-attention-recovery-list">
+        {recovery.highlights.map((line) => (
+          <li key={line} className="aletheia-dashboard__recovery-row">
+            {line}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

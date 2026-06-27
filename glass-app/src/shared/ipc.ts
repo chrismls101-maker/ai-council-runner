@@ -1504,6 +1504,8 @@ export interface GlassState {
   aletheiaPersonaBehavior?: import("./aletheiaPersonaBehavior.ts").AletheiaPersonaBehaviorSnapshot;
   /** B4.2 — Aletheia session notes (decisions + rationales). */
   aletheiaNotes?: import("./aletheiaNotes.ts").AletheiaNotesSnapshot;
+  /** B4.3 — attention recovery brief after a meaningful gap. */
+  aletheiaAttentionRecovery?: import("./aletheiaAttentionRecovery.ts").AletheiaAttentionRecoverySnapshot;
   // ── Design-to-Code Bridge (#163) ─────────────────────────────────────────
   /** Active design capture cards keyed by feed item id. */
   designCaptures?: Record<string, {

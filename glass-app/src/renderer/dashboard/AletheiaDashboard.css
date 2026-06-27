@@ -435,6 +435,23 @@
   color: rgba(196, 181, 253, 0.75);
 }
 
+.aletheia-dashboard__recovery-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.aletheia-dashboard__recovery-row {
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(226, 232, 240, 0.82);
+  padding-left: 10px;
+  border-left: 2px solid rgba(196, 181, 253, 0.35);
+}
+
 .aletheia-dashboard__quote {
   margin: 0;
   padding: 10px 12px;
