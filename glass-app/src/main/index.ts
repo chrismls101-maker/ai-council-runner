@@ -380,6 +380,7 @@ import {
   resolveVoiceActionConfirmation,
 } from "../shared/aletheiaActionConfirmation.ts";
 import { intentFromAdviceApproval } from "../shared/aletheiaExecution.ts";
+import { runAletheiaBoundedTerminalLoop } from "./aletheiaBoundedLoopRunner.ts";
 import { refreshAletheiaPendingAdvicePlane } from "./aletheiaPendingAdvicePlane.ts";
 import { ensurePtySpawnHelperExecutable } from "./glassTerminal.ts";
 import {
@@ -1175,6 +1176,8 @@ interface AppState {
   aletheiaPendingAdvice?: AletheiaPendingAdviceSnapshot;
   /** B2.1 — one-shot companion speech after advice approve/dismiss. */
   aletheiaAdviceSpeak?: { text: string; nonce: number };
+  /** B2.3 — bounded autonomy loop scope, audit trail, and summary. */
+  aletheiaBoundedLoop?: import("../shared/aletheiaBoundedAutonomy.ts").AletheiaBoundedLoopSnapshot;
   /** Whether the dock terminal panel is open. */
   glassDockTerminalOpen?: boolean;
   /** Active PTY session id. */
@@ -1808,6 +1811,18 @@ const aletheiaActionOrchestratorHost: AletheiaActionOrchestratorHost = {
   },
   getSessionId: currentAletheiaActionSessionId,
   getPermissionPlane: () => state.aletheiaPermissionPlane,
+  runBoundedLoop: (intent, confirmation) =>
+    runAletheiaBoundedTerminalLoop(
+      {
+        getSnapshot: () => state.aletheiaBoundedLoop,
+        setSnapshot: (snapshot) => {
+          state.aletheiaBoundedLoop = snapshot;
+        },
+        push,
+      },
+      intent,
+      confirmation,
+    ),
   push,
 };
 const aletheiaActionOrchestrator = new AletheiaActionOrchestrator(
@@ -4609,6 +4624,7 @@ function snapshot(): GlassState {
     aletheiaAmbientSynthesis: state.aletheiaAmbientSynthesis,
     aletheiaPendingAdvice: state.aletheiaPendingAdvice,
     aletheiaAdviceSpeak: state.aletheiaAdviceSpeak,
+    aletheiaBoundedLoop: state.aletheiaBoundedLoop,
     glassDockTerminalOpen: state.glassDockTerminalOpen,
     glassDockTerminalId: state.glassDockTerminalId,
     glassDockTerminalTabs: state.glassDockTerminalTabs,
@@ -11099,6 +11115,7 @@ function deactivateCompanionMode(): void {
   clearAletheiaActivationState();
   state.aletheiaPendingAdvice = undefined;
   state.aletheiaAdviceSpeak = undefined;
+  state.aletheiaBoundedLoop = undefined;
   state.companionPresence = null;
   state.companionMemory = clearCompanionSessionMemory();
   state.companionWarmupPhase = "none";

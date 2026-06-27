@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { AletheiaAdviceKind } from "./aletheiaPendingAdvice.ts";
+import type { BoundedLoopConfig } from "./aletheiaBoundedAutonomy.ts";
+import { buildTerminalInvestigationScopeDeclaration, readBoundedLoopConfig } from "./aletheiaBoundedAutonomy.ts";
+
+export { readBoundedLoopConfig } from "./aletheiaBoundedAutonomy.ts";
+export type { BoundedLoopConfig } from "./aletheiaBoundedAutonomy.ts";
 
 export type ActionKind = "shell" | "file-write" | "file-apply" | "keystroke" | "app-control" | "research" | "delegated";
 
@@ -86,6 +91,8 @@ export interface AletheiaActionPipelineSnapshot {
     scopeDescription: string;
     targetDescription: string;
     commandPreview?: string;
+    scopeDeclaration?: string;
+    boundedLoop?: BoundedLoopConfig;
     narration: string;
     requestedAt: number;
     glassActionId?: string;
@@ -212,12 +219,18 @@ export function intentFromAdviceApproval(input: {
 }): ActionIntent | null {
   if (input.kind === "terminal_error" && input.command?.trim()) {
     const command = input.command.trim();
+    const maxIterations = 3;
     return intentFromShell({
       command,
       sessionId: input.sessionId,
       rationale: input.body,
       targetApp: input.targetApp,
       glassActionId: `advice-${input.adviceId}`,
+      boundedLoop: {
+        kind: "terminal_investigation",
+        maxIterations,
+        scopeDeclaration: buildTerminalInvestigationScopeDeclaration(command, maxIterations),
+      },
     });
   }
   return null;
@@ -231,23 +244,30 @@ export function intentFromShell(input: {
   targetApp?: string;
   id?: string;
   glassActionId?: string;
+  boundedLoop?: BoundedLoopConfig;
 }): ActionIntent {
   const command = input.command.trim();
   const preview =
     command.length > 72 ? `${command.slice(0, 72)}…` : command;
+  const bounded = input.boundedLoop;
   return {
     id: input.id ?? makeIntentId(),
     sessionId: input.sessionId,
     kind: "shell",
-    summary: `Run shell command: ${preview}`,
+    summary: bounded
+      ? `Bounded terminal investigation: ${preview}`
+      : `Run shell command: ${preview}`,
     rationale: input.rationale ?? "User approved Aletheia's suggested investigation.",
     scope: {
-      description: `Single shell command in Glass terminal context`,
+      description: bounded
+        ? bounded.scopeDeclaration
+        : "Single shell command in Glass terminal context",
       targetApp: input.targetApp,
     },
     payload: {
       command,
       targetApp: input.targetApp,
+      ...(bounded ? { boundedLoop: bounded } : {}),
     },
     requestedAt: Date.now(),
     glassActionId: input.glassActionId,
@@ -282,6 +302,7 @@ export function commandPreviewForIntent(intent: ActionIntent): string | undefine
 }
 
 export function buildPendingConfirmationView(intent: ActionIntent, narration: string) {
+  const boundedLoop = readBoundedLoopConfig(intent.payload);
   return {
     intentId: intent.id,
     kind: intent.kind,
@@ -290,6 +311,8 @@ export function buildPendingConfirmationView(intent: ActionIntent, narration: st
     scopeDescription: intent.scope.description,
     targetDescription: targetDescriptionForIntent(intent),
     commandPreview: commandPreviewForIntent(intent),
+    scopeDeclaration: boundedLoop?.scopeDeclaration,
+    boundedLoop: boundedLoop ?? undefined,
     narration,
     requestedAt: intent.requestedAt,
     glassActionId: intent.glassActionId,

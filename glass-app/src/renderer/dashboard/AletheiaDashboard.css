@@ -645,6 +645,29 @@
   color: rgba(167, 243, 208, 0.92);
 }
 
-.aletheia-dashboard__confirm-result--error .aletheia-dashboard__panel-copy {
+.aletheia-dashboard__confirm-scope {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(14, 116, 144, 0.14);
+  border: 1px solid rgba(56, 189, 248, 0.22);
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(186, 230, 253, 0.92);
+}
+
+.aletheia-dashboard__bounded-audit {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(226, 232, 240, 0.82);
+}
+
+.aletheia-dashboard__bounded-audit-row--ok {
+  color: rgba(167, 243, 208, 0.92);
+}
+
+.aletheia-dashboard__bounded-audit-row--error {
   color: rgba(252, 165, 165, 0.92);
 }

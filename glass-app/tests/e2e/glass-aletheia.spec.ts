@@ -157,6 +157,7 @@ test.describe("IIVO Glass Aletheia", () => {
     await expect(overlay.locator('[data-testid="aletheia-dashboard-observation"]')).toBeVisible();
     await expect(overlay.locator('[data-testid="aletheia-dashboard-pending-advice"]')).toBeVisible();
     await expect(overlay.locator('[data-testid="aletheia-dashboard-action-confirmation"]')).toBeVisible();
+    await expect(overlay.locator('[data-testid="aletheia-dashboard-bounded-loop"]')).toBeVisible();
     await expect(overlay.locator('[data-testid="aletheia-dashboard-services"]')).toBeVisible();
     await expect(overlay.locator('[data-testid="aletheia-dashboard-dependencies"]')).toBeVisible();
     await expect(overlay.locator('[data-testid="aletheia-dashboard-privacy"]')).toBeVisible();

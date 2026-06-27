@@ -12,6 +12,7 @@ export interface ActionConfirmationCardView {
   targetLine: string;
   reasonLine: string;
   commandPreview?: string;
+  scopeDeclaration?: string;
   narration: string;
 }
 
@@ -44,6 +45,7 @@ export function formatActionConfirmationCard(
     targetLine: pending.targetDescription,
     reasonLine: pending.rationale,
     commandPreview: pending.commandPreview,
+    scopeDeclaration: pending.scopeDeclaration,
     narration: pending.narration,
   };
 }

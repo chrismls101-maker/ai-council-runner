@@ -19,6 +19,7 @@ import {
   intentFromWriteFile,
   narrationForStage,
   pipelineState,
+  readBoundedLoopConfig,
 } from "../shared/aletheiaExecution.ts";
 import { passAuthorityGate } from "../shared/aletheiaAuthorityGate.ts";
 import { canExecuteActionOnPermissionPlane } from "../shared/aletheiaPermissionControlPlane.ts";
@@ -49,6 +50,10 @@ export interface AletheiaActionOrchestratorHost {
   }) => void;
   getSessionId: () => string;
   getPermissionPlane?: () => AletheiaPermissionControlPlaneSnapshot | undefined;
+  runBoundedLoop?: (
+    intent: ActionIntent,
+    confirmation: ActionConfirmation,
+  ) => Promise<{ ok: boolean; summary: string }>;
   push: () => void;
 }
 
@@ -272,6 +277,28 @@ export class AletheiaActionOrchestrator {
     }
 
     this.recordStage(intent, "executing");
+
+    const boundedLoop = readBoundedLoopConfig(intent.payload);
+    if (boundedLoop && confirmation && this.host.runBoundedLoop) {
+      const loopResult = await this.host.runBoundedLoop(intent, confirmation);
+      const finalStage = loopResult.ok ? "complete" : "failed";
+      this.recordStage(intent, finalStage);
+      this.syncPipeline({
+        pendingConfirmation: undefined,
+        lastResult: {
+          intentId: intent.id,
+          stage: finalStage,
+          narration: loopResult.summary,
+          ok: loopResult.ok,
+          message: loopResult.summary,
+          updatedAt: Date.now(),
+          glassActionId: intent.glassActionId,
+        },
+      });
+      this.host.push();
+      return;
+    }
+
     const rawResult = await this.executor.execute(intent);
     this.recordStage(intent, "verifying");
     const verified = await this.executor.verify(intent, rawResult);

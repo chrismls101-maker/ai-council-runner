@@ -1481,6 +1481,8 @@ export interface GlassState {
   aletheiaPendingAdvice?: import("./aletheiaPendingAdvice.ts").AletheiaPendingAdviceSnapshot;
   /** B2.1 — one-shot companion speech after advice approve/dismiss. */
   aletheiaAdviceSpeak?: { text: string; nonce: number };
+  /** B2.3 — bounded autonomy loop scope, audit trail, and summary. */
+  aletheiaBoundedLoop?: import("./aletheiaBoundedAutonomy.ts").AletheiaBoundedLoopSnapshot;
   // ── Design-to-Code Bridge (#163) ─────────────────────────────────────────
   /** Active design capture cards keyed by feed item id. */
   designCaptures?: Record<string, {

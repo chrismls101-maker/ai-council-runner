@@ -121,6 +121,7 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
   const ambientSynthesis = glassState.aletheiaAmbientSynthesis;
   const pendingAdvice = glassState.aletheiaPendingAdvice;
   const actionPipeline = glassState.aletheiaActionPipeline;
+  const boundedLoop = glassState.aletheiaBoundedLoop;
 
   const handleApproveAdvice = useCallback((adviceId: string): void => {
     dispatchAletheiaCommand("approve-aletheia-advice", { adviceId });
@@ -308,6 +309,7 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
               onReject={handleRejectAction}
               onModify={handleModifyAction}
             />
+            <BoundedLoopPanel companionActive={companionActive} boundedLoop={boundedLoop} />
             <PermissionsPanel
               permissionPlane={permissionPlane}
               capabilities={glassState.setupCapabilities ?? []}
@@ -639,6 +641,14 @@ function ActionConfirmationPanel({
             <span className="aletheia-dashboard__confirm-key">Reason</span>
             {card.reasonLine}
           </p>
+          {card.scopeDeclaration ? (
+            <p
+              className="aletheia-dashboard__confirm-scope"
+              data-testid="aletheia-dashboard-confirm-scope"
+            >
+              {card.scopeDeclaration}
+            </p>
+          ) : null}
           {card.commandPreview ? (
             <pre className="aletheia-dashboard__confirm-preview" data-testid="aletheia-dashboard-confirm-preview">
               {card.commandPreview}
@@ -700,6 +710,68 @@ function ActionConfirmationPanel({
           <p className="aletheia-dashboard__panel-copy">{lastResult.message}</p>
         </div>
       ) : null}
+    </section>
+  );
+}
+
+function BoundedLoopPanel({
+  companionActive,
+  boundedLoop,
+}: {
+  companionActive: boolean;
+  boundedLoop?: GlassState["aletheiaBoundedLoop"];
+}): JSX.Element {
+  return (
+    <section className="aletheia-dashboard__panel" data-testid="aletheia-dashboard-bounded-loop">
+      <p className="aletheia-dashboard__panel-label">Bounded loop</p>
+      {!companionActive ? (
+        <p className="aletheia-dashboard__panel-copy">
+          Activate Aletheia to run declared autonomous loops with a live audit trail.
+        </p>
+      ) : !boundedLoop ? (
+        <p className="aletheia-dashboard__panel-copy" data-testid="aletheia-dashboard-bounded-loop-empty">
+          No active loop — bounded investigations appear here once you confirm scope.
+        </p>
+      ) : (
+        <>
+          <p className="aletheia-dashboard__panel-copy" data-testid="aletheia-dashboard-bounded-loop-scope">
+            {boundedLoop.scope.declaration}
+          </p>
+          <ul className="aletheia-dashboard__bounded-audit" data-testid="aletheia-dashboard-bounded-loop-audit">
+            {boundedLoop.scope.allowedActions.map((row) => (
+              <li key={row}>{row}</li>
+            ))}
+          </ul>
+          <p className="aletheia-dashboard__panel-meta" data-testid="aletheia-dashboard-bounded-loop-phase">
+            Phase: {boundedLoop.phase.replace(/_/g, " ")}
+            {boundedLoop.iteration > 0 ? ` · iteration ${boundedLoop.iteration}/${boundedLoop.scope.maxIterations}` : ""}
+          </p>
+          {boundedLoop.audit.length > 0 ? (
+            <ul className="aletheia-dashboard__bounded-audit" data-testid="aletheia-dashboard-bounded-loop-log">
+              {boundedLoop.audit.map((row) => (
+                <li
+                  key={row.id}
+                  className={
+                    row.ok === true
+                      ? "aletheia-dashboard__bounded-audit-row--ok"
+                      : row.ok === false
+                        ? "aletheia-dashboard__bounded-audit-row--error"
+                        : undefined
+                  }
+                >
+                  {row.narration}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {boundedLoop.summary ? (
+            <div className="aletheia-dashboard__confirm-result aletheia-dashboard__confirm-result--ok" data-testid="aletheia-dashboard-bounded-loop-summary">
+              <p className="aletheia-dashboard__confirm-key">Loop summary</p>
+              <p className="aletheia-dashboard__panel-copy">{boundedLoop.summary}</p>
+            </div>
+          ) : null}
+        </>
+      )}
     </section>
   );
 }
