@@ -32,6 +32,7 @@ import {
   beginAletheiaSession,
   finalizeAletheiaSession,
   currentAletheiaSessionId,
+  currentAletheiaSessionTurnCount,
   incrementAletheiaSessionTurn,
 } from "./companionSessionStore.ts";
 import {
@@ -326,6 +327,7 @@ import {
   type AppendAletheiaNoteInput,
 } from "../shared/aletheiaNotes.ts";
 import { buildAletheiaAttentionRecovery } from "../shared/aletheiaAttentionRecovery.ts";
+import { buildAletheiaSessionEndSummary } from "../shared/aletheiaSessionEndSummary.ts";
 import {
   AletheiaActionOrchestrator,
   currentAletheiaActionSessionId,
@@ -2046,27 +2048,7 @@ function handleAletheiaPermissionRevocation(
   const micRevoked = events.some((e) => e.domain === "microphone" || e.domain === "consentMic");
   if (micRevoked && state.companionModeActive) {
     console.warn("[glass] companion deactivated — microphone permission/consent revoked mid-session");
-    state.companionModeActive = false;
-    state.companionModeToggleNonce += 1;
-    finalizeAletheiaSession("Permission revoked — Aletheia paused.");
-    state.companionPresence = null;
-    state.companionMemory = clearCompanionSessionMemory();
-    state.companionWarmupPhase = "none";
-    clearCompanionPrivacyState();
-    resetCompanionAmbientState();
-    stopCompanionDeepgramSession();
-    stopCompanionAnchorWatch();
-    aletheiaPermissionMonitor.setCompanionActive(false);
-    aletheiaSidecarManager.setCompanionActive(false);
-    clearAletheiaActivationState();
-    clearAletheiaAgentCoordinatorState(aletheiaAgentCoordinatorHost);
-    clearAletheiaDelegatedPresenceState(aletheiaDelegatedPresenceHost);
-    clearAletheiaDelegatedLoopState(aletheiaDelegatedLoopHost);
-    clearAletheiaResearchConversationState(aletheiaResearchConversationHost);
-    state.aletheiaPersonaBehavior = undefined;
-    abortAletheiaCompanionOperation();
-    pendingLoopDecisionResolver = null;
-    loopCancelRequested = false;
+    deactivateCompanionMode("Permission revoked — Aletheia paused.");
   }
 }
 
@@ -2251,6 +2233,8 @@ let companionLastResponseAt = 0;
 let companionPrivacyTimer: ReturnType<typeof setTimeout> | null = null;
 /** When companion mode last deactivated — used for B4.3 attention recovery. */
 let lastCompanionDeactivatedAt = 0;
+/** Pending advice left unresolved when the last companion session ended — for attention recovery. */
+let endedSessionRecoveryHints: { pendingAdviceCount: number } | null = null;
 /** When privacy pause started — used for B4.3 attention recovery on resume. */
 let companionPrivacyStartedAt = 0;
 
@@ -2270,6 +2254,7 @@ function resetCompanionAmbientState(): void {
 function clearCompanionPrivacyState(): void {
   clearCompanionPrivacyTimer();
   state.companionPrivacy = undefined;
+  companionPrivacyStartedAt = 0;
 }
 
 /**
@@ -4357,14 +4342,18 @@ function refreshAletheiaAttentionRecoveryState(gapMs: number): void {
           summary: last.summary,
         }
       : null,
-    agentRun: state.agentRun
-      ? {
-          agentId: state.agentRun.agentId,
-          status: state.agentRun.status,
-          updatedAt: state.agentRun.updatedAt,
-        }
-      : null,
-    pendingAdviceCount: pendingAletheiaAdviceCards(state.aletheiaPendingAdvice).length,
+    agentRun:
+      state.agentRun && state.agentRun.updatedAt >= Date.now() - gapMs
+        ? {
+            agentId: state.agentRun.agentId,
+            status: state.agentRun.status,
+            updatedAt: state.agentRun.updatedAt,
+          }
+        : null,
+    pendingAdviceCount: Math.max(
+      pendingAletheiaAdviceCards(state.aletheiaPendingAdvice).length,
+      endedSessionRecoveryHints?.pendingAdviceCount ?? 0,
+    ),
     ledgerEntries: getRecentActionLedgerEntries(12).map((row) => ({
       summary: row.summary,
       narration: row.narration,
@@ -4383,6 +4372,7 @@ function maybeRefreshAttentionRecoveryAfterPrivacyEnd(): void {
   refreshAletheiaAttentionRecoveryState(gapMs);
   if (state.aletheiaAttentionRecovery) {
     speakAletheiaAdviceAck(state.aletheiaAttentionRecovery.spokenBrief);
+    push();
   }
 }
 
@@ -7373,22 +7363,18 @@ async function handleCommand(
       }
 
       setListenNotesPadVisible(false);
-      finalizeAletheiaSession();
-      clearAletheiaActivationState();
-      state.companionModeActive = false;
-      state.companionPresence = null;
-      state.companionMemory = clearCompanionSessionMemory();
-      state.companionWarmupPhase = "none";
-      clearCompanionPrivacyState();
-      resetCompanionAmbientState();
-      stopCompanionDeepgramSession();
-      stopCompanionAnchorWatch();
-      clearAletheiaAgentCoordinatorState(aletheiaAgentCoordinatorHost);
-      clearAletheiaDelegatedPresenceState(aletheiaDelegatedPresenceHost);
-      clearAletheiaDelegatedLoopState(aletheiaDelegatedLoopHost);
-      clearAletheiaResearchConversationState(aletheiaResearchConversationHost);
-      requestAletheiaLoopCancel();
-      pendingLoopDecisionResolver = null;
+      if (state.companionModeActive) {
+        deactivateCompanionMode();
+      } else {
+        finalizeAletheiaSession();
+        clearAletheiaActivationState();
+        clearAletheiaAgentCoordinatorState(aletheiaAgentCoordinatorHost);
+        clearAletheiaDelegatedPresenceState(aletheiaDelegatedPresenceHost);
+        clearAletheiaDelegatedLoopState(aletheiaDelegatedLoopHost);
+        clearAletheiaResearchConversationState(aletheiaResearchConversationHost);
+        requestAletheiaLoopCancel();
+        pendingLoopDecisionResolver = null;
+      }
       push();
       return;
     }
@@ -9261,6 +9247,7 @@ async function handleCommand(
     }
 
     case "update-aletheia-note": {
+      if (!command.body.trim()) return;
       updateAletheiaNote(command.noteId, command.body);
       refreshAletheiaNotesState();
       push();
@@ -11781,6 +11768,7 @@ function applyCompanionModeActivation(): void {
   const gapMs = lastCompanionDeactivatedAt > 0 ? Date.now() - lastCompanionDeactivatedAt : 0;
   refreshAletheiaAttentionRecoveryState(gapMs);
   lastCompanionDeactivatedAt = 0;
+  endedSessionRecoveryHints = null;
   aletheiaPermissionMonitor.setCompanionActive(true);
   aletheiaSidecarManager.setCompanionActive(true);
   beginAletheiaSession(state.activeApp);
@@ -11803,13 +11791,26 @@ function applyCompanionModeActivation(): void {
   refreshAletheiaObservationPlaneState({ forcePush: true, forcePersist: true });
 }
 
-function deactivateCompanionMode(): void {
+function deactivateCompanionMode(sessionSummary?: string): void {
   lastCompanionDeactivatedAt = Date.now();
+  const pendingCards = pendingAletheiaAdviceCards(state.aletheiaPendingAdvice);
+  endedSessionRecoveryHints =
+    pendingCards.length > 0 ? { pendingAdviceCount: pendingCards.length } : null;
+  const resolvedSummary =
+    sessionSummary
+    ?? buildAletheiaSessionEndSummary({
+      turnCount: currentAletheiaSessionTurnCount(),
+      pendingAdviceCount: pendingCards.length,
+      pendingAdviceHeadline: pendingCards[0]?.headline,
+      pendingActionSummary: state.aletheiaActionPipeline?.pendingConfirmation?.summary,
+      frontApp: state.activeApp,
+    });
+
   state.companionModeActive = false;
   state.companionModeToggleNonce += 1;
   aletheiaPermissionMonitor.setCompanionActive(false);
   aletheiaSidecarManager.setCompanionActive(false);
-  finalizeAletheiaSession();
+  finalizeAletheiaSession(resolvedSummary);
   clearAletheiaActivationState();
   state.aletheiaPendingAdvice = undefined;
   state.aletheiaAdviceSpeak = undefined;

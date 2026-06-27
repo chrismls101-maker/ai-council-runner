@@ -340,4 +340,5 @@ test("companionSessionStore.ts exports beginAletheiaSession, finalizeAletheiaSes
   assert.match(src, /export function beginAletheiaSession/, "beginAletheiaSession must be exported");
   assert.match(src, /export function finalizeAletheiaSession/, "finalizeAletheiaSession must be exported");
   assert.match(src, /export function incrementAletheiaSessionTurn/, "incrementAletheiaSessionTurn must be exported");
+  assert.match(src, /export function currentAletheiaSessionTurnCount/, "currentAletheiaSessionTurnCount must be exported");
 });

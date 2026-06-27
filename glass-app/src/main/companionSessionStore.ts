@@ -52,6 +52,10 @@ export function incrementAletheiaSessionTurn(): void {
   _currentAletheiaSessionTurnCount += 1;
 }
 
+export function currentAletheiaSessionTurnCount(): number {
+  return _currentAletheiaSessionTurnCount;
+}
+
 /**
  * Call when companion mode deactivates. Stamps ended_at and turn count in
  * SQLite, then clears module-level session state.

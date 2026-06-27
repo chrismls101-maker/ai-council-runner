@@ -52,3 +52,32 @@ test("buildAletheiaAttentionRecovery returns null for short gaps", () => {
     null,
   );
 });
+
+test("buildAletheiaAttentionRecovery ignores stale agent runs outside gap", () => {
+  const now = Date.now();
+  const recovery = buildAletheiaAttentionRecovery({
+    gapMs: 10 * 60 * 1000,
+    now,
+    agentRun: {
+      agentId: "coder",
+      status: "done",
+      updatedAt: now - 24 * 60 * 60 * 1000,
+    },
+    pendingAdviceCount: 0,
+    ledgerEntries: [],
+  });
+  assert.ok(recovery);
+  assert.ok(!recovery!.highlights.some((line) => line.includes("coder")));
+  assert.equal(recovery!.spokenBrief, "Back after 10 minutes — ready when you are");
+});
+
+test("buildAletheiaAttentionRecovery avoids duplicate back-after phrasing", () => {
+  const recovery = buildAletheiaAttentionRecovery({
+    gapMs: 10 * 60 * 1000,
+    pendingAdviceCount: 0,
+    ledgerEntries: [],
+  });
+  assert.ok(recovery);
+  assert.equal(recovery!.spokenBrief, "Back after 10 minutes — ready when you are");
+  assert.equal(recovery!.spokenBrief.match(/Back after/gi)?.length, 1);
+});

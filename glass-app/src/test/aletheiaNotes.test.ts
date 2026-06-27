@@ -28,6 +28,19 @@ test("selectRelevantAletheiaNotes ranks keyword matches", () => {
   assert.match(relevant[0]!.body, /cross-app context/i);
 });
 
+test("selectRelevantAletheiaNotes strips trailing punctuation from query words", () => {
+  const notes = [
+    createAletheiaNote({
+      body: "Deferred cross-app context dependency",
+      category: "decision",
+      source: "user",
+    }),
+  ];
+  const relevant = selectRelevantAletheiaNotes(notes, "What about context?");
+  assert.equal(relevant.length, 1);
+  assert.match(relevant[0]!.body, /context/i);
+});
+
 test("formatAletheiaNotesContext includes guidance for natural reference", () => {
   const note = createAletheiaNote({
     body: "Ship Phase 3 before Phase 4",

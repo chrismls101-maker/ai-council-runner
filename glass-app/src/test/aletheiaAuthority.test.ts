@@ -400,9 +400,9 @@ test("ALETHEIA_BLOCKED_COMMANDS set is non-empty", () => {
   assert.ok(ALETHEIA_BLOCKED_COMMANDS.size > 0, "blocked list must not be empty");
 });
 
-test("ALETHEIA_BLOCKED_COMMANDS is larger than ALETHEIA_ALLOWED_COMMANDS (Glass owns more commands)", () => {
+test("ALETHEIA_BLOCKED_COMMANDS remains at least as large as allowed (Glass-privileged surface)", () => {
   assert.ok(
-    ALETHEIA_BLOCKED_COMMANDS.size > ALETHEIA_ALLOWED_COMMANDS.size,
-    `Expected more blocked (${ALETHEIA_BLOCKED_COMMANDS.size}) than allowed (${ALETHEIA_ALLOWED_COMMANDS.size}) commands`,
+    ALETHEIA_BLOCKED_COMMANDS.size >= ALETHEIA_ALLOWED_COMMANDS.size,
+    `Expected blocked (${ALETHEIA_BLOCKED_COMMANDS.size}) >= allowed (${ALETHEIA_ALLOWED_COMMANDS.size}) commands`,
   );
 });

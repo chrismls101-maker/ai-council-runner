@@ -80,15 +80,19 @@ export function buildAletheiaAttentionRecovery(
     }
   }
 
-  if (input.agentRun) {
+  if (input.agentRun && input.agentRun.updatedAt >= now - input.gapMs) {
     const agentLine = agentStatusLabel(input.agentRun.agentId, input.agentRun.status);
     if (agentLine) highlights.push(agentLine);
   }
 
   if (input.pendingAdviceCount > 0) {
-    highlights.push(
-      `${input.pendingAdviceCount} pending advice card${input.pendingAdviceCount === 1 ? "" : "s"} waiting for you`,
-    );
+    const summaryCoversAdvice =
+      input.lastSession?.summary?.toLowerCase().includes("advice") === true;
+    if (!summaryCoversAdvice) {
+      highlights.push(
+        `${input.pendingAdviceCount} pending advice card${input.pendingAdviceCount === 1 ? "" : "s"} waiting for you`,
+      );
+    }
   }
 
   const recentLedger = input.ledgerEntries
@@ -111,7 +115,11 @@ export function buildAletheiaAttentionRecovery(
     highlights.push(`Back after ${gapLabel} — ready when you are`);
   }
 
-  const spokenParts = [`Back after ${gapLabel}.`, highlights[0]!];
+  const genericFallback = `Back after ${gapLabel} — ready when you are`;
+  const spokenParts =
+    highlights.length === 1 && highlights[0] === genericFallback
+      ? [genericFallback]
+      : [`Back after ${gapLabel}.`, highlights[0]!];
   if (input.pendingAdviceCount > 0 && !spokenParts[1]!.includes("advice")) {
     spokenParts.push("You have advice waiting.");
   }

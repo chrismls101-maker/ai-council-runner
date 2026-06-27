@@ -91,6 +91,14 @@ function noteSearchText(note: AletheiaNote): string {
   return `${note.body} ${note.rationale ?? ""}`.toLowerCase();
 }
 
+function promptKeywords(prompt: string): string[] {
+  return prompt
+    .toLowerCase()
+    .split(/\s+/)
+    .map((word) => word.replace(/^[^\p{L}\p{N}-]+|[^\p{L}\p{N}-]+$/gu, ""))
+    .filter((word) => word.length > 2);
+}
+
 export function selectRelevantAletheiaNotes(
   notes: readonly AletheiaNote[],
   prompt: string,
@@ -99,10 +107,8 @@ export function selectRelevantAletheiaNotes(
   const trimmed = prompt.trim();
   if (!trimmed || notes.length === 0) return [];
 
-  const words = trimmed
-    .toLowerCase()
-    .split(/\s+/)
-    .filter((word) => word.length > 2);
+  const words = promptKeywords(trimmed);
+  if (words.length === 0) return [];
 
   const scored = notes.map((note) => {
     const haystack = noteSearchText(note);
