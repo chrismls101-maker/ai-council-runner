@@ -2075,6 +2075,7 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
 .overlay-root--workspace-active .code-analyst-explorer,
 .overlay-root--workspace-active .writing-studio,
 .overlay-root--workspace-active .glass-dashboard-shell,
+.overlay-root--workspace-active .aletheia-dashboard-shell,
 .overlay-root--research-active .research-explorer {
   pointer-events: auto;
 }

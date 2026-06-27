@@ -66,6 +66,7 @@ test("COMPANION_LOOKING_SPEECH is a short visual-ask cue", () => {
 test("Aletheia warm-up and ready speech are short intro cues", async () => {
   const {
     COMPANION_WARMING_SPEECH,
+    COMPANION_PRESENCE_SPEECH,
     COMPANION_READY_SPEECH,
     COMPANION_THINKING_SPEECH,
     COMPANION_MACHINE_AUDIO_DISCLOSURE,
@@ -73,7 +74,8 @@ test("Aletheia warm-up and ready speech are short intro cues", async () => {
   } = await import("../shared/glassCompanion.ts");
   assert.equal(ALETHEIA_IDENTITY_NAME, "Aletheia");
   assert.ok(COMPANION_WARMING_SPEECH.length < 80);
-  assert.match(COMPANION_READY_SPEECH, /Aletheia/i);
+  assert.ok(COMPANION_PRESENCE_SPEECH.length < 80);
+  assert.match(COMPANION_PRESENCE_SPEECH, /here/i);
   assert.ok(COMPANION_THINKING_SPEECH.length < 60);
   assert.match(COMPANION_MACHINE_AUDIO_DISCLOSURE, /screen audio/i);
 });

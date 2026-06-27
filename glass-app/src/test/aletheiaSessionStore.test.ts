@@ -268,6 +268,13 @@ test("aletheiaSessionStore.ts exports required functions and type", () => {
   assert.match(src, /export function endAletheiaSession/, "endAletheiaSession must be exported");
   assert.match(src, /export function getRecentAletheiaSessions/, "getRecentAletheiaSessions must be exported");
   assert.match(src, /export function deleteAletheiaSessions/, "deleteAletheiaSessions must be exported");
+  assert.match(src, /export function appendObservationSnapshot/, "appendObservationSnapshot must be exported");
+  assert.match(
+    src,
+    /if \(!sessionId\) return/,
+    "appendObservationSnapshot must skip persistence when sessionId is null",
+  );
+  assert.match(src, /export function getRecentObservationSnapshots/, "getRecentObservationSnapshots must be exported");
 });
 
 test("deleteAletheiaSessions is NOT imported in aletheiaDashboardIpc.ts (Glass Memory admin only)", () => {
@@ -307,6 +314,10 @@ test("IPC channels getAletheiaSessionHistory and deleteAletheiaSessionHistory ar
 test("createAletheiaSessionsTable is called in index.ts after initDatabase", () => {
   const src = readFileSync(join(ROOT, "main", "index.ts"), "utf8");
   assert.match(src, /createAletheiaSessionsTable/, "createAletheiaSessionsTable must be called in index.ts");
+  assert.match(src, /aletheiaObservationPlane/, "aletheiaObservationPlane must be wired in index.ts");
+  assert.match(src, /aletheiaActivation/, "aletheiaActivation must be wired in index.ts");
+  assert.match(src, /aletheiaAmbientSynthesis/, "aletheiaAmbientSynthesis must be wired in index.ts");
+  assert.match(src, /refreshAletheiaObservationPlaneState/, "refreshAletheiaObservationPlaneState must be wired in index.ts");
   // Verify table init appears near initDatabase call
   const initIdx = src.indexOf("initDatabase()");
   const tableIdx = src.indexOf("createAletheiaSessionsTable()");

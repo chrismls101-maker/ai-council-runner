@@ -114,6 +114,9 @@ function formatCompanionBlock(request: GlassAskRequest): string {
   if (request.companionRoute) {
     parts.push(`Route: ${request.companionRoute}`);
   }
+  if (request.companionActivationHint) {
+    parts.push(request.companionActivationHint);
+  }
   if (request.companionUiMap) {
     parts.push(`UI map marks: ${JSON.stringify(request.companionUiMap).slice(0, 6000)}`);
   }

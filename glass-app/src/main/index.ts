@@ -31,6 +31,8 @@ import {
   updateCompanionSessionMemory,
   beginAletheiaSession,
   finalizeAletheiaSession,
+  currentAletheiaSessionId,
+  incrementAletheiaSessionTurn,
 } from "./companionSessionStore.ts";
 import {
   canReuseCompanionCapture,
@@ -346,6 +348,25 @@ import {
   dependencyManifestSnapshotsEqual,
   type AletheiaDependencyManifestSnapshot,
 } from "../shared/aletheiaDependencyManifest.ts";
+import { refreshAletheiaObservationPlane } from "./aletheiaObservationPlane.ts";
+import type { AletheiaObservationSnapshot } from "../shared/aletheiaObservationSignals.ts";
+import { observationSnapshotsEqual } from "../shared/aletheiaObservationSignals.ts";
+import {
+  CLIPBOARD_CONTEXT_SNIPPET_LEN,
+  normalizeClipboardCapture,
+} from "../shared/clipboardPerception.ts";
+import {
+  advanceAletheiaActivationAfterTurn,
+  initialAletheiaActivationState,
+  resolveActivationContextGate,
+  type AletheiaActivationState,
+} from "../shared/aletheiaActivationPolicy.ts";
+import {
+  ambientSynthesisForUserContext,
+  ambientSynthesisSnapshotsEqual,
+  buildAletheiaAmbientSynthesis,
+  type AletheiaAmbientSynthesisSnapshot,
+} from "../shared/aletheiaAmbientSynthesis.ts";
 import { ensurePtySpawnHelperExecutable } from "./glassTerminal.ts";
 import {
   logSessionStart,
@@ -1085,6 +1106,8 @@ interface AppState {
   omniParserInstall: import("../shared/omniParserInstall.ts").OmniParserInstallState;
   /** Last known clipboard text content (polled every 2 s, silent). */
   clipboardText?: string;
+  /** True when clipboard capture was truncated from an oversized paste. */
+  clipboardTruncated?: boolean;
   /** Name of the frontmost app, updated on each app switch. */
   activeApp?: string;
   /** Name of the app that was frontmost before Glass itself took focus. */
@@ -1128,6 +1151,12 @@ interface AppState {
   };
   /** P0.5 — unified dependency manifest + bootstrap snapshot. */
   aletheiaDependencyManifest?: AletheiaDependencyManifestSnapshot;
+  /** B1.1 — passive vs active observation signal instrumentation. */
+  aletheiaObservationPlane?: AletheiaObservationSnapshot;
+  /** B1.2 — presence-first companion activation state. */
+  aletheiaActivation?: AletheiaActivationState;
+  /** B1.3 — cross-signal ambient synthesis snapshot. */
+  aletheiaAmbientSynthesis?: AletheiaAmbientSynthesisSnapshot;
   /** Whether the dock terminal panel is open. */
   glassDockTerminalOpen?: boolean;
   /** Active PTY session id. */
@@ -1799,6 +1828,7 @@ function handleAletheiaPermissionRevocation(
     stopCompanionAnchorWatch();
     aletheiaPermissionMonitor.setCompanionActive(false);
     aletheiaSidecarManager.setCompanionActive(false);
+    clearAletheiaActivationState();
   }
 }
 
@@ -3551,18 +3581,33 @@ function startPerceptionLoop(): void {
   let lastClip = "";
   setInterval(() => {
     const clip = clipboard.readText();
-    if (clip !== lastClip && clip.length > 0 && clip.length < 10000) {
-      lastClip = clip;
-      state.clipboardText = clip;
-      // do NOT call push() here — too noisy; only update state silently
-      // ── Clipboard Intelligence — proactive diagnosis (opt-in) ────────────
-      if (state.glassSettings.clipboardIntelligenceEnabled) {
+    if (clip === lastClip) return;
+
+    lastClip = clip;
+    const { text, truncated } = normalizeClipboardCapture(clip);
+    const hadText = Boolean(state.clipboardText);
+    state.clipboardText = text;
+    state.clipboardTruncated = truncated;
+
+    if (text !== undefined) {
+      refreshAletheiaObservationPlaneState();
+      if (
+        !truncated
+        && state.glassSettings.clipboardIntelligenceEnabled
+        && clip.length > 0
+      ) {
         const cls = classifyClipboard(clip);
         const decision = clipboardIntelGate.decide(clip, cls);
         if (decision.shouldFire) {
           void handleClipboardIntelligence(clip, cls);
         }
       }
+      return;
+    }
+
+    if (hadText) {
+      state.clipboardTruncated = false;
+      refreshAletheiaObservationPlaneState();
     }
   }, 2000);
 
@@ -3968,6 +4013,114 @@ function refreshAletheiaPermissionPlane(now = Date.now()): AletheiaPermissionCon
   return plane;
 }
 
+function buildAletheiaObservationPlaneInput() {
+  const privacyActive = state.companionPrivacy?.active === true;
+  const companionMicActive = state.companionModeActive && !privacyActive;
+  const digestAgeMs = latestDigest ? Date.now() - latestDigest.capturedAt : null;
+  return {
+    companionModeActive: state.companionModeActive,
+    companionPrivacyActive: privacyActive,
+    micListening: state.privacy.listening,
+    micCapturing: state.privacy.capturing,
+    companionMicActive,
+    screenCaptureReady: state.screenCaptureProbe === "ready",
+    screenDigestFresh: isDigestFresh(latestDigest),
+    screenDigestAgeMs: digestAgeMs,
+    clipboardMonitored: true,
+    clipboardHasContent: Boolean(state.clipboardText && state.clipboardText.length > 0),
+    clipboardTruncated: state.clipboardTruncated === true,
+    permissionPlane: state.aletheiaPermissionPlane,
+    sessionId: currentAletheiaSessionId(),
+  };
+}
+
+function refreshAletheiaObservationPlaneState(options?: { forcePush?: boolean; forcePersist?: boolean }) {
+  const previousObservation = state.aletheiaObservationPlane;
+  const previousAmbient = state.aletheiaAmbientSynthesis;
+
+  const snapshot = refreshAletheiaObservationPlane(
+    {
+      buildInput: buildAletheiaObservationPlaneInput,
+      getSnapshot: () => state.aletheiaObservationPlane,
+      setSnapshot: (plane) => {
+        state.aletheiaObservationPlane = plane;
+      },
+      push,
+    },
+    options,
+  );
+  const ambient = refreshAletheiaAmbientSynthesisState();
+
+  const observationChanged = !observationSnapshotsEqual(previousObservation, snapshot);
+  const ambientChanged = !ambientSynthesisSnapshotsEqual(previousAmbient, ambient);
+  if (options?.forcePush || (ambientChanged && !observationChanged)) {
+    push();
+  }
+
+  return snapshot;
+}
+
+function refreshAletheiaAmbientSynthesisState(): AletheiaAmbientSynthesisSnapshot {
+  const snapshot = buildAletheiaAmbientSynthesis({
+    activeApp: state.activeApp,
+    previousApp: state.previousApp,
+    screenDigest: isDigestFresh(latestDigest) ? latestDigest.text : undefined,
+    screenDigestFresh: isDigestFresh(latestDigest),
+    clipboardText: state.clipboardText,
+    terminalBlocks: getRecentTerminalContextBlocks(),
+    observationMode: state.aletheiaObservationPlane?.mode,
+  });
+  state.aletheiaAmbientSynthesis = snapshot;
+  return snapshot;
+}
+
+function beginAletheiaActivationState(): void {
+  state.aletheiaActivation = initialAletheiaActivationState();
+}
+
+function clearAletheiaActivationState(): void {
+  state.aletheiaActivation = undefined;
+}
+
+function resolveAskUserContextForSubmit(
+  prompt: string,
+  companionRoute: CompanionRoute | undefined,
+  gate = resolveActivationContextGate({
+    activation: state.aletheiaActivation,
+    companionModeActive: state.companionModeActive,
+    companionRoute,
+    prompt,
+  }),
+): string | undefined {
+  const profileContext = resolveGlassUserContext(glassContextProfile, glassContextOnboardingSeed());
+
+  refreshAletheiaAmbientSynthesisState();
+
+  let ambientContext: string | undefined;
+  if (state.companionModeActive) {
+    if (gate.requireConfirmObservedContext) {
+      ambientContext = ambientSynthesisForUserContext(state.aletheiaAmbientSynthesis, {
+        confirmOnly: true,
+      });
+    } else if (!gate.suppressAmbientSynthesis) {
+      ambientContext =
+        ambientSynthesisForUserContext(state.aletheiaAmbientSynthesis)
+        ?? resolveGlassAskAmbientSnippets();
+    }
+  } else {
+    ambientContext = resolveGlassAskAmbientSnippets();
+  }
+
+  const includeTerminal =
+    !state.companionModeActive
+    || !gate.suppressAmbientSynthesis
+    || gate.requireConfirmObservedContext;
+  const termCtx = includeTerminal ? getTerminalContextString() : null;
+
+  const parts = [profileContext, ambientContext, termCtx].filter(Boolean);
+  return parts.length > 0 ? parts.join("\n\n") : undefined;
+}
+
 function refreshSetupCapabilities(): void {
   state.setupCapabilities = buildGlassSetupCapabilities({
     platform: process.platform,
@@ -3990,6 +4143,7 @@ function refreshSetupCapabilities(): void {
     lastError: state.lastError,
   });
   refreshAletheiaPermissionPlane();
+  refreshAletheiaObservationPlaneState();
   void aletheiaSidecarManager.refreshNow();
   void refreshAletheiaDependencyManifest();
 }
@@ -4308,6 +4462,9 @@ function snapshot(): GlassState {
     aletheiaSidecarPlane: state.aletheiaSidecarPlane,
     aletheiaSidecarAlert: state.aletheiaSidecarAlert,
     aletheiaDependencyManifest: state.aletheiaDependencyManifest,
+    aletheiaObservationPlane: state.aletheiaObservationPlane,
+    aletheiaActivation: state.aletheiaActivation,
+    aletheiaAmbientSynthesis: state.aletheiaAmbientSynthesis,
     glassDockTerminalOpen: state.glassDockTerminalOpen,
     glassDockTerminalId: state.glassDockTerminalId,
     glassDockTerminalTabs: state.glassDockTerminalTabs,
@@ -5130,15 +5287,21 @@ function glassContextOnboardingSeed(): GlassUserProfile | null {
 
 function resolveGlassAskUserContext(): string | undefined {
   const base = resolveGlassUserContext(glassContextProfile, glassContextOnboardingSeed());
+  const ambient = resolveGlassAskAmbientSnippets();
+  const parts = [base, ambient].filter(Boolean);
+  return parts.length > 0 ? parts.join("\n") : undefined;
+}
+
+function resolveGlassAskAmbientSnippets(): string | undefined {
   const clipboardSnippet =
     state.clipboardText && state.clipboardText.length > 0
-      ? `[Clipboard: "${state.clipboardText.slice(0, 500)}"]`
+      ? `[Clipboard${state.clipboardTruncated ? " (truncated)" : ""}: "${state.clipboardText.slice(0, CLIPBOARD_CONTEXT_SNIPPET_LEN)}"]`
       : undefined;
   const screenDigest =
     isDigestFresh(latestDigest)
       ? `[Screen: ${latestDigest.text}]`
       : undefined;
-  const parts = [base, clipboardSnippet, screenDigest].filter(Boolean);
+  const parts = [clipboardSnippet, screenDigest].filter(Boolean);
   return parts.length > 0 ? parts.join("\n") : undefined;
 }
 
@@ -5779,11 +5942,13 @@ async function submitCommand(
   );
   push();
 
-  const userContext = resolveGlassAskUserContext();
-  const termCtx = getTerminalContextString();
-  const enrichedUserContext = termCtx
-    ? [userContext, termCtx].filter(Boolean).join("\n\n")
-    : userContext;
+  const activationGate = resolveActivationContextGate({
+    activation: state.aletheiaActivation,
+    companionModeActive: state.companionModeActive,
+    companionRoute,
+    prompt: text,
+  });
+  const enrichedUserContext = resolveAskUserContextForSubmit(text, companionRoute, activationGate);
 
   const chatMemorySessionId = randomUUID();
   const windowCtxForSession = getCachedWindowContext();
@@ -5810,6 +5975,9 @@ async function submitCommand(
     companionMemory: state.companionMemory
       ? companionMemoryForAsk(state.companionMemory)
       : undefined,
+    ...(activationGate.companionActivationHint
+      ? { companionActivationHint: activationGate.companionActivationHint }
+      : {}),
     ...(enrichedUserContext ? { userContext: enrichedUserContext } : {}),
   };
 
@@ -5910,6 +6078,13 @@ async function submitCommand(
     }
     if (state.companionModeActive) {
       companionLastResponseAt = Date.now();
+      if (state.aletheiaActivation) {
+        state.aletheiaActivation = advanceAletheiaActivationAfterTurn(
+          state.aletheiaActivation,
+          activationGate.classification,
+        );
+        incrementAletheiaSessionTurn();
+      }
     }
     companionLocalUiMapForAsk = null;
 
@@ -6391,6 +6566,7 @@ async function handleCommand(
 
       setListenNotesPadVisible(false);
       finalizeAletheiaSession();
+      clearAletheiaActivationState();
       state.companionModeActive = false;
       state.companionPresence = null;
       state.companionMemory = clearCompanionSessionMemory();
@@ -7014,74 +7190,21 @@ async function handleCommand(
       push();
       return;
     case "toggle-companion-mode": {
-      // L2.4 consent gate — activation only. Deactivation is always permitted.
-      // If the user has not acknowledged mic consent during onboarding, block
-      // activation silently and push state so the renderer can surface the
-      // consent-required condition (e.g., open Aletheia dashboard → Permissions).
-      if (!state.companionModeActive && !canActivateMicRecording(state.consentState)) {
-        console.warn("[glass] toggle-companion-mode blocked — mic/tos consent not given");
-        push();
-        return;
-      }
-      refreshSetupCapabilities();
-      const companionBlock = permissionPlaneBlocksCompanion(state.aletheiaPermissionPlane);
-      if (!state.companionModeActive && companionBlock) {
-        console.warn("[glass] toggle-companion-mode blocked —", companionBlock);
-        state.lastNotice = companionBlock;
-        push();
-        return;
-      }
-      if (!state.companionModeActive && process.env.IIVO_GLASS_E2E !== "1") {
-        await refreshAletheiaDependencyManifest();
-        const dependencyBlock = dependencyManifestBlocksAletheia(state.aletheiaDependencyManifest);
-        if (dependencyBlock) {
-          console.warn("[glass] toggle-companion-mode blocked —", dependencyBlock);
-          state.lastNotice = dependencyBlock;
-          push();
-          return;
-        }
-        await aletheiaSidecarManager.runBootCheck();
-        const sidecarBlock = sidecarManagerBlocksCompanion(state.aletheiaSidecarPlane);
-        if (sidecarBlock) {
-          console.warn("[glass] toggle-companion-mode blocked —", sidecarBlock);
-          state.lastNotice = sidecarBlock;
-          push();
-          return;
-        }
-      }
-      state.companionModeActive = !state.companionModeActive;
-      state.companionModeToggleNonce += 1;
-      aletheiaPermissionMonitor.setCompanionActive(state.companionModeActive);
-      aletheiaSidecarManager.setCompanionActive(state.companionModeActive);
       if (!state.companionModeActive) {
-        finalizeAletheiaSession();
-        state.companionPresence = null;
-        state.companionMemory = clearCompanionSessionMemory();
-        state.companionWarmupPhase = "none";
-        clearCompanionPrivacyState();
-        resetCompanionAmbientState();
-        stopCompanionDeepgramSession();
-        stopCompanionAnchorWatch();
+        const block = await ensureCompanionModeCanActivate();
+        if (block) {
+          console.warn("[glass] toggle-companion-mode blocked —", block);
+          if (!block.toLowerCase().includes("consent")) {
+            state.lastNotice = block;
+          }
+          push();
+          return;
+        }
+        applyCompanionModeActivation();
       } else {
-        beginAletheiaSession(state.activeApp);
-        // Release command-bar Voice Mode mic before Aletheia listens in overlay.
-        broadcastTranscriptionControl({ type: "stop" });
-        state.companionWarmupPhase = "none";
-        startCompanionDeepgramSession();
-        warmOmniParserSidecarWithCallbacks({
-          onWarming: () => {
-            state.companionWarmupPhase = "warming";
-            state.companionWarmupSpeakNonce += 1;
-            push();
-          },
-          onReady: () => {
-            state.companionWarmupPhase = "ready";
-            state.companionWarmupSpeakNonce += 1;
-            push();
-          },
-        });
+        deactivateCompanionMode();
+        refreshAletheiaObservationPlaneState({ forcePush: true, forcePersist: true });
       }
-      push();
       return;
     }
     case "companion-privacy-start": {
@@ -7099,12 +7222,12 @@ async function handleCommand(
         push();
         broadcast(IPC.companionPrivacyResumed, {});
       }, durationMs);
-      push();
+      refreshAletheiaObservationPlaneState({ forcePush: true, forcePersist: true });
       return;
     }
     case "companion-privacy-end": {
       clearCompanionPrivacyState();
-      push();
+      refreshAletheiaObservationPlaneState({ forcePush: true, forcePersist: true });
       return;
     }
     case "open-glass-setup":
@@ -10755,17 +10878,34 @@ function isValidPtySessionId(termId: unknown): termId is string {
   return typeof termId === "string" && getActivePtySessionIds().includes(termId);
 }
 
-function enableCompanionModeForAgent(): void {
-  if (state.companionModeActive) return;
+async function ensureCompanionModeCanActivate(): Promise<string | null> {
   if (!canActivateMicRecording(state.consentState)) {
-    console.warn("[glass] enableCompanionModeForAgent blocked — mic/tos consent not given");
-    return;
+    return "Mic/tos consent not given";
   }
+  refreshSetupCapabilities();
+  const companionBlock = permissionPlaneBlocksCompanion(state.aletheiaPermissionPlane);
+  if (companionBlock) return companionBlock;
+  if (process.env.IIVO_GLASS_E2E !== "1") {
+    await refreshAletheiaDependencyManifest();
+    const dependencyBlock = dependencyManifestBlocksAletheia(state.aletheiaDependencyManifest);
+    if (dependencyBlock) return dependencyBlock;
+    await aletheiaSidecarManager.runBootCheck();
+    const sidecarBlock = sidecarManagerBlocksCompanion(state.aletheiaSidecarPlane);
+    if (sidecarBlock) return sidecarBlock;
+  }
+  return null;
+}
+
+function applyCompanionModeActivation(): void {
   state.companionModeActive = true;
   state.companionModeToggleNonce += 1;
+  aletheiaPermissionMonitor.setCompanionActive(true);
+  aletheiaSidecarManager.setCompanionActive(true);
   beginAletheiaSession(state.activeApp);
+  beginAletheiaActivationState();
   broadcastTranscriptionControl({ type: "stop" });
   state.companionWarmupPhase = "none";
+  startCompanionDeepgramSession();
   warmOmniParserSidecarWithCallbacks({
     onWarming: () => {
       state.companionWarmupPhase = "warming";
@@ -10778,7 +10918,34 @@ function enableCompanionModeForAgent(): void {
       push();
     },
   });
-  push();
+  refreshAletheiaObservationPlaneState({ forcePush: true, forcePersist: true });
+}
+
+function deactivateCompanionMode(): void {
+  state.companionModeActive = false;
+  state.companionModeToggleNonce += 1;
+  aletheiaPermissionMonitor.setCompanionActive(false);
+  aletheiaSidecarManager.setCompanionActive(false);
+  finalizeAletheiaSession();
+  clearAletheiaActivationState();
+  state.companionPresence = null;
+  state.companionMemory = clearCompanionSessionMemory();
+  state.companionWarmupPhase = "none";
+  clearCompanionPrivacyState();
+  resetCompanionAmbientState();
+  stopCompanionDeepgramSession();
+  stopCompanionAnchorWatch();
+}
+
+async function enableCompanionModeForAgent(): Promise<boolean> {
+  if (state.companionModeActive) return true;
+  const block = await ensureCompanionModeCanActivate();
+  if (block) {
+    console.warn("[glass] enableCompanionModeForAgent blocked —", block);
+    return false;
+  }
+  applyCompanionModeActivation();
+  return true;
 }
 
 function syncAgentRunFromEvent(ev: AgentEvent): boolean {
@@ -11558,7 +11725,7 @@ function registerIpc(): void {
       // agentsAutoActivate flag (default: false) guards public builds from
       // auto-activating companion mode. Must be explicitly enabled server-side.
       if (agentId !== "coder" && state.serverRuntimeFlags?.agentsAutoActivate === true) {
-        enableCompanionModeForAgent();
+        void enableCompanionModeForAgent();
       }
 
       const outputDir = resolveAgentOutputFolder(state.glassSettings);
@@ -13691,6 +13858,7 @@ app.whenReady().then(() =>
       latestDigest = result;
       state.workingContext = result.text;
       state.workingContextAge = result.capturedAt;
+      refreshAletheiaObservationPlaneState();
       push();
     },
     onError: () => {

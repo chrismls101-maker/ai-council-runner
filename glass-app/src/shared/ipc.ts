@@ -1465,6 +1465,12 @@ export interface GlassState {
   };
   /** P0.5 — unified dependency manifest + bootstrap snapshot. */
   aletheiaDependencyManifest?: import("./aletheiaDependencyManifest.ts").AletheiaDependencyManifestSnapshot;
+  /** B1.1 — passive vs active observation signal instrumentation. */
+  aletheiaObservationPlane?: import("./aletheiaObservationSignals.ts").AletheiaObservationSnapshot;
+  /** B1.2 — presence-first companion activation state. */
+  aletheiaActivation?: import("./aletheiaActivationPolicy.ts").AletheiaActivationState;
+  /** B1.3 — cross-signal ambient synthesis snapshot. */
+  aletheiaAmbientSynthesis?: import("./aletheiaAmbientSynthesis.ts").AletheiaAmbientSynthesisSnapshot;
   // ── Design-to-Code Bridge (#163) ─────────────────────────────────────────
   /** Active design capture cards keyed by feed item id. */
   designCaptures?: Record<string, {

@@ -4,6 +4,9 @@ import type { GlassCapabilityRow } from "../../shared/glassCapabilities.ts";
 import type { GlassState, MessageRow, SessionRowWithMeta } from "../../shared/ipc.ts";
 import { formatRelativeTime } from "../../shared/relativeTime.ts";
 import type { PermissionDomainRow } from "../../shared/aletheiaPermissionControlPlane.ts";
+import type { ObservationSignalRow as ObservationSignalRowData } from "../../shared/aletheiaObservationSignals.ts";
+import { observationSignalStatusLabel } from "../../shared/aletheiaObservationSignals.ts";
+import { activationPhaseLabel } from "../../shared/aletheiaActivationPolicy.ts";
 import type { SidecarServiceRow } from "../../shared/aletheiaSidecarManager.ts";
 import type { DependencyRow } from "../../shared/aletheiaDependencyManifest.ts";
 import { send, useGlassState } from "../useGlassState.ts";
@@ -110,6 +113,9 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
   const sidecarPlane = glassState.aletheiaSidecarPlane;
   const sidecarAlert = glassState.aletheiaSidecarAlert;
   const dependencyManifest = glassState.aletheiaDependencyManifest;
+  const observationPlane = glassState.aletheiaObservationPlane;
+  const activation = glassState.aletheiaActivation;
+  const ambientSynthesis = glassState.aletheiaAmbientSynthesis;
 
   return (
     <div
@@ -257,6 +263,12 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
               activeApp={glassState.activeApp}
               hasPresence={Boolean(glassState.companionPresence)}
               warmupPhase={glassState.companionWarmupPhase ?? "none"}
+            />
+            <ObservationPanel
+              observationPlane={observationPlane}
+              activation={activation}
+              ambientSynthesis={ambientSynthesis}
+              companionActive={companionActive}
             />
             <PermissionsPanel
               permissionPlane={permissionPlane}
@@ -497,6 +509,116 @@ function SidecarServiceInstrumentRow({ row }: { row: SidecarServiceRow }): JSX.E
       <p className="aletheia-dashboard__permission-impact">
         {ok ? row.withIt : row.withoutIt}
       </p>
+    </li>
+  );
+}
+
+function ObservationPanel({
+  observationPlane,
+  activation,
+  ambientSynthesis,
+  companionActive,
+}: {
+  observationPlane?: GlassState["aletheiaObservationPlane"];
+  activation?: GlassState["aletheiaActivation"];
+  ambientSynthesis?: GlassState["aletheiaAmbientSynthesis"];
+  companionActive: boolean;
+}): JSX.Element {
+  const modeClass =
+    observationPlane?.mode === "companion_active"
+      ? " aletheia-dashboard__mode-pill--active"
+      : observationPlane?.mode === "passive"
+        ? " aletheia-dashboard__mode-pill--passive"
+        : observationPlane?.mode === "companion_privacy"
+          ? " aletheia-dashboard__mode-pill--privacy"
+          : "";
+
+  return (
+    <section className="aletheia-dashboard__panel" data-testid="aletheia-dashboard-observation">
+      <p className="aletheia-dashboard__panel-label">Observation signals</p>
+      {observationPlane ? (
+        <>
+          <div className="aletheia-dashboard__observation-mode">
+            <span
+              className={`aletheia-dashboard__mode-pill${modeClass}`}
+              data-testid="aletheia-dashboard-observation-mode"
+            >
+              {observationPlane.modeLabel}
+            </span>
+            <p className="aletheia-dashboard__panel-meta">{observationPlane.modeDetail}</p>
+          </div>
+          <p className="aletheia-dashboard__panel-footnote" data-testid="aletheia-dashboard-observation-engagement">
+            {observationPlane.engagementNote}
+          </p>
+          <ul className="aletheia-dashboard__stat-list" data-testid="aletheia-dashboard-observation-signals">
+            {observationPlane.signals.map((row) => (
+              <ObservationSignalInstrument key={row.id} row={row} />
+            ))}
+          </ul>
+          {observationPlane.sessionId ? (
+            <p className="aletheia-dashboard__panel-meta" data-testid="aletheia-dashboard-observation-recall">
+              {observationPlane.sessionSnapshotCount} signal snapshot
+              {observationPlane.sessionSnapshotCount === 1 ? "" : "s"} persisted for this session.
+            </p>
+          ) : null}
+          {companionActive && activation ? (
+            <p className="aletheia-dashboard__panel-meta" data-testid="aletheia-dashboard-activation-phase">
+              Activation: {activationPhaseLabel(activation.phase)}
+              {activation.awaitingUserLead ? " — waiting for you to lead" : ""}
+            </p>
+          ) : null}
+          {ambientSynthesis?.ready && ambientSynthesis.connectedPicture ? (
+            <div data-testid="aletheia-dashboard-ambient-synthesis">
+              <p className="aletheia-dashboard__panel-footnote">Connected picture</p>
+              <p className="aletheia-dashboard__panel-copy">{ambientSynthesis.connectedPicture}</p>
+              {ambientSynthesis.connections.length > 1 ? (
+                <ul className="aletheia-dashboard__stat-list">
+                  {ambientSynthesis.connections.slice(1, 3).map((row) => (
+                    <li key={row.id}>
+                      <span className="aletheia-dashboard__stat-key">{row.signals.join(" + ")}</span>
+                      <span className="aletheia-dashboard__stat-value">{row.insight}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <p className="aletheia-dashboard__panel-meta">Checking observation signals…</p>
+      )}
+    </section>
+  );
+}
+
+function ObservationSignalInstrument({ row }: { row: ObservationSignalRowData }): JSX.Element {
+  const ok = row.status === "active" || row.status === "idle";
+  const statusLabel = observationSignalStatusLabel(row.status);
+  const permissionNote =
+    row.permissionLabel && row.permissionStatus
+      ? `${row.permissionLabel}: ${row.permissionStatus.replace(/_/g, " ")}`
+      : null;
+
+  return (
+    <li className="aletheia-dashboard__permission-instrument" data-testid={`aletheia-observation-${row.id}`}>
+      <div className="aletheia-dashboard__permission-instrument-head">
+        <span className="aletheia-dashboard__stat-key">{row.label}</span>
+        <span
+          className={`aletheia-dashboard__stat-value${
+            row.status === "active"
+              ? " aletheia-dashboard__stat-value--live"
+              : ok
+                ? " aletheia-dashboard__stat-value--ok"
+                : " aletheia-dashboard__stat-value--error"
+          }`}
+        >
+          {statusLabel}
+        </span>
+      </div>
+      <p className="aletheia-dashboard__permission-copy">{row.detail}</p>
+      {permissionNote ? (
+        <p className="aletheia-dashboard__permission-impact">Permission: {permissionNote}</p>
+      ) : null}
     </li>
   );
 }

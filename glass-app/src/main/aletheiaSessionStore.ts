@@ -15,6 +15,7 @@
  *   - Glass Memory admin panel owns export / delete / wipe.
  */
 
+import type { AletheiaObservationSnapshot } from "../shared/aletheiaObservationSignals.ts";
 import { getDb } from "./glassDatabase.ts";
 
 // ---------------------------------------------------------------------------
@@ -29,6 +30,14 @@ export interface AletheiaSessionRow {
   front_app: string | null;
   summary: string | null;
   created_at: number;
+}
+
+export interface AletheiaObservationSnapshotRow {
+  id: number;
+  session_id: string | null;
+  captured_at: number;
+  mode: string;
+  signals_json: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -51,6 +60,17 @@ export function createAletheiaSessionsTable(): void {
       );
       CREATE INDEX IF NOT EXISTS idx_aletheia_sessions_started
         ON aletheia_sessions (started_at DESC);
+    `);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS aletheia_observation_snapshots (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id   TEXT,
+        captured_at  INTEGER NOT NULL,
+        mode         TEXT NOT NULL,
+        signals_json TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_aletheia_observation_session
+        ON aletheia_observation_snapshots (session_id, captured_at DESC);
     `);
   } catch (err) {
     console.error("[aletheiaSessionStore] createAletheiaSessionsTable error:", err);
@@ -103,6 +123,74 @@ export function endAletheiaSession(
     ).run(endedAt, turnCount, safeSummary, id);
   } catch (err) {
     console.error("[aletheiaSessionStore] endAletheiaSession error:", err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Observation signal persistence (B1.1)
+// ---------------------------------------------------------------------------
+
+/**
+ * Persists an observation snapshot for session recall.
+ * Only written during active companion sessions — passive snapshots stay in memory.
+ */
+export function appendObservationSnapshot(
+  sessionId: string | null,
+  snapshot: AletheiaObservationSnapshot,
+): void {
+  if (!sessionId) return;
+  const db = getDb();
+  if (!db) return;
+  try {
+    db.prepare(
+      `INSERT INTO aletheia_observation_snapshots (session_id, captured_at, mode, signals_json)
+       VALUES (?, ?, ?, ?)`,
+    ).run(
+      sessionId,
+      snapshot.updatedAt,
+      snapshot.mode,
+      JSON.stringify(snapshot.signals),
+    );
+  } catch (err) {
+    console.error("[aletheiaSessionStore] appendObservationSnapshot error:", err);
+  }
+}
+
+export function countObservationSnapshotsForSession(sessionId: string): number {
+  const db = getDb();
+  if (!db) return 0;
+  try {
+    const row = db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM aletheia_observation_snapshots WHERE session_id = ?`,
+      )
+      .get(sessionId) as { n: number } | undefined;
+    return row?.n ?? 0;
+  } catch (err) {
+    console.error("[aletheiaSessionStore] countObservationSnapshotsForSession error:", err);
+    return 0;
+  }
+}
+
+export function getRecentObservationSnapshots(
+  sessionId: string,
+  limit: number,
+): AletheiaObservationSnapshotRow[] {
+  const db = getDb();
+  if (!db) return [];
+  try {
+    return db
+      .prepare(
+        `SELECT id, session_id, captured_at, mode, signals_json
+         FROM aletheia_observation_snapshots
+         WHERE session_id = ?
+         ORDER BY captured_at DESC
+         LIMIT ?`,
+      )
+      .all(sessionId, limit) as AletheiaObservationSnapshotRow[];
+  } catch (err) {
+    console.error("[aletheiaSessionStore] getRecentObservationSnapshots error:", err);
+    return [];
   }
 }
 

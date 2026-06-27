@@ -154,6 +154,7 @@ test.describe("IIVO Glass Aletheia", () => {
     await openAletheiaDashboardViaMenu(overlay);
 
     await expect(overlay.locator('[data-testid="aletheia-dashboard-permissions"]')).toBeVisible();
+    await expect(overlay.locator('[data-testid="aletheia-dashboard-observation"]')).toBeVisible();
     await expect(overlay.locator('[data-testid="aletheia-dashboard-services"]')).toBeVisible();
     await expect(overlay.locator('[data-testid="aletheia-dashboard-dependencies"]')).toBeVisible();
     await expect(overlay.locator('[data-testid="aletheia-dashboard-privacy"]')).toBeVisible();
@@ -166,7 +167,9 @@ test.describe("IIVO Glass Aletheia", () => {
         return Boolean(
           s.aletheiaPermissionPlane?.domains.length
           && s.aletheiaSidecarPlane?.services.length
-          && s.aletheiaDependencyManifest?.dependencies.length,
+          && s.aletheiaDependencyManifest?.dependencies.length
+          && s.aletheiaObservationPlane?.signals.length === 3
+          && s.aletheiaAmbientSynthesis?.signalCount !== undefined,
         );
       })
       .toBe(true);

@@ -294,6 +294,47 @@
   color: rgba(254, 202, 202, 0.92);
 }
 
+.aletheia-dashboard__stat-value--live {
+  color: rgba(125, 211, 252, 0.95);
+}
+
+.aletheia-dashboard__observation-mode {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.aletheia-dashboard__mode-pill {
+  align-self: flex-start;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(226, 232, 240, 0.82);
+  background: rgba(148, 163, 184, 0.14);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+.aletheia-dashboard__mode-pill--passive {
+  color: rgba(167, 243, 208, 0.92);
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.28);
+}
+
+.aletheia-dashboard__mode-pill--active {
+  color: rgba(125, 211, 252, 0.95);
+  background: rgba(14, 165, 233, 0.14);
+  border-color: rgba(14, 165, 233, 0.32);
+}
+
+.aletheia-dashboard__mode-pill--privacy {
+  color: rgba(253, 224, 71, 0.92);
+  background: rgba(234, 179, 8, 0.12);
+  border-color: rgba(234, 179, 8, 0.28);
+}
+
 .aletheia-dashboard__panel-copy {
   margin: 0;
   font-size: 13px;

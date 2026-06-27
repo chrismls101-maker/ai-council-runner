@@ -2,7 +2,7 @@ import { useEffect } from "react";
 
 const BUILDER_UI_SELECTOR = ".builder-strip, .builder-panel, .builder-panel-host";
 const FULLSCREEN_WORKSPACE_SELECTOR =
-  ".research-explorer, .code-analyst-explorer, .writing-studio, .glass-dashboard-shell:not(.glass-dashboard-shell--hidden)";
+  ".research-explorer, .code-analyst-explorer, .writing-studio, .glass-dashboard-shell:not(.glass-dashboard-shell--hidden), .aletheia-dashboard-shell:not(.aletheia-dashboard-shell--hidden)";
 
 function isOverBuilderUi(x: number, y: number): boolean {
   const hit = document.elementFromPoint(x, y);

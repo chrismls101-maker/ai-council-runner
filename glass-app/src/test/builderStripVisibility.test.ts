@@ -9,9 +9,24 @@ test("builder strip shows for developer after onboarding", () => {
   );
 });
 
-test("builder strip hidden for non-developer in production", () => {
+test("builder strip shows for general persona when public Aletheia flag is on", () => {
+  assert.equal(
+    shouldShowBuilderStrip({ onboardingComplete: true, persona: "general" }),
+    true,
+  );
   assert.equal(
     shouldShowBuilderStrip({ onboardingComplete: true, persona: "operator" }),
+    true,
+  );
+});
+
+test("builder strip hidden for non-developer when public Aletheia flag is off", () => {
+  assert.equal(
+    shouldShowBuilderStrip({
+      onboardingComplete: true,
+      persona: "operator",
+      aletheiaStripForAllPersonas: false,
+    }),
     false,
   );
 });

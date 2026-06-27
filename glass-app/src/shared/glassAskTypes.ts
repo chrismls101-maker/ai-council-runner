@@ -65,6 +65,8 @@ export interface GlassAskRequest {
   companionUiMap?: import("./companionGuidance.ts").UiMap;
   /** Phase 4a — how Companion should handle this turn. */
   companionRoute?: import("./companionRetarget.ts").CompanionRoute;
+  /** B1.2 — presence-first activation hint for first companion turns. */
+  companionActivationHint?: string;
   /** Phase 4a — prior guidance context for retarget / follow-up. */
   companionMemory?: import("./companionSessionMemory.ts").CompanionMemoryPayload;
   /** When true, server must not inject stored/user profile (session debriefs, etc.). */

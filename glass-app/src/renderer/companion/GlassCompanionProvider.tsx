@@ -38,7 +38,7 @@ import {
 import {
   COMPANION_LOOKING_SPEECH,
   COMPANION_MACHINE_AUDIO_DISCLOSURE,
-  COMPANION_READY_SPEECH,
+  COMPANION_PRESENCE_SPEECH,
   COMPANION_THINKING_SPEECH,
   COMPANION_WARMING_SPEECH,
   COMPANION_LISTEN_RESTART_BASE_MS,
@@ -406,7 +406,7 @@ function useGlassCompanionSession(): GlassCompanionController {
       phase === "warming"
         ? COMPANION_WARMING_SPEECH
         : phase === "ready"
-          ? COMPANION_READY_SPEECH
+          ? COMPANION_PRESENCE_SPEECH
           : null;
     if (!line) return;
 

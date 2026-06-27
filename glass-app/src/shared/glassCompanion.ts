@@ -26,6 +26,9 @@ export const COMPANION_WARMING_SPEECH = "One moment — waking up.";
 /** Spoken once per session when sight is ready after a warm-up. */
 export const COMPANION_READY_SPEECH = "I'm Aletheia — what's on your mind?";
 
+/** B1.2 — presence-first activation: wait for the user, no context synthesis opener. */
+export const COMPANION_PRESENCE_SPEECH = "I'm here when you're ready.";
+
 /** Bridge between visual capture and answer TTS — fills the thinking gap. */
 export const COMPANION_THINKING_SPEECH = "Mm — let me think on that.";
 

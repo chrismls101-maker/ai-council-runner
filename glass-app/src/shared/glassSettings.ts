@@ -310,6 +310,17 @@ export function parseDockPlacement(value: string | undefined): DockPlacement {
   return "left-rail";
 }
 
+/** E2E runs against real userData — force current product chrome without persisting over dev settings. */
+export function e2eChromeLayoutSettings(settings: GlassUserSettings): GlassUserSettings {
+  return {
+    ...settings,
+    chromeLayoutLocked: true,
+    dockPlacement: "left-rail",
+    dockCustomOrigin: null,
+    commandBarCustomOrigin: null,
+  };
+}
+
 export function parseChromeOrigin(value: unknown): ChromeOrigin | null {
   if (!value || typeof value !== "object") return null;
   const record = value as { x?: unknown; y?: unknown };
