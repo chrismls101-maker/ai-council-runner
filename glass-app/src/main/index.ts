@@ -375,6 +375,11 @@ import {
   resolveVoiceAdviceResponse,
   type AletheiaPendingAdviceSnapshot,
 } from "../shared/aletheiaPendingAdvice.ts";
+import {
+  actionResultAckSpeech,
+  resolveVoiceActionConfirmation,
+} from "../shared/aletheiaActionConfirmation.ts";
+import { intentFromAdviceApproval } from "../shared/aletheiaExecution.ts";
 import { refreshAletheiaPendingAdvicePlane } from "./aletheiaPendingAdvicePlane.ts";
 import { ensurePtySpawnHelperExecutable } from "./glassTerminal.ts";
 import {
@@ -4105,10 +4110,37 @@ function speakAletheiaAdviceAck(text: string): void {
   };
 }
 
-function handleAletheiaAdviceDecision(
+async function proposeActionFromApprovedAdvice(
+  card: import("../shared/aletheiaPendingAdvice.ts").AletheiaAdviceCard,
+): Promise<boolean> {
+  const terminalBlock = getLastTerminalErrorBlock();
+  const intent = intentFromAdviceApproval({
+    sessionId: currentAletheiaActionSessionId(),
+    adviceId: card.id,
+    kind: card.kind,
+    headline: card.headline,
+    body: card.body,
+    command: terminalBlock?.command,
+    targetApp: state.activeApp,
+  });
+  if (!intent) return false;
+
+  try {
+    ensureGlassTerminalSession();
+    state.glassDockTerminalOpen = true;
+    showGlassTerminalWindowUnlessIde();
+  } catch {
+    /* terminal optional — shell still runs */
+  }
+
+  await aletheiaActionOrchestrator.proposeIntent(intent);
+  return true;
+}
+
+async function handleAletheiaAdviceDecision(
   adviceId: string,
   decision: "approve" | "dismiss",
-): void {
+): Promise<void> {
   const snapshot = state.aletheiaPendingAdvice;
   if (!snapshot) return;
 
@@ -4120,17 +4152,67 @@ function handleAletheiaAdviceDecision(
       ? approveAletheiaAdvice(snapshot, adviceId)
       : dismissAletheiaAdvice(snapshot, adviceId);
 
-  speakAletheiaAdviceAck(
-    decision === "approve" ? adviceApprovalAckSpeech(card) : adviceDismissAckSpeech(),
-  );
+  if (decision === "approve") {
+    const proposed = await proposeActionFromApprovedAdvice(card);
+    speakAletheiaAdviceAck(
+      proposed
+        ? "Review the action below — I'll wait for your confirmation before running anything."
+        : adviceApprovalAckSpeech(card),
+    );
+  } else {
+    speakAletheiaAdviceAck(adviceDismissAckSpeech());
+  }
   push();
+}
+
+async function handleAletheiaActionConfirmation(
+  intentId: string,
+  decision: "approve" | "reject",
+  confirmedBy: "user-tap" | "user-voice" = "user-tap",
+): Promise<void> {
+  if (decision === "approve") {
+    await aletheiaActionOrchestrator.confirmAction(intentId, confirmedBy);
+  } else {
+    await aletheiaActionOrchestrator.rejectAction(intentId);
+  }
+
+  const last = state.aletheiaActionPipeline?.lastResult;
+  if (last && last.intentId === intentId) {
+    speakAletheiaAdviceAck(actionResultAckSpeech(last.ok, last.message));
+  } else if (decision === "reject") {
+    speakAletheiaAdviceAck("Okay — I won't run that.");
+  }
+}
+
+function tryHandleVoiceActionConfirmation(text: string): boolean {
+  if (!state.companionModeActive || state.companionPrivacy?.active) return false;
+  const resolution = resolveVoiceActionConfirmation(text, state.aletheiaActionPipeline);
+  if (!resolution) return false;
+
+  const intentId = state.aletheiaActionPipeline?.pendingConfirmation?.intentId;
+  if (!intentId) return false;
+
+  if (resolution.decision === "modify") {
+    void aletheiaActionOrchestrator.modifyAction(intentId, resolution.modifier).then(() => {
+      speakAletheiaAdviceAck("Updated — review the revised action and confirm when ready.");
+      push();
+    });
+    return true;
+  }
+
+  void handleAletheiaActionConfirmation(
+    intentId,
+    resolution.decision === "approve" ? "approve" : "reject",
+    "user-voice",
+  );
+  return true;
 }
 
 function tryHandleVoiceAdviceResponse(text: string): boolean {
   if (!state.companionModeActive || state.companionPrivacy?.active) return false;
   const resolution = resolveVoiceAdviceResponse(text, state.aletheiaPendingAdvice);
   if (!resolution) return false;
-  handleAletheiaAdviceDecision(resolution.adviceId, resolution.decision);
+  void handleAletheiaAdviceDecision(resolution.adviceId, resolution.decision);
   return true;
 }
 
@@ -5509,6 +5591,10 @@ async function submitCommand(
   const text = (contextPrefix + rawText).trim();
 
   if (state.companionPrivacy?.active) {
+    return;
+  }
+
+  if (tryHandleVoiceActionConfirmation(rawText.trim())) {
     return;
   }
 
@@ -8464,12 +8550,19 @@ async function handleCommand(
     }
 
     case "confirm-aletheia-action": {
-      await aletheiaActionOrchestrator.confirmAction(command.intentId, "user-tap");
+      await handleAletheiaActionConfirmation(command.intentId, "approve", "user-tap");
       return;
     }
 
     case "reject-aletheia-action": {
-      await aletheiaActionOrchestrator.rejectAction(command.intentId);
+      await handleAletheiaActionConfirmation(command.intentId, "reject", "user-tap");
+      return;
+    }
+
+    case "modify-aletheia-action": {
+      await aletheiaActionOrchestrator.modifyAction(command.intentId, command.modifier);
+      speakAletheiaAdviceAck("Updated — review the revised action and confirm when ready.");
+      push();
       return;
     }
 
@@ -8497,12 +8590,12 @@ async function handleCommand(
     }
 
     case "approve-aletheia-advice": {
-      handleAletheiaAdviceDecision(command.adviceId, "approve");
+      await handleAletheiaAdviceDecision(command.adviceId, "approve");
       return;
     }
 
     case "dismiss-aletheia-advice": {
-      handleAletheiaAdviceDecision(command.adviceId, "dismiss");
+      await handleAletheiaAdviceDecision(command.adviceId, "dismiss");
       return;
     }
 

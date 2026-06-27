@@ -34,6 +34,11 @@ export const ALETHEIA_ALLOWED_COMMANDS = new Set([
   // B2.1 — advise-then-wait queue (session control, not Glass infra)
   "approve-aletheia-advice",    // User tapped approve on pending advice card
   "dismiss-aletheia-advice",    // User tapped dismiss on pending advice card
+
+  // B2.2 — act-with-confirmation (orchestrator pipeline control)
+  "confirm-aletheia-action",    // User confirmed a pending action intent
+  "reject-aletheia-action",     // User rejected a pending action intent
+  "modify-aletheia-action",     // User revised a pending action before confirm
 ] as const);
 
 export type AletheiaAllowedCommand = typeof ALETHEIA_ALLOWED_COMMANDS extends Set<infer T>

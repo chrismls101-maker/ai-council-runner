@@ -9,7 +9,31 @@ import {
   formatComputerUseRouteNarration,
   routeAndTypeText,
 } from "./aletheiaComputerUseExecutor.ts";
-import { writeFile } from "./glassActions.ts";
+import { runShellCommand, writeFile } from "./glassActions.ts";
+
+const SHELL_OUTPUT_MAX = 8_000;
+
+function runShellCommandOnce(command: string): Promise<{ ok: boolean; output: string; exitCode: number | null }> {
+  return new Promise((resolve) => {
+    let output = "";
+    const cancel = runShellCommand(
+      command,
+      (chunk) => {
+        if (output.length < SHELL_OUTPUT_MAX) {
+          output += chunk;
+        }
+      },
+      (exitCode) => {
+        const ok = exitCode === 0;
+        resolve({
+          ok,
+          output: output.trim() || (ok ? "Command completed with no output." : "Command failed."),
+          exitCode,
+        });
+      },
+    );
+  });
+}
 
 export async function executeActionIntent(intent: ActionIntent): Promise<ActionResult> {
   const started = Date.now();
@@ -48,6 +72,17 @@ export async function executeActionIntent(intent: ActionIntent): Promise<ActionR
           durationMs: Date.now() - started,
         };
       }
+      case "shell": {
+        const command = String(intent.payload.command ?? "");
+        const result = await runShellCommandOnce(command);
+        return {
+          ...base,
+          ok: result.ok,
+          output: result.ok ? result.output : undefined,
+          errorMessage: result.ok ? undefined : result.output,
+          durationMs: Date.now() - started,
+        };
+      }
       default:
         return {
           ...base,
@@ -77,6 +112,10 @@ export async function verifyActionResult(intent: ActionIntent, result: ActionRes
 
   if (intent.kind === "keystroke") {
     // Keystroke injection has no durable artifact to verify — executor ok is sufficient.
+    return result;
+  }
+
+  if (intent.kind === "shell") {
     return result;
   }
 

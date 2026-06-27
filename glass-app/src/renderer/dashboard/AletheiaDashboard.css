@@ -577,3 +577,74 @@
   font-weight: 500;
   color: rgba(196, 181, 253, 0.95);
 }
+
+.aletheia-dashboard__confirm-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  background: rgba(14, 116, 144, 0.12);
+}
+
+.aletheia-dashboard__confirm-line {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(226, 232, 240, 0.88);
+}
+
+.aletheia-dashboard__confirm-key {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.82);
+  margin-bottom: 2px;
+}
+
+.aletheia-dashboard__confirm-preview {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(2, 6, 23, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  font-size: 11px;
+  line-height: 1.4;
+  color: rgba(226, 232, 240, 0.92);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.aletheia-dashboard__confirm-modify {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.aletheia-dashboard__confirm-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(2, 6, 23, 0.45);
+  color: rgba(248, 250, 252, 0.94);
+  font-size: 12px;
+}
+
+.aletheia-dashboard__confirm-result {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.aletheia-dashboard__confirm-result--ok .aletheia-dashboard__panel-copy {
+  color: rgba(167, 243, 208, 0.92);
+}
+
+.aletheia-dashboard__confirm-result--error .aletheia-dashboard__panel-copy {
+  color: rgba(252, 165, 165, 0.92);
+}

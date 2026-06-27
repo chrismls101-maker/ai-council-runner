@@ -12,6 +12,8 @@ import type {
   PipelineState,
 } from "../shared/aletheiaExecution.ts";
 import {
+  applyActionModifier,
+  buildPendingConfirmationView,
   confirmationFromUserTap,
   intentFromKeystrokes,
   intentFromWriteFile,
@@ -107,6 +109,24 @@ export class AletheiaActionOrchestrator {
     await this.runPipeline(intent, input.userInitiated ? confirmationFromUserTap(intent.id) : undefined);
   }
 
+  /** Propose an intent that stops at awaiting-confirmation (B2.2). */
+  async proposeIntent(intent: ActionIntent): Promise<void> {
+    await this.runPipeline(intent, undefined);
+  }
+
+  async modifyAction(intentId: string, modifier: string): Promise<void> {
+    const intent = this.pendingIntents.get(intentId);
+    if (!intent) return;
+
+    const revised = applyActionModifier(intent, modifier);
+    this.pendingIntents.set(intentId, revised);
+    const awaiting = this.recordStage(revised, "awaiting-confirmation");
+    this.syncPipeline({
+      pendingConfirmation: buildPendingConfirmationView(revised, awaiting.narration),
+    });
+    this.host.push();
+  }
+
   async confirmAction(intentId: string, confirmedBy: ActionConfirmation["confirmedBy"] = "user-tap"): Promise<void> {
     const intent = this.pendingIntents.get(intentId);
     if (!intent) {
@@ -167,16 +187,7 @@ export class AletheiaActionOrchestrator {
         this.pendingIntents.set(intent.id, intent);
         const awaiting = this.recordStage(intent, "awaiting-confirmation");
         this.syncPipeline({
-          pendingConfirmation: {
-            intentId: intent.id,
-            kind: intent.kind,
-            summary: intent.summary,
-            rationale: intent.rationale,
-            scopeDescription: intent.scope.description,
-            narration: awaiting.narration,
-            requestedAt: intent.requestedAt,
-            glassActionId: intent.glassActionId,
-          },
+          pendingConfirmation: buildPendingConfirmationView(intent, awaiting.narration),
         });
         if (intent.glassActionId) {
           this.host.setActionResult({

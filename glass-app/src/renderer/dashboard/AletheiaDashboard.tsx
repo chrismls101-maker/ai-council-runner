@@ -9,6 +9,7 @@ import { observationSignalStatusLabel } from "../../shared/aletheiaObservationSi
 import { activationPhaseLabel } from "../../shared/aletheiaActivationPolicy.ts";
 import { pendingAletheiaAdviceCards } from "../../shared/aletheiaPendingAdvice.ts";
 import type { AletheiaAdviceCard } from "../../shared/aletheiaPendingAdvice.ts";
+import { formatActionConfirmationCard } from "../../shared/aletheiaActionConfirmation.ts";
 import type { SidecarServiceRow } from "../../shared/aletheiaSidecarManager.ts";
 import type { DependencyRow } from "../../shared/aletheiaDependencyManifest.ts";
 import { send, useGlassState } from "../useGlassState.ts";
@@ -119,6 +120,7 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
   const activation = glassState.aletheiaActivation;
   const ambientSynthesis = glassState.aletheiaAmbientSynthesis;
   const pendingAdvice = glassState.aletheiaPendingAdvice;
+  const actionPipeline = glassState.aletheiaActionPipeline;
 
   const handleApproveAdvice = useCallback((adviceId: string): void => {
     dispatchAletheiaCommand("approve-aletheia-advice", { adviceId });
@@ -126,6 +128,18 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
 
   const handleDismissAdvice = useCallback((adviceId: string): void => {
     dispatchAletheiaCommand("dismiss-aletheia-advice", { adviceId });
+  }, []);
+
+  const handleConfirmAction = useCallback((intentId: string): void => {
+    dispatchAletheiaCommand("confirm-aletheia-action", { intentId });
+  }, []);
+
+  const handleRejectAction = useCallback((intentId: string): void => {
+    dispatchAletheiaCommand("reject-aletheia-action", { intentId });
+  }, []);
+
+  const handleModifyAction = useCallback((intentId: string, modifier: string): void => {
+    dispatchAletheiaCommand("modify-aletheia-action", { intentId, modifier });
   }, []);
 
   return (
@@ -286,6 +300,13 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
               pendingAdvice={pendingAdvice}
               onApprove={handleApproveAdvice}
               onDismiss={handleDismissAdvice}
+            />
+            <ActionConfirmationPanel
+              companionActive={companionActive}
+              actionPipeline={actionPipeline}
+              onConfirm={handleConfirmAction}
+              onReject={handleRejectAction}
+              onModify={handleModifyAction}
             />
             <PermissionsPanel
               permissionPlane={permissionPlane}
@@ -545,7 +566,7 @@ function PendingAdvicePanel({
 
   return (
     <section className="aletheia-dashboard__panel" data-testid="aletheia-dashboard-pending-advice">
-      <p className="aletheia-dashboard__panel-label">Pending actions</p>
+      <p className="aletheia-dashboard__panel-label">Pending advice</p>
       {!companionActive ? (
         <p className="aletheia-dashboard__panel-copy">
           Activate Aletheia to receive advice — she waits for your go before acting.
@@ -568,8 +589,116 @@ function PendingAdvicePanel({
       )}
       {companionActive && pending.length > 0 ? (
         <p className="aletheia-dashboard__panel-footnote">
-          Say yes or no — or tap approve / dismiss. Aletheia will not act until you decide.
+          Approve to review a concrete action — execution still requires a second confirmation.
         </p>
+      ) : null}
+    </section>
+  );
+}
+
+function ActionConfirmationPanel({
+  companionActive,
+  actionPipeline,
+  onConfirm,
+  onReject,
+  onModify,
+}: {
+  companionActive: boolean;
+  actionPipeline?: GlassState["aletheiaActionPipeline"];
+  onConfirm: (intentId: string) => void;
+  onReject: (intentId: string) => void;
+  onModify: (intentId: string, modifier: string) => void;
+}): JSX.Element {
+  const pending = actionPipeline?.pendingConfirmation;
+  const card = pending ? formatActionConfirmationCard(pending) : null;
+  const lastResult = actionPipeline?.lastResult;
+  const [modifier, setModifier] = useState("");
+
+  useEffect(() => {
+    setModifier("");
+  }, [pending?.intentId]);
+
+  return (
+    <section className="aletheia-dashboard__panel" data-testid="aletheia-dashboard-action-confirmation">
+      <p className="aletheia-dashboard__panel-label">Action confirmation</p>
+      {!companionActive ? (
+        <p className="aletheia-dashboard__panel-copy">
+          Activate Aletheia to confirm actions she proposes.
+        </p>
+      ) : card ? (
+        <div className="aletheia-dashboard__confirm-card" data-testid="aletheia-dashboard-confirm-card">
+          <p className="aletheia-dashboard__confirm-line">
+            <span className="aletheia-dashboard__confirm-key">Aletheia will run</span>
+            {card.runLine}
+          </p>
+          <p className="aletheia-dashboard__confirm-line">
+            <span className="aletheia-dashboard__confirm-key">On</span>
+            {card.targetLine}
+          </p>
+          <p className="aletheia-dashboard__confirm-line">
+            <span className="aletheia-dashboard__confirm-key">Reason</span>
+            {card.reasonLine}
+          </p>
+          {card.commandPreview ? (
+            <pre className="aletheia-dashboard__confirm-preview" data-testid="aletheia-dashboard-confirm-preview">
+              {card.commandPreview}
+            </pre>
+          ) : null}
+          <label className="aletheia-dashboard__confirm-modify">
+            <span className="aletheia-dashboard__confirm-key">Modify</span>
+            <input
+              type="text"
+              className="aletheia-dashboard__confirm-input"
+              data-testid="aletheia-dashboard-confirm-modify-input"
+              placeholder="Change it to npm test"
+              value={modifier}
+              onChange={(event) => setModifier(event.target.value)}
+            />
+          </label>
+          <div className="aletheia-dashboard__panel-actions">
+            <button
+              type="button"
+              className="aletheia-dashboard__activate"
+              data-testid="aletheia-dashboard-confirm-approve"
+              onClick={() => onConfirm(card.intentId)}
+            >
+              Approve
+            </button>
+            <button
+              type="button"
+              className="aletheia-dashboard__secondary-btn"
+              data-testid="aletheia-dashboard-confirm-modify"
+              disabled={!modifier.trim()}
+              onClick={() => onModify(card.intentId, modifier.trim())}
+            >
+              Apply change
+            </button>
+            <button
+              type="button"
+              className="aletheia-dashboard__secondary-btn"
+              data-testid="aletheia-dashboard-confirm-reject"
+              onClick={() => onReject(card.intentId)}
+            >
+              Reject
+            </button>
+          </div>
+          <p className="aletheia-dashboard__panel-footnote">
+            Say yes, no, or &quot;change it to…&quot; — nothing runs until you approve.
+          </p>
+        </div>
+      ) : (
+        <p className="aletheia-dashboard__panel-copy" data-testid="aletheia-dashboard-confirm-empty">
+          No action awaiting confirmation.
+        </p>
+      )}
+      {lastResult ? (
+        <div
+          className={`aletheia-dashboard__confirm-result${lastResult.ok ? " aletheia-dashboard__confirm-result--ok" : " aletheia-dashboard__confirm-result--error"}`}
+          data-testid="aletheia-dashboard-confirm-result"
+        >
+          <p className="aletheia-dashboard__confirm-key">Last result</p>
+          <p className="aletheia-dashboard__panel-copy">{lastResult.message}</p>
+        </div>
       ) : null}
     </section>
   );

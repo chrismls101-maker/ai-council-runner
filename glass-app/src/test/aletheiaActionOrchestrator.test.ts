@@ -108,6 +108,61 @@ test("unconfirmed intent stops at awaiting-confirmation", async () => {
   assert.equal(snapshot?.pendingConfirmation?.glassActionId, "test-write-2");
 });
 
+test("modifyAction revises pending shell command", async () => {
+  let snapshot: AletheiaActionPipelineSnapshot | undefined;
+  const { intentFromShell } = await import("../shared/aletheiaExecution.ts");
+
+  const orchestrator = new AletheiaActionOrchestrator(
+    {
+      getPipelineSnapshot: () => snapshot,
+      setPipelineSnapshot: (next) => {
+        snapshot = next;
+      },
+      setActionResult: () => {},
+      getSessionId: () => "test-session",
+      push: () => {},
+    },
+    memoryLedger().port,
+    mockExecutor(),
+  );
+
+  await orchestrator.proposeIntent(
+    intentFromShell({ command: "npm test", sessionId: "test-session" }),
+  );
+
+  const intentId = snapshot?.pendingConfirmation?.intentId;
+  assert.ok(intentId);
+
+  await orchestrator.modifyAction(intentId!, "change it to npm run lint");
+  assert.equal(snapshot?.pendingConfirmation?.commandPreview, "npm run lint");
+});
+
+test("proposeIntent stops at awaiting-confirmation", async () => {
+  let snapshot: AletheiaActionPipelineSnapshot | undefined;
+  const { intentFromShell } = await import("../shared/aletheiaExecution.ts");
+
+  const orchestrator = new AletheiaActionOrchestrator(
+    {
+      getPipelineSnapshot: () => snapshot,
+      setPipelineSnapshot: (next) => {
+        snapshot = next;
+      },
+      setActionResult: () => {},
+      getSessionId: () => "test-session",
+      push: () => {},
+    },
+    memoryLedger().port,
+    mockExecutor(),
+  );
+
+  await orchestrator.proposeIntent(
+    intentFromShell({ command: "npm test", sessionId: "test-session" }),
+  );
+
+  assert.ok(snapshot?.pendingConfirmation);
+  assert.equal(snapshot?.pendingConfirmation?.targetDescription, "Glass shell");
+});
+
 test("confirmAction executes pending intent", async () => {
   let snapshot: AletheiaActionPipelineSnapshot | undefined;
   let actionResult:

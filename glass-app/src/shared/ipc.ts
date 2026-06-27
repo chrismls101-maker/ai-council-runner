@@ -1038,6 +1038,8 @@ export type GlassCommand =
   | { type: "approve-aletheia-advice"; adviceId: string }
   /** B2.1 — dismiss a pending Aletheia advice card without acting. */
   | { type: "dismiss-aletheia-advice"; adviceId: string }
+  /** B2.2 — modify a pending Aletheia action before confirmation. */
+  | { type: "modify-aletheia-action"; intentId: string; modifier: string }
   // ── Glass built-in terminal (PTY) ─────────────────────────────────────────
   | { type: "glass-terminal-open" }
   | { type: "glass-terminal-close" }

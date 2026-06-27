@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { AletheiaAdviceKind } from "./aletheiaPendingAdvice.ts";
 
 export type ActionKind = "shell" | "file-write" | "file-apply" | "keystroke" | "app-control" | "research" | "delegated";
 
@@ -83,6 +84,8 @@ export interface AletheiaActionPipelineSnapshot {
     summary: string;
     rationale: string;
     scopeDescription: string;
+    targetDescription: string;
+    commandPreview?: string;
     narration: string;
     requestedAt: number;
     glassActionId?: string;
@@ -195,6 +198,147 @@ export function intentFromKeystrokes(input: {
     requestedAt: Date.now(),
     glassActionId: input.id,
   };
+}
+
+/** Build intent from an approved Aletheia advice card (B2.2 bridge). */
+export function intentFromAdviceApproval(input: {
+  sessionId: string;
+  adviceId: string;
+  kind: AletheiaAdviceKind;
+  headline: string;
+  body: string;
+  command?: string;
+  targetApp?: string;
+}): ActionIntent | null {
+  if (input.kind === "terminal_error" && input.command?.trim()) {
+    const command = input.command.trim();
+    return intentFromShell({
+      command,
+      sessionId: input.sessionId,
+      rationale: input.body,
+      targetApp: input.targetApp,
+      glassActionId: `advice-${input.adviceId}`,
+    });
+  }
+  return null;
+}
+
+/** Build intent from a shell command proposal. */
+export function intentFromShell(input: {
+  command: string;
+  sessionId: string;
+  rationale?: string;
+  targetApp?: string;
+  id?: string;
+  glassActionId?: string;
+}): ActionIntent {
+  const command = input.command.trim();
+  const preview =
+    command.length > 72 ? `${command.slice(0, 72)}…` : command;
+  return {
+    id: input.id ?? makeIntentId(),
+    sessionId: input.sessionId,
+    kind: "shell",
+    summary: `Run shell command: ${preview}`,
+    rationale: input.rationale ?? "User approved Aletheia's suggested investigation.",
+    scope: {
+      description: `Single shell command in Glass terminal context`,
+      targetApp: input.targetApp,
+    },
+    payload: {
+      command,
+      targetApp: input.targetApp,
+    },
+    requestedAt: Date.now(),
+    glassActionId: input.glassActionId,
+  };
+}
+
+export function targetDescriptionForIntent(intent: ActionIntent): string {
+  if (intent.scope.targetApp) return intent.scope.targetApp;
+  if (intent.kind === "shell") return "Glass shell";
+  if (intent.kind === "file-write" || intent.kind === "file-apply") {
+    return String(intent.payload.path ?? "file system");
+  }
+  if (intent.kind === "keystroke") {
+    return String(intent.payload.targetApp ?? "active app");
+  }
+  return intent.scope.description;
+}
+
+export function commandPreviewForIntent(intent: ActionIntent): string | undefined {
+  if (intent.kind === "shell") {
+    return typeof intent.payload.command === "string" ? intent.payload.command : undefined;
+  }
+  if (intent.kind === "keystroke") {
+    const text = typeof intent.payload.text === "string" ? intent.payload.text : "";
+    if (!text) return undefined;
+    return text.length > 80 ? `${text.slice(0, 80)}…` : text;
+  }
+  if (intent.kind === "file-write" || intent.kind === "file-apply") {
+    return typeof intent.payload.path === "string" ? intent.payload.path : undefined;
+  }
+  return undefined;
+}
+
+export function buildPendingConfirmationView(intent: ActionIntent, narration: string) {
+  return {
+    intentId: intent.id,
+    kind: intent.kind,
+    summary: intent.summary,
+    rationale: intent.rationale,
+    scopeDescription: intent.scope.description,
+    targetDescription: targetDescriptionForIntent(intent),
+    commandPreview: commandPreviewForIntent(intent),
+    narration,
+    requestedAt: intent.requestedAt,
+    glassActionId: intent.glassActionId,
+  };
+}
+
+/** Apply a user modifier to a pending intent payload (B2.2). */
+export function applyActionModifier(intent: ActionIntent, modifier: string): ActionIntent {
+  const trimmed = modifier.trim();
+  if (!trimmed) return intent;
+
+  if (intent.kind === "shell") {
+    const command = extractShellCommandFromModifier(trimmed) ?? trimmed;
+    return {
+      ...intent,
+      summary: `Run shell command: ${command.length > 72 ? `${command.slice(0, 72)}…` : command}`,
+      payload: { ...intent.payload, command },
+    };
+  }
+
+  if (intent.kind === "keystroke") {
+    const text = extractTextFromModifier(trimmed) ?? trimmed;
+    return {
+      ...intent,
+      summary: `Type text into ${intent.scope.targetApp ?? "active app"}`,
+      payload: { ...intent.payload, text },
+    };
+  }
+
+  return intent;
+}
+
+function extractShellCommandFromModifier(text: string): string | undefined {
+  const patterns = [
+    /\bchange it to\s+(.+)/i,
+    /\binstead run\s+(.+)/i,
+    /\brun\s+(.+)\s+instead/i,
+    /\buse\s+(.+)\s+instead/i,
+  ];
+  for (const re of patterns) {
+    const match = text.match(re);
+    if (match?.[1]?.trim()) return match[1].trim();
+  }
+  return undefined;
+}
+
+function extractTextFromModifier(text: string): string | undefined {
+  const match = text.match(/\btype\s+(.+)/i);
+  return match?.[1]?.trim();
 }
 
 export function confirmationFromUserTap(intentId: string): ActionConfirmation {
