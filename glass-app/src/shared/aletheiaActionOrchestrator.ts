@@ -282,7 +282,6 @@ export class AletheiaActionOrchestrator {
     if (boundedLoop && confirmation && this.host.runBoundedLoop) {
       const loopResult = await this.host.runBoundedLoop(intent, confirmation);
       const finalStage = loopResult.ok ? "complete" : "failed";
-      this.recordStage(intent, finalStage);
       this.syncPipeline({
         pendingConfirmation: undefined,
         lastResult: {

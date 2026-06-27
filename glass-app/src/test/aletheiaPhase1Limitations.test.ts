@@ -45,6 +45,16 @@ test("enableCompanionModeForAgent gates activation and delegates to shared apply
   );
 });
 
+test("handleAletheiaActionConfirmation broadcasts speech after confirm", () => {
+  const src = readFileSync(join(ROOT, "main", "index.ts"), "utf8");
+  const fn = src.slice(src.indexOf("async function handleAletheiaActionConfirmation"));
+  assert.match(
+    fn.slice(0, fn.indexOf("function tryHandleVoiceActionConfirmation")),
+    /speakAletheiaAdviceAck[\s\S]*push\(\)/,
+    "action confirmation must push state after speaking result",
+  );
+});
+
 test("applyCompanionModeActivation starts Deepgram companion session", () => {
   const src = readFileSync(join(ROOT, "main", "index.ts"), "utf8");
   const fn = src.slice(src.indexOf("function applyCompanionModeActivation"));

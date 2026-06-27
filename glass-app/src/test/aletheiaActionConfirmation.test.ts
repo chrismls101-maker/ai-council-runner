@@ -65,6 +65,22 @@ describe("applyActionModifier", () => {
     const revised = applyActionModifier(intent, "change it to npm run lint");
     assert.equal(revised.payload.command, "npm run lint");
   });
+
+  test("updates bounded scope declaration when shell command changes", () => {
+    const intent = intentFromAdviceApproval({
+      sessionId: "s1",
+      adviceId: "advice-1",
+      kind: "terminal_error",
+      headline: "Error",
+      body: "Terminal shows a failure.",
+      command: "npm test",
+      targetApp: "Cursor",
+    });
+    assert.ok(intent);
+    const revised = applyActionModifier(intent!, "change it to npm run lint");
+    assert.equal(revised.payload.command, "npm run lint");
+    assert.match(String((revised.payload.boundedLoop as { scopeDeclaration?: string } | undefined)?.scopeDeclaration ?? ""), /npm run lint/);
+  });
 });
 
 describe("intentFromAdviceApproval", () => {

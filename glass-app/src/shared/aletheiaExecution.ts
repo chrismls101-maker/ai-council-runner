@@ -326,10 +326,32 @@ export function applyActionModifier(intent: ActionIntent, modifier: string): Act
 
   if (intent.kind === "shell") {
     const command = extractShellCommandFromModifier(trimmed) ?? trimmed;
+    const preview = command.length > 72 ? `${command.slice(0, 72)}…` : command;
+    const bounded = readBoundedLoopConfig(intent.payload);
+    const nextPayload: Record<string, unknown> = { ...intent.payload, command };
+    if (bounded) {
+      const scopeDeclaration = buildTerminalInvestigationScopeDeclaration(
+        command,
+        bounded.maxIterations,
+      );
+      nextPayload.boundedLoop = {
+        ...bounded,
+        scopeDeclaration,
+      };
+      return {
+        ...intent,
+        summary: `Bounded terminal investigation: ${preview}`,
+        scope: {
+          ...intent.scope,
+          description: scopeDeclaration,
+        },
+        payload: nextPayload,
+      };
+    }
     return {
       ...intent,
-      summary: `Run shell command: ${command.length > 72 ? `${command.slice(0, 72)}…` : command}`,
-      payload: { ...intent.payload, command },
+      summary: `Run shell command: ${preview}`,
+      payload: nextPayload,
     };
   }
 

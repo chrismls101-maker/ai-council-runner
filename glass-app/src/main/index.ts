@@ -4197,6 +4197,7 @@ async function handleAletheiaActionConfirmation(
   } else if (decision === "reject") {
     speakAletheiaAdviceAck("Okay — I won't run that.");
   }
+  push();
 }
 
 function tryHandleVoiceActionConfirmation(text: string): boolean {

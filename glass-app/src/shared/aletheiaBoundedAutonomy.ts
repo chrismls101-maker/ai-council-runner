@@ -142,7 +142,6 @@ export function buildBoundedLoopSummary(
   finalOk: boolean,
 ): string {
   const iterations = audit.length;
-  const fixesApplied = audit.filter((row) => row.ok === true).length;
   const lastDetail = audit[audit.length - 1]?.detail?.trim();
 
   if (finalOk) {

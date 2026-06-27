@@ -62,14 +62,6 @@ export async function runAletheiaBoundedTerminalLoop(
       ok: null,
     });
 
-    snapshot = appendBoundedLoopAudit(snapshot, {
-      iteration,
-      narration: `Iteration ${iteration}: running \`${command}\`.`,
-      ok: null,
-    });
-    host.setSnapshot(snapshot);
-    host.push();
-
     const loopIntent: ActionIntent = {
       ...intent,
       summary: intent.summary,

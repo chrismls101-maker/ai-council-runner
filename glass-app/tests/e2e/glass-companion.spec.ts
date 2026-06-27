@@ -210,6 +210,11 @@ test.describe("G1 — Authority allowlist", () => {
     assert.doesNotThrow(() => dispatchAletheiaCommand("companion-privacy-end"));
     assert.doesNotThrow(() => dispatchAletheiaCommand("open-glass-setup"));
     assert.doesNotThrow(() => dispatchAletheiaCommand("open-glass-memory"));
+    assert.doesNotThrow(() => dispatchAletheiaCommand("approve-aletheia-advice", { adviceId: "test" }));
+    assert.doesNotThrow(() => dispatchAletheiaCommand("dismiss-aletheia-advice", { adviceId: "test" }));
+    assert.doesNotThrow(() => dispatchAletheiaCommand("confirm-aletheia-action", { intentId: "test" }));
+    assert.doesNotThrow(() => dispatchAletheiaCommand("reject-aletheia-action", { intentId: "test" }));
+    assert.doesNotThrow(() => dispatchAletheiaCommand("modify-aletheia-action", { intentId: "test", modifier: "npm test" }));
   });
 
   test("G1.11 — ALLOWED and BLOCKED sets are disjoint (no command in both)", () => {
