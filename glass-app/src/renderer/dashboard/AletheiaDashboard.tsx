@@ -3,7 +3,10 @@ import { Mic, MicOff, Shield, Sparkles } from "lucide-react";
 import type { GlassCapabilityRow } from "../../shared/glassCapabilities.ts";
 import type { GlassState, MessageRow, SessionRowWithMeta } from "../../shared/ipc.ts";
 import { formatRelativeTime } from "../../shared/relativeTime.ts";
-import { useGlassState } from "../useGlassState.ts";
+import type { PermissionDomainRow } from "../../shared/aletheiaPermissionControlPlane.ts";
+import type { SidecarServiceRow } from "../../shared/aletheiaSidecarManager.ts";
+import type { DependencyRow } from "../../shared/aletheiaDependencyManifest.ts";
+import { send, useGlassState } from "../useGlassState.ts";
 import { dispatchAletheiaCommand } from "../../shared/aletheiaAuthority.ts";
 import { ensureAletheiaDispatchRegistered } from "../aletheia/registerAletheiaDispatch.ts";
 import { useGlassCompanion } from "../companion/GlassCompanionProvider.tsx";
@@ -90,6 +93,24 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
     dispatchAletheiaCommand("open-glass-memory");
   }, []);
 
+  const handleDismissPermissionAlert = useCallback((): void => {
+    send({ type: "dismiss-aletheia-permission-alert" });
+  }, []);
+
+  const handleDismissSidecarAlert = useCallback((): void => {
+    send({ type: "dismiss-aletheia-sidecar-alert" });
+  }, []);
+
+  const handleRunBootstrap = useCallback((): void => {
+    send({ type: "run-aletheia-bootstrap" });
+  }, []);
+
+  const permissionPlane = glassState.aletheiaPermissionPlane;
+  const permissionAlert = glassState.aletheiaPermissionAlert;
+  const sidecarPlane = glassState.aletheiaSidecarPlane;
+  const sidecarAlert = glassState.aletheiaSidecarAlert;
+  const dependencyManifest = glassState.aletheiaDependencyManifest;
+
   return (
     <div
       className={`aletheia-dashboard-shell${visible ? "" : " aletheia-dashboard-shell--hidden"}`}
@@ -124,6 +145,75 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
             <div className="aletheia-dashboard__degraded" data-testid="aletheia-dashboard-server-degraded">
               <p className="aletheia-dashboard__degraded-label">Server offline</p>
               <p className="aletheia-dashboard__degraded-detail">{serverDegraded}</p>
+            </div>
+          ) : null}
+
+          {permissionAlert ? (
+            <div className="aletheia-dashboard__degraded" data-testid="aletheia-dashboard-permission-alert">
+              <p className="aletheia-dashboard__degraded-label">Permission changed</p>
+              <p className="aletheia-dashboard__degraded-detail">{permissionAlert.message}</p>
+              <button
+                type="button"
+                className="aletheia-dashboard__secondary-btn"
+                data-testid="aletheia-dashboard-permission-alert-dismiss"
+                onClick={handleDismissPermissionAlert}
+              >
+                Dismiss
+              </button>
+            </div>
+          ) : null}
+
+          {permissionPlane?.degraded && !permissionAlert ? (
+            <div className="aletheia-dashboard__degraded aletheia-dashboard__degraded--warn" data-testid="aletheia-dashboard-permission-degraded">
+              <p className="aletheia-dashboard__degraded-label">
+                Operating mode · {permissionPlane.authorityTier.replace(/_/g, " ")}
+              </p>
+              <p className="aletheia-dashboard__degraded-detail">
+                {permissionPlane.degradedSummary ?? "Some capabilities are limited."}
+              </p>
+            </div>
+          ) : null}
+
+          {dependencyManifest && !dependencyManifest.bootstrapComplete ? (
+            <div
+              className="aletheia-dashboard__degraded aletheia-dashboard__degraded--warn"
+              data-testid="aletheia-dashboard-bootstrap-incomplete"
+            >
+              <p className="aletheia-dashboard__degraded-label">Bootstrap incomplete</p>
+              <p className="aletheia-dashboard__degraded-detail">{dependencyManifest.aletheiaNarration}</p>
+              <button
+                type="button"
+                className="aletheia-dashboard__secondary-btn"
+                data-testid="aletheia-dashboard-run-bootstrap"
+                onClick={handleRunBootstrap}
+              >
+                Re-check dependencies
+              </button>
+            </div>
+          ) : null}
+
+          {sidecarAlert ? (
+            <div className="aletheia-dashboard__degraded" data-testid="aletheia-dashboard-sidecar-alert">
+              <p className="aletheia-dashboard__degraded-label">Service changed</p>
+              <p className="aletheia-dashboard__degraded-detail">{sidecarAlert.message}</p>
+              <button
+                type="button"
+                className="aletheia-dashboard__secondary-btn"
+                data-testid="aletheia-dashboard-sidecar-alert-dismiss"
+                onClick={handleDismissSidecarAlert}
+              >
+                Dismiss
+              </button>
+            </div>
+          ) : null}
+
+          {sidecarPlane?.degraded && !sidecarAlert && sidecarPlane.degradedSummary ? (
+            <div
+              className="aletheia-dashboard__degraded aletheia-dashboard__degraded--warn"
+              data-testid="aletheia-dashboard-sidecar-degraded"
+            >
+              <p className="aletheia-dashboard__degraded-label">Local services</p>
+              <p className="aletheia-dashboard__degraded-detail">{sidecarPlane.degradedSummary}</p>
             </div>
           ) : null}
 
@@ -169,9 +259,16 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
               warmupPhase={glassState.companionWarmupPhase ?? "none"}
             />
             <PermissionsPanel
+              permissionPlane={permissionPlane}
               capabilities={glassState.setupCapabilities ?? []}
               consentState={glassState.consentState}
               systemAudioStatus={glassState.systemAudioStatus}
+              onOpenSetup={handleOpenGlassSetup}
+            />
+            <ServicesPanel sidecarPlane={sidecarPlane} />
+            <DependenciesPanel
+              manifest={dependencyManifest}
+              onRunBootstrap={handleRunBootstrap}
               onOpenSetup={handleOpenGlassSetup}
             />
             <PrivacyPanel
@@ -251,12 +348,167 @@ function PresencePanel({
   );
 }
 
+function DependenciesPanel({
+  manifest,
+  onRunBootstrap,
+  onOpenSetup,
+}: {
+  manifest?: GlassState["aletheiaDependencyManifest"];
+  onRunBootstrap: () => void;
+  onOpenSetup: () => void;
+}): JSX.Element {
+  const missing = manifest?.dependencies.filter(
+    (row) => row.status === "missing" || row.status === "error" || row.status === "optional_missing",
+  );
+
+  return (
+    <section className="aletheia-dashboard__panel" data-testid="aletheia-dashboard-dependencies">
+      <p className="aletheia-dashboard__panel-label">Dependency manifest</p>
+      {manifest ? (
+        <>
+          <p className="aletheia-dashboard__panel-meta" data-testid="aletheia-dashboard-bootstrap-summary">
+            {manifest.summary}
+          </p>
+          <ul className="aletheia-dashboard__stat-list" data-testid="aletheia-dashboard-dependency-manifest">
+            {manifest.dependencies.map((row) => (
+              <DependencyInstrumentRow key={row.id} row={row} />
+            ))}
+          </ul>
+          {missing && missing.length > 0 ? (
+            <p className="aletheia-dashboard__panel-footnote">
+              {missing.length} item(s) need attention — install or configure in Glass Setup.
+            </p>
+          ) : null}
+        </>
+      ) : (
+        <p className="aletheia-dashboard__panel-meta">Running bootstrap check…</p>
+      )}
+      <div className="aletheia-dashboard__panel-actions">
+        <button
+          type="button"
+          className="aletheia-dashboard__link-btn"
+          data-testid="aletheia-dashboard-bootstrap-recheck"
+          onClick={onRunBootstrap}
+        >
+          Re-check all dependencies
+        </button>
+        <button
+          type="button"
+          className="aletheia-dashboard__link-btn"
+          data-testid="aletheia-dashboard-bootstrap-setup"
+          onClick={onOpenSetup}
+        >
+          Open Glass Setup →
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function DependencyInstrumentRow({ row }: { row: DependencyRow }): JSX.Element {
+  const ok = row.status === "ready" || row.status === "installing";
+  const statusLabel =
+    row.status === "ready"
+      ? "Ready"
+      : row.status === "optional_missing"
+        ? "Optional"
+        : row.status === "installing"
+          ? "Installing"
+          : row.status === "degraded"
+            ? "Degraded"
+            : row.status === "missing"
+              ? "Missing"
+              : row.status === "error"
+                ? "Error"
+                : "Unknown";
+  return (
+    <li className="aletheia-dashboard__permission-instrument" data-testid={`aletheia-dependency-${row.id}`}>
+      <div className="aletheia-dashboard__permission-instrument-head">
+        <span className="aletheia-dashboard__stat-key">
+          {row.label}
+          {row.critical ? " · required" : ""}
+        </span>
+        <span
+          className={`aletheia-dashboard__stat-value${ok ? " aletheia-dashboard__stat-value--ok" : " aletheia-dashboard__stat-value--error"}`}
+        >
+          {statusLabel}
+        </span>
+      </div>
+      <p className="aletheia-dashboard__permission-copy">{row.detail}</p>
+      <p className="aletheia-dashboard__permission-impact">{ok ? row.withIt : row.withoutIt}</p>
+    </li>
+  );
+}
+
+function ServicesPanel({
+  sidecarPlane,
+}: {
+  sidecarPlane?: GlassState["aletheiaSidecarPlane"];
+}): JSX.Element {
+  return (
+    <section className="aletheia-dashboard__panel" data-testid="aletheia-dashboard-services">
+      <p className="aletheia-dashboard__panel-label">Supervised services</p>
+      {sidecarPlane ? (
+        <>
+          <p className="aletheia-dashboard__panel-meta" data-testid="aletheia-dashboard-sidecar-boot">
+            Boot ready: {sidecarPlane.bootReady ? "Yes" : "No"}
+          </p>
+          <ul className="aletheia-dashboard__stat-list" data-testid="aletheia-dashboard-sidecar-plane">
+            {sidecarPlane.services.map((row) => (
+              <SidecarServiceInstrumentRow key={row.id} row={row} />
+            ))}
+          </ul>
+        </>
+      ) : (
+        <p className="aletheia-dashboard__panel-meta">Checking local services…</p>
+      )}
+    </section>
+  );
+}
+
+function SidecarServiceInstrumentRow({ row }: { row: SidecarServiceRow }): JSX.Element {
+  const ok = row.status === "healthy" || row.status === "disabled";
+  const statusLabel =
+    row.status === "healthy"
+      ? "Online"
+      : row.status === "disabled"
+        ? "Disabled"
+        : row.status === "starting"
+          ? "Starting"
+          : row.status === "not_installed"
+            ? "Not installed"
+            : row.status === "degraded"
+              ? "Degraded"
+              : "Offline";
+  return (
+    <li className="aletheia-dashboard__permission-instrument" data-testid={`aletheia-sidecar-${row.id}`}>
+      <div className="aletheia-dashboard__permission-instrument-head">
+        <span className="aletheia-dashboard__stat-key">
+          {row.label}
+          {row.critical ? " · required" : ""}
+        </span>
+        <span
+          className={`aletheia-dashboard__stat-value${ok ? " aletheia-dashboard__stat-value--ok" : " aletheia-dashboard__stat-value--error"}`}
+        >
+          {statusLabel}
+        </span>
+      </div>
+      <p className="aletheia-dashboard__permission-copy">{row.detail}</p>
+      <p className="aletheia-dashboard__permission-impact">
+        {ok ? row.withIt : row.withoutIt}
+      </p>
+    </li>
+  );
+}
+
 function PermissionsPanel({
+  permissionPlane,
   capabilities,
   consentState,
   systemAudioStatus,
   onOpenSetup,
 }: {
+  permissionPlane?: GlassState["aletheiaPermissionPlane"];
   capabilities: GlassCapabilityRow[];
   consentState?: GlassState["consentState"];
   systemAudioStatus?: string;
@@ -266,21 +518,42 @@ function PermissionsPanel({
   const screen = capabilities.find((row) => row.id === "screenRecording");
   const audio = capabilities.find((row) => row.id === "systemAudio");
 
+  const instrumentRows =
+    permissionPlane?.domains.filter((row) =>
+      ["microphone", "screenCapture", "systemAudio", "accessibility", "automation"].includes(row.id),
+    ) ?? [];
+
   return (
     <section className="aletheia-dashboard__panel" data-testid="aletheia-dashboard-permissions">
-      <p className="aletheia-dashboard__panel-label">Permissions &amp; hearing</p>
+      <p className="aletheia-dashboard__panel-label">Permissions &amp; authority</p>
+      {permissionPlane ? (
+        <p className="aletheia-dashboard__panel-meta" data-testid="aletheia-dashboard-authority-tier">
+          Authority tier: {permissionPlane.authorityTier.replace(/_/g, " ")}
+        </p>
+      ) : null}
+      {instrumentRows.length > 0 ? (
+        <ul className="aletheia-dashboard__stat-list" data-testid="aletheia-dashboard-permission-plane">
+          {instrumentRows.map((row) => (
+            <PermissionInstrumentRow key={row.id} row={row} />
+          ))}
+        </ul>
+      ) : (
+        <ul className="aletheia-dashboard__stat-list">
+          <PermissionRow label="Microphone" row={mic} fallback={mic ? undefined : "Not checked"} />
+          <PermissionRow label="Screen capture" row={screen} fallback={screen ? undefined : "Not checked"} />
+          <PermissionRow
+            label="Machine audio"
+            row={audio}
+            fallback={
+              systemAudioStatus === "available"
+                ? "Available"
+                : systemAudioStatus ?? "Not configured"
+            }
+          />
+        </ul>
+      )}
+      <p className="aletheia-dashboard__panel-footnote">Consent checkpoints</p>
       <ul className="aletheia-dashboard__stat-list">
-        <PermissionRow label="Microphone" row={mic} fallback={mic ? undefined : "Not checked"} />
-        <PermissionRow label="Screen capture" row={screen} fallback={screen ? undefined : "Not checked"} />
-        <PermissionRow
-          label="Machine audio"
-          row={audio}
-          fallback={
-            systemAudioStatus === "available"
-              ? "Available"
-              : systemAudioStatus ?? "Not configured"
-          }
-        />
         <ConsentRow label="Mic consent" ack={consentState?.micAck === true} />
         <ConsentRow label="Screen consent" ack={consentState?.screenAck === true} />
         <ConsentRow label="Recording consent" ack={consentState?.recordingAck === true} />
@@ -295,6 +568,38 @@ function PermissionsPanel({
         Open Glass System setup →
       </button>
     </section>
+  );
+}
+
+function PermissionInstrumentRow({ row }: { row: PermissionDomainRow }): JSX.Element {
+  const ok = row.status === "ready";
+  const statusLabel =
+    row.status === "ready"
+      ? "Ready"
+      : row.status === "missing_consent"
+        ? "Consent required"
+        : row.status === "missing_os_permission"
+          ? "OS permission required"
+          : row.status === "blocked"
+            ? "Blocked"
+            : row.status === "degraded"
+              ? "Degraded"
+              : "Unknown";
+  return (
+    <li className="aletheia-dashboard__permission-instrument" data-testid={`aletheia-permission-${row.id}`}>
+      <div className="aletheia-dashboard__permission-instrument-head">
+        <span className="aletheia-dashboard__stat-key">{row.label}</span>
+        <span
+          className={`aletheia-dashboard__stat-value${ok ? " aletheia-dashboard__stat-value--ok" : " aletheia-dashboard__stat-value--error"}`}
+        >
+          {statusLabel}
+        </span>
+      </div>
+      <p className="aletheia-dashboard__permission-copy">{row.whyNeeded}</p>
+      <p className="aletheia-dashboard__permission-impact">
+        {ok ? row.withIt : row.withoutIt}
+      </p>
+    </li>
   );
 }
 

@@ -21,7 +21,7 @@ import {
   COMPANION_ANCHOR_INVALIDATED_NOTICE,
   type AnchorWatchSnapshot,
 } from "./companionAnchorWatch.ts";
-import { shouldTryOmniParser, tryOmniParserMarks, warmOmniParserSidecarWithCallbacks } from "./companionOmniParser.ts";
+import { shouldTryOmniParser, tryOmniParserMarks, warmOmniParserSidecarWithCallbacks, restartOmniParserSidecar } from "./companionOmniParser.ts";
 import {
   buildOmniParserInstallTerminalCommand,
   getOmniParserInstallState,
@@ -310,6 +310,43 @@ import { registerDashboardIpc, setDashboardIpcAuth, isDashboardIpcSender } from 
 import { registerAletheiaDashboardIpc, setAletheiaDashboardIpcAuth } from "./aletheiaDashboardIpc.ts";
 import { closeDatabase, gracefulDatabaseShutdown, initDatabase } from "./glassDatabase.ts";
 import { createAletheiaSessionsTable } from "./aletheiaSessionStore.ts";
+import { createAletheiaActionLedgerTable } from "./aletheiaActionLedgerStore.ts";
+import {
+  AletheiaActionOrchestrator,
+  currentAletheiaActionSessionId,
+  defaultActionExecutorPort,
+  defaultActionLedgerPort,
+  type AletheiaActionOrchestratorHost,
+} from "./aletheiaActionOrchestratorHost.ts";
+import { AletheiaPermissionMonitor } from "./aletheiaPermissionMonitor.ts";
+import { probeAletheiaOsPermissions } from "./aletheiaPermissionProbe.ts";
+import {
+  buildAletheiaPermissionControlPlane,
+  detectPermissionRevocations,
+  permissionPlaneBlocksCompanion,
+  type AletheiaPermissionControlPlaneSnapshot,
+} from "../shared/aletheiaPermissionControlPlane.ts";
+import { AletheiaSidecarManager } from "./aletheiaSidecarManagerHost.ts";
+import {
+  probeObservationService,
+  probeOmniParserService,
+  probeSttService,
+} from "./aletheiaSidecarProbes.ts";
+import {
+  buildAletheiaSidecarManagerSnapshot,
+  detectSidecarDegradation,
+  sidecarManagerBlocksCompanion,
+  type AletheiaSidecarManagerSnapshot,
+} from "../shared/aletheiaSidecarManager.ts";
+import { runAletheiaBootstrapPass } from "./aletheiaBootstrapRunner.ts";
+import { probeAletheiaDependencies } from "./aletheiaDependencyProbes.ts";
+import {
+  buildAletheiaDependencyManifest,
+  dependencyManifestBlocksAletheia,
+  dependencyManifestSnapshotsEqual,
+  type AletheiaDependencyManifestSnapshot,
+} from "../shared/aletheiaDependencyManifest.ts";
+import { ensurePtySpawnHelperExecutable } from "./glassTerminal.ts";
 import {
   logSessionStart,
   logSessionEnd,
@@ -715,11 +752,9 @@ import {
   getRecentMemory,
 } from "./glassMemory.ts";
 import {
-  writeFile as glassWriteFile,
   applyCodeToFile,
   readFileForDiff,
   restoreBackup,
-  injectKeystrokes,
   runShellCommand,
 } from "./glassActions.ts";
 import {
@@ -1070,9 +1105,29 @@ interface AppState {
   actionResult?: {
     id: string;
     type: "write-file" | "inject-keystrokes" | "apply-fix" | "restore-backup";
-    status: "ok" | "error";
+    status: "ok" | "error" | "pending";
     message: string;
   };
+  /** P0.1 — Aletheia action orchestrator pipeline snapshot. */
+  aletheiaActionPipeline?: import("../shared/aletheiaExecution.ts").AletheiaActionPipelineSnapshot;
+  /** P0.4 — permission control plane snapshot. */
+  aletheiaPermissionPlane?: AletheiaPermissionControlPlaneSnapshot;
+  aletheiaPermissionAlert?: {
+    message: string;
+    domain: string;
+    revokedAt: number;
+    alertNonce: number;
+  };
+  /** P0.3 — supervised local services (OmniParser, STT, observation). */
+  aletheiaSidecarPlane?: AletheiaSidecarManagerSnapshot;
+  aletheiaSidecarAlert?: {
+    message: string;
+    serviceId: string;
+    degradedAt: number;
+    alertNonce: number;
+  };
+  /** P0.5 — unified dependency manifest + bootstrap snapshot. */
+  aletheiaDependencyManifest?: AletheiaDependencyManifestSnapshot;
   /** Whether the dock terminal panel is open. */
   glassDockTerminalOpen?: boolean;
   /** Active PTY session id. */
@@ -1695,6 +1750,178 @@ let agentProxyServer: import("./agentProxyServer.ts").AgentProxyServer | null = 
 
 // Action Execution Engine — cancel handles for running shell commands
 const shellCancels = new Map<string, () => void>();
+
+const aletheiaActionOrchestratorHost: AletheiaActionOrchestratorHost = {
+  getPipelineSnapshot: () => state.aletheiaActionPipeline,
+  setPipelineSnapshot: (snapshot) => {
+    state.aletheiaActionPipeline = snapshot;
+  },
+  setActionResult: (input) => {
+    state.actionResult = input;
+  },
+  getSessionId: currentAletheiaActionSessionId,
+  getPermissionPlane: () => state.aletheiaPermissionPlane,
+  push,
+};
+const aletheiaActionOrchestrator = new AletheiaActionOrchestrator(
+  aletheiaActionOrchestratorHost,
+  defaultActionLedgerPort,
+  defaultActionExecutorPort,
+);
+
+let aletheiaPermissionAlertNonce = 0;
+
+function handleAletheiaPermissionRevocation(
+  events: ReturnType<typeof detectPermissionRevocations>,
+): void {
+  if (events.length === 0) return;
+  const primary = events[0];
+  aletheiaPermissionAlertNonce += 1;
+  state.aletheiaPermissionAlert = {
+    message: primary.narration,
+    domain: primary.domain,
+    revokedAt: Date.now(),
+    alertNonce: aletheiaPermissionAlertNonce,
+  };
+
+  const micRevoked = events.some((e) => e.domain === "microphone" || e.domain === "consentMic");
+  if (micRevoked && state.companionModeActive) {
+    console.warn("[glass] companion deactivated — microphone permission/consent revoked mid-session");
+    state.companionModeActive = false;
+    state.companionModeToggleNonce += 1;
+    finalizeAletheiaSession("Permission revoked — Aletheia paused.");
+    state.companionPresence = null;
+    state.companionMemory = clearCompanionSessionMemory();
+    state.companionWarmupPhase = "none";
+    clearCompanionPrivacyState();
+    resetCompanionAmbientState();
+    stopCompanionDeepgramSession();
+    stopCompanionAnchorWatch();
+    aletheiaPermissionMonitor.setCompanionActive(false);
+    aletheiaSidecarManager.setCompanionActive(false);
+  }
+}
+
+const aletheiaPermissionMonitor = new AletheiaPermissionMonitor({
+  getSnapshot: () => state.aletheiaPermissionPlane,
+  setSnapshot: (snapshot) => {
+    state.aletheiaPermissionPlane = snapshot;
+  },
+  onRevocation: handleAletheiaPermissionRevocation,
+  refreshSnapshot: () => {
+    refreshSetupCapabilities();
+    return state.aletheiaPermissionPlane!;
+  },
+  push,
+});
+
+let aletheiaSidecarAlertNonce = 0;
+
+function handleAletheiaSidecarDegradation(
+  events: ReturnType<typeof detectSidecarDegradation>,
+): void {
+  if (events.length === 0) return;
+  const primary = events[0];
+  aletheiaSidecarAlertNonce += 1;
+  state.aletheiaSidecarAlert = {
+    message: primary.narration,
+    serviceId: primary.serviceId,
+    degradedAt: Date.now(),
+    alertNonce: aletheiaSidecarAlertNonce,
+  };
+}
+
+async function refreshAletheiaSidecarPlane(now = Date.now()): Promise<AletheiaSidecarManagerSnapshot> {
+  const omni = await probeOmniParserService();
+  const snapshot = buildAletheiaSidecarManagerSnapshot(
+    [
+      omni,
+      probeSttService({
+        sttEnabled: state.stt.enabled,
+        sttStatus: state.stt.status,
+        lastSttError: state.stt.lastError,
+        deepgramKeyPresent: Boolean(process.env.DEEPGRAM_API_KEY?.trim()),
+        openAiKeyPresent: Boolean(
+          process.env.IIVO_GLASS_OPENAI_API_KEY?.trim() || process.env.OPENAI_API_KEY?.trim(),
+        ),
+      }),
+      probeObservationService({
+        screenCaptureReady: state.screenCaptureProbe === "ready",
+        screenCaptureDetail: state.screenCaptureDetail,
+      }),
+    ],
+    now,
+  );
+  state.aletheiaSidecarPlane = snapshot;
+  return snapshot;
+}
+
+async function refreshAletheiaDependencyManifest(now = Date.now()): Promise<AletheiaDependencyManifestSnapshot> {
+  const previous = state.aletheiaDependencyManifest;
+  const probes = await probeAletheiaDependencies({
+    screenCaptureReady: state.screenCaptureProbe === "ready",
+    screenCaptureDetail: state.screenCaptureDetail,
+    ollamaAvailable: state.ollamaAvailable,
+    blackHoleInstallStatus: state.blackHoleInstallStatus,
+    serverReachable: state.serverHealthForSetup?.reachable === true,
+  });
+  const snapshot = buildAletheiaDependencyManifest(probes, now);
+  state.aletheiaDependencyManifest = snapshot;
+  if (!dependencyManifestSnapshotsEqual(previous, snapshot)) {
+    push();
+  }
+  return snapshot;
+}
+
+async function runAletheiaBootstrap(): Promise<void> {
+  await runAletheiaBootstrapPass({
+    getContext: () => ({
+      screenCaptureReady: state.screenCaptureProbe === "ready",
+      screenCaptureDetail: state.screenCaptureDetail,
+      ollamaAvailable: state.ollamaAvailable,
+      blackHoleInstallStatus: state.blackHoleInstallStatus,
+      serverReachable: state.serverHealthForSetup?.reachable === true,
+    }),
+    fixNodePtyPermissions: ensurePtySpawnHelperExecutable,
+    refreshSetup: async () => {
+      refreshSetupCapabilities();
+    },
+    setManifest: (snapshot) => {
+      state.aletheiaDependencyManifest = snapshot;
+    },
+    push,
+  });
+}
+
+const aletheiaSidecarManager = new AletheiaSidecarManager({
+  getSnapshot: () => state.aletheiaSidecarPlane,
+  setSnapshot: (snapshot) => {
+    state.aletheiaSidecarPlane = snapshot;
+  },
+  onDegradation: handleAletheiaSidecarDegradation,
+  refreshSnapshot: refreshAletheiaSidecarPlane,
+  restartHandlers: {
+    omniparser: restartOmniParserSidecar,
+    stt: async () => {
+      if (!state.companionModeActive) return true;
+      startCompanionDeepgramSession();
+      return true;
+    },
+    observation: async () => {
+      try {
+        const result = await runGlassSetupCheck({
+          config,
+          displayTarget: state.glassSettings.displayTarget,
+        });
+        await applyGlassSetupCheckResult(result, { silent: true });
+      } catch {
+        /* best effort */
+      }
+      return state.screenCaptureProbe === "ready";
+    },
+  },
+  push,
+});
 
 // Clipboard Intelligence gate — singleton so cooldown persists across polls
 const clipboardIntelGate = new ClipboardIntelligenceGate();
@@ -3726,6 +3953,21 @@ function refreshOmniParserInstall(): void {
   state.omniParserInstall = getOmniParserInstallState();
 }
 
+function refreshAletheiaPermissionPlane(now = Date.now()): AletheiaPermissionControlPlaneSnapshot {
+  const os = probeAletheiaOsPermissions();
+  const plane = buildAletheiaPermissionControlPlane({
+    consent: state.consentState,
+    micPermission: state.micPermission,
+    micListening: state.privacy.listening,
+    screenCaptureReady: state.screenCaptureProbe === "ready",
+    systemAudioStatus: state.systemAudioStatus,
+    accessibilityGranted: os.accessibilityGranted,
+    setupCapabilities: state.setupCapabilities,
+  }, now);
+  state.aletheiaPermissionPlane = plane;
+  return plane;
+}
+
 function refreshSetupCapabilities(): void {
   state.setupCapabilities = buildGlassSetupCapabilities({
     platform: process.platform,
@@ -3747,6 +3989,9 @@ function refreshSetupCapabilities(): void {
     lastSttError: state.stt.lastError,
     lastError: state.lastError,
   });
+  refreshAletheiaPermissionPlane();
+  void aletheiaSidecarManager.refreshNow();
+  void refreshAletheiaDependencyManifest();
 }
 
 async function applyGlassSetupCheckResult(
@@ -4057,6 +4302,12 @@ function snapshot(): GlassState {
     memoryResults: glassMemoryResults,
     shellOutputs: state.shellOutputs,
     actionResult: state.actionResult,
+    aletheiaActionPipeline: state.aletheiaActionPipeline,
+    aletheiaPermissionPlane: state.aletheiaPermissionPlane,
+    aletheiaPermissionAlert: state.aletheiaPermissionAlert,
+    aletheiaSidecarPlane: state.aletheiaSidecarPlane,
+    aletheiaSidecarAlert: state.aletheiaSidecarAlert,
+    aletheiaDependencyManifest: state.aletheiaDependencyManifest,
     glassDockTerminalOpen: state.glassDockTerminalOpen,
     glassDockTerminalId: state.glassDockTerminalId,
     glassDockTerminalTabs: state.glassDockTerminalTabs,
@@ -6772,8 +7023,36 @@ async function handleCommand(
         push();
         return;
       }
+      refreshSetupCapabilities();
+      const companionBlock = permissionPlaneBlocksCompanion(state.aletheiaPermissionPlane);
+      if (!state.companionModeActive && companionBlock) {
+        console.warn("[glass] toggle-companion-mode blocked —", companionBlock);
+        state.lastNotice = companionBlock;
+        push();
+        return;
+      }
+      if (!state.companionModeActive && process.env.IIVO_GLASS_E2E !== "1") {
+        await refreshAletheiaDependencyManifest();
+        const dependencyBlock = dependencyManifestBlocksAletheia(state.aletheiaDependencyManifest);
+        if (dependencyBlock) {
+          console.warn("[glass] toggle-companion-mode blocked —", dependencyBlock);
+          state.lastNotice = dependencyBlock;
+          push();
+          return;
+        }
+        await aletheiaSidecarManager.runBootCheck();
+        const sidecarBlock = sidecarManagerBlocksCompanion(state.aletheiaSidecarPlane);
+        if (sidecarBlock) {
+          console.warn("[glass] toggle-companion-mode blocked —", sidecarBlock);
+          state.lastNotice = sidecarBlock;
+          push();
+          return;
+        }
+      }
       state.companionModeActive = !state.companionModeActive;
       state.companionModeToggleNonce += 1;
+      aletheiaPermissionMonitor.setCompanionActive(state.companionModeActive);
+      aletheiaSidecarManager.setCompanionActive(state.companionModeActive);
       if (!state.companionModeActive) {
         finalizeAletheiaSession();
         state.companionPresence = null;
@@ -7067,6 +7346,9 @@ async function handleCommand(
         state.blackHoleInstallStatus = p.status;
         state.blackHoleInstallProgress = p.progress;
         push();
+        if (p.status === "done" || p.status === "error") {
+          void refreshAletheiaDependencyManifest();
+        }
       }).catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err);
         state.blackHoleInstallStatus = "error";
@@ -7973,31 +8255,54 @@ async function handleCommand(
     }
 
     case "write-file": {
-      const result = await glassWriteFile(command.path, command.content);
-      state.actionResult = {
+      await aletheiaActionOrchestrator.runWriteFile({
+        path: command.path,
+        content: command.content,
         id: command.id,
-        type: 'write-file',
-        status: result.ok ? 'ok' : 'error',
-        message: result.message,
-      };
-      push();
+        userInitiated: true,
+      });
       return;
     }
 
     case "inject-keystrokes": {
-      if (command.targetApp) {
-        try {
-          await execFileAsync('osascript', ['-e', `tell application "${command.targetApp}" to activate`]);
-          await new Promise(resolve => setTimeout(resolve, 400));
-        } catch { /* ignore */ }
-      }
-      const result = await injectKeystrokes(command.text);
-      state.actionResult = {
+      await aletheiaActionOrchestrator.runInjectKeystrokes({
+        text: command.text,
         id: command.id,
-        type: 'inject-keystrokes',
-        status: result.ok ? 'ok' : 'error',
-        message: result.message,
-      };
+        targetApp: command.targetApp,
+        userInitiated: true,
+      });
+      return;
+    }
+
+    case "confirm-aletheia-action": {
+      await aletheiaActionOrchestrator.confirmAction(command.intentId, "user-tap");
+      return;
+    }
+
+    case "reject-aletheia-action": {
+      await aletheiaActionOrchestrator.rejectAction(command.intentId);
+      return;
+    }
+
+    case "dismiss-aletheia-permission-alert": {
+      state.aletheiaPermissionAlert = undefined;
+      push();
+      return;
+    }
+
+    case "dismiss-aletheia-sidecar-alert": {
+      state.aletheiaSidecarAlert = undefined;
+      push();
+      return;
+    }
+
+    case "run-aletheia-bootstrap": {
+      await runAletheiaBootstrap();
+      if (!state.aletheiaDependencyManifest?.bootstrapComplete) {
+        state.lastNotice = state.aletheiaDependencyManifest?.aletheiaNarration ?? "Bootstrap incomplete.";
+      } else {
+        state.lastNotice = state.aletheiaDependencyManifest.summary;
+      }
       push();
       return;
     }
@@ -13219,6 +13524,7 @@ app.whenReady().then(() =>
 
   const dbInit = initDatabase();
   createAletheiaSessionsTable();
+  createAletheiaActionLedgerTable();
   if (dbInit.recoveredFromCorruption) {
     const backupName = dbInit.corruptionBackupPath
       ? dbInit.corruptionBackupPath.split(/[/\\]/).pop() ?? "glass-corrupted.db"
@@ -13294,6 +13600,9 @@ app.whenReady().then(() =>
     recordingAck: glassOnboardingState.consentRecordingAck,
     tosAck: glassOnboardingState.consentTosAck,
   };
+  refreshSetupCapabilities();
+  aletheiaPermissionMonitor.start();
+  aletheiaSidecarManager.start();
   state.iivoAccountLink = await loadIivoAccountLink();
   void refreshServerRuntimeFlags();
   setInterval(() => { void refreshServerRuntimeFlags(); }, 5 * 60_000);
@@ -13328,6 +13637,7 @@ app.whenReady().then(() =>
   state.onboardingComplete = state.glassSettings.onboardingComplete ?? false;
   state.persona = state.glassSettings.persona;
   state.ollamaAvailable = await checkOllamaAvailable();
+  void runAletheiaBootstrap();
   const bootWorkspaceRoot = state.glassSettings.agentCodeWorkspaceRoot?.trim();
   if (bootWorkspaceRoot) {
     state.indexState = {

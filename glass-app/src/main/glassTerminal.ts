@@ -100,7 +100,7 @@ function makeId(): string {
 }
 
 /** node-pty's spawn-helper must be executable or macOS returns posix_spawnp failed. */
-function ensurePtySpawnHelperExecutable(): void {
+export function ensurePtySpawnHelperExecutable(): void {
   if (process.platform === "win32") return;
   try {
     const ptyRoot = path.dirname(nodeRequire.resolve("node-pty/package.json"));

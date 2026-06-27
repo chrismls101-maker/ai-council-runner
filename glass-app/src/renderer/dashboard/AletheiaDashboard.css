@@ -307,6 +307,41 @@
   color: rgba(167, 139, 250, 0.82);
 }
 
+.aletheia-dashboard__degraded--warn {
+  border-color: rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.08);
+}
+
+.aletheia-dashboard__permission-instrument {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.aletheia-dashboard__permission-instrument:last-child {
+  border-bottom: none;
+}
+
+.aletheia-dashboard__permission-instrument-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.aletheia-dashboard__permission-copy,
+.aletheia-dashboard__permission-impact {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: rgba(226, 232, 240, 0.65);
+}
+
+.aletheia-dashboard__permission-impact {
+  color: rgba(196, 181, 253, 0.75);
+}
+
 .aletheia-dashboard__panel-footnote {
   margin: 12px 0 0;
   font-size: 11px;

@@ -1024,6 +1024,16 @@ export type GlassCommand =
   | { type: "write-file"; path: string; content: string; id: string }
   | { type: "inject-keystrokes"; text: string; id: string; targetApp?: string }
   | { type: "cancel-shell"; id: string }
+  /** P0.1 — confirm a pending Aletheia action intent after review. */
+  | { type: "confirm-aletheia-action"; intentId: string }
+  /** P0.1 — reject a pending Aletheia action intent. */
+  | { type: "reject-aletheia-action"; intentId: string }
+  /** P0.4 — dismiss permission revocation banner in Aletheia dashboard. */
+  | { type: "dismiss-aletheia-permission-alert" }
+  /** P0.3 — dismiss sidecar degradation banner in Aletheia dashboard. */
+  | { type: "dismiss-aletheia-sidecar-alert" }
+  /** P0.5 — re-run Aletheia dependency bootstrap pass. */
+  | { type: "run-aletheia-bootstrap" }
   // ── Glass built-in terminal (PTY) ─────────────────────────────────────────
   | { type: "glass-terminal-open" }
   | { type: "glass-terminal-close" }
@@ -1430,9 +1440,31 @@ export interface GlassState {
   actionResult?: {
     id: string;
     type: "write-file" | "inject-keystrokes" | "apply-fix" | "restore-backup";
-    status: "ok" | "error";
+    status: "ok" | "error" | "pending";
     message: string;
   };
+  /** P0.1 — Aletheia action orchestrator pipeline snapshot for trust UI. */
+  aletheiaActionPipeline?: import("./aletheiaExecution.ts").AletheiaActionPipelineSnapshot;
+  /** P0.4 — live permission + consent instrumentation for Aletheia authority tiers. */
+  aletheiaPermissionPlane?: import("./aletheiaPermissionControlPlane.ts").AletheiaPermissionControlPlaneSnapshot;
+  /** P0.4 — most recent permission revocation alert (cleared on dismiss). */
+  aletheiaPermissionAlert?: {
+    message: string;
+    domain: string;
+    revokedAt: number;
+    alertNonce: number;
+  };
+  /** P0.3 — supervised local services health snapshot. */
+  aletheiaSidecarPlane?: import("./aletheiaSidecarManager.ts").AletheiaSidecarManagerSnapshot;
+  /** P0.3 — service degradation alert (cleared on dismiss). */
+  aletheiaSidecarAlert?: {
+    message: string;
+    serviceId: string;
+    degradedAt: number;
+    alertNonce: number;
+  };
+  /** P0.5 — unified dependency manifest + bootstrap snapshot. */
+  aletheiaDependencyManifest?: import("./aletheiaDependencyManifest.ts").AletheiaDependencyManifestSnapshot;
   // ── Design-to-Code Bridge (#163) ─────────────────────────────────────────
   /** Active design capture cards keyed by feed item id. */
   designCaptures?: Record<string, {

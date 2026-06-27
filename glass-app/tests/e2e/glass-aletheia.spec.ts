@@ -149,14 +149,27 @@ test.describe("IIVO Glass Aletheia", () => {
   });
 
   test("Aletheia dashboard opens with trust panels", async () => {
-    const { overlay } = await getGlassWindows(app.browser);
+    const { overlay, command } = await getGlassWindows(app.browser);
 
     await openAletheiaDashboardViaMenu(overlay);
 
     await expect(overlay.locator('[data-testid="aletheia-dashboard-permissions"]')).toBeVisible();
+    await expect(overlay.locator('[data-testid="aletheia-dashboard-services"]')).toBeVisible();
+    await expect(overlay.locator('[data-testid="aletheia-dashboard-dependencies"]')).toBeVisible();
     await expect(overlay.locator('[data-testid="aletheia-dashboard-privacy"]')).toBeVisible();
     await expect(overlay.locator('[data-testid="aletheia-dashboard-sessions"]')).toBeVisible();
     await expect(overlay.locator('[data-testid="aletheia-dashboard-memory"]')).toBeVisible();
+
+    await expect
+      .poll(async () => {
+        const s = await readGlassState(command);
+        return Boolean(
+          s.aletheiaPermissionPlane?.domains.length
+          && s.aletheiaSidecarPlane?.services.length
+          && s.aletheiaDependencyManifest?.dependencies.length,
+        );
+      })
+      .toBe(true);
     await dwell();
   });
 

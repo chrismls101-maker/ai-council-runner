@@ -252,6 +252,7 @@ async function trySpawnSidecar(url: string): Promise<boolean> {
   }
   sidecarProcess.on("exit", () => {
     sidecarProcess = null;
+    spawnAttempted = false;
   });
 
   const deadline = Date.now() + SPAWN_HEALTH_WAIT_MS;
@@ -351,4 +352,18 @@ export function shouldTryOmniParser(axDomMarkCount: number, appName?: string): b
 export function resetOmniParserSidecarStateForTests(): void {
   spawnAttempted = false;
   sidecarProcess = null;
+}
+
+/** Supervisor restart — allows a fresh spawn after crash or health failure. */
+export async function restartOmniParserSidecar(): Promise<boolean> {
+  if (sidecarProcess) {
+    try {
+      sidecarProcess.kill("SIGTERM");
+    } catch {
+      /* best effort */
+    }
+    sidecarProcess = null;
+  }
+  spawnAttempted = false;
+  return ensureOmniParserSidecar();
 }
