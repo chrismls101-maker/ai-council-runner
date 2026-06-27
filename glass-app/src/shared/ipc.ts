@@ -1485,6 +1485,8 @@ export interface GlassState {
   aletheiaBoundedLoop?: import("./aletheiaBoundedAutonomy.ts").AletheiaBoundedLoopSnapshot;
   /** B3.1 — live agent coordination activity for council / research / writing routes. */
   aletheiaAgentActivity?: import("./aletheiaAgentCoordinator.ts").AletheiaAgentActivitySnapshot;
+  /** B3.2 — delegated presence: focus app, observe, report back. */
+  aletheiaDelegatedPresence?: import("./aletheiaDelegatedPresence.ts").AletheiaDelegatedPresenceSnapshot;
   // ── Design-to-Code Bridge (#163) ─────────────────────────────────────────
   /** Active design capture cards keyed by feed item id. */
   designCaptures?: Record<string, {

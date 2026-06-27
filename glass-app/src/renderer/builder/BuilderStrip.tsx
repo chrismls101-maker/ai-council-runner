@@ -72,11 +72,18 @@ export function BuilderStrip({
     return () => window.clearTimeout(timer);
   }, [aletheiaSweeping, handleAletheiaSweepEnd]);
 
+  const delegatedTaskRunning =
+    glassState.aletheiaDelegatedPresence != null
+    && glassState.aletheiaDelegatedPresence.phase !== "complete"
+    && glassState.aletheiaDelegatedPresence.phase !== "failed";
+
   const companionTooltip = aletheiaMenuOpen
     ? "Aletheia — choose Activate or Dashboard"
-    : companion.active
-      ? `${companion.statusLabel} — tap for Activate or Dashboard`
-      : "Aletheia — Glass voice presence · tap for Activate or Dashboard";
+    : delegatedTaskRunning
+      ? "Aletheia — operating in another app"
+      : companion.active
+        ? `${companion.statusLabel} — tap for Activate or Dashboard`
+        : "Aletheia — Glass voice presence · tap for Activate or Dashboard";
 
   useBuilderStripClickThrough(activeTab !== null);
 
@@ -407,7 +414,7 @@ export function BuilderStrip({
           <div className="builder-strip__aletheia-wrap">
             <button
               type="button"
-              className={`builder-tab builder-tab--aletheia${companion.active ? " builder-tab--companion--active" : ""}${aletheiaSweeping ? " builder-tab--aletheia--revealing" : ""}${aletheiaMenuOpen ? " builder-tab--aletheia-menu-open" : ""}${glassState.aletheiaDashboardActive ? " builder-tab--active" : ""}`}
+              className={`builder-tab builder-tab--aletheia${companion.active ? " builder-tab--companion--active" : ""}${delegatedTaskRunning ? " builder-tab--aletheia--delegated" : ""}${aletheiaSweeping ? " builder-tab--aletheia--revealing" : ""}${aletheiaMenuOpen ? " builder-tab--aletheia-menu-open" : ""}${glassState.aletheiaDashboardActive ? " builder-tab--active" : ""}`}
               onClick={handleAletheiaClick}
               onPointerEnter={replayAletheiaTruthSweep}
               aria-label="Aletheia — Activate or Dashboard"
@@ -426,7 +433,7 @@ export function BuilderStrip({
                 />
               </span>
               <span
-                className={`builder-companion-toggle__dot${companion.active ? " builder-companion-toggle__dot--live" : ""}`}
+                className={`builder-companion-toggle__dot${companion.active ? " builder-companion-toggle__dot--live" : ""}${delegatedTaskRunning ? " builder-companion-toggle__dot--delegated" : ""}`}
                 aria-hidden="true"
               />
               <span className="builder-tab__aletheia-label" aria-hidden="true">

@@ -393,6 +393,17 @@ import {
   coordinationRouteNarration,
   type CoordinationIntent,
 } from "../shared/aletheiaAgentCoordinator.ts";
+import {
+  classifyDelegatedPresenceIntent,
+  delegatedPresenceIntroSpeech,
+  isDelegatedPresenceRunning,
+  type DelegatedPresenceIntent,
+} from "../shared/aletheiaDelegatedPresence.ts";
+import {
+  runAletheiaDelegatedPresence,
+  clearAletheiaDelegatedPresenceState,
+  type AletheiaDelegatedPresenceHost,
+} from "./aletheiaDelegatedPresenceRunner.ts";
 import { ensurePtySpawnHelperExecutable } from "./glassTerminal.ts";
 import {
   logSessionStart,
@@ -1191,6 +1202,8 @@ interface AppState {
   aletheiaBoundedLoop?: import("../shared/aletheiaBoundedAutonomy.ts").AletheiaBoundedLoopSnapshot;
   /** B3.1 — agent coordination activity (council / research / writing routes). */
   aletheiaAgentActivity?: import("../shared/aletheiaAgentCoordinator.ts").AletheiaAgentActivitySnapshot;
+  /** B3.2 — delegated presence task (go operate app, report back). */
+  aletheiaDelegatedPresence?: import("../shared/aletheiaDelegatedPresence.ts").AletheiaDelegatedPresenceSnapshot;
   /** Whether the dock terminal panel is open. */
   glassDockTerminalOpen?: boolean;
   /** Active PTY session id. */
@@ -1854,6 +1867,25 @@ const aletheiaAgentCoordinatorHost: AletheiaAgentCoordinatorHost = {
   getAnthropicModel: () =>
     resolveCoderAgentApiModel(resolveCoderAgentModelId(state.glassSettings?.coderAgentModel)),
   getOutputDir: () => resolveAgentOutputFolder(state.glassSettings),
+};
+
+const aletheiaDelegatedPresenceHost: AletheiaDelegatedPresenceHost = {
+  getSnapshot: () => state.aletheiaDelegatedPresence,
+  setSnapshot: (snapshot) => {
+    state.aletheiaDelegatedPresence = snapshot;
+  },
+  push,
+  getSessionId: currentAletheiaActionSessionId,
+  getConfig: () => config,
+  resolveCaptureTarget: () => resolveCaptureDisplay(state.glassSettings.displayTarget),
+  getWindowContext: () => {
+    const ctx = getCachedWindowContext();
+    return {
+      appName: ctx.appName ?? state.activeApp,
+      windowTitle: ctx.windowTitle,
+    };
+  },
+  getScreenDigest: () => (isDigestFresh(latestDigest) ? latestDigest.text : undefined),
 };
 
 let aletheiaPermissionAlertNonce = 0;
@@ -4154,6 +4186,7 @@ async function handleAletheiaCoordination(intent: CoordinationIntent): Promise<v
   if (
     state.askInFlight
     || state.agentRun?.status === "running"
+    || isDelegatedPresenceRunning(state.aletheiaDelegatedPresence)
     || state.aletheiaAgentActivity?.phase === "running"
     || state.aletheiaAgentActivity?.phase === "synthesizing"
   ) {
@@ -4188,6 +4221,50 @@ async function handleAletheiaCoordination(intent: CoordinationIntent): Promise<v
       createCommandFeedItem("response", result.answer, {
         prompt: intent.prompt,
         fullBody: result.answer,
+      }),
+    );
+  } else if (!result.ok && result.errorMessage) {
+    speakAletheiaAdviceAck(result.errorMessage);
+    state.lastError = result.errorMessage;
+  }
+  push();
+}
+
+async function handleAletheiaDelegatedPresence(intent: DelegatedPresenceIntent): Promise<void> {
+  if (
+    state.askInFlight
+    || state.agentRun?.status === "running"
+    || isDelegatedPresenceRunning(state.aletheiaDelegatedPresence)
+    || state.aletheiaAgentActivity?.phase === "running"
+    || state.aletheiaAgentActivity?.phase === "synthesizing"
+  ) {
+    speakAletheiaAdviceAck("I'm still working on something — give me a moment.");
+    push();
+    return;
+  }
+
+  trackCopilotCommand(intent.goal);
+  pushFeed(createCommandFeedItem("command", intent.goal, { prompt: intent.goal }));
+  speakAletheiaAdviceAck(delegatedPresenceIntroSpeech(intent.targetApp));
+  push();
+
+  const result = await runAletheiaDelegatedPresence(aletheiaDelegatedPresenceHost, intent);
+
+  if (result.ok && result.report) {
+    const spoken =
+      result.report.length > 420 ? `${result.report.slice(0, 417)}…` : result.report;
+    speakAletheiaAdviceAck(spoken);
+    state.lastAskResponse = {
+      prompt: intent.goal,
+      answer: result.report,
+      fullAnswer: result.report,
+      at: new Date().toISOString(),
+      routeUsed: "aletheia_delegated_presence",
+    };
+    pushFeed(
+      createCommandFeedItem("response", result.report, {
+        prompt: intent.goal,
+        fullBody: result.report,
       }),
     );
   } else if (!result.ok && result.errorMessage) {
@@ -4699,6 +4776,7 @@ function snapshot(): GlassState {
     aletheiaAdviceSpeak: state.aletheiaAdviceSpeak,
     aletheiaBoundedLoop: state.aletheiaBoundedLoop,
     aletheiaAgentActivity: state.aletheiaAgentActivity,
+    aletheiaDelegatedPresence: state.aletheiaDelegatedPresence,
     glassDockTerminalOpen: state.glassDockTerminalOpen,
     glassDockTerminalId: state.glassDockTerminalId,
     glassDockTerminalTabs: state.glassDockTerminalTabs,
@@ -5693,6 +5771,13 @@ async function submitCommand(
   }
 
   if (state.companionModeActive && !state.companionPrivacy?.active) {
+    const delegated = classifyDelegatedPresenceIntent(rawText.trim());
+    if (delegated) {
+      incrementAletheiaSessionTurn();
+      void handleAletheiaDelegatedPresence(delegated);
+      return;
+    }
+
     const coordination = classifyCoordinationIntent(rawText.trim());
     if (coordination) {
       incrementAletheiaSessionTurn();
@@ -11200,6 +11285,7 @@ function deactivateCompanionMode(): void {
   state.aletheiaAdviceSpeak = undefined;
   state.aletheiaBoundedLoop = undefined;
   clearAletheiaAgentCoordinatorState(aletheiaAgentCoordinatorHost);
+  clearAletheiaDelegatedPresenceState(aletheiaDelegatedPresenceHost);
   state.companionPresence = null;
   state.companionMemory = clearCompanionSessionMemory();
   state.companionWarmupPhase = "none";

@@ -123,6 +123,7 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
   const actionPipeline = glassState.aletheiaActionPipeline;
   const boundedLoop = glassState.aletheiaBoundedLoop;
   const agentActivity = glassState.aletheiaAgentActivity;
+  const delegatedPresence = glassState.aletheiaDelegatedPresence;
 
   const handleApproveAdvice = useCallback((adviceId: string): void => {
     dispatchAletheiaCommand("approve-aletheia-advice", { adviceId });
@@ -312,6 +313,10 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
             />
             <BoundedLoopPanel companionActive={companionActive} boundedLoop={boundedLoop} />
             <AgentActivityPanel companionActive={companionActive} agentActivity={agentActivity} />
+            <DelegatedPresencePanel
+              companionActive={companionActive}
+              delegatedPresence={delegatedPresence}
+            />
             <PermissionsPanel
               permissionPlane={permissionPlane}
               capabilities={glassState.setupCapabilities ?? []}
@@ -838,6 +843,80 @@ function AgentActivityPanel({
             >
               <p className="aletheia-dashboard__confirm-key">Could not finish</p>
               <p className="aletheia-dashboard__panel-copy">{agentActivity.errorMessage}</p>
+            </div>
+          ) : null}
+        </>
+      )}
+    </section>
+  );
+}
+
+function DelegatedPresencePanel({
+  companionActive,
+  delegatedPresence,
+}: {
+  companionActive: boolean;
+  delegatedPresence?: GlassState["aletheiaDelegatedPresence"];
+}): JSX.Element {
+  const running =
+    delegatedPresence != null
+    && delegatedPresence.phase !== "complete"
+    && delegatedPresence.phase !== "failed";
+
+  return (
+    <section className="aletheia-dashboard__panel" data-testid="aletheia-dashboard-delegated-presence">
+      <p className="aletheia-dashboard__panel-label">Delegated presence</p>
+      {!companionActive ? (
+        <p className="aletheia-dashboard__panel-copy">
+          Activate Aletheia — she can go operate any app on your machine and report back.
+        </p>
+      ) : !delegatedPresence ? (
+        <p className="aletheia-dashboard__panel-copy" data-testid="aletheia-dashboard-delegated-presence-empty">
+          No active task — try &quot;Go to Figma and tell me what&apos;s on the artboard.&quot;
+        </p>
+      ) : (
+        <>
+          <p className="aletheia-dashboard__panel-meta" data-testid="aletheia-dashboard-delegated-presence-phase">
+            {running ? "Operating" : delegatedPresence.phase.replace(/_/g, " ")}
+            {delegatedPresence.method ? ` · ${delegatedPresence.method}` : ""}
+          </p>
+          <p className="aletheia-dashboard__panel-copy" data-testid="aletheia-dashboard-delegated-presence-goal">
+            {delegatedPresence.targetApp}: {delegatedPresence.reportQuestion}
+          </p>
+          {delegatedPresence.audit.length > 0 ? (
+            <ul className="aletheia-dashboard__bounded-audit" data-testid="aletheia-dashboard-delegated-presence-audit">
+              {delegatedPresence.audit.map((row) => (
+                <li
+                  key={row.id}
+                  className={
+                    row.ok === true
+                      ? "aletheia-dashboard__bounded-audit-row--ok"
+                      : row.ok === false
+                        ? "aletheia-dashboard__bounded-audit-row--error"
+                        : undefined
+                  }
+                >
+                  {row.narration}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {delegatedPresence.report ? (
+            <div
+              className="aletheia-dashboard__confirm-result aletheia-dashboard__confirm-result--ok"
+              data-testid="aletheia-dashboard-delegated-presence-report"
+            >
+              <p className="aletheia-dashboard__confirm-key">Report</p>
+              <p className="aletheia-dashboard__panel-copy">{delegatedPresence.report}</p>
+            </div>
+          ) : null}
+          {delegatedPresence.errorMessage ? (
+            <div
+              className="aletheia-dashboard__confirm-result aletheia-dashboard__confirm-result--error"
+              data-testid="aletheia-dashboard-delegated-presence-error"
+            >
+              <p className="aletheia-dashboard__confirm-key">Could not finish</p>
+              <p className="aletheia-dashboard__panel-copy">{delegatedPresence.errorMessage}</p>
             </div>
           ) : null}
         </>

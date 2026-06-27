@@ -501,6 +501,24 @@
   50% { opacity: 1; transform: scale(1.08); }
 }
 
+.builder-tab--aletheia--delegated::after {
+  opacity: 1;
+  animation: builder-delegated-pulse 1.1s ease-in-out infinite;
+}
+
+.builder-companion-toggle__dot--delegated {
+  background: linear-gradient(135deg, rgba(251, 191, 36, 1), rgba(244, 114, 182, 1));
+  box-shadow:
+    0 0 8px rgba(251, 191, 36, 0.95),
+    0 0 16px rgba(244, 114, 182, 0.85);
+  animation: builder-delegated-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes builder-delegated-pulse {
+  0%, 100% { opacity: 0.65; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.12); }
+}
+
 .builder-tab--powers .builder-tab__icon,
 .builder-tab--palette .builder-tab__icon {
   opacity: 0.95;
