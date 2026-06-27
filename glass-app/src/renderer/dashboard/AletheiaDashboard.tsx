@@ -11,6 +11,8 @@ import {
   operatingModeLabel,
   resolveAletheiaPersonaBehavior,
 } from "../../shared/aletheiaPersonaBehavior.ts";
+import { categoryLabel } from "../../shared/aletheiaNotes.ts";
+import type { AletheiaNote } from "../../shared/aletheiaNotes.ts";
 import { pendingAletheiaAdviceCards } from "../../shared/aletheiaPendingAdvice.ts";
 import type { AletheiaAdviceCard } from "../../shared/aletheiaPendingAdvice.ts";
 import { formatActionConfirmationCard } from "../../shared/aletheiaActionConfirmation.ts";
@@ -130,6 +132,7 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
   const delegatedPresence = glassState.aletheiaDelegatedPresence;
   const delegatedLoop = glassState.aletheiaDelegatedLoop;
   const researchConversation = glassState.aletheiaResearchConversation;
+  const aletheiaNotes = glassState.aletheiaNotes;
   const personaBehavior = useMemo(
     () =>
       glassState.aletheiaPersonaBehavior
@@ -176,6 +179,18 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
 
   const handleResearchFollowUp = useCallback((action: import("../../shared/aletheiaResearchConversation.ts").ResearchFollowUpAction): void => {
     dispatchAletheiaCommand("aletheia-research-follow-up", { action });
+  }, []);
+
+  const handleAddNote = useCallback((body: string): void => {
+    dispatchAletheiaCommand("add-aletheia-note", { body, category: "general" });
+  }, []);
+
+  const handleUpdateNote = useCallback((noteId: string, body: string): void => {
+    dispatchAletheiaCommand("update-aletheia-note", { noteId, body });
+  }, []);
+
+  const handleDeleteNote = useCallback((noteId: string): void => {
+    dispatchAletheiaCommand("delete-aletheia-note", { noteId });
   }, []);
 
   return (
@@ -365,6 +380,13 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
               companionActive={companionActive}
               researchConversation={researchConversation}
               onFollowUp={handleResearchFollowUp}
+            />
+            <AletheiaNotesPanel
+              companionActive={companionActive}
+              notes={aletheiaNotes?.notes ?? []}
+              onAdd={handleAddNote}
+              onUpdate={handleUpdateNote}
+              onDelete={handleDeleteNote}
             />
             <PermissionsPanel
               permissionPlane={permissionPlane}
@@ -1700,6 +1722,133 @@ function SessionMessageDetail({
         );
       })}
     </ul>
+  );
+}
+
+function AletheiaNotesPanel({
+  companionActive,
+  notes,
+  onAdd,
+  onUpdate,
+  onDelete,
+}: {
+  companionActive: boolean;
+  notes: AletheiaNote[];
+  onAdd: (body: string) => void;
+  onUpdate: (noteId: string, body: string) => void;
+  onDelete: (noteId: string) => void;
+}): JSX.Element {
+  const [draft, setDraft] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState("");
+
+  return (
+    <section className="aletheia-dashboard__panel" data-testid="aletheia-dashboard-notes">
+      <p className="aletheia-dashboard__panel-label">Notes</p>
+      <p className="aletheia-dashboard__panel-copy">
+        What Aletheia remembers across sessions — decisions, rationales, and research you saved.
+        Distinct from the audit trail and from Glass Memory admin.
+      </p>
+      {companionActive ? (
+        <div className="aletheia-dashboard__notes-add" data-testid="aletheia-dashboard-notes-add">
+          <textarea
+            className="aletheia-dashboard__notes-input"
+            rows={2}
+            placeholder="Add a note Aletheia should remember…"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+          />
+          <button
+            type="button"
+            className="aletheia-dashboard__secondary-btn"
+            data-testid="aletheia-dashboard-notes-add-btn"
+            disabled={!draft.trim()}
+            onClick={() => {
+              const body = draft.trim();
+              if (!body) return;
+              onAdd(body);
+              setDraft("");
+            }}
+          >
+            Add note
+          </button>
+        </div>
+      ) : null}
+      {notes.length === 0 ? (
+        <p className="aletheia-dashboard__panel-footnote" data-testid="aletheia-dashboard-notes-empty">
+          No notes yet — approve advice, confirm actions, or save research to build memory.
+        </p>
+      ) : (
+        <ul className="aletheia-dashboard__notes-list" data-testid="aletheia-dashboard-notes-list">
+          {notes.slice(0, 12).map((note) => (
+            <li key={note.id} className="aletheia-dashboard__notes-row">
+              {editingId === note.id ? (
+                <>
+                  <textarea
+                    className="aletheia-dashboard__notes-input"
+                    rows={2}
+                    value={editDraft}
+                    onChange={(event) => setEditDraft(event.target.value)}
+                  />
+                  <div className="aletheia-dashboard__confirm-actions">
+                    <button
+                      type="button"
+                      className="aletheia-dashboard__primary-btn"
+                      onClick={() => {
+                        const body = editDraft.trim();
+                        if (!body) return;
+                        onUpdate(note.id, body);
+                        setEditingId(null);
+                      }}
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      className="aletheia-dashboard__secondary-btn"
+                      onClick={() => setEditingId(null)}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="aletheia-dashboard__notes-meta">
+                    {categoryLabel(note.category)} · {note.source}
+                  </p>
+                  <p className="aletheia-dashboard__panel-copy">{note.body}</p>
+                  {note.rationale ? (
+                    <p className="aletheia-dashboard__panel-footnote">{note.rationale}</p>
+                  ) : null}
+                  <div className="aletheia-dashboard__confirm-actions">
+                    <button
+                      type="button"
+                      className="aletheia-dashboard__secondary-btn"
+                      data-testid={`aletheia-dashboard-note-edit-${note.id}`}
+                      onClick={() => {
+                        setEditingId(note.id);
+                        setEditDraft(note.body);
+                      }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="aletheia-dashboard__secondary-btn"
+                      data-testid={`aletheia-dashboard-note-delete-${note.id}`}
+                      onClick={() => onDelete(note.id)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

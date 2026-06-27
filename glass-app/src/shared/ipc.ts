@@ -1046,6 +1046,9 @@ export type GlassCommand =
   | { type: "cancel-aletheia-loop" }
   /** B3.4 — follow-up action on an active research conversation thread. */
   | { type: "aletheia-research-follow-up"; action: import("./aletheiaResearchConversation.ts").ResearchFollowUpAction }
+  | { type: "add-aletheia-note"; body: string; category?: import("./aletheiaNotes.ts").AletheiaNoteCategory }
+  | { type: "update-aletheia-note"; noteId: string; body: string }
+  | { type: "delete-aletheia-note"; noteId: string }
   // ── Glass built-in terminal (PTY) ─────────────────────────────────────────
   | { type: "glass-terminal-open" }
   | { type: "glass-terminal-close" }
@@ -1499,6 +1502,8 @@ export interface GlassState {
   aletheiaResearchConversation?: import("./aletheiaResearchConversation.ts").AletheiaResearchConversationSnapshot;
   /** B4.1 — persona-aware operating mode for Aletheia companion. */
   aletheiaPersonaBehavior?: import("./aletheiaPersonaBehavior.ts").AletheiaPersonaBehaviorSnapshot;
+  /** B4.2 — Aletheia session notes (decisions + rationales). */
+  aletheiaNotes?: import("./aletheiaNotes.ts").AletheiaNotesSnapshot;
   // ── Design-to-Code Bridge (#163) ─────────────────────────────────────────
   /** Active design capture cards keyed by feed item id. */
   designCaptures?: Record<string, {

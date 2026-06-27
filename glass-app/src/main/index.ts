@@ -314,6 +314,18 @@ import { closeDatabase, gracefulDatabaseShutdown, initDatabase } from "./glassDa
 import { createAletheiaSessionsTable } from "./aletheiaSessionStore.ts";
 import { createAletheiaActionLedgerTable } from "./aletheiaActionLedgerStore.ts";
 import {
+  appendAletheiaNote,
+  createAletheiaNotesTable,
+  deleteAletheiaNote,
+  listAletheiaNotes,
+  updateAletheiaNote,
+} from "./aletheiaNotesStore.ts";
+import {
+  formatAletheiaNotesContext,
+  selectRelevantAletheiaNotes,
+  type AppendAletheiaNoteInput,
+} from "../shared/aletheiaNotes.ts";
+import {
   AletheiaActionOrchestrator,
   currentAletheiaActionSessionId,
   defaultActionExecutorPort,
@@ -1246,6 +1258,8 @@ interface AppState {
   aletheiaResearchConversation?: import("../shared/aletheiaResearchConversation.ts").AletheiaResearchConversationSnapshot;
   /** B4.1 — persona-aware operating mode. */
   aletheiaPersonaBehavior?: import("../shared/aletheiaPersonaBehavior.ts").AletheiaPersonaBehaviorSnapshot;
+  /** B4.2 — Aletheia session notes. */
+  aletheiaNotes?: import("../shared/aletheiaNotes.ts").AletheiaNotesSnapshot;
   /** Whether the dock terminal panel is open. */
   glassDockTerminalOpen?: boolean;
   /** Active PTY session id. */
@@ -2004,6 +2018,9 @@ const aletheiaResearchConversationHost: AletheiaResearchConversationHost = {
     });
     glassMemoryResults = await getRecentMemory(5);
     push();
+  },
+  appendSessionNote: (input) => {
+    captureAletheiaSessionNote(input);
   },
 };
 
@@ -4312,6 +4329,18 @@ function refreshAletheiaPersonaBehaviorState(now = Date.now()): void {
   });
 }
 
+function refreshAletheiaNotesState(): void {
+  state.aletheiaNotes = listAletheiaNotes(50);
+}
+
+function captureAletheiaSessionNote(input: AppendAletheiaNoteInput): void {
+  appendAletheiaNote({
+    ...input,
+    sessionId: input.sessionId ?? currentAletheiaActionSessionId(),
+  });
+  refreshAletheiaNotesState();
+}
+
 function speakAletheiaAdviceAck(text: string): void {
   state.aletheiaAdviceSpeak = {
     text: truncateAletheiaSpokenText(text, state.aletheiaPersonaBehavior),
@@ -4463,6 +4492,11 @@ async function handleAletheiaDelegatedLoop(intent: DelegatedLoopIntent): Promise
     if (op.signal.aborted) return;
 
       if (result.handoff) {
+      captureAletheiaSessionNote({
+        body: result.handoff.slice(0, 320),
+        category: "observation",
+        source: "loop",
+      });
       const spoken =
         result.handoff.length > 420 ? `${result.handoff.slice(0, 417)}…` : result.handoff;
       speakAletheiaAdviceAck(spoken);
@@ -4642,6 +4676,12 @@ async function handleAletheiaAdviceDecision(
       : dismissAletheiaAdvice(snapshot, adviceId);
 
   if (decision === "approve") {
+    captureAletheiaSessionNote({
+      body: card.headline,
+      rationale: card.body.slice(0, 280),
+      category: "decision",
+      source: "advice",
+    });
     const proposed = await proposeActionFromApprovedAdvice(card);
     speakAletheiaAdviceAck(
       proposed
@@ -4660,7 +4700,16 @@ async function handleAletheiaActionConfirmation(
   confirmedBy: "user-tap" | "user-voice" = "user-tap",
 ): Promise<void> {
   if (decision === "approve") {
+    const pending = state.aletheiaActionPipeline?.pendingConfirmation;
     await aletheiaActionOrchestrator.confirmAction(intentId, confirmedBy);
+    if (pending) {
+      captureAletheiaSessionNote({
+        body: pending.summary,
+        rationale: pending.rationale?.slice(0, 280) ?? "User confirmed this action.",
+        category: "decision",
+        source: "action",
+      });
+    }
   } else {
     await aletheiaActionOrchestrator.rejectAction(intentId);
   }
@@ -4761,6 +4810,12 @@ function resolveAskUserContextForSubmit(
   const personaDirective = state.aletheiaPersonaBehavior?.promptDirective;
   if (personaDirective && state.companionModeActive) {
     parts.unshift(personaDirective);
+  }
+  if (state.companionModeActive && state.aletheiaNotes?.notes.length) {
+    const notesContext = formatAletheiaNotesContext(
+      selectRelevantAletheiaNotes(state.aletheiaNotes.notes, prompt),
+    );
+    if (notesContext) parts.unshift(notesContext);
   }
   return parts.length > 0 ? parts.join("\n\n") : undefined;
 }
@@ -5117,6 +5172,7 @@ function snapshot(): GlassState {
     aletheiaDelegatedLoop: state.aletheiaDelegatedLoop,
     aletheiaResearchConversation: state.aletheiaResearchConversation,
     aletheiaPersonaBehavior: state.aletheiaPersonaBehavior,
+    aletheiaNotes: state.aletheiaNotes,
     glassDockTerminalOpen: state.glassDockTerminalOpen,
     glassDockTerminalId: state.glassDockTerminalId,
     glassDockTerminalTabs: state.glassDockTerminalTabs,
@@ -9137,6 +9193,30 @@ async function handleCommand(
       return;
     }
 
+    case "add-aletheia-note": {
+      captureAletheiaSessionNote({
+        body: command.body,
+        category: command.category ?? "general",
+        source: "user",
+      });
+      push();
+      return;
+    }
+
+    case "update-aletheia-note": {
+      updateAletheiaNote(command.noteId, command.body);
+      refreshAletheiaNotesState();
+      push();
+      return;
+    }
+
+    case "delete-aletheia-note": {
+      deleteAletheiaNote(command.noteId);
+      refreshAletheiaNotesState();
+      push();
+      return;
+    }
+
     case "dismiss-aletheia-permission-alert": {
       state.aletheiaPermissionAlert = undefined;
       push();
@@ -11640,6 +11720,7 @@ function applyCompanionModeActivation(): void {
   state.companionModeActive = true;
   state.companionModeToggleNonce += 1;
   refreshAletheiaPersonaBehaviorState();
+  refreshAletheiaNotesState();
   aletheiaPermissionMonitor.setCompanionActive(true);
   aletheiaSidecarManager.setCompanionActive(true);
   beginAletheiaSession(state.activeApp);
@@ -14444,6 +14525,8 @@ app.whenReady().then(() =>
   const dbInit = initDatabase();
   createAletheiaSessionsTable();
   createAletheiaActionLedgerTable();
+  createAletheiaNotesTable();
+  refreshAletheiaNotesState();
   if (dbInit.recoveredFromCorruption) {
     const backupName = dbInit.corruptionBackupPath
       ? dbInit.corruptionBackupPath.split(/[/\\]/).pop() ?? "glass-corrupted.db"

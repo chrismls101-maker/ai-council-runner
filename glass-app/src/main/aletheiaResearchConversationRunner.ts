@@ -28,6 +28,7 @@ export interface AletheiaResearchConversationHost {
   getAnthropicModel: () => string;
   getOutputDir: () => string;
   persistResearchNote?: (input: { prompt: string; answer: string }) => Promise<void>;
+  appendSessionNote?: (input: import("../shared/aletheiaNotes.ts").AppendAletheiaNoteInput) => void;
 }
 
 function setSnapshot(
@@ -145,6 +146,12 @@ export async function runAletheiaResearchFollowUp(
         answer: note,
       });
     }
+    host.appendSessionNote?.({
+      body: existing.query,
+      rationale: note.slice(0, 500),
+      category: "research",
+      source: "research",
+    });
     if (isAletheiaCompanionOperationAborted(signal)) {
       return { ok: false, errorMessage: "Save cancelled." };
     }

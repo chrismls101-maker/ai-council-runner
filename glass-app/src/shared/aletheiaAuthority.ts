@@ -46,6 +46,11 @@ export const ALETHEIA_ALLOWED_COMMANDS = new Set([
 
   // B3.4 — research conversation follow-up (session control, not Glass infra)
   "aletheia-research-follow-up", // Summarize / compare / draft from research thread
+
+  // B4.2 — Aletheia session notes (session memory, not Glass admin)
+  "add-aletheia-note",
+  "update-aletheia-note",
+  "delete-aletheia-note",
 ] as const);
 
 export type AletheiaAllowedCommand = typeof ALETHEIA_ALLOWED_COMMANDS extends Set<infer T>
