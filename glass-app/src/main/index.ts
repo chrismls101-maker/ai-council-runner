@@ -174,6 +174,7 @@ import {
 } from "../shared/sessionPayload.ts";
 import { captureDisplayById } from "./capture.ts";
 import {
+  resolveActiveDisplayId,
   resolveCaptureDisplay,
   sanitizeDisplayTarget,
 } from "./displayRegistry.ts";
@@ -335,6 +336,15 @@ import {
   emptyAletheiaRelationshipThread,
   markCompanionAway,
 } from "../shared/aletheiaRelationshipThread.ts";
+import {
+  buildAletheiaDisplayAwareness,
+  formatAletheiaDisplayContext,
+} from "../shared/aletheiaDisplayAwareness.ts";
+import {
+  buildAletheiaSurfaceContext,
+  resolveAletheiaSurface,
+  spokenTextForSurface,
+} from "../shared/aletheiaSurfaceDoctrine.ts";
 import {
   AletheiaActionOrchestrator,
   currentAletheiaActionSessionId,
@@ -1275,6 +1285,8 @@ interface AppState {
   aletheiaAttentionRecovery?: import("../shared/aletheiaAttentionRecovery.ts").AletheiaAttentionRecoverySnapshot;
   /** B5.1 — relationship thread events across app switches. */
   aletheiaRelationshipThread?: import("../shared/aletheiaRelationshipThread.ts").AletheiaRelationshipThreadSnapshot;
+  /** B5.2 — multi-display situational awareness. */
+  aletheiaDisplayAwareness?: import("../shared/aletheiaDisplayAwareness.ts").AletheiaDisplayAwarenessSnapshot;
   /** Whether the dock terminal panel is open. */
   glassDockTerminalOpen?: boolean;
   /** Active PTY session id. */
@@ -4305,6 +4317,16 @@ function refreshAletheiaObservationPlaneState(options?: { forcePush?: boolean; f
   return snapshot;
 }
 
+function refreshAletheiaDisplayAwarenessState(): void {
+  const displays = getConnectedDisplays();
+  state.aletheiaDisplayAwareness = buildAletheiaDisplayAwareness({
+    connectedDisplays: displays,
+    displayTarget: state.glassSettings.displayTarget,
+    overlayDisplayId: resolveActiveDisplayId(state.glassSettings.displayTarget),
+    activeApp: state.activeApp,
+  }) ?? undefined;
+}
+
 function refreshAletheiaAmbientSynthesisState(): AletheiaAmbientSynthesisSnapshot {
   const snapshot = buildAletheiaAmbientSynthesis({
     activeApp: state.activeApp,
@@ -4316,6 +4338,7 @@ function refreshAletheiaAmbientSynthesisState(): AletheiaAmbientSynthesisSnapsho
     observationMode: state.aletheiaObservationPlane?.mode,
   });
   state.aletheiaAmbientSynthesis = snapshot;
+  refreshAletheiaDisplayAwarenessState();
   refreshAletheiaPendingAdvicePlane({
     getCompanionModeActive: () => state.companionModeActive,
     getCompanionPrivacyActive: () => state.companionPrivacy?.active === true,
@@ -4468,8 +4491,17 @@ function captureAletheiaSessionNote(input: AppendAletheiaNoteInput): void {
 }
 
 function speakAletheiaAdviceAck(text: string): void {
+  const surface = resolveAletheiaSurface({
+    companionModeActive: state.companionModeActive,
+    aletheiaDashboardActive: state.aletheiaDashboardActive,
+  });
+  const spoken = spokenTextForSurface(text, {
+    surface,
+    companionModeActive: state.companionModeActive,
+    personaBehavior: state.aletheiaPersonaBehavior,
+  });
   state.aletheiaAdviceSpeak = {
-    text: truncateAletheiaSpokenText(text, state.aletheiaPersonaBehavior),
+    text: spoken,
     nonce: (state.aletheiaAdviceSpeak?.nonce ?? 0) + 1,
   };
 }
@@ -4933,6 +4965,15 @@ function resolveAskUserContextForSubmit(
   const termCtx = includeTerminal ? getTerminalContextString() : null;
 
   const parts = [profileContext, ambientContext, termCtx].filter(Boolean);
+  const surface = resolveAletheiaSurface({
+    companionModeActive: state.companionModeActive,
+    aletheiaDashboardActive: state.aletheiaDashboardActive,
+  });
+  parts.unshift(buildAletheiaSurfaceContext({ surface, companionModeActive: state.companionModeActive }));
+  const displayContext = formatAletheiaDisplayContext(state.aletheiaDisplayAwareness);
+  if (displayContext && state.companionModeActive) {
+    parts.unshift(displayContext);
+  }
   const personaDirective = state.aletheiaPersonaBehavior?.promptDirective;
   if (personaDirective && state.companionModeActive) {
     parts.unshift(personaDirective);
@@ -5301,6 +5342,7 @@ function snapshot(): GlassState {
     aletheiaNotes: state.aletheiaNotes,
     aletheiaAttentionRecovery: state.aletheiaAttentionRecovery,
     aletheiaRelationshipThread: state.aletheiaRelationshipThread,
+    aletheiaDisplayAwareness: state.aletheiaDisplayAwareness,
     glassDockTerminalOpen: state.glassDockTerminalOpen,
     glassDockTerminalId: state.glassDockTerminalId,
     glassDockTerminalTabs: state.glassDockTerminalTabs,
@@ -7987,6 +8029,7 @@ async function handleCommand(
     }
     case "refresh-glass-layout":
       refreshGlassDisplayLayout();
+      refreshAletheiaDisplayAwarenessState();
       push();
       return;
     case "chrome-window-drag": {
@@ -11911,6 +11954,7 @@ function deactivateCompanionMode(sessionSummary?: string): void {
   state.aletheiaPersonaBehavior = undefined;
   state.aletheiaAttentionRecovery = undefined;
   state.aletheiaRelationshipThread = undefined;
+  state.aletheiaDisplayAwareness = undefined;
   lastRelationshipTerminalErrorKey = "";
   abortAletheiaCompanionOperation();
   pendingLoopDecisionResolver = null;

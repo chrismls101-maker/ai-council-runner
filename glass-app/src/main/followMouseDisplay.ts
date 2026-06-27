@@ -41,7 +41,7 @@ export function startFollowMouseTracking(
   stopFollowMouseTracking();
   onDisplayChanged = relayout;
 
-  if (target !== "follow_mouse") return;
+  if (target !== "follow_mouse" && target !== "all_displays") return;
 
   syncFollowMouseDisplay(true);
   followMouseTimer = setInterval(() => {

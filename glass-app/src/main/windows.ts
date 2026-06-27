@@ -2624,8 +2624,8 @@ export function getDisplayLayoutSummary(): string {
 
 function syncFollowMouseMode(): void {
   stopFollowMouseTracking();
-  if (activeDisplayTarget === "follow_mouse") {
-    startFollowMouseTracking("follow_mouse", () => relayoutAllWindows());
+  if (activeDisplayTarget === "follow_mouse" || activeDisplayTarget === "all_displays") {
+    startFollowMouseTracking(activeDisplayTarget, () => relayoutAllWindows());
   }
 }
 

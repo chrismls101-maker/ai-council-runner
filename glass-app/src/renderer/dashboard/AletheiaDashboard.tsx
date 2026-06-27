@@ -16,6 +16,8 @@ import type { AletheiaNote } from "../../shared/aletheiaNotes.ts";
 import type { AletheiaAttentionRecoverySnapshot } from "../../shared/aletheiaAttentionRecovery.ts";
 import type { AletheiaRelationshipThreadSnapshot } from "../../shared/aletheiaRelationshipThread.ts";
 import { relationshipEventKindLabel } from "../../shared/aletheiaRelationshipThread.ts";
+import type { AletheiaDisplayAwarenessSnapshot } from "../../shared/aletheiaDisplayAwareness.ts";
+import { resolveAletheiaSurface } from "../../shared/aletheiaSurfaceDoctrine.ts";
 import { pendingAletheiaAdviceCards } from "../../shared/aletheiaPendingAdvice.ts";
 import type { AletheiaAdviceCard } from "../../shared/aletheiaPendingAdvice.ts";
 import { formatActionConfirmationCard } from "../../shared/aletheiaActionConfirmation.ts";
@@ -138,6 +140,7 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
   const aletheiaNotes = glassState.aletheiaNotes;
   const attentionRecovery = glassState.aletheiaAttentionRecovery;
   const relationshipThread = glassState.aletheiaRelationshipThread;
+  const displayAwareness = glassState.aletheiaDisplayAwareness;
   const personaBehavior = useMemo(
     () =>
       glassState.aletheiaPersonaBehavior
@@ -359,10 +362,15 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
               companionActive={companionActive}
               thread={relationshipThread}
             />
+            <DisplayAwarenessPanel
+              companionActive={companionActive}
+              awareness={displayAwareness}
+            />
             <PersonaBehaviorPanel
               companionActive={companionActive}
               personaBehavior={personaBehavior}
               persona={glassState.persona}
+              aletheiaDashboardActive
             />
             <PendingAdvicePanel
               companionActive={companionActive}
@@ -508,15 +516,38 @@ function RelationshipThreadPanel({
   );
 }
 
+function DisplayAwarenessPanel({
+  companionActive,
+  awareness,
+}: {
+  companionActive: boolean;
+  awareness?: AletheiaDisplayAwarenessSnapshot;
+}): JSX.Element | null {
+  if (!companionActive || !awareness || awareness.displayCount <= 1) return null;
+
+  return (
+    <section className="aletheia-dashboard__panel" data-testid="aletheia-dashboard-display-awareness">
+      <p className="aletheia-dashboard__panel-label">Displays</p>
+      <p className="aletheia-dashboard__panel-copy">{awareness.contextBlock}</p>
+    </section>
+  );
+}
+
 function PersonaBehaviorPanel({
   companionActive,
   personaBehavior,
   persona,
+  aletheiaDashboardActive,
 }: {
   companionActive: boolean;
   personaBehavior: ReturnType<typeof resolveAletheiaPersonaBehavior>;
   persona?: GlassState["persona"];
+  aletheiaDashboardActive?: boolean;
 }): JSX.Element {
+  const surface = resolveAletheiaSurface({
+    companionModeActive: companionActive,
+    aletheiaDashboardActive,
+  });
   return (
     <section className="aletheia-dashboard__panel" data-testid="aletheia-dashboard-persona-behavior">
       <p className="aletheia-dashboard__panel-label">Operating mode</p>
@@ -549,6 +580,9 @@ function PersonaBehaviorPanel({
               Founder command tier active — expanded authority scope acknowledged.
             </p>
           ) : null}
+          <p className="aletheia-dashboard__panel-footnote" data-testid="aletheia-dashboard-surface-doctrine">
+            Calm presence on {surface.replace(/_/g, " ")} — same tone, pacing matched to this surface.
+          </p>
         </>
       )}
     </section>

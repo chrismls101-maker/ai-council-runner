@@ -75,7 +75,11 @@ test("resolveEffectiveDisplayId follow mouse uses cursor display", () => {
 test("normalizeDisplayTarget falls back when display removed", () => {
   assert.equal(normalizeDisplayTarget(99, [1, 2]), "primary");
   assert.equal(normalizeDisplayTarget(2, [1, 2]), 2);
-  assert.equal(normalizeDisplayTarget("all_displays", [1, 2]), "primary");
+});
+
+test("normalizeDisplayTarget preserves all_displays with multiple monitors", () => {
+  assert.equal(normalizeDisplayTarget("all_displays", [1, 2]), "all_displays");
+  assert.equal(normalizeDisplayTarget("all_displays", [1]), "primary");
 });
 
 test("overlay uses selected display workArea", () => {

@@ -79,7 +79,9 @@ export function normalizeDisplayTarget(
   connectedIds: number[],
 ): GlassDisplayTarget {
   if (target === "primary" || target === "follow_mouse") return target;
-  if (target === "all_displays") return "primary";
+  if (target === "all_displays") {
+    return connectedIds.length > 1 ? "all_displays" : "primary";
+  }
   if (typeof target === "number" && connectedIds.includes(target)) return target;
   return "primary";
 }
