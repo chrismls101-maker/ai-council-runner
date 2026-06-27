@@ -382,6 +382,17 @@ import {
 import { intentFromAdviceApproval } from "../shared/aletheiaExecution.ts";
 import { runAletheiaBoundedTerminalLoop } from "./aletheiaBoundedLoopRunner.ts";
 import { refreshAletheiaPendingAdvicePlane } from "./aletheiaPendingAdvicePlane.ts";
+import {
+  dispatchAletheiaCoordination,
+  initAletheiaAgentCoordinatorPlane,
+  clearAletheiaAgentCoordinatorState,
+  type AletheiaAgentCoordinatorHost,
+} from "./aletheiaAgentCoordinatorPlane.ts";
+import {
+  classifyCoordinationIntent,
+  coordinationRouteNarration,
+  type CoordinationIntent,
+} from "../shared/aletheiaAgentCoordinator.ts";
 import { ensurePtySpawnHelperExecutable } from "./glassTerminal.ts";
 import {
   logSessionStart,
@@ -1178,6 +1189,8 @@ interface AppState {
   aletheiaAdviceSpeak?: { text: string; nonce: number };
   /** B2.3 — bounded autonomy loop scope, audit trail, and summary. */
   aletheiaBoundedLoop?: import("../shared/aletheiaBoundedAutonomy.ts").AletheiaBoundedLoopSnapshot;
+  /** B3.1 — agent coordination activity (council / research / writing routes). */
+  aletheiaAgentActivity?: import("../shared/aletheiaAgentCoordinator.ts").AletheiaAgentActivitySnapshot;
   /** Whether the dock terminal panel is open. */
   glassDockTerminalOpen?: boolean;
   /** Active PTY session id. */
@@ -1830,6 +1843,18 @@ const aletheiaActionOrchestrator = new AletheiaActionOrchestrator(
   defaultActionLedgerPort,
   defaultActionExecutorPort,
 );
+
+const aletheiaAgentCoordinatorHost: AletheiaAgentCoordinatorHost = {
+  getSnapshot: () => state.aletheiaAgentActivity,
+  setSnapshot: (snapshot) => {
+    state.aletheiaAgentActivity = snapshot;
+  },
+  push,
+  getSessionId: currentAletheiaActionSessionId,
+  getAnthropicModel: () =>
+    resolveCoderAgentApiModel(resolveCoderAgentModelId(state.glassSettings?.coderAgentModel)),
+  getOutputDir: () => resolveAgentOutputFolder(state.glassSettings),
+};
 
 let aletheiaPermissionAlertNonce = 0;
 
@@ -4125,6 +4150,53 @@ function speakAletheiaAdviceAck(text: string): void {
   };
 }
 
+async function handleAletheiaCoordination(intent: CoordinationIntent): Promise<void> {
+  if (
+    state.askInFlight
+    || state.agentRun?.status === "running"
+    || state.aletheiaAgentActivity?.phase === "running"
+    || state.aletheiaAgentActivity?.phase === "synthesizing"
+  ) {
+    speakAletheiaAdviceAck("I'm still working on something — give me a moment.");
+    push();
+    return;
+  }
+
+  trackCopilotCommand(intent.prompt);
+  pushFeed(createCommandFeedItem("command", intent.prompt, { prompt: intent.prompt }));
+  speakAletheiaAdviceAck(coordinationRouteNarration(intent.route));
+  push();
+
+  const result = await dispatchAletheiaCoordination(
+    aletheiaAgentCoordinatorHost,
+    intent.prompt,
+    intent.route,
+  );
+
+  if (result.ok && result.answer) {
+    const spoken =
+      result.answer.length > 420 ? `${result.answer.slice(0, 417)}…` : result.answer;
+    speakAletheiaAdviceAck(spoken);
+    state.lastAskResponse = {
+      prompt: intent.prompt,
+      answer: result.answer,
+      fullAnswer: result.answer,
+      at: new Date().toISOString(),
+      routeUsed: "aletheia_coordination",
+    };
+    pushFeed(
+      createCommandFeedItem("response", result.answer, {
+        prompt: intent.prompt,
+        fullBody: result.answer,
+      }),
+    );
+  } else if (!result.ok && result.errorMessage) {
+    speakAletheiaAdviceAck(result.errorMessage);
+    state.lastError = result.errorMessage;
+  }
+  push();
+}
+
 async function proposeActionFromApprovedAdvice(
   card: import("../shared/aletheiaPendingAdvice.ts").AletheiaAdviceCard,
 ): Promise<boolean> {
@@ -4626,6 +4698,7 @@ function snapshot(): GlassState {
     aletheiaPendingAdvice: state.aletheiaPendingAdvice,
     aletheiaAdviceSpeak: state.aletheiaAdviceSpeak,
     aletheiaBoundedLoop: state.aletheiaBoundedLoop,
+    aletheiaAgentActivity: state.aletheiaAgentActivity,
     glassDockTerminalOpen: state.glassDockTerminalOpen,
     glassDockTerminalId: state.glassDockTerminalId,
     glassDockTerminalTabs: state.glassDockTerminalTabs,
@@ -5617,6 +5690,15 @@ async function submitCommand(
 
   if (tryHandleVoiceAdviceResponse(rawText.trim())) {
     return;
+  }
+
+  if (state.companionModeActive && !state.companionPrivacy?.active) {
+    const coordination = classifyCoordinationIntent(rawText.trim());
+    if (coordination) {
+      incrementAletheiaSessionTurn();
+      void handleAletheiaCoordination(coordination);
+      return;
+    }
   }
 
   if (
@@ -11117,6 +11199,7 @@ function deactivateCompanionMode(): void {
   state.aletheiaPendingAdvice = undefined;
   state.aletheiaAdviceSpeak = undefined;
   state.aletheiaBoundedLoop = undefined;
+  clearAletheiaAgentCoordinatorState(aletheiaAgentCoordinatorHost);
   state.companionPresence = null;
   state.companionMemory = clearCompanionSessionMemory();
   state.companionWarmupPhase = "none";
@@ -13912,6 +13995,7 @@ app.whenReady().then(() =>
       resolveCoderAgentApiModel(resolveCoderAgentModelId(state.glassSettings?.coderAgentModel)),
     getOutputDir: () => resolveAgentOutputFolder(state.glassSettings),
   });
+  initAletheiaAgentCoordinatorPlane(aletheiaAgentCoordinatorHost);
 
   // Wire: audio build plan ready → surface "Build from video" feed card
   agentBus.subscribe<AudioBuildPlanPayload>(

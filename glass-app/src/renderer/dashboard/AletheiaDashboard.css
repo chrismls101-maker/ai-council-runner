@@ -671,3 +671,34 @@
 .aletheia-dashboard__bounded-audit-row--error {
   color: rgba(252, 165, 165, 0.92);
 }
+
+.aletheia-dashboard__agent-activity {
+  margin: 8px 0 0;
+  padding-left: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.aletheia-dashboard__agent-activity-label {
+  display: block;
+  font-size: 13px;
+  line-height: 1.4;
+  color: rgba(226, 232, 240, 0.92);
+}
+
+.aletheia-dashboard__agent-activity-row--running .aletheia-dashboard__agent-activity-label {
+  color: rgba(186, 230, 253, 0.96);
+}
+
+.aletheia-dashboard__agent-activity-row--done .aletheia-dashboard__agent-activity-label {
+  color: rgba(167, 243, 208, 0.92);
+}
+
+.aletheia-dashboard__agent-activity-row--error .aletheia-dashboard__agent-activity-label {
+  color: rgba(252, 165, 165, 0.92);
+}
+
+.aletheia-dashboard__confirm-result--error .aletheia-dashboard__panel-copy {
+  color: rgba(252, 165, 165, 0.92);
+}

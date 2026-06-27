@@ -53,8 +53,10 @@ test("mixed input source resolves when listening with session context", () => {
 
 test("panel renders one consolidated Copilot section", () => {
   const panel = readFileSync(join(ROOT, "renderer", "panel", "Panel.tsx"), "utf8");
+  const sessionControl = readFileSync(join(ROOT, "renderer", "panel", "SessionControlTab.tsx"), "utf8");
   const copilot = readFileSync(join(ROOT, "renderer", "panel", "CopilotPanel.tsx"), "utf8");
-  assert.ok(panel.includes("CopilotPanel"), "Panel mounts consolidated Copilot section");
+  assert.ok(sessionControl.includes("CopilotPanel"), "Session tab mounts consolidated Copilot section");
+  assert.ok(panel.includes("SessionControlTab"), "Panel routes Session tab through SessionControlTab");
   assert.ok(!panel.includes("<CopilotConfigure"), "Session tab no longer hosts duplicate copilot block");
   // Advanced drawer still exposes the detailed controls.
   assert.ok(copilot.includes("Session focus"), "Advanced exposes session focus");

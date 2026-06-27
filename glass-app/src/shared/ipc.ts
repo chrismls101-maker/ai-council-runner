@@ -1483,6 +1483,8 @@ export interface GlassState {
   aletheiaAdviceSpeak?: { text: string; nonce: number };
   /** B2.3 — bounded autonomy loop scope, audit trail, and summary. */
   aletheiaBoundedLoop?: import("./aletheiaBoundedAutonomy.ts").AletheiaBoundedLoopSnapshot;
+  /** B3.1 — live agent coordination activity for council / research / writing routes. */
+  aletheiaAgentActivity?: import("./aletheiaAgentCoordinator.ts").AletheiaAgentActivitySnapshot;
   // ── Design-to-Code Bridge (#163) ─────────────────────────────────────────
   /** Active design capture cards keyed by feed item id. */
   designCaptures?: Record<string, {

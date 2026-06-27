@@ -122,6 +122,7 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
   const pendingAdvice = glassState.aletheiaPendingAdvice;
   const actionPipeline = glassState.aletheiaActionPipeline;
   const boundedLoop = glassState.aletheiaBoundedLoop;
+  const agentActivity = glassState.aletheiaAgentActivity;
 
   const handleApproveAdvice = useCallback((adviceId: string): void => {
     dispatchAletheiaCommand("approve-aletheia-advice", { adviceId });
@@ -310,6 +311,7 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
               onModify={handleModifyAction}
             />
             <BoundedLoopPanel companionActive={companionActive} boundedLoop={boundedLoop} />
+            <AgentActivityPanel companionActive={companionActive} agentActivity={agentActivity} />
             <PermissionsPanel
               permissionPlane={permissionPlane}
               capabilities={glassState.setupCapabilities ?? []}
@@ -768,6 +770,74 @@ function BoundedLoopPanel({
             <div className="aletheia-dashboard__confirm-result aletheia-dashboard__confirm-result--ok" data-testid="aletheia-dashboard-bounded-loop-summary">
               <p className="aletheia-dashboard__confirm-key">Loop summary</p>
               <p className="aletheia-dashboard__panel-copy">{boundedLoop.summary}</p>
+            </div>
+          ) : null}
+        </>
+      )}
+    </section>
+  );
+}
+
+function AgentActivityPanel({
+  companionActive,
+  agentActivity,
+}: {
+  companionActive: boolean;
+  agentActivity?: GlassState["aletheiaAgentActivity"];
+}): JSX.Element {
+  return (
+    <section className="aletheia-dashboard__panel" data-testid="aletheia-dashboard-agent-activity">
+      <p className="aletheia-dashboard__panel-label">Agent activity</p>
+      {!companionActive ? (
+        <p className="aletheia-dashboard__panel-copy">
+          Activate Aletheia — she can route council, research, and writing work on your behalf.
+        </p>
+      ) : !agentActivity ? (
+        <p className="aletheia-dashboard__panel-copy" data-testid="aletheia-dashboard-agent-activity-empty">
+          No active coordination — ask her to figure out an approach, research a topic, or draft something.
+        </p>
+      ) : (
+        <>
+          <p className="aletheia-dashboard__panel-meta" data-testid="aletheia-dashboard-agent-activity-phase">
+            {agentActivity.phase.replace(/_/g, " ")}
+          </p>
+          <ul className="aletheia-dashboard__agent-activity" data-testid="aletheia-dashboard-agent-activity-steps">
+            {agentActivity.steps.map((step) => (
+              <li
+                key={step.id}
+                className={
+                  step.status === "done"
+                    ? "aletheia-dashboard__agent-activity-row--done"
+                    : step.status === "running"
+                      ? "aletheia-dashboard__agent-activity-row--running"
+                      : step.status === "failed"
+                        ? "aletheia-dashboard__agent-activity-row--error"
+                        : undefined
+                }
+              >
+                <span className="aletheia-dashboard__agent-activity-label">{step.label}</span>
+                {step.detail ? (
+                  <span className="aletheia-dashboard__panel-footnote">{step.detail}</span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+          {agentActivity.unifiedAnswer ? (
+            <div
+              className="aletheia-dashboard__confirm-result aletheia-dashboard__confirm-result--ok"
+              data-testid="aletheia-dashboard-agent-activity-answer"
+            >
+              <p className="aletheia-dashboard__confirm-key">Unified answer</p>
+              <p className="aletheia-dashboard__panel-copy">{agentActivity.unifiedAnswer}</p>
+            </div>
+          ) : null}
+          {agentActivity.errorMessage ? (
+            <div
+              className="aletheia-dashboard__confirm-result aletheia-dashboard__confirm-result--error"
+              data-testid="aletheia-dashboard-agent-activity-error"
+            >
+              <p className="aletheia-dashboard__confirm-key">Could not finish</p>
+              <p className="aletheia-dashboard__panel-copy">{agentActivity.errorMessage}</p>
             </div>
           ) : null}
         </>
