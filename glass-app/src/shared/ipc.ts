@@ -1497,6 +1497,8 @@ export interface GlassState {
   aletheiaDelegatedLoop?: import("./aletheiaDelegatedLoop.ts").AletheiaDelegatedLoopSnapshot;
   /** B3.4 — web research conversation thread with citations. */
   aletheiaResearchConversation?: import("./aletheiaResearchConversation.ts").AletheiaResearchConversationSnapshot;
+  /** B4.1 — persona-aware operating mode for Aletheia companion. */
+  aletheiaPersonaBehavior?: import("./aletheiaPersonaBehavior.ts").AletheiaPersonaBehaviorSnapshot;
   // ── Design-to-Code Bridge (#163) ─────────────────────────────────────────
   /** Active design capture cards keyed by feed item id. */
   designCaptures?: Record<string, {

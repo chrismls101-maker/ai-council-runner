@@ -436,6 +436,10 @@ import {
   finishAletheiaCompanionOperation,
   startAletheiaCompanionOperation,
 } from "./aletheiaCompanionOperation.ts";
+import {
+  resolveAletheiaPersonaBehavior,
+  truncateAletheiaSpokenText,
+} from "../shared/aletheiaPersonaBehavior.ts";
 import { ensurePtySpawnHelperExecutable } from "./glassTerminal.ts";
 import {
   logSessionStart,
@@ -1240,6 +1244,8 @@ interface AppState {
   aletheiaDelegatedLoop?: import("../shared/aletheiaDelegatedLoop.ts").AletheiaDelegatedLoopSnapshot;
   /** B3.4 — web research conversation with citations. */
   aletheiaResearchConversation?: import("../shared/aletheiaResearchConversation.ts").AletheiaResearchConversationSnapshot;
+  /** B4.1 — persona-aware operating mode. */
+  aletheiaPersonaBehavior?: import("../shared/aletheiaPersonaBehavior.ts").AletheiaPersonaBehaviorSnapshot;
   /** Whether the dock terminal panel is open. */
   glassDockTerminalOpen?: boolean;
   /** Active PTY session id. */
@@ -2036,6 +2042,7 @@ function handleAletheiaPermissionRevocation(
     clearAletheiaDelegatedPresenceState(aletheiaDelegatedPresenceHost);
     clearAletheiaDelegatedLoopState(aletheiaDelegatedLoopHost);
     clearAletheiaResearchConversationState(aletheiaResearchConversationHost);
+    state.aletheiaPersonaBehavior = undefined;
     abortAletheiaCompanionOperation();
     pendingLoopDecisionResolver = null;
     loopCancelRequested = false;
@@ -4286,6 +4293,7 @@ function refreshAletheiaAmbientSynthesisState(): AletheiaAmbientSynthesisSnapsho
     getCompanionPrivacyActive: () => state.companionPrivacy?.active === true,
     getActivation: () => state.aletheiaActivation,
     getAmbientSynthesis: () => state.aletheiaAmbientSynthesis,
+    getInitiativeLevel: () => state.aletheiaPersonaBehavior?.initiativeLevel,
     getSnapshot: () => state.aletheiaPendingAdvice,
     setSnapshot: (plane) => {
       state.aletheiaPendingAdvice = plane;
@@ -4295,9 +4303,18 @@ function refreshAletheiaAmbientSynthesisState(): AletheiaAmbientSynthesisSnapsho
   return snapshot;
 }
 
+function refreshAletheiaPersonaBehaviorState(now = Date.now()): void {
+  state.aletheiaPersonaBehavior = resolveAletheiaPersonaBehavior({
+    persona: state.persona,
+    accountLink: state.iivoAccountLink,
+    glassDevMode: !app.isPackaged,
+    now,
+  });
+}
+
 function speakAletheiaAdviceAck(text: string): void {
   state.aletheiaAdviceSpeak = {
-    text,
+    text: truncateAletheiaSpokenText(text, state.aletheiaPersonaBehavior),
     nonce: (state.aletheiaAdviceSpeak?.nonce ?? 0) + 1,
   };
 }
@@ -4741,6 +4758,10 @@ function resolveAskUserContextForSubmit(
   const termCtx = includeTerminal ? getTerminalContextString() : null;
 
   const parts = [profileContext, ambientContext, termCtx].filter(Boolean);
+  const personaDirective = state.aletheiaPersonaBehavior?.promptDirective;
+  if (personaDirective && state.companionModeActive) {
+    parts.unshift(personaDirective);
+  }
   return parts.length > 0 ? parts.join("\n\n") : undefined;
 }
 
@@ -5095,6 +5116,7 @@ function snapshot(): GlassState {
     aletheiaDelegatedPresence: state.aletheiaDelegatedPresence,
     aletheiaDelegatedLoop: state.aletheiaDelegatedLoop,
     aletheiaResearchConversation: state.aletheiaResearchConversation,
+    aletheiaPersonaBehavior: state.aletheiaPersonaBehavior,
     glassDockTerminalOpen: state.glassDockTerminalOpen,
     glassDockTerminalId: state.glassDockTerminalId,
     glassDockTerminalTabs: state.glassDockTerminalTabs,
@@ -5183,6 +5205,7 @@ async function finishSortingHatOnboarding(persona?: GlassState["persona"]): Prom
   state.glassSettings = glassUserSettings;
   state.onboardingComplete = true;
   if (effectivePersona) state.persona = effectivePersona;
+  if (state.companionModeActive) refreshAletheiaPersonaBehaviorState();
   state.onboardingFinishedAt = Date.now();
   syncBuilderStripLayoutReserve();
 
@@ -8194,6 +8217,7 @@ async function handleCommand(
           };
           await persistIivoAccountLink(link);
           state.iivoAccountLink = link;
+          if (state.companionModeActive) refreshAletheiaPersonaBehaviorState();
           push();
         } catch (err) {
           state.lastError =
@@ -8207,6 +8231,7 @@ async function handleCommand(
       (async () => {
         await clearIivoAccountLink();
         state.iivoAccountLink = null;
+        if (state.companionModeActive) refreshAletheiaPersonaBehaviorState();
         push();
       })();
       return;
@@ -11614,6 +11639,7 @@ async function ensureCompanionModeCanActivate(): Promise<string | null> {
 function applyCompanionModeActivation(): void {
   state.companionModeActive = true;
   state.companionModeToggleNonce += 1;
+  refreshAletheiaPersonaBehaviorState();
   aletheiaPermissionMonitor.setCompanionActive(true);
   aletheiaSidecarManager.setCompanionActive(true);
   beginAletheiaSession(state.activeApp);
@@ -11650,6 +11676,7 @@ function deactivateCompanionMode(): void {
   clearAletheiaDelegatedPresenceState(aletheiaDelegatedPresenceHost);
   clearAletheiaDelegatedLoopState(aletheiaDelegatedLoopHost);
   clearAletheiaResearchConversationState(aletheiaResearchConversationHost);
+  state.aletheiaPersonaBehavior = undefined;
   abortAletheiaCompanionOperation();
   pendingLoopDecisionResolver = null;
   loopCancelRequested = false;

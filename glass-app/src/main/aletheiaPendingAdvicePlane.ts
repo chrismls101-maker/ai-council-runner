@@ -17,6 +17,7 @@ export interface AletheiaPendingAdvicePlaneHost {
   getCompanionPrivacyActive: () => boolean;
   getActivation: () => AletheiaActivationState | undefined;
   getAmbientSynthesis: () => AletheiaAmbientSynthesisSnapshot | undefined;
+  getInitiativeLevel?: () => import("../shared/aletheiaPersonaBehavior.ts").AletheiaInitiativeLevel | undefined;
   getSnapshot: () => AletheiaPendingAdviceSnapshot | undefined;
   setSnapshot: (snapshot: AletheiaPendingAdviceSnapshot | undefined) => void;
   push: () => void;
@@ -43,6 +44,7 @@ export function refreshAletheiaPendingAdvicePlane(
     activation: host.getActivation(),
     connections: ambient?.connections ?? [],
     existingCards: previous.cards,
+    initiativeLevel: host.getInitiativeLevel?.(),
   });
 
   const next = incoming.length > 0

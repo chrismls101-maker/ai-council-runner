@@ -7,6 +7,10 @@ import type { PermissionDomainRow } from "../../shared/aletheiaPermissionControl
 import type { ObservationSignalRow as ObservationSignalRowData } from "../../shared/aletheiaObservationSignals.ts";
 import { observationSignalStatusLabel } from "../../shared/aletheiaObservationSignals.ts";
 import { activationPhaseLabel } from "../../shared/aletheiaActivationPolicy.ts";
+import {
+  operatingModeLabel,
+  resolveAletheiaPersonaBehavior,
+} from "../../shared/aletheiaPersonaBehavior.ts";
 import { pendingAletheiaAdviceCards } from "../../shared/aletheiaPendingAdvice.ts";
 import type { AletheiaAdviceCard } from "../../shared/aletheiaPendingAdvice.ts";
 import { formatActionConfirmationCard } from "../../shared/aletheiaActionConfirmation.ts";
@@ -126,6 +130,21 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
   const delegatedPresence = glassState.aletheiaDelegatedPresence;
   const delegatedLoop = glassState.aletheiaDelegatedLoop;
   const researchConversation = glassState.aletheiaResearchConversation;
+  const personaBehavior = useMemo(
+    () =>
+      glassState.aletheiaPersonaBehavior
+      ?? resolveAletheiaPersonaBehavior({
+        persona: glassState.persona,
+        accountLink: glassState.iivoAccountLink,
+        glassDevMode: glassState.glassDevMode,
+      }),
+    [
+      glassState.aletheiaPersonaBehavior,
+      glassState.persona,
+      glassState.iivoAccountLink,
+      glassState.glassDevMode,
+    ],
+  );
 
   const handleApproveAdvice = useCallback((adviceId: string): void => {
     dispatchAletheiaCommand("approve-aletheia-advice", { adviceId });
@@ -312,6 +331,11 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
               ambientSynthesis={ambientSynthesis}
               companionActive={companionActive}
             />
+            <PersonaBehaviorPanel
+              companionActive={companionActive}
+              personaBehavior={personaBehavior}
+              persona={glassState.persona}
+            />
             <PendingAdvicePanel
               companionActive={companionActive}
               pendingAdvice={pendingAdvice}
@@ -373,6 +397,53 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
         </div>
       </div>
     </div>
+  );
+}
+
+function PersonaBehaviorPanel({
+  companionActive,
+  personaBehavior,
+  persona,
+}: {
+  companionActive: boolean;
+  personaBehavior: ReturnType<typeof resolveAletheiaPersonaBehavior>;
+  persona?: GlassState["persona"];
+}): JSX.Element {
+  return (
+    <section className="aletheia-dashboard__panel" data-testid="aletheia-dashboard-persona-behavior">
+      <p className="aletheia-dashboard__panel-label">Operating mode</p>
+      {!companionActive ? (
+        <p className="aletheia-dashboard__panel-copy">
+          Activate Aletheia — she adapts tone and initiative to your persona
+          {persona ? ` (${persona})` : ""}.
+        </p>
+      ) : (
+        <>
+          <p className="aletheia-dashboard__panel-meta" data-testid="aletheia-dashboard-persona-mode">
+            {operatingModeLabel(personaBehavior.operatingMode)}
+            {personaBehavior.founderTierActive ? " · founder tier" : ""}
+          </p>
+          <p className="aletheia-dashboard__panel-copy" data-testid="aletheia-dashboard-persona-tone">
+            {personaBehavior.toneLabel}
+          </p>
+          <ul className="aletheia-dashboard__stat-list">
+            <li>
+              <span className="aletheia-dashboard__stat-key">Verbosity</span>
+              <span className="aletheia-dashboard__stat-value">{personaBehavior.verbosity}</span>
+            </li>
+            <li>
+              <span className="aletheia-dashboard__stat-key">Initiative</span>
+              <span className="aletheia-dashboard__stat-value">{personaBehavior.initiativeLevel}</span>
+            </li>
+          </ul>
+          {personaBehavior.founderTierActive ? (
+            <p className="aletheia-dashboard__panel-footnote" data-testid="aletheia-dashboard-founder-tier">
+              Founder command tier active — expanded authority scope acknowledged.
+            </p>
+          ) : null}
+        </>
+      )}
+    </section>
   );
 }
 

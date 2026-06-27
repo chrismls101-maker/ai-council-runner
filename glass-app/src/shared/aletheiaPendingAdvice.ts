@@ -44,6 +44,7 @@ export interface AdviceGenerationInput {
   activation?: AletheiaActivationState | null;
   connections: readonly AmbientSignalConnection[];
   existingCards: readonly AletheiaAdviceCard[];
+  initiativeLevel?: import("./aletheiaPersonaBehavior.ts").AletheiaInitiativeLevel;
 }
 
 export interface VoiceAdviceResolution {
@@ -113,7 +114,9 @@ export function canSurfaceAletheiaAdvice(input: AdviceGenerationInput): boolean 
   if (!input.companionModeActive || input.companionPrivacyActive) return false;
   const activation = input.activation;
   if (!activation) return false;
-  if (activation.awaitingUserLead && activation.userTurnCount === 0) return false;
+  if (activation.awaitingUserLead && activation.userTurnCount === 0) {
+    if (input.initiativeLevel !== "high") return false;
+  }
   return true;
 }
 

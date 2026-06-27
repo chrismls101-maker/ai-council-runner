@@ -407,7 +407,7 @@ function useGlassCompanionSession(): GlassCompanionController {
       phase === "warming"
         ? COMPANION_WARMING_SPEECH
         : phase === "ready"
-          ? COMPANION_PRESENCE_SPEECH
+          ? (glass.aletheiaPersonaBehavior?.activationSpeech ?? COMPANION_PRESENCE_SPEECH)
           : null;
     if (!line) return;
 
@@ -425,6 +425,7 @@ function useGlassCompanionSession(): GlassCompanionController {
     glass.companionWarmupPhase,
     glass.companionWarmupSpeakNonce,
     state.status,
+    glass.aletheiaPersonaBehavior?.activationSpeech,
     tts,
     speakTracked,
   ]);

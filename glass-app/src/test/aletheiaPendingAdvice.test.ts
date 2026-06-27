@@ -52,6 +52,24 @@ describe("generateAletheiaAdviceCards", () => {
     });
     assert.equal(cards.length, 0);
   });
+
+  test("high initiative surfaces advice before the user speaks (founder mode)", () => {
+    const cards = generateAletheiaAdviceCards({
+      companionModeActive: true,
+      companionPrivacyActive: false,
+      activation: initialAletheiaActivationState(),
+      initiativeLevel: "high",
+      connections: [
+        {
+          id: "terminal_dev_app",
+          signals: ["terminal", "activeApp"],
+          insight: "Your terminal has a recent error and you are in Cursor.",
+        },
+      ],
+      existingCards: [],
+    });
+    assert.equal(cards.length, 1);
+  });
 });
 
 describe("resolveVoiceAdviceResponse", () => {
