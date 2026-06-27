@@ -1510,6 +1510,8 @@ export interface GlassState {
   aletheiaRelationshipThread?: import("./aletheiaRelationshipThread.ts").AletheiaRelationshipThreadSnapshot;
   /** B5.2 — multi-display situational awareness. */
   aletheiaDisplayAwareness?: import("./aletheiaDisplayAwareness.ts").AletheiaDisplayAwarenessSnapshot;
+  /** B6 — live trust activity and human-legible audit trail from action ledger. */
+  aletheiaTrustActivity?: import("./aletheiaTrustLedger.ts").AletheiaTrustActivitySnapshot;
   // ── Design-to-Code Bridge (#163) ─────────────────────────────────────────
   /** Active design capture cards keyed by feed item id. */
   designCaptures?: Record<string, {

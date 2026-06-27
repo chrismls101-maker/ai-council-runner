@@ -18,6 +18,8 @@ import type { AletheiaRelationshipThreadSnapshot } from "../../shared/aletheiaRe
 import { relationshipEventKindLabel } from "../../shared/aletheiaRelationshipThread.ts";
 import type { AletheiaDisplayAwarenessSnapshot } from "../../shared/aletheiaDisplayAwareness.ts";
 import type { ConnectedDisplaySnapshot } from "../../shared/displayInfo.ts";
+import type { AletheiaTrustActivitySnapshot } from "../../shared/aletheiaTrustLedger.ts";
+import { kindLabel, stageLabel } from "../../shared/aletheiaTrustLedger.ts";
 import { resolveAletheiaSurface } from "../../shared/aletheiaSurfaceDoctrine.ts";
 import { pendingAletheiaAdviceCards } from "../../shared/aletheiaPendingAdvice.ts";
 import type { AletheiaAdviceCard } from "../../shared/aletheiaPendingAdvice.ts";
@@ -142,6 +144,7 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
   const attentionRecovery = glassState.aletheiaAttentionRecovery;
   const relationshipThread = glassState.aletheiaRelationshipThread;
   const displayAwareness = glassState.aletheiaDisplayAwareness;
+  const trustActivity = glassState.aletheiaTrustActivity;
   const personaBehavior = useMemo(
     () =>
       glassState.aletheiaPersonaBehavior
@@ -387,7 +390,14 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
               onModify={handleModifyAction}
             />
             <BoundedLoopPanel companionActive={companionActive} boundedLoop={boundedLoop} />
-            <AgentActivityPanel companionActive={companionActive} agentActivity={agentActivity} />
+            <AgentActivityPanel
+              companionActive={companionActive}
+              agentActivity={agentActivity}
+            />
+            <TrustActivityPanel
+              companionActive={companionActive}
+              trustActivity={trustActivity}
+            />
             <DelegatedPresencePanel
               companionActive={companionActive}
               delegatedPresence={delegatedPresence}
@@ -1030,6 +1040,60 @@ function BoundedLoopPanel({
               <p className="aletheia-dashboard__panel-copy">{boundedLoop.summary}</p>
             </div>
           ) : null}
+        </>
+      )}
+    </section>
+  );
+}
+
+function TrustActivityPanel({
+  companionActive,
+  trustActivity,
+}: {
+  companionActive: boolean;
+  trustActivity?: AletheiaTrustActivitySnapshot;
+}): JSX.Element {
+  return (
+    <section className="aletheia-dashboard__panel" data-testid="aletheia-dashboard-trust-activity">
+      <p className="aletheia-dashboard__panel-label">Trust &amp; activity</p>
+      {!trustActivity || trustActivity.entries.length === 0 ? (
+        <p className="aletheia-dashboard__panel-copy" data-testid="aletheia-dashboard-trust-empty">
+          {companionActive
+            ? "Actions Aletheia takes will appear here with a plain-language audit trail."
+            : "Activate Aletheia — every action she runs is logged here in human-readable form."}
+        </p>
+      ) : (
+        <>
+          <p className="aletheia-dashboard__panel-meta" data-testid="aletheia-dashboard-trust-summary">
+            {trustActivity.summaryLine}
+            {trustActivity.sessionId ? " · this session" : " · recent history"}
+          </p>
+          <ul className="aletheia-dashboard__bounded-audit" data-testid="aletheia-dashboard-trust-audit">
+            {trustActivity.entries.map((row) => (
+              <li
+                key={row.id}
+                className={
+                  row.ok === true
+                    ? "aletheia-dashboard__bounded-audit-row--ok"
+                    : row.ok === false
+                      ? "aletheia-dashboard__bounded-audit-row--error"
+                      : undefined
+                }
+              >
+                <span className="aletheia-dashboard__notes-meta">
+                  {kindLabel(row.kind)} · {stageLabel(row.stage)}
+                </span>
+                {" "}
+                {row.headline}
+                {row.detail && row.detail !== row.headline ? (
+                  <span className="aletheia-dashboard__panel-footnote"> — {row.detail}</span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+          <p className="aletheia-dashboard__panel-footnote">
+            Durable audit trail from the action ledger — read-only here; memory admin stays in Glass.
+          </p>
         </>
       )}
     </section>

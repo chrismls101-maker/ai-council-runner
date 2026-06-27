@@ -9,6 +9,16 @@ import { getDb } from "./glassDatabase.ts";
 import type { ActionIntent, ActionLedgerEntry, ActionResult, PipelineStage } from "../shared/aletheiaExecution.ts";
 import { makeLedgerEntryId, narrationForStage } from "../shared/aletheiaExecution.ts";
 
+let onAletheiaActionLedgerChanged: (() => void) | null = null;
+
+export function setAletheiaActionLedgerChangedHandler(handler: (() => void) | null): void {
+  onAletheiaActionLedgerChanged = handler;
+}
+
+function notifyAletheiaActionLedgerChanged(): void {
+  onAletheiaActionLedgerChanged?.();
+}
+
 export function createAletheiaActionLedgerTable(): void {
   const db = getDb();
   if (!db) return;
@@ -59,30 +69,31 @@ export function appendActionLedgerEntry(input: {
   };
 
   const db = getDb();
-  if (!db) return entry;
-
-  try {
-    db.prepare(
-      `INSERT INTO aletheia_action_ledger
-        (id, intent_id, session_id, stage, kind, summary, narration, payload_json, ok, error_message, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      entry.id,
-      entry.intentId,
-      entry.sessionId,
-      entry.stage,
-      entry.kind,
-      entry.summary,
-      entry.narration,
-      entry.payloadJson,
-      entry.ok === null || entry.ok === undefined ? null : entry.ok ? 1 : 0,
-      entry.errorMessage,
-      entry.createdAt,
-    );
-  } catch (err) {
-    console.error("[aletheiaActionLedgerStore] appendActionLedgerEntry error:", err);
+  if (db) {
+    try {
+      db.prepare(
+        `INSERT INTO aletheia_action_ledger
+          (id, intent_id, session_id, stage, kind, summary, narration, payload_json, ok, error_message, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        entry.id,
+        entry.intentId,
+        entry.sessionId,
+        entry.stage,
+        entry.kind,
+        entry.summary,
+        entry.narration,
+        entry.payloadJson,
+        entry.ok === null || entry.ok === undefined ? null : entry.ok ? 1 : 0,
+        entry.errorMessage,
+        entry.createdAt,
+      );
+    } catch (err) {
+      console.error("[aletheiaActionLedgerStore] appendActionLedgerEntry error:", err);
+    }
   }
 
+  notifyAletheiaActionLedgerChanged();
   return entry;
 }
 

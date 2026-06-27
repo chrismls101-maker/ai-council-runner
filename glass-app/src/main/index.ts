@@ -315,7 +315,7 @@ import { registerDashboardIpc, setDashboardIpcAuth, isDashboardIpcSender } from 
 import { registerAletheiaDashboardIpc, setAletheiaDashboardIpcAuth } from "./aletheiaDashboardIpc.ts";
 import { closeDatabase, gracefulDatabaseShutdown, initDatabase } from "./glassDatabase.ts";
 import { createAletheiaSessionsTable, getRecentAletheiaSessions } from "./aletheiaSessionStore.ts";
-import { createAletheiaActionLedgerTable, getRecentActionLedgerEntries } from "./aletheiaActionLedgerStore.ts";
+import { createAletheiaActionLedgerTable, getRecentActionLedgerEntries, setAletheiaActionLedgerChangedHandler } from "./aletheiaActionLedgerStore.ts";
 import {
   appendAletheiaNote,
   createAletheiaNotesTable,
@@ -342,6 +342,10 @@ import {
   displayAwarenessSnapshotsEqual,
   formatAletheiaDisplayContext,
 } from "../shared/aletheiaDisplayAwareness.ts";
+import {
+  buildAletheiaTrustActivity,
+  trustActivitySnapshotsEqual,
+} from "../shared/aletheiaTrustLedger.ts";
 import {
   buildAletheiaSurfaceContext,
   resolveAletheiaSurface,
@@ -1290,6 +1294,8 @@ interface AppState {
   aletheiaRelationshipThread?: import("../shared/aletheiaRelationshipThread.ts").AletheiaRelationshipThreadSnapshot;
   /** B5.2 — multi-display situational awareness. */
   aletheiaDisplayAwareness?: import("../shared/aletheiaDisplayAwareness.ts").AletheiaDisplayAwarenessSnapshot;
+  /** B6 — live trust activity and human-legible audit trail from action ledger. */
+  aletheiaTrustActivity?: import("../shared/aletheiaTrustLedger.ts").AletheiaTrustActivitySnapshot;
   /** Whether the dock terminal panel is open. */
   glassDockTerminalOpen?: boolean;
   /** Active PTY session id. */
@@ -4327,6 +4333,17 @@ function refreshAletheiaObservationPlaneState(options?: { forcePush?: boolean; f
   return snapshot;
 }
 
+function refreshAletheiaTrustActivityState(): boolean {
+  const sessionId = currentAletheiaActionSessionId();
+  const previous = state.aletheiaTrustActivity;
+  state.aletheiaTrustActivity = buildAletheiaTrustActivity(getRecentActionLedgerEntries(32), {
+    sessionId:
+      state.companionModeActive && sessionId !== "glass-no-session" ? sessionId : undefined,
+    limit: 16,
+  });
+  return !trustActivitySnapshotsEqual(previous, state.aletheiaTrustActivity);
+}
+
 function refreshAletheiaDisplayAwarenessState(): boolean {
   const previous = state.aletheiaDisplayAwareness;
   const displays = getConnectedDisplays();
@@ -5360,6 +5377,7 @@ function snapshot(): GlassState {
     aletheiaAttentionRecovery: state.aletheiaAttentionRecovery,
     aletheiaRelationshipThread: state.aletheiaRelationshipThread,
     aletheiaDisplayAwareness: state.aletheiaDisplayAwareness,
+    aletheiaTrustActivity: state.aletheiaTrustActivity,
     glassDockTerminalOpen: state.glassDockTerminalOpen,
     glassDockTerminalId: state.glassDockTerminalId,
     glassDockTerminalTabs: state.glassDockTerminalTabs,
@@ -11948,6 +11966,7 @@ function applyCompanionModeActivation(): void {
     },
   });
   refreshAletheiaObservationPlaneState({ forcePush: true, forcePersist: true });
+  refreshAletheiaTrustActivityState();
 }
 
 function deactivateCompanionMode(sessionSummary?: string): void {
@@ -13186,6 +13205,7 @@ function registerIpc(): void {
       state.glassDashboardNav = null;
     }
     state.aletheiaDashboardActive = true;
+    refreshAletheiaTrustActivityState();
     syncIdeChromeFromState();
     push();
     setImmediate(() => notifyAletheiaDashboardMounted());
@@ -14751,6 +14771,14 @@ app.whenReady().then(() =>
   const dbInit = initDatabase();
   createAletheiaSessionsTable();
   createAletheiaActionLedgerTable();
+  setAletheiaActionLedgerChangedHandler(() => {
+    if (refreshAletheiaTrustActivityState()) {
+      if (state.companionModeActive || state.aletheiaDashboardActive) {
+        push();
+      }
+    }
+  });
+  refreshAletheiaTrustActivityState();
   createAletheiaNotesTable();
   refreshAletheiaNotesState();
   if (dbInit.recoveredFromCorruption) {
