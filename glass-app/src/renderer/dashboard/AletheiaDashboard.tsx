@@ -33,7 +33,7 @@ import type { AletheiaAdviceCard } from "../../shared/aletheiaPendingAdvice.ts";
 import { formatActionConfirmationCard } from "../../shared/aletheiaActionConfirmation.ts";
 import type { SidecarServiceRow } from "../../shared/aletheiaSidecarManager.ts";
 import type { DependencyRow } from "../../shared/aletheiaDependencyManifest.ts";
-import { send, useGlassState } from "../useGlassState.ts";
+import { useGlassState } from "../useGlassState.ts";
 import { dispatchAletheiaCommand } from "../../shared/aletheiaAuthority.ts";
 import { ensureAletheiaDispatchRegistered } from "../aletheia/registerAletheiaDispatch.ts";
 import { useGlassCompanion } from "../companion/GlassCompanionProvider.tsx";
@@ -121,11 +121,11 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
   }, []);
 
   const handleDismissPermissionAlert = useCallback((): void => {
-    send({ type: "dismiss-aletheia-permission-alert" });
+    dispatchAletheiaCommand("dismiss-aletheia-permission-alert");
   }, []);
 
   const handleDismissSidecarAlert = useCallback((): void => {
-    send({ type: "dismiss-aletheia-sidecar-alert" });
+    dispatchAletheiaCommand("dismiss-aletheia-sidecar-alert");
   }, []);
 
   const handleDismissSecurityContainment = useCallback((): void => {
@@ -141,7 +141,7 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
   }, []);
 
   const handleRunBootstrap = useCallback((): void => {
-    send({ type: "run-aletheia-bootstrap" });
+    dispatchAletheiaCommand("run-aletheia-bootstrap");
   }, []);
 
   const permissionPlane = glassState.aletheiaPermissionPlane;

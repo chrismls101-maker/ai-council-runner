@@ -52,6 +52,11 @@ export const ALETHEIA_ALLOWED_COMMANDS = new Set([
   "update-aletheia-note",
   "delete-aletheia-note",
 
+  // B1 — permission / sidecar alerts and dependency bootstrap (session control)
+  "dismiss-aletheia-permission-alert",
+  "dismiss-aletheia-sidecar-alert",
+  "run-aletheia-bootstrap",
+
   // B7 — dismiss security containment hold after user review.
   "dismiss-aletheia-security-containment",
 

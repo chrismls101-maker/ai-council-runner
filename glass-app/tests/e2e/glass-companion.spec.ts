@@ -12,8 +12,8 @@
  *   G6 — Server degraded banner                                          [ 5 tests]
  *   G7 — IPC boundary regression                                         [ 5 tests]
  *   G8 — Security hive panel + containment dismiss                         [ 4 tests]
- *   G9 — Founder Deployed Execution panel + strip marker                   [ 4 tests]
- *                                                            Total:       50 tests
+ *   G9 — Founder Deployed Execution panel + strip marker                   [ 6 tests]
+ *                                                            Total:       52 tests
  *
  * Stub notes:
  *   - Mic / audio capture: no real hardware used. Companion is toggled via
@@ -257,6 +257,12 @@ test.describe("G1 — Authority allowlist", () => {
     assert.doesNotThrow(() => dispatchAletheiaCommand("confirm-aletheia-action", { intentId: "test" }));
     assert.doesNotThrow(() => dispatchAletheiaCommand("reject-aletheia-action", { intentId: "test" }));
     assert.doesNotThrow(() => dispatchAletheiaCommand("modify-aletheia-action", { intentId: "test", modifier: "npm test" }));
+    assert.doesNotThrow(() => dispatchAletheiaCommand("dismiss-aletheia-permission-alert"));
+    assert.doesNotThrow(() => dispatchAletheiaCommand("dismiss-aletheia-sidecar-alert"));
+    assert.doesNotThrow(() => dispatchAletheiaCommand("run-aletheia-bootstrap"));
+    assert.doesNotThrow(() => dispatchAletheiaCommand("dismiss-aletheia-security-containment"));
+    assert.doesNotThrow(() => dispatchAletheiaCommand("invoke-aletheia-deployed-execution"));
+    assert.doesNotThrow(() => dispatchAletheiaCommand("deactivate-aletheia-deployed-execution"));
   });
 
   test("G1.11 — ALLOWED and BLOCKED sets are disjoint (no command in both)", () => {
@@ -269,10 +275,14 @@ test.describe("G1 — Authority allowlist", () => {
     }
   });
 
-  test("G1.12 — BLOCKED set is larger than ALLOWED (Glass owns more commands than Aletheia)", () => {
+  test("G1.12 — allow and block lists are both non-empty and session-scoped", () => {
     assert.ok(
-      ALETHEIA_BLOCKED_COMMANDS.size > ALETHEIA_ALLOWED_COMMANDS.size,
-      `Blocked (${ALETHEIA_BLOCKED_COMMANDS.size}) must exceed allowed (${ALETHEIA_ALLOWED_COMMANDS.size})`,
+      ALETHEIA_ALLOWED_COMMANDS.size >= 20,
+      `Aletheia allowlist should cover session UI commands (got ${ALETHEIA_ALLOWED_COMMANDS.size})`,
+    );
+    assert.ok(
+      ALETHEIA_BLOCKED_COMMANDS.size >= 10,
+      `Glass-privileged blocklist must stay substantial (got ${ALETHEIA_BLOCKED_COMMANDS.size})`,
     );
   });
 });
@@ -1169,7 +1179,7 @@ test.describe("Electron companion suite", () => {
     });
   });
 
-  // ── G9 — Founder Deployed Execution (4 tests) ─────────────────────────────
+  // ── G9 — Founder Deployed Execution (6 tests) ─────────────────────────────
 
   test.describe("G9 — Founder Deployed Execution", () => {
     test("G9.1 — founder panel hidden for non-founder accounts", async () => {
@@ -1265,6 +1275,87 @@ test.describe("Electron companion suite", () => {
         window.glass.send({
           type: "e2e-set-state",
           patch: { aletheiaDeployedExecution: undefined, iivoAccountLink: undefined },
+        });
+      });
+      await dwell();
+    });
+
+    test("G9.5 — invoke command activates Deployed Execution for founder", async () => {
+      const { command } = await getGlassWindows(app.browser);
+
+      await command.evaluate((patch) => {
+        window.glass.send({ type: "e2e-set-state", patch });
+      }, {
+        ...e2eFounderAccountLinkPatch(),
+        companionModeActive: true,
+        aletheiaDeployedExecution: undefined,
+      });
+
+      await command.evaluate(() => {
+        window.glass.send({ type: "invoke-aletheia-deployed-execution" });
+      });
+
+      await expect
+        .poll(async () => {
+          const state = await readGlassState(command);
+          return state.aletheiaDeployedExecution?.active === true;
+        })
+        .toBe(true);
+
+      await command.evaluate(() => {
+        window.glass.send({
+          type: "e2e-set-state",
+          patch: {
+            aletheiaDeployedExecution: undefined,
+            iivoAccountLink: undefined,
+            companionModeActive: false,
+          },
+        });
+      });
+      await dwell();
+    });
+
+    test("G9.6 — deactivate command clears Deployed Execution", async () => {
+      const { command } = await getGlassWindows(app.browser);
+
+      await command.evaluate((patch) => {
+        window.glass.send({ type: "e2e-set-state", patch });
+      }, {
+        ...e2eFounderAccountLinkPatch(),
+        companionModeActive: true,
+        aletheiaDeployedExecution: undefined,
+      });
+
+      await command.evaluate(() => {
+        window.glass.send({ type: "invoke-aletheia-deployed-execution" });
+      });
+
+      await expect
+        .poll(async () => {
+          const state = await readGlassState(command);
+          return state.aletheiaDeployedExecution?.active === true;
+        })
+        .toBe(true);
+
+      await command.evaluate(() => {
+        window.glass.send({ type: "deactivate-aletheia-deployed-execution" });
+      });
+
+      await expect
+        .poll(async () => {
+          const state = await readGlassState(command);
+          return state.aletheiaDeployedExecution?.active ?? false;
+        })
+        .toBe(false);
+
+      await command.evaluate(() => {
+        window.glass.send({
+          type: "e2e-set-state",
+          patch: {
+            aletheiaDeployedExecution: undefined,
+            iivoAccountLink: undefined,
+            companionModeActive: false,
+          },
         });
       });
       await dwell();

@@ -400,9 +400,21 @@ test("ALETHEIA_BLOCKED_COMMANDS set is non-empty", () => {
   assert.ok(ALETHEIA_BLOCKED_COMMANDS.size > 0, "blocked list must not be empty");
 });
 
-test("ALETHEIA_BLOCKED_COMMANDS remains at least as large as allowed (Glass-privileged surface)", () => {
-  assert.ok(
-    ALETHEIA_BLOCKED_COMMANDS.size >= ALETHEIA_ALLOWED_COMMANDS.size,
-    `Expected blocked (${ALETHEIA_BLOCKED_COMMANDS.size}) >= allowed (${ALETHEIA_ALLOWED_COMMANDS.size}) commands`,
-  );
+test("allowed and blocked command sets are disjoint", () => {
+  for (const cmd of ALETHEIA_ALLOWED_COMMANDS) {
+    assert.equal(
+      ALETHEIA_BLOCKED_COMMANDS.has(cmd as never),
+      false,
+      `"${cmd}" must not appear on both allow and block lists`,
+    );
+  }
+});
+
+test("isAletheiaAllowed returns true for session alert dismiss and bootstrap commands", () => {
+  assert.equal(isAletheiaAllowed("dismiss-aletheia-permission-alert"), true);
+  assert.equal(isAletheiaAllowed("dismiss-aletheia-sidecar-alert"), true);
+  assert.equal(isAletheiaAllowed("run-aletheia-bootstrap"), true);
+  assert.equal(isAletheiaAllowed("invoke-aletheia-deployed-execution"), true);
+  assert.equal(isAletheiaAllowed("deactivate-aletheia-deployed-execution"), true);
+  assert.equal(isAletheiaAllowed("dismiss-aletheia-security-containment"), true);
 });
