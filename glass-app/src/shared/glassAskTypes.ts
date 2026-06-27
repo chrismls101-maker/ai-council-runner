@@ -103,7 +103,7 @@ export interface GlassLastAskResponse {
   runId?: string;
   contextId?: string;
   at: string;
-  routeUsed?: "glass_direct" | "glass_visual_direct" | "aletheia_coordination" | "aletheia_delegated_presence";
+  routeUsed?: "glass_direct" | "glass_visual_direct" | "aletheia_coordination" | "aletheia_delegated_presence" | "aletheia_delegated_loop" | "aletheia_research_conversation";
   model?: string;
   /** Present when this response was produced by a Glass Agent run. */
   agentMeta?: GlassAgentResponseMeta;

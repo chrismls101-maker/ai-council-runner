@@ -14,6 +14,7 @@ import {
   type DelegatedPresenceIntent,
 } from "../shared/aletheiaDelegatedPresence.ts";
 import { executeComputerUse, formatComputerUseRouteNarration } from "./aletheiaComputerUseExecutor.ts";
+import { isAletheiaCompanionOperationAborted } from "./aletheiaCompanionOperation.ts";
 import { appendActionLedgerEntry } from "./aletheiaActionLedgerStore.ts";
 import { captureDisplayById } from "./capture.ts";
 import { askIivoGlass } from "./glassAskClient.ts";
@@ -36,7 +37,12 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function setSnapshot(host: AletheiaDelegatedPresenceHost, snapshot: AletheiaDelegatedPresenceSnapshot): void {
+function setSnapshot(
+  host: AletheiaDelegatedPresenceHost,
+  snapshot: AletheiaDelegatedPresenceSnapshot,
+  signal?: AbortSignal,
+): void {
+  if (isAletheiaCompanionOperationAborted(signal)) return;
   host.setSnapshot(snapshot);
   host.push();
 }
@@ -79,6 +85,7 @@ function recordLedger(
 async function observeTargetApp(
   host: AletheiaDelegatedPresenceHost,
   intent: DelegatedPresenceIntent,
+  signal?: AbortSignal,
 ): Promise<string> {
   const ctx = host.getWindowContext();
   const digest = host.getScreenDigest();
@@ -121,11 +128,20 @@ async function observeTargetApp(
         optimizedWidth: optimized.optimizedWidth,
         optimizedHeight: optimized.optimizedHeight,
       },
-    });
+    }, signal);
 
     const answer = response.answer?.trim();
     if (answer) return answer;
   } catch (err) {
+    if (signal?.aborted) {
+      return buildDelegatedPresenceFallbackReport({
+        targetApp: intent.targetApp,
+        reportQuestion: intent.reportQuestion,
+        windowTitle: ctx.windowTitle,
+        frontApp: ctx.appName,
+        screenDigest: digest,
+      });
+    }
     if (!(err instanceof GlassAskNoAnthropicKeyError)) {
       console.warn("[aletheiaDelegatedPresence] visual report failed:", err);
     }
@@ -140,19 +156,44 @@ async function observeTargetApp(
   });
 }
 
+export async function observeDelegatedAppReport(
+  host: AletheiaDelegatedPresenceHost,
+  intent: DelegatedPresenceIntent,
+  signal?: AbortSignal,
+): Promise<string> {
+  return observeTargetApp(host, intent, signal);
+}
+
+export async function focusDelegatedApp(targetApp: string): Promise<{
+  ok: boolean;
+  message: string;
+  method: string;
+}> {
+  const focus = await executeComputerUse({
+    operation: "activate_app",
+    targetApp,
+  });
+  return { ok: focus.ok, message: focus.message, method: focus.method };
+}
+
 export async function runAletheiaDelegatedPresence(
   host: AletheiaDelegatedPresenceHost,
   intent: DelegatedPresenceIntent,
+  options?: { signal?: AbortSignal },
 ): Promise<{ ok: boolean; report?: string; errorMessage?: string }> {
+  const signal = options?.signal;
   const sessionId = host.getSessionId();
   const ledgerIntent = delegatedIntent(sessionId, intent);
 
   let snapshot = initialDelegatedPresenceSnapshot(intent);
-  setSnapshot(host, snapshot);
+  setSnapshot(host, snapshot, signal);
+  if (isAletheiaCompanionOperationAborted(signal)) {
+    return { ok: false, errorMessage: "Delegated task cancelled." };
+  }
   recordLedger(ledgerIntent, "intent", `Delegated task: ${intent.goal}`, true);
 
   snapshot = markDelegatedPresencePhase(snapshot, "focusing");
-  setSnapshot(host, snapshot);
+  setSnapshot(host, snapshot, signal);
 
   const focus = await executeComputerUse({
     operation: "activate_app",
@@ -168,7 +209,7 @@ export async function runAletheiaDelegatedPresence(
     method: focus.method,
     errorMessage: focus.ok ? undefined : focus.message,
   });
-  setSnapshot(host, snapshot);
+  setSnapshot(host, snapshot, signal);
   recordLedger(
     ledgerIntent,
     focus.ok ? "executing" : "failed",
@@ -177,7 +218,10 @@ export async function runAletheiaDelegatedPresence(
     focus.ok ? null : focus.message,
   );
 
-  if (!focus.ok) {
+  if (!focus.ok || isAletheiaCompanionOperationAborted(signal)) {
+    if (isAletheiaCompanionOperationAborted(signal)) {
+      return { ok: false, errorMessage: "Delegated task cancelled." };
+    }
     host.setSnapshot(snapshot);
     host.push();
     return { ok: false, errorMessage: focus.message };
@@ -186,16 +230,19 @@ export async function runAletheiaDelegatedPresence(
   await delay(900);
 
   snapshot = markDelegatedPresencePhase(snapshot, "reporting");
-  setSnapshot(host, snapshot);
+  setSnapshot(host, snapshot, signal);
 
-  const report = await observeTargetApp(host, intent);
+  const report = await observeTargetApp(host, intent, signal);
+  if (isAletheiaCompanionOperationAborted(signal)) {
+    return { ok: false, errorMessage: "Delegated task cancelled." };
+  }
 
   snapshot = appendDelegatedPresenceAudit(snapshot, {
     narration: "Report synthesized from focused app context.",
     ok: true,
   });
   snapshot = markDelegatedPresencePhase(snapshot, "complete", { report, method: focus.method });
-  setSnapshot(host, snapshot);
+  setSnapshot(host, snapshot, signal);
   recordLedger(ledgerIntent, "complete", report.slice(0, 500), true);
 
   return { ok: true, report };

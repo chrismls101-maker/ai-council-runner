@@ -1040,6 +1040,12 @@ export type GlassCommand =
   | { type: "dismiss-aletheia-advice"; adviceId: string }
   /** B2.2 — modify a pending Aletheia action before confirmation. */
   | { type: "modify-aletheia-action"; intentId: string; modifier: string }
+  /** B3.3 — continue a paused delegated loop after a decision point. */
+  | { type: "continue-aletheia-loop" }
+  /** B3.3 — cancel an in-progress delegated loop. */
+  | { type: "cancel-aletheia-loop" }
+  /** B3.4 — follow-up action on an active research conversation thread. */
+  | { type: "aletheia-research-follow-up"; action: import("./aletheiaResearchConversation.ts").ResearchFollowUpAction }
   // ── Glass built-in terminal (PTY) ─────────────────────────────────────────
   | { type: "glass-terminal-open" }
   | { type: "glass-terminal-close" }
@@ -1487,6 +1493,10 @@ export interface GlassState {
   aletheiaAgentActivity?: import("./aletheiaAgentCoordinator.ts").AletheiaAgentActivitySnapshot;
   /** B3.2 — delegated presence: focus app, observe, report back. */
   aletheiaDelegatedPresence?: import("./aletheiaDelegatedPresence.ts").AletheiaDelegatedPresenceSnapshot;
+  /** B3.3 — general delegated loop with live narrative and handoff. */
+  aletheiaDelegatedLoop?: import("./aletheiaDelegatedLoop.ts").AletheiaDelegatedLoopSnapshot;
+  /** B3.4 — web research conversation thread with citations. */
+  aletheiaResearchConversation?: import("./aletheiaResearchConversation.ts").AletheiaResearchConversationSnapshot;
   // ── Design-to-Code Bridge (#163) ─────────────────────────────────────────
   /** Active design capture cards keyed by feed item id. */
   designCaptures?: Record<string, {

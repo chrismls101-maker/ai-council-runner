@@ -404,6 +404,38 @@ import {
   clearAletheiaDelegatedPresenceState,
   type AletheiaDelegatedPresenceHost,
 } from "./aletheiaDelegatedPresenceRunner.ts";
+import {
+  classifyDelegatedLoopIntent,
+  delegatedLoopIntroSpeech,
+  isDelegatedLoopRunning,
+  resolveVoiceLoopDecision,
+  type DelegatedLoopIntent,
+} from "../shared/aletheiaDelegatedLoop.ts";
+import {
+  runAletheiaDelegatedLoop,
+  clearAletheiaDelegatedLoopState,
+  type AletheiaDelegatedLoopHost,
+  type LoopDecision,
+} from "./aletheiaDelegatedLoopRunner.ts";
+import {
+  classifyResearchConversationIntent,
+  isResearchConversationActive,
+  researchCompleteSpeech,
+  researchIntroSpeech,
+  type ResearchConversationIntent,
+} from "../shared/aletheiaResearchConversation.ts";
+import type { ResearchFollowUpAction } from "../shared/aletheiaResearchConversation.ts";
+import {
+  runAletheiaResearchConversation,
+  runAletheiaResearchFollowUp,
+  clearAletheiaResearchConversationState,
+  type AletheiaResearchConversationHost,
+} from "./aletheiaResearchConversationRunner.ts";
+import {
+  abortAletheiaCompanionOperation,
+  finishAletheiaCompanionOperation,
+  startAletheiaCompanionOperation,
+} from "./aletheiaCompanionOperation.ts";
 import { ensurePtySpawnHelperExecutable } from "./glassTerminal.ts";
 import {
   logSessionStart,
@@ -1204,6 +1236,10 @@ interface AppState {
   aletheiaAgentActivity?: import("../shared/aletheiaAgentCoordinator.ts").AletheiaAgentActivitySnapshot;
   /** B3.2 — delegated presence task (go operate app, report back). */
   aletheiaDelegatedPresence?: import("../shared/aletheiaDelegatedPresence.ts").AletheiaDelegatedPresenceSnapshot;
+  /** B3.3 — general delegated loop narrative and handoff. */
+  aletheiaDelegatedLoop?: import("../shared/aletheiaDelegatedLoop.ts").AletheiaDelegatedLoopSnapshot;
+  /** B3.4 — web research conversation with citations. */
+  aletheiaResearchConversation?: import("../shared/aletheiaResearchConversation.ts").AletheiaResearchConversationSnapshot;
   /** Whether the dock terminal panel is open. */
   glassDockTerminalOpen?: boolean;
   /** Active PTY session id. */
@@ -1888,6 +1924,83 @@ const aletheiaDelegatedPresenceHost: AletheiaDelegatedPresenceHost = {
   getScreenDigest: () => (isDigestFresh(latestDigest) ? latestDigest.text : undefined),
 };
 
+let pendingLoopDecisionResolver: ((decision: LoopDecision) => void) | null = null;
+let loopCancelRequested = false;
+
+function requestAletheiaLoopCancel(): void {
+  loopCancelRequested = true;
+  abortAletheiaCompanionOperation();
+  if (state.aletheiaDelegatedLoop?.phase === "awaiting_decision") {
+    resolveAletheiaLoopDecision("cancel");
+  }
+}
+
+function resetAletheiaLoopCancel(): void {
+  loopCancelRequested = false;
+}
+
+function awaitAletheiaLoopDecision(question: string): Promise<LoopDecision> {
+  speakAletheiaAdviceAck(question);
+  push();
+  return new Promise((resolve) => {
+    pendingLoopDecisionResolver = resolve;
+  });
+}
+
+function resolveAletheiaLoopDecision(decision: LoopDecision): void {
+  pendingLoopDecisionResolver?.(decision);
+  pendingLoopDecisionResolver = null;
+}
+
+const aletheiaDelegatedLoopHost: AletheiaDelegatedLoopHost = {
+  getSnapshot: () => state.aletheiaDelegatedPresence,
+  setSnapshot: (snapshot) => {
+    state.aletheiaDelegatedPresence = snapshot;
+  },
+  getLoopSnapshot: () => state.aletheiaDelegatedLoop,
+  setLoopSnapshot: (snapshot) => {
+    state.aletheiaDelegatedLoop = snapshot;
+  },
+  push,
+  getSessionId: currentAletheiaActionSessionId,
+  getConfig: () => config,
+  resolveCaptureTarget: () => resolveCaptureDisplay(state.glassSettings.displayTarget),
+  getWindowContext: () => {
+    const ctx = getCachedWindowContext();
+    return {
+      appName: ctx.appName ?? state.activeApp,
+      windowTitle: ctx.windowTitle,
+    };
+  },
+  getScreenDigest: () => (isDigestFresh(latestDigest) ? latestDigest.text : undefined),
+  getAnthropicModel: () =>
+    resolveCoderAgentApiModel(resolveCoderAgentModelId(state.glassSettings?.coderAgentModel)),
+  getOutputDir: () => resolveAgentOutputFolder(state.glassSettings),
+  awaitLoopDecision: awaitAletheiaLoopDecision,
+  shouldCancelLoop: () => loopCancelRequested,
+};
+
+const aletheiaResearchConversationHost: AletheiaResearchConversationHost = {
+  getSnapshot: () => state.aletheiaResearchConversation,
+  setSnapshot: (snapshot) => {
+    state.aletheiaResearchConversation = snapshot;
+  },
+  push,
+  getSessionId: currentAletheiaActionSessionId,
+  getAnthropicModel: () =>
+    resolveCoderAgentApiModel(resolveCoderAgentModelId(state.glassSettings?.coderAgentModel)),
+  getOutputDir: () => resolveAgentOutputFolder(state.glassSettings),
+  persistResearchNote: async ({ prompt, answer }) => {
+    await saveMemoryEntry({
+      prompt: `[Research] ${prompt}`,
+      answer,
+      app: state.activeApp,
+    });
+    glassMemoryResults = await getRecentMemory(5);
+    push();
+  },
+};
+
 let aletheiaPermissionAlertNonce = 0;
 
 function handleAletheiaPermissionRevocation(
@@ -1919,6 +2032,13 @@ function handleAletheiaPermissionRevocation(
     aletheiaPermissionMonitor.setCompanionActive(false);
     aletheiaSidecarManager.setCompanionActive(false);
     clearAletheiaActivationState();
+    clearAletheiaAgentCoordinatorState(aletheiaAgentCoordinatorHost);
+    clearAletheiaDelegatedPresenceState(aletheiaDelegatedPresenceHost);
+    clearAletheiaDelegatedLoopState(aletheiaDelegatedLoopHost);
+    clearAletheiaResearchConversationState(aletheiaResearchConversationHost);
+    abortAletheiaCompanionOperation();
+    pendingLoopDecisionResolver = null;
+    loopCancelRequested = false;
   }
 }
 
@@ -4186,6 +4306,8 @@ async function handleAletheiaCoordination(intent: CoordinationIntent): Promise<v
   if (
     state.askInFlight
     || state.agentRun?.status === "running"
+    || isResearchConversationActive(state.aletheiaResearchConversation)
+    || isDelegatedLoopRunning(state.aletheiaDelegatedLoop)
     || isDelegatedPresenceRunning(state.aletheiaDelegatedPresence)
     || state.aletheiaAgentActivity?.phase === "running"
     || state.aletheiaAgentActivity?.phase === "synthesizing"
@@ -4200,40 +4322,50 @@ async function handleAletheiaCoordination(intent: CoordinationIntent): Promise<v
   speakAletheiaAdviceAck(coordinationRouteNarration(intent.route));
   push();
 
-  const result = await dispatchAletheiaCoordination(
-    aletheiaAgentCoordinatorHost,
-    intent.prompt,
-    intent.route,
-  );
-
-  if (result.ok && result.answer) {
-    const spoken =
-      result.answer.length > 420 ? `${result.answer.slice(0, 417)}…` : result.answer;
-    speakAletheiaAdviceAck(spoken);
-    state.lastAskResponse = {
-      prompt: intent.prompt,
-      answer: result.answer,
-      fullAnswer: result.answer,
-      at: new Date().toISOString(),
-      routeUsed: "aletheia_coordination",
-    };
-    pushFeed(
-      createCommandFeedItem("response", result.answer, {
-        prompt: intent.prompt,
-        fullBody: result.answer,
-      }),
+  const op = startAletheiaCompanionOperation();
+  try {
+    const result = await dispatchAletheiaCoordination(
+      aletheiaAgentCoordinatorHost,
+      intent.prompt,
+      intent.route,
+      { signal: op.signal },
     );
-  } else if (!result.ok && result.errorMessage) {
-    speakAletheiaAdviceAck(result.errorMessage);
-    state.lastError = result.errorMessage;
+
+    if (op.signal.aborted) return;
+
+    if (result.ok && result.answer) {
+      const spoken =
+        result.answer.length > 420 ? `${result.answer.slice(0, 417)}…` : result.answer;
+      speakAletheiaAdviceAck(spoken);
+      state.lastAskResponse = {
+        prompt: intent.prompt,
+        answer: result.answer,
+        fullAnswer: result.answer,
+        at: new Date().toISOString(),
+        routeUsed: "aletheia_coordination",
+      };
+      pushFeed(
+        createCommandFeedItem("response", result.answer, {
+          prompt: intent.prompt,
+          fullBody: result.answer,
+        }),
+      );
+    } else if (!result.ok && result.errorMessage) {
+      speakAletheiaAdviceAck(result.errorMessage);
+      state.lastError = result.errorMessage;
+    }
+    push();
+  } finally {
+    finishAletheiaCompanionOperation(op);
   }
-  push();
 }
 
 async function handleAletheiaDelegatedPresence(intent: DelegatedPresenceIntent): Promise<void> {
   if (
     state.askInFlight
     || state.agentRun?.status === "running"
+    || isResearchConversationActive(state.aletheiaResearchConversation)
+    || isDelegatedLoopRunning(state.aletheiaDelegatedLoop)
     || isDelegatedPresenceRunning(state.aletheiaDelegatedPresence)
     || state.aletheiaAgentActivity?.phase === "running"
     || state.aletheiaAgentActivity?.phase === "synthesizing"
@@ -4248,30 +4380,206 @@ async function handleAletheiaDelegatedPresence(intent: DelegatedPresenceIntent):
   speakAletheiaAdviceAck(delegatedPresenceIntroSpeech(intent.targetApp));
   push();
 
-  const result = await runAletheiaDelegatedPresence(aletheiaDelegatedPresenceHost, intent);
+  const op = startAletheiaCompanionOperation();
+  try {
+    const result = await runAletheiaDelegatedPresence(aletheiaDelegatedPresenceHost, intent, {
+      signal: op.signal,
+    });
 
-  if (result.ok && result.report) {
-    const spoken =
-      result.report.length > 420 ? `${result.report.slice(0, 417)}…` : result.report;
-    speakAletheiaAdviceAck(spoken);
-    state.lastAskResponse = {
-      prompt: intent.goal,
-      answer: result.report,
-      fullAnswer: result.report,
-      at: new Date().toISOString(),
-      routeUsed: "aletheia_delegated_presence",
-    };
-    pushFeed(
-      createCommandFeedItem("response", result.report, {
+    if (op.signal.aborted) return;
+
+      if (result.ok && result.report) {
+      const spoken =
+        result.report.length > 420 ? `${result.report.slice(0, 417)}…` : result.report;
+      speakAletheiaAdviceAck(spoken);
+      state.lastAskResponse = {
         prompt: intent.goal,
-        fullBody: result.report,
-      }),
-    );
-  } else if (!result.ok && result.errorMessage) {
-    speakAletheiaAdviceAck(result.errorMessage);
-    state.lastError = result.errorMessage;
+        answer: result.report,
+        fullAnswer: result.report,
+        at: new Date().toISOString(),
+        routeUsed: "aletheia_delegated_presence",
+      };
+      pushFeed(
+        createCommandFeedItem("response", result.report, {
+          prompt: intent.goal,
+          fullBody: result.report,
+        }),
+      );
+    } else if (!result.ok && result.errorMessage) {
+      speakAletheiaAdviceAck(result.errorMessage);
+      state.lastError = result.errorMessage;
+    }
+    push();
+  } finally {
+    finishAletheiaCompanionOperation(op);
   }
+}
+
+async function handleAletheiaDelegatedLoop(intent: DelegatedLoopIntent): Promise<void> {
+  if (
+    state.askInFlight
+    || state.agentRun?.status === "running"
+    || isResearchConversationActive(state.aletheiaResearchConversation)
+    || isDelegatedLoopRunning(state.aletheiaDelegatedLoop)
+    || isDelegatedPresenceRunning(state.aletheiaDelegatedPresence)
+    || state.aletheiaAgentActivity?.phase === "running"
+    || state.aletheiaAgentActivity?.phase === "synthesizing"
+  ) {
+    speakAletheiaAdviceAck("I'm still working on something — give me a moment.");
+    push();
+    return;
+  }
+
+  trackCopilotCommand(intent.goal);
+  pushFeed(createCommandFeedItem("command", intent.goal, { prompt: intent.goal }));
+  speakAletheiaAdviceAck(delegatedLoopIntroSpeech());
   push();
+
+  resetAletheiaLoopCancel();
+  const op = startAletheiaCompanionOperation();
+  try {
+    const result = await runAletheiaDelegatedLoop(aletheiaDelegatedLoopHost, intent, {
+      signal: op.signal,
+    });
+    loopCancelRequested = false;
+
+    if (op.signal.aborted) return;
+
+      if (result.handoff) {
+      const spoken =
+        result.handoff.length > 420 ? `${result.handoff.slice(0, 417)}…` : result.handoff;
+      speakAletheiaAdviceAck(spoken);
+      state.lastAskResponse = {
+        prompt: intent.goal,
+        answer: result.handoff,
+        fullAnswer: result.handoff,
+        at: new Date().toISOString(),
+        routeUsed: "aletheia_delegated_loop",
+      };
+      pushFeed(
+        createCommandFeedItem("response", result.handoff, {
+          prompt: intent.goal,
+          fullBody: result.handoff,
+        }),
+      );
+    } else if (!result.ok && result.errorMessage) {
+      speakAletheiaAdviceAck(result.errorMessage);
+      state.lastError = result.errorMessage;
+    }
+    push();
+  } finally {
+    finishAletheiaCompanionOperation(op);
+  }
+}
+
+async function handleAletheiaResearchConversation(intent: ResearchConversationIntent): Promise<void> {
+  if (
+    state.askInFlight
+    || state.agentRun?.status === "running"
+    || isResearchConversationActive(state.aletheiaResearchConversation)
+    || isDelegatedLoopRunning(state.aletheiaDelegatedLoop)
+    || isDelegatedPresenceRunning(state.aletheiaDelegatedPresence)
+    || state.aletheiaAgentActivity?.phase === "running"
+    || state.aletheiaAgentActivity?.phase === "synthesizing"
+  ) {
+    speakAletheiaAdviceAck("I'm still working on something — give me a moment.");
+    push();
+    return;
+  }
+
+  trackCopilotCommand(intent.query);
+  pushFeed(createCommandFeedItem("command", intent.query, { prompt: intent.query }));
+
+  if (intent.isFollowUp && intent.followUpAction) {
+    await handleAletheiaResearchFollowUp(intent.followUpAction);
+    return;
+  }
+
+  speakAletheiaAdviceAck(researchIntroSpeech());
+  push();
+
+  const op = startAletheiaCompanionOperation();
+  try {
+    const result = await runAletheiaResearchConversation(aletheiaResearchConversationHost, intent, {
+      followUpAction: intent.followUpAction,
+      signal: op.signal,
+    });
+
+    if (op.signal.aborted) return;
+
+      if (result.ok && result.answer) {
+      const citationCount = state.aletheiaResearchConversation?.citations.length ?? 0;
+      const spokenBody =
+        result.answer.length > 360 ? `${result.answer.slice(0, 357)}…` : result.answer;
+      speakAletheiaAdviceAck(`${researchCompleteSpeech(citationCount)} ${spokenBody}`);
+      state.lastAskResponse = {
+        prompt: intent.query,
+        answer: result.answer,
+        fullAnswer: result.answer,
+        at: new Date().toISOString(),
+        routeUsed: "aletheia_research_conversation",
+      };
+      pushFeed(
+        createCommandFeedItem("response", result.answer, {
+          prompt: intent.query,
+          fullBody: result.answer,
+        }),
+      );
+    } else if (!result.ok && result.errorMessage) {
+      speakAletheiaAdviceAck(result.errorMessage);
+      state.lastError = result.errorMessage;
+    }
+    push();
+  } finally {
+    finishAletheiaCompanionOperation(op);
+  }
+}
+
+async function handleAletheiaResearchFollowUp(action: ResearchFollowUpAction): Promise<void> {
+  if (isResearchConversationActive(state.aletheiaResearchConversation)) {
+    speakAletheiaAdviceAck("Still checking the web — one moment.");
+    push();
+    return;
+  }
+
+  if (action !== "save_to_notes" && action !== "hand_to_writing") {
+    speakAletheiaAdviceAck(researchIntroSpeech());
+    push();
+  }
+
+  const op = startAletheiaCompanionOperation();
+  try {
+    const result = await runAletheiaResearchFollowUp(aletheiaResearchConversationHost, action, {
+      signal: op.signal,
+    });
+
+    if (op.signal.aborted) return;
+
+      if (result.ok && result.answer) {
+      const spoken =
+        result.answer.length > 420 ? `${result.answer.slice(0, 417)}…` : result.answer;
+      speakAletheiaAdviceAck(spoken);
+      state.lastAskResponse = {
+        prompt: `Research follow-up: ${action}`,
+        answer: result.answer,
+        fullAnswer: result.answer,
+        at: new Date().toISOString(),
+        routeUsed: "aletheia_research_conversation",
+      };
+      pushFeed(
+        createCommandFeedItem("response", result.answer, {
+          prompt: `Research follow-up: ${action}`,
+          fullBody: result.answer,
+        }),
+      );
+    } else if (!result.ok && result.errorMessage) {
+      speakAletheiaAdviceAck(result.errorMessage);
+      state.lastError = result.errorMessage;
+    }
+    push();
+  } finally {
+    finishAletheiaCompanionOperation(op);
+  }
 }
 
 async function proposeActionFromApprovedAdvice(
@@ -4370,6 +4678,14 @@ function tryHandleVoiceActionConfirmation(text: string): boolean {
     resolution.decision === "approve" ? "approve" : "reject",
     "user-voice",
   );
+  return true;
+}
+
+function tryHandleVoiceLoopDecision(text: string): boolean {
+  if (!state.companionModeActive || state.companionPrivacy?.active) return false;
+  const decision = resolveVoiceLoopDecision(text, state.aletheiaDelegatedLoop);
+  if (!decision) return false;
+  resolveAletheiaLoopDecision(decision);
   return true;
 }
 
@@ -4777,6 +5093,8 @@ function snapshot(): GlassState {
     aletheiaBoundedLoop: state.aletheiaBoundedLoop,
     aletheiaAgentActivity: state.aletheiaAgentActivity,
     aletheiaDelegatedPresence: state.aletheiaDelegatedPresence,
+    aletheiaDelegatedLoop: state.aletheiaDelegatedLoop,
+    aletheiaResearchConversation: state.aletheiaResearchConversation,
     glassDockTerminalOpen: state.glassDockTerminalOpen,
     glassDockTerminalId: state.glassDockTerminalId,
     glassDockTerminalTabs: state.glassDockTerminalTabs,
@@ -5766,15 +6084,36 @@ async function submitCommand(
     return;
   }
 
+  if (tryHandleVoiceLoopDecision(rawText.trim())) {
+    return;
+  }
+
   if (tryHandleVoiceAdviceResponse(rawText.trim())) {
     return;
   }
 
   if (state.companionModeActive && !state.companionPrivacy?.active) {
+    const delegatedLoop = classifyDelegatedLoopIntent(rawText.trim());
+    if (delegatedLoop) {
+      incrementAletheiaSessionTurn();
+      void handleAletheiaDelegatedLoop(delegatedLoop);
+      return;
+    }
+
     const delegated = classifyDelegatedPresenceIntent(rawText.trim());
     if (delegated) {
       incrementAletheiaSessionTurn();
       void handleAletheiaDelegatedPresence(delegated);
+      return;
+    }
+
+    const researchConversation = classifyResearchConversationIntent(
+      rawText.trim(),
+      state.aletheiaResearchConversation,
+    );
+    if (researchConversation) {
+      incrementAletheiaSessionTurn();
+      void handleAletheiaResearchConversation(researchConversation);
       return;
     }
 
@@ -6911,6 +7250,12 @@ async function handleCommand(
       resetCompanionAmbientState();
       stopCompanionDeepgramSession();
       stopCompanionAnchorWatch();
+      clearAletheiaAgentCoordinatorState(aletheiaAgentCoordinatorHost);
+      clearAletheiaDelegatedPresenceState(aletheiaDelegatedPresenceHost);
+      clearAletheiaDelegatedLoopState(aletheiaDelegatedLoopHost);
+      clearAletheiaResearchConversationState(aletheiaResearchConversationHost);
+      requestAletheiaLoopCancel();
+      pendingLoopDecisionResolver = null;
       push();
       return;
     }
@@ -8747,6 +9092,23 @@ async function handleCommand(
       await aletheiaActionOrchestrator.modifyAction(command.intentId, command.modifier);
       speakAletheiaAdviceAck("Updated — review the revised action and confirm when ready.");
       push();
+      return;
+    }
+
+    case "continue-aletheia-loop": {
+      if (state.aletheiaDelegatedLoop?.phase === "awaiting_decision") {
+        resolveAletheiaLoopDecision("continue");
+      }
+      return;
+    }
+
+    case "cancel-aletheia-loop": {
+      requestAletheiaLoopCancel();
+      return;
+    }
+
+    case "aletheia-research-follow-up": {
+      await handleAletheiaResearchFollowUp(command.action);
       return;
     }
 
@@ -11286,6 +11648,11 @@ function deactivateCompanionMode(): void {
   state.aletheiaBoundedLoop = undefined;
   clearAletheiaAgentCoordinatorState(aletheiaAgentCoordinatorHost);
   clearAletheiaDelegatedPresenceState(aletheiaDelegatedPresenceHost);
+  clearAletheiaDelegatedLoopState(aletheiaDelegatedLoopHost);
+  clearAletheiaResearchConversationState(aletheiaResearchConversationHost);
+  abortAletheiaCompanionOperation();
+  pendingLoopDecisionResolver = null;
+  loopCancelRequested = false;
   state.companionPresence = null;
   state.companionMemory = clearCompanionSessionMemory();
   state.companionWarmupPhase = "none";

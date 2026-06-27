@@ -25,6 +25,7 @@ import {
   type CoordinationRoute,
 } from "../shared/aletheiaAgentCoordinator.ts";
 import type { GlassAgentId } from "../shared/ipc.ts";
+import { isAletheiaCompanionOperationAborted } from "./aletheiaCompanionOperation.ts";
 
 export interface AletheiaAgentCoordinatorHost {
   getSnapshot: () => AletheiaAgentActivitySnapshot | undefined;
@@ -44,7 +45,12 @@ interface SessionEnrichedPayload {
 let activeCorrelationId: string | null = null;
 let busCleanups: Array<() => void> = [];
 
-function setSnapshot(host: AletheiaAgentCoordinatorHost, snapshot: AletheiaAgentActivitySnapshot): void {
+function setSnapshot(
+  host: AletheiaAgentCoordinatorHost,
+  snapshot: AletheiaAgentActivitySnapshot,
+  signal?: AbortSignal,
+): void {
+  if (isAletheiaCompanionOperationAborted(signal)) return;
   host.setSnapshot(snapshot);
   host.push();
 }
@@ -58,6 +64,7 @@ async function executeAgentRun(
   prompt: string,
   host: AletheiaAgentCoordinatorHost,
   correlationId: string,
+  signal?: AbortSignal,
 ): Promise<{ ok: boolean; answer?: string; errorMessage?: string }> {
   const result = await runAgent({
     runId: chainRunId(`aletheia-${agentId}`),
@@ -67,8 +74,13 @@ async function executeAgentRun(
     anthropicModel: host.getAnthropicModel(),
     correlationId,
     sessionId: host.getSessionId(),
+    signal,
     onEvent: () => {},
   });
+
+  if (isAletheiaCompanionOperationAborted(signal)) {
+    return { ok: false, errorMessage: "Coordination cancelled." };
+  }
 
   if (result.outcome === "done") {
     return {
@@ -89,9 +101,10 @@ async function runSingleAgentCoordination(
   agentId: GlassAgentId,
   prompt: string,
   correlationId: string,
+  signal?: AbortSignal,
 ): Promise<{ ok: boolean; answer?: string; errorMessage?: string }> {
   const stepId = snapshot.steps[0]?.id ?? "step-1";
-  const run = await executeAgentRun(agentId, prompt, host, correlationId);
+  const run = await executeAgentRun(agentId, prompt, host, correlationId, signal);
 
   if (run.ok) {
     setSnapshot(
@@ -100,6 +113,7 @@ async function runSingleAgentCoordination(
         updateAgentActivityStep(snapshot, stepId, { status: "done", detail: "Complete" }),
         { ok: true, answer: run.answer },
       ),
+      signal,
     );
     return run;
   }
@@ -119,16 +133,21 @@ async function runCouncilCoordination(
   snapshot: AletheiaAgentActivitySnapshot,
   prompt: string,
   correlationId: string,
+  signal?: AbortSignal,
 ): Promise<{ ok: boolean; answer?: string; errorMessage?: string }> {
   let current = markAgentActivityPhase(snapshot, "running");
   current = { ...current, correlationId };
-  setSnapshot(host, current);
+  setSnapshot(host, current, signal);
 
   try {
     const result = await runLocalCouncilDeliberation(prompt, {
       sessionId: host.getSessionId(),
       correlationId,
     });
+
+    if (isAletheiaCompanionOperationAborted(signal)) {
+      return { ok: false, errorMessage: "Coordination cancelled." };
+    }
 
     let next = current;
     for (const role of ["strategy", "critic", "judge"] as const) {
@@ -142,6 +161,7 @@ async function runCouncilCoordination(
     setSnapshot(
       host,
       finalizeAgentActivity(next, { ok: true, answer: result.answer }),
+      signal,
     );
     return { ok: true, answer: result.answer };
   } catch (err) {
@@ -155,6 +175,7 @@ async function runCouncilCoordination(
     setSnapshot(
       host,
       finalizeAgentActivity(snapshot, { ok: false, errorMessage }),
+      signal,
     );
     return { ok: false, errorMessage };
   }
@@ -165,8 +186,9 @@ async function runResearchThenWriteCoordination(
   snapshot: AletheiaAgentActivitySnapshot,
   prompt: string,
   correlationId: string,
+  signal?: AbortSignal,
 ): Promise<{ ok: boolean; answer?: string; errorMessage?: string }> {
-  const research = await executeAgentRun("research", prompt, host, correlationId);
+  const research = await executeAgentRun("research", prompt, host, correlationId, signal);
   if (!research.ok) {
     setSnapshot(
       host,
@@ -177,6 +199,7 @@ async function runResearchThenWriteCoordination(
         }),
         { ok: false, errorMessage: research.errorMessage },
       ),
+      signal,
     );
     return research;
   }
@@ -186,13 +209,13 @@ async function runResearchThenWriteCoordination(
     "step-1",
     "step-2",
   );
-  setSnapshot(host, current);
+  setSnapshot(host, current, signal);
 
   const draftPrompt = research.answer
     ? `Write a clear, well-structured document based on these findings:\n\n${research.answer}`
     : `Write a clear, well-structured document for:\n\n${prompt}`;
 
-  const writing = await executeAgentRun("writing", draftPrompt, host, correlationId);
+  const writing = await executeAgentRun("writing", draftPrompt, host, correlationId, signal);
   if (!writing.ok) {
     setSnapshot(
       host,
@@ -203,6 +226,7 @@ async function runResearchThenWriteCoordination(
         }),
         { ok: false, errorMessage: writing.errorMessage },
       ),
+      signal,
     );
     return writing;
   }
@@ -213,6 +237,7 @@ async function runResearchThenWriteCoordination(
       updateAgentActivityStep(current, "step-2", { status: "done", detail: "Complete" }),
       { ok: true, answer: writing.answer },
     ),
+    signal,
   );
   return writing;
 }
@@ -293,35 +318,39 @@ export async function dispatchAletheiaCoordination(
   host: AletheiaAgentCoordinatorHost,
   prompt: string,
   route: CoordinationRoute,
+  options?: { signal?: AbortSignal },
 ): Promise<{ ok: boolean; answer?: string; errorMessage?: string }> {
+  const signal = options?.signal;
   const correlationId = AgentBus.newCorrelationId();
   activeCorrelationId = correlationId;
 
   let snapshot = initialAgentActivitySnapshot(route, prompt);
   snapshot = { ...snapshot, correlationId };
-  setSnapshot(host, markAgentActivityPhase(snapshot, "running"));
+  setSnapshot(host, markAgentActivityPhase(snapshot, "running"), signal);
 
   let result: { ok: boolean; answer?: string; errorMessage?: string };
 
   switch (route) {
     case "council":
-      result = await runCouncilCoordination(host, snapshot, prompt, correlationId);
+      result = await runCouncilCoordination(host, snapshot, prompt, correlationId, signal);
       break;
     case "research":
-      result = await runSingleAgentCoordination(host, snapshot, "research", prompt, correlationId);
+      result = await runSingleAgentCoordination(host, snapshot, "research", prompt, correlationId, signal);
       break;
     case "writing":
-      result = await runSingleAgentCoordination(host, snapshot, "writing", prompt, correlationId);
+      result = await runSingleAgentCoordination(host, snapshot, "writing", prompt, correlationId, signal);
       break;
     case "research_then_write":
-      result = await runResearchThenWriteCoordination(host, snapshot, prompt, correlationId);
+      result = await runResearchThenWriteCoordination(host, snapshot, prompt, correlationId, signal);
       break;
     default:
       result = { ok: false, errorMessage: "Unknown coordination route." };
   }
 
   activeCorrelationId = null;
-  host.onComplete?.(result);
+  if (!isAletheiaCompanionOperationAborted(signal)) {
+    host.onComplete?.(result);
+  }
   return result;
 }
 

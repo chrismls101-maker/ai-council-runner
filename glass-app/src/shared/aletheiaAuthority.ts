@@ -39,6 +39,13 @@ export const ALETHEIA_ALLOWED_COMMANDS = new Set([
   "confirm-aletheia-action",    // User confirmed a pending action intent
   "reject-aletheia-action",     // User rejected a pending action intent
   "modify-aletheia-action",     // User revised a pending action before confirm
+
+  // B3.3 — delegated loop decision (session control during multi-step loop)
+  "continue-aletheia-loop",     // User chose to continue after a decision point
+  "cancel-aletheia-loop",       // User chose to stop the loop
+
+  // B3.4 — research conversation follow-up (session control, not Glass infra)
+  "aletheia-research-follow-up", // Summarize / compare / draft from research thread
 ] as const);
 
 export type AletheiaAllowedCommand = typeof ALETHEIA_ALLOWED_COMMANDS extends Set<infer T>

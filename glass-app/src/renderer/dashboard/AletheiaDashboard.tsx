@@ -124,6 +124,8 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
   const boundedLoop = glassState.aletheiaBoundedLoop;
   const agentActivity = glassState.aletheiaAgentActivity;
   const delegatedPresence = glassState.aletheiaDelegatedPresence;
+  const delegatedLoop = glassState.aletheiaDelegatedLoop;
+  const researchConversation = glassState.aletheiaResearchConversation;
 
   const handleApproveAdvice = useCallback((adviceId: string): void => {
     dispatchAletheiaCommand("approve-aletheia-advice", { adviceId });
@@ -143,6 +145,18 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
 
   const handleModifyAction = useCallback((intentId: string, modifier: string): void => {
     dispatchAletheiaCommand("modify-aletheia-action", { intentId, modifier });
+  }, []);
+
+  const handleContinueLoop = useCallback((): void => {
+    dispatchAletheiaCommand("continue-aletheia-loop");
+  }, []);
+
+  const handleCancelLoop = useCallback((): void => {
+    dispatchAletheiaCommand("cancel-aletheia-loop");
+  }, []);
+
+  const handleResearchFollowUp = useCallback((action: import("../../shared/aletheiaResearchConversation.ts").ResearchFollowUpAction): void => {
+    dispatchAletheiaCommand("aletheia-research-follow-up", { action });
   }, []);
 
   return (
@@ -316,6 +330,17 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
             <DelegatedPresencePanel
               companionActive={companionActive}
               delegatedPresence={delegatedPresence}
+            />
+            <LoopNarrativePanel
+              companionActive={companionActive}
+              delegatedLoop={delegatedLoop}
+              onContinue={handleContinueLoop}
+              onCancel={handleCancelLoop}
+            />
+            <ResearchConversationPanel
+              companionActive={companionActive}
+              researchConversation={researchConversation}
+              onFollowUp={handleResearchFollowUp}
             />
             <PermissionsPanel
               permissionPlane={permissionPlane}
@@ -917,6 +942,209 @@ function DelegatedPresencePanel({
             >
               <p className="aletheia-dashboard__confirm-key">Could not finish</p>
               <p className="aletheia-dashboard__panel-copy">{delegatedPresence.errorMessage}</p>
+            </div>
+          ) : null}
+        </>
+      )}
+    </section>
+  );
+}
+
+function LoopNarrativePanel({
+  companionActive,
+  delegatedLoop,
+  onContinue,
+  onCancel,
+}: {
+  companionActive: boolean;
+  delegatedLoop?: GlassState["aletheiaDelegatedLoop"];
+  onContinue: () => void;
+  onCancel: () => void;
+}): JSX.Element {
+  const awaitingDecision = delegatedLoop?.phase === "awaiting_decision";
+  const loopRunning =
+    delegatedLoop != null
+    && delegatedLoop.phase !== "complete"
+    && delegatedLoop.phase !== "failed"
+    && delegatedLoop.phase !== "cancelled";
+
+  return (
+    <section className="aletheia-dashboard__panel" data-testid="aletheia-dashboard-loop-narrative">
+      <p className="aletheia-dashboard__panel-label">Loop narrative</p>
+      {!companionActive ? (
+        <p className="aletheia-dashboard__panel-copy">
+          Activate Aletheia — she can run multi-step work across apps while narrating each step.
+        </p>
+      ) : !delegatedLoop ? (
+        <p className="aletheia-dashboard__panel-copy" data-testid="aletheia-dashboard-loop-narrative-empty">
+          No active loop — try &quot;Work through the launch checklist for me and report back.&quot;
+        </p>
+      ) : (
+        <>
+          <p className="aletheia-dashboard__panel-meta" data-testid="aletheia-dashboard-loop-narrative-phase">
+            {delegatedLoop.phase.replace(/_/g, " ")}
+            {delegatedLoop.currentStepIndex >= 0
+              ? ` · step ${delegatedLoop.currentStepIndex + 1}/${delegatedLoop.steps.length}`
+              : ""}
+          </p>
+          <p className="aletheia-dashboard__panel-copy" data-testid="aletheia-dashboard-loop-narrative-goal">
+            {delegatedLoop.goal}
+          </p>
+          {delegatedLoop.narrative.length > 0 ? (
+            <ol className="aletheia-dashboard__loop-narrative" data-testid="aletheia-dashboard-loop-narrative-log">
+              {delegatedLoop.narrative.map((row) => (
+                <li key={row.id}>{row.sentence}</li>
+              ))}
+            </ol>
+          ) : null}
+          {awaitingDecision && delegatedLoop.pendingDecision ? (
+            <div className="aletheia-dashboard__confirm-card" data-testid="aletheia-dashboard-loop-decision">
+              <p className="aletheia-dashboard__confirm-key">Decision needed</p>
+              <p className="aletheia-dashboard__panel-copy">{delegatedLoop.pendingDecision.question}</p>
+              <div className="aletheia-dashboard__confirm-actions">
+                <button
+                  type="button"
+                  className="aletheia-dashboard__primary-btn"
+                  data-testid="aletheia-dashboard-loop-continue"
+                  onClick={onContinue}
+                >
+                  Continue
+                </button>
+                <button
+                  type="button"
+                  className="aletheia-dashboard__secondary-btn"
+                  data-testid="aletheia-dashboard-loop-cancel"
+                  onClick={onCancel}
+                >
+                  Stop loop
+                </button>
+              </div>
+            </div>
+          ) : loopRunning ? (
+            <div className="aletheia-dashboard__confirm-actions">
+              <button
+                type="button"
+                className="aletheia-dashboard__secondary-btn"
+                data-testid="aletheia-dashboard-loop-cancel-running"
+                onClick={onCancel}
+              >
+                Stop loop
+              </button>
+            </div>
+          ) : null}
+          {delegatedLoop.handoff ? (
+            <div
+              className="aletheia-dashboard__confirm-result aletheia-dashboard__confirm-result--ok"
+              data-testid="aletheia-dashboard-loop-handoff"
+            >
+              <p className="aletheia-dashboard__confirm-key">Handoff</p>
+              <p className="aletheia-dashboard__panel-copy">{delegatedLoop.handoff.completed}</p>
+              {delegatedLoop.handoff.remaining ? (
+                <p className="aletheia-dashboard__panel-footnote">{delegatedLoop.handoff.remaining}</p>
+              ) : null}
+              {delegatedLoop.handoff.needsFromYou ? (
+                <p className="aletheia-dashboard__panel-copy">{delegatedLoop.handoff.needsFromYou}</p>
+              ) : null}
+            </div>
+          ) : null}
+        </>
+      )}
+    </section>
+  );
+}
+
+function ResearchConversationPanel({
+  companionActive,
+  researchConversation,
+  onFollowUp,
+}: {
+  companionActive: boolean;
+  researchConversation?: GlassState["aletheiaResearchConversation"];
+  onFollowUp: (action: import("../../shared/aletheiaResearchConversation.ts").ResearchFollowUpAction) => void;
+}): JSX.Element {
+  const researching = researchConversation?.phase === "researching";
+  const followUps: import("../../shared/aletheiaResearchConversation.ts").ResearchFollowUpAction[] = [
+    "summarize",
+    "compare_deeper",
+    "save_to_notes",
+    "draft_from_findings",
+    "hand_to_writing",
+  ];
+
+  return (
+    <section className="aletheia-dashboard__panel" data-testid="aletheia-dashboard-research-conversation">
+      <p className="aletheia-dashboard__panel-label">Research</p>
+      {!companionActive ? (
+        <p className="aletheia-dashboard__panel-copy">
+          Activate Aletheia — ask her to look things up and she&apos;ll answer in this thread with sources.
+        </p>
+      ) : !researchConversation ? (
+        <p className="aletheia-dashboard__panel-copy" data-testid="aletheia-dashboard-research-empty">
+          No active research — try &quot;Look this up: latest EU AI Act guidance.&quot;
+        </p>
+      ) : (
+        <>
+          <p className="aletheia-dashboard__panel-meta" data-testid="aletheia-dashboard-research-phase">
+            {researching
+              ? "Researching…"
+              : researchConversation.phase.replace(/_/g, " ")}
+          </p>
+          <p className="aletheia-dashboard__panel-copy" data-testid="aletheia-dashboard-research-query">
+            {researchConversation.query}
+          </p>
+          {researchConversation.statusMessage && researching ? (
+            <p className="aletheia-dashboard__panel-copy aletheia-dashboard__research-status">
+              {researchConversation.statusMessage}
+            </p>
+          ) : null}
+          {researchConversation.synthesis ? (
+            <div
+              className="aletheia-dashboard__confirm-result aletheia-dashboard__confirm-result--ok"
+              data-testid="aletheia-dashboard-research-synthesis"
+            >
+              <p className="aletheia-dashboard__confirm-key">Answer</p>
+              <p className="aletheia-dashboard__panel-copy">{researchConversation.synthesis}</p>
+            </div>
+          ) : null}
+          {researchConversation.citations.length > 0 ? (
+            <ul className="aletheia-dashboard__research-citations" data-testid="aletheia-dashboard-research-citations">
+              {researchConversation.citations.map((citation) => (
+                <li key={`${citation.index}-${citation.url}`}>
+                  [{citation.index}] {citation.url}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {researchConversation.phase === "complete" ? (
+            <div className="aletheia-dashboard__confirm-actions" data-testid="aletheia-dashboard-research-follow-ups">
+              {followUps.map((action) => (
+                <button
+                  key={action}
+                  type="button"
+                  className="aletheia-dashboard__secondary-btn"
+                  data-testid={`aletheia-dashboard-research-follow-up-${action}`}
+                  onClick={() => onFollowUp(action)}
+                >
+                  {action === "summarize"
+                    ? "Summarize"
+                    : action === "compare_deeper"
+                      ? "Compare deeper"
+                      : action === "save_to_notes"
+                        ? "Save to notes"
+                        : action === "draft_from_findings"
+                          ? "Draft from findings"
+                          : "Hand to writing"}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {researchConversation.errorMessage ? (
+            <div
+              className="aletheia-dashboard__confirm-result aletheia-dashboard__confirm-result--error"
+              data-testid="aletheia-dashboard-research-error"
+            >
+              <p className="aletheia-dashboard__confirm-key">Could not finish</p>
+              <p className="aletheia-dashboard__panel-copy">{researchConversation.errorMessage}</p>
             </div>
           ) : null}
         </>

@@ -702,3 +702,26 @@
 .aletheia-dashboard__confirm-result--error .aletheia-dashboard__panel-copy {
   color: rgba(252, 165, 165, 0.92);
 }
+
+.aletheia-dashboard__loop-narrative {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(226, 232, 240, 0.9);
+}
+
+.aletheia-dashboard__research-citations {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(186, 230, 253, 0.88);
+  word-break: break-all;
+}
+
+.aletheia-dashboard__research-status {
+  color: rgba(186, 230, 253, 0.96);
+}

@@ -73,14 +73,21 @@ export function BuilderStrip({
   }, [aletheiaSweeping, handleAletheiaSweepEnd]);
 
   const delegatedTaskRunning =
-    glassState.aletheiaDelegatedPresence != null
-    && glassState.aletheiaDelegatedPresence.phase !== "complete"
-    && glassState.aletheiaDelegatedPresence.phase !== "failed";
+    (glassState.aletheiaDelegatedPresence != null
+      && glassState.aletheiaDelegatedPresence.phase !== "complete"
+      && glassState.aletheiaDelegatedPresence.phase !== "failed")
+    || (glassState.aletheiaDelegatedLoop != null
+      && glassState.aletheiaDelegatedLoop.phase !== "complete"
+      && glassState.aletheiaDelegatedLoop.phase !== "failed"
+      && glassState.aletheiaDelegatedLoop.phase !== "cancelled")
+    || glassState.aletheiaResearchConversation?.phase === "researching";
 
   const companionTooltip = aletheiaMenuOpen
     ? "Aletheia — choose Activate or Dashboard"
     : delegatedTaskRunning
-      ? "Aletheia — operating in another app"
+      ? glassState.aletheiaResearchConversation?.phase === "researching"
+        ? "Aletheia — checking the web"
+        : "Aletheia — operating in another app"
       : companion.active
         ? `${companion.statusLabel} — tap for Activate or Dashboard`
         : "Aletheia — Glass voice presence · tap for Activate or Dashboard";
