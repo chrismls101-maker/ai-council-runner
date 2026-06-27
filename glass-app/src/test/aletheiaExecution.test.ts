@@ -33,6 +33,36 @@ describe("aletheiaAuthorityGate", () => {
     assert.equal(gate.ok, true);
   });
 
+  test("allows founder-auto confirmation when Deployed Execution is active", () => {
+    const intent = intentFromWriteFile({
+      path: "~/Desktop/test.md",
+      content: "hello",
+      id: "card-1",
+      sessionId: "sess-1",
+    });
+    const gate = passAuthorityGate(
+      intent,
+      { intentId: intent.id, confirmedAt: Date.now(), confirmedBy: "founder-auto" },
+      { deployedExecutionActive: true },
+    );
+    assert.equal(gate.ok, true);
+  });
+
+  test("rejects founder-auto confirmation when Deployed Execution is inactive", () => {
+    const intent = intentFromWriteFile({
+      path: "~/Desktop/test.md",
+      content: "hello",
+      id: "card-1",
+      sessionId: "sess-1",
+    });
+    const gate = passAuthorityGate(
+      intent,
+      { intentId: intent.id, confirmedAt: Date.now(), confirmedBy: "founder-auto" },
+      { deployedExecutionActive: false },
+    );
+    assert.equal(gate.ok, false);
+  });
+
   test("rejects path outside declared scope", () => {
     const intent = intentFromWriteFile({
       path: "~/Desktop/allowed.md",

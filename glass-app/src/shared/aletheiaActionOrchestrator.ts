@@ -52,7 +52,8 @@ export interface AletheiaActionOrchestratorHost {
   }) => void;
   getSessionId: () => string;
   getPermissionPlane?: () => AletheiaPermissionControlPlaneSnapshot | undefined;
-  getSecurityHive?: () => SecurityHiveSnapshot | undefined;
+  getSecurityHive?: () => import("./aletheiaSecurityHive.ts").SecurityHiveSnapshot | undefined;
+  getDeployedExecutionActive?: () => boolean;
   onActionVerified?: (intent: ActionIntent, result: ActionResult) => void;
   runBoundedLoop?: (
     intent: ActionIntent,
@@ -187,12 +188,22 @@ export class AletheiaActionOrchestrator {
   ): Promise<void> {
     this.pendingIntents.delete(intent.id);
 
+    const deployedExecutionActive = this.host.getDeployedExecutionActive?.() === true;
+    let effectiveConfirmation = confirmation;
+    if (!effectiveConfirmation && deployedExecutionActive) {
+      effectiveConfirmation = {
+        intentId: intent.id,
+        confirmedAt: Date.now(),
+        confirmedBy: "founder-auto",
+      };
+    }
+
     this.recordStage(intent, "intent");
     this.recordStage(intent, "planning");
 
-    const gate = passAuthorityGate(intent, confirmation);
+    const gate = passAuthorityGate(intent, effectiveConfirmation, { deployedExecutionActive });
     if (!gate.ok) {
-      if (!confirmation) {
+      if (!effectiveConfirmation) {
         this.pendingIntents.set(intent.id, intent);
         const awaiting = this.recordStage(intent, "awaiting-confirmation");
         this.syncPipeline({
@@ -241,7 +252,7 @@ export class AletheiaActionOrchestrator {
     }
 
     this.ledger.appendStage(intent, "awaiting-confirmation", {
-      narration: `Confirmed by ${confirmation!.confirmedBy}.`,
+      narration: `Confirmed by ${effectiveConfirmation!.confirmedBy}.`,
       ok: true,
     });
 
@@ -315,8 +326,8 @@ export class AletheiaActionOrchestrator {
     this.recordStage(intent, "executing");
 
     const boundedLoop = readBoundedLoopConfig(intent.payload);
-    if (boundedLoop && confirmation && this.host.runBoundedLoop) {
-      const loopResult = await this.host.runBoundedLoop(intent, confirmation);
+    if (boundedLoop && effectiveConfirmation && this.host.runBoundedLoop) {
+      const loopResult = await this.host.runBoundedLoop(intent, effectiveConfirmation);
       const finalStage = loopResult.ok ? "complete" : "failed";
       this.syncPipeline({
         pendingConfirmation: undefined,

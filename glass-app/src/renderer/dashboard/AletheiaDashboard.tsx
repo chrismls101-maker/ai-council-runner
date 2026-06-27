@@ -22,6 +22,11 @@ import type { AletheiaTrustActivitySnapshot } from "../../shared/aletheiaTrustLe
 import { kindLabel, stageLabel } from "../../shared/aletheiaTrustLedger.ts";
 import type { SecurityHiveSnapshot } from "../../shared/aletheiaSecurityHive.ts";
 import { agentLabel, threatCategoryLabel } from "../../shared/aletheiaSecurityHive.ts";
+import {
+  DEPLOYED_EXECUTION_HEADER_LABEL,
+  isFounderAccount,
+  type AletheiaDeployedExecutionSnapshot,
+} from "../../shared/aletheiaFounderCommandTier.ts";
 import { resolveAletheiaSurface } from "../../shared/aletheiaSurfaceDoctrine.ts";
 import { pendingAletheiaAdviceCards } from "../../shared/aletheiaPendingAdvice.ts";
 import type { AletheiaAdviceCard } from "../../shared/aletheiaPendingAdvice.ts";
@@ -127,6 +132,14 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
     dispatchAletheiaCommand("dismiss-aletheia-security-containment");
   }, []);
 
+  const handleInvokeDeployedExecution = useCallback((): void => {
+    dispatchAletheiaCommand("invoke-aletheia-deployed-execution");
+  }, []);
+
+  const handleDeactivateDeployedExecution = useCallback((): void => {
+    dispatchAletheiaCommand("deactivate-aletheia-deployed-execution");
+  }, []);
+
   const handleRunBootstrap = useCallback((): void => {
     send({ type: "run-aletheia-bootstrap" });
   }, []);
@@ -152,6 +165,8 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
   const displayAwareness = glassState.aletheiaDisplayAwareness;
   const trustActivity = glassState.aletheiaTrustActivity;
   const securityHive = glassState.aletheiaSecurityHive;
+  const deployedExecution = glassState.aletheiaDeployedExecution;
+  const founderAccount = isFounderAccount(glassState.iivoAccountLink);
   const personaBehavior = useMemo(
     () =>
       glassState.aletheiaPersonaBehavior
@@ -159,12 +174,14 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
         persona: glassState.persona,
         accountLink: glassState.iivoAccountLink,
         glassDevMode: glassState.glassDevMode,
+        deployedExecutionActive: deployedExecution?.active === true,
       }),
     [
       glassState.aletheiaPersonaBehavior,
       glassState.persona,
       glassState.iivoAccountLink,
       glassState.glassDevMode,
+      deployedExecution?.active,
     ],
   );
 
@@ -227,6 +244,14 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
           >
             {privacyActive ? "Aletheia · Privacy" : statusLabel}
           </span>
+          {deployedExecution?.active ? (
+            <span
+              className="aletheia-dashboard__status-pill aletheia-dashboard__status-pill--founder-tier"
+              data-testid="aletheia-dashboard-deployed-execution-header"
+            >
+              {deployedExecution.headerLabel ?? DEPLOYED_EXECUTION_HEADER_LABEL}
+            </span>
+          ) : null}
           <div className="aletheia-dashboard__titlebar-actions">
             <GlassHoverTooltip label="Close Aletheia dashboard" placement="bottom">
               <button
@@ -383,6 +408,14 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
               personaBehavior={personaBehavior}
               persona={glassState.persona}
             />
+            {founderAccount ? (
+              <FounderCommandTierPanel
+                companionActive={companionActive}
+                deployedExecution={deployedExecution}
+                onInvoke={handleInvokeDeployedExecution}
+                onDeactivate={handleDeactivateDeployedExecution}
+              />
+            ) : null}
             <PendingAdvicePanel
               companionActive={companionActive}
               pendingAdvice={pendingAdvice}
@@ -613,12 +646,69 @@ function PersonaBehaviorPanel({
           </ul>
           {personaBehavior.founderTierActive ? (
             <p className="aletheia-dashboard__panel-footnote" data-testid="aletheia-dashboard-founder-tier">
-              Founder command tier active — expanded authority scope acknowledged.
+              Deployed Execution active — expanded authority scope acknowledged.
             </p>
           ) : null}
           <p className="aletheia-dashboard__panel-footnote" data-testid="aletheia-dashboard-surface-doctrine">
             Calm presence on {surface.replace(/_/g, " ")} — same tone, pacing matched to this surface.
           </p>
+        </>
+      )}
+    </section>
+  );
+}
+
+function FounderCommandTierPanel({
+  companionActive,
+  deployedExecution,
+  onInvoke,
+  onDeactivate,
+}: {
+  companionActive: boolean;
+  deployedExecution?: AletheiaDeployedExecutionSnapshot;
+  onInvoke: () => void;
+  onDeactivate: () => void;
+}): JSX.Element {
+  const active = deployedExecution?.active === true;
+  return (
+    <section className="aletheia-dashboard__panel" data-testid="aletheia-dashboard-founder-command-tier">
+      <p className="aletheia-dashboard__panel-label">Founder command tier</p>
+      {active ? (
+        <>
+          <p className="aletheia-dashboard__panel-meta" data-testid="aletheia-dashboard-deployed-execution-active">
+            Deployed Execution active
+          </p>
+          <p className="aletheia-dashboard__panel-copy">
+            Authority expanded for this session — actions proceed with founder-auto confirmation where allowed.
+          </p>
+          <button
+            type="button"
+            className="aletheia-dashboard__secondary-btn"
+            data-testid="aletheia-dashboard-deactivate-deployed-execution"
+            onClick={onDeactivate}
+          >
+            Return to standard mode
+          </button>
+        </>
+      ) : (
+        <>
+          <p className="aletheia-dashboard__panel-copy">
+            Explicit founder authority — invoke Deployed Execution while Aletheia is active.
+          </p>
+          <button
+            type="button"
+            className="aletheia-dashboard__primary-btn"
+            data-testid="aletheia-dashboard-invoke-deployed-execution"
+            disabled={!companionActive}
+            onClick={onInvoke}
+          >
+            Invoke Deployed Execution
+          </button>
+          {!companionActive ? (
+            <p className="aletheia-dashboard__panel-footnote">
+              Activate Aletheia first — Deployed Execution is a session mode, not a passive account flag.
+            </p>
+          ) : null}
         </>
       )}
     </section>
@@ -1191,6 +1281,7 @@ function TrustActivityPanel({
               >
                 <span className="aletheia-dashboard__notes-meta">
                   {kindLabel(row.kind)} · {stageLabel(row.stage)}
+                  {row.attributionLabel ? ` · ${row.attributionLabel}` : ""}
                 </span>
                 {" "}
                 {row.headline}

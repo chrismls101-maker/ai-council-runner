@@ -35,13 +35,19 @@ export function createAletheiaActionLedgerTable(): void {
         payload_json  TEXT,
         ok            INTEGER,
         error_message TEXT,
-        created_at    INTEGER NOT NULL
+        created_at    INTEGER NOT NULL,
+        attribution   TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_aletheia_action_ledger_intent
         ON aletheia_action_ledger (intent_id, created_at);
       CREATE INDEX IF NOT EXISTS idx_aletheia_action_ledger_created
         ON aletheia_action_ledger (created_at DESC);
     `);
+    try {
+      db.exec(`ALTER TABLE aletheia_action_ledger ADD COLUMN attribution TEXT`);
+    } catch {
+      // column already exists
+    }
   } catch (err) {
     console.error("[aletheiaActionLedgerStore] createAletheiaActionLedgerTable error:", err);
   }
@@ -53,6 +59,7 @@ export function appendActionLedgerEntry(input: {
   narration?: string;
   ok?: boolean | null;
   errorMessage?: string | null;
+  attribution?: string | null;
 }): ActionLedgerEntry {
   const entry: ActionLedgerEntry = {
     id: makeLedgerEntryId(),
@@ -66,6 +73,7 @@ export function appendActionLedgerEntry(input: {
     ok: input.ok ?? null,
     errorMessage: input.errorMessage ?? null,
     createdAt: Date.now(),
+    attribution: input.attribution ?? null,
   };
 
   const db = getDb();
@@ -73,8 +81,8 @@ export function appendActionLedgerEntry(input: {
     try {
       db.prepare(
         `INSERT INTO aletheia_action_ledger
-          (id, intent_id, session_id, stage, kind, summary, narration, payload_json, ok, error_message, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          (id, intent_id, session_id, stage, kind, summary, narration, payload_json, ok, error_message, created_at, attribution)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         entry.id,
         entry.intentId,
@@ -87,6 +95,7 @@ export function appendActionLedgerEntry(input: {
         entry.ok === null || entry.ok === undefined ? null : entry.ok ? 1 : 0,
         entry.errorMessage,
         entry.createdAt,
+        entry.attribution,
       );
     } catch (err) {
       console.error("[aletheiaActionLedgerStore] appendActionLedgerEntry error:", err);
@@ -97,7 +106,11 @@ export function appendActionLedgerEntry(input: {
   return entry;
 }
 
-export function appendResultLedgerEntry(intent: ActionIntent, result: ActionResult): ActionLedgerEntry {
+export function appendResultLedgerEntry(
+  intent: ActionIntent,
+  result: ActionResult,
+  attribution?: string | null,
+): ActionLedgerEntry {
   const stage = result.ok ? "complete" : "failed";
   return appendActionLedgerEntry({
     intent,
@@ -105,6 +118,7 @@ export function appendResultLedgerEntry(intent: ActionIntent, result: ActionResu
     narration: narrationForStage(intent, stage, result),
     ok: result.ok,
     errorMessage: result.errorMessage ?? null,
+    attribution,
   });
 }
 
@@ -114,7 +128,7 @@ export function getRecentActionLedgerEntries(limit: number): ActionLedgerEntry[]
   try {
     const rows = db
       .prepare(
-        `SELECT id, intent_id, session_id, stage, kind, summary, narration, payload_json, ok, error_message, created_at
+        `SELECT id, intent_id, session_id, stage, kind, summary, narration, payload_json, ok, error_message, created_at, attribution
          FROM aletheia_action_ledger
          ORDER BY created_at DESC
          LIMIT ?`,
@@ -131,6 +145,7 @@ export function getRecentActionLedgerEntries(limit: number): ActionLedgerEntry[]
         ok: number | null;
         error_message: string | null;
         created_at: number;
+        attribution: string | null;
       }>;
 
     return rows.map((row) => ({
@@ -145,6 +160,7 @@ export function getRecentActionLedgerEntries(limit: number): ActionLedgerEntry[]
       ok: row.ok === null ? null : row.ok === 1,
       errorMessage: row.error_message,
       createdAt: row.created_at,
+      attribution: row.attribution,
     }));
   } catch (err) {
     console.error("[aletheiaActionLedgerStore] getRecentActionLedgerEntries error:", err);
@@ -158,7 +174,7 @@ export function getActionLedgerForIntent(intentId: string): ActionLedgerEntry[] 
   try {
     const rows = db
       .prepare(
-        `SELECT id, intent_id, session_id, stage, kind, summary, narration, payload_json, ok, error_message, created_at
+        `SELECT id, intent_id, session_id, stage, kind, summary, narration, payload_json, ok, error_message, created_at, attribution
          FROM aletheia_action_ledger
          WHERE intent_id = ?
          ORDER BY created_at ASC`,
@@ -175,6 +191,7 @@ export function getActionLedgerForIntent(intentId: string): ActionLedgerEntry[] 
         ok: number | null;
         error_message: string | null;
         created_at: number;
+        attribution: string | null;
       }>;
 
     return rows.map((row) => ({
@@ -189,6 +206,7 @@ export function getActionLedgerForIntent(intentId: string): ActionLedgerEntry[] 
       ok: row.ok === null ? null : row.ok === 1,
       errorMessage: row.error_message,
       createdAt: row.created_at,
+      attribution: row.attribution,
     }));
   } catch (err) {
     console.error("[aletheiaActionLedgerStore] getActionLedgerForIntent error:", err);

@@ -11,20 +11,25 @@ import {
 import { executeActionIntent, verifyActionResult } from "./aletheiaActionExecutor.ts";
 import { currentAletheiaSessionId } from "./companionSessionStore.ts";
 
-export const defaultActionLedgerPort: ActionLedgerPort = {
-  appendStage(intent, stage, input) {
-    appendActionLedgerEntry({
-      intent,
-      stage,
-      narration: input?.narration,
-      ok: input?.ok,
-      errorMessage: input?.errorMessage,
-    });
-  },
-  appendResult(intent, result) {
-    appendResultLedgerEntry(intent, result);
-  },
-};
+export function createActionLedgerPort(getAttribution?: () => string | undefined): ActionLedgerPort {
+  return {
+    appendStage(intent, stage, input) {
+      appendActionLedgerEntry({
+        intent,
+        stage,
+        narration: input?.narration,
+        ok: input?.ok,
+        errorMessage: input?.errorMessage,
+        attribution: getAttribution?.() ?? null,
+      });
+    },
+    appendResult(intent, result) {
+      appendResultLedgerEntry(intent, result, getAttribution?.() ?? null);
+    },
+  };
+}
+
+export const defaultActionLedgerPort: ActionLedgerPort = createActionLedgerPort();
 
 export const defaultActionExecutorPort: ActionExecutorPort = {
   execute: executeActionIntent,

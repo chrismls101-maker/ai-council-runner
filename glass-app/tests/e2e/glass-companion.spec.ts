@@ -12,7 +12,8 @@
  *   G6 — Server degraded banner                                          [ 5 tests]
  *   G7 — IPC boundary regression                                         [ 5 tests]
  *   G8 — Security hive panel + containment dismiss                         [ 4 tests]
- *                                                            Total:       46 tests
+ *   G9 — Founder Deployed Execution panel + strip marker                   [ 4 tests]
+ *                                                            Total:       50 tests
  *
  * Stub notes:
  *   - Mic / audio capture: no real hardware used. Companion is toggled via
@@ -58,6 +59,7 @@ import {
   appendThreatSignal,
   initialSecurityHiveSnapshot,
 } from "../../src/shared/aletheiaSecurityHive.ts";
+import { activateDeployedExecution } from "../../src/shared/aletheiaFounderCommandTier.ts";
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -116,6 +118,28 @@ function e2eHoldModeSecurityHivePatch(): { aletheiaSecurityHive: ReturnType<type
   };
 }
 
+function e2eFounderAccountLinkPatch() {
+  return {
+    iivoAccountLink: {
+      sessionToken: "e2e-founder",
+      userId: "e2e-founder",
+      email: "founder@e2e.test",
+      name: "E2E Founder",
+      role: "founder" as const,
+      fullBuildLoop: true,
+      linkedAt: new Date().toISOString(),
+    },
+  };
+}
+
+function e2eDeployedExecutionPatch() {
+  return {
+    ...e2eFounderAccountLinkPatch(),
+    companionModeActive: true,
+    aletheiaDeployedExecution: activateDeployedExecution("e2e-session"),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // G1 — Authority allowlist (pure JS, no Electron)
 // 12 tests — always run, even in headless CI
@@ -126,7 +150,7 @@ test.describe("G1 — Authority allowlist", () => {
     for (const cmd of ALETHEIA_ALLOWED_COMMANDS) {
       assert.equal(isAletheiaAllowed(cmd), true, `Expected "${cmd}" to be allowed`);
     }
-    assert.equal(ALETHEIA_ALLOWED_COMMANDS.size, 6, "Should have exactly 6 allowed commands");
+    assert.equal(ALETHEIA_ALLOWED_COMMANDS.size, 20, "Should have exactly 20 allowed commands");
   });
 
   test("G1.2 — spot-check: all 6 specific allowed commands pass individually", () => {
@@ -1140,6 +1164,108 @@ test.describe("Electron companion suite", () => {
       await overlay.evaluate(() => window.glass.closeAletheiaDashboard());
       await command.evaluate(() => {
         window.glass.send({ type: "e2e-set-state", patch: { aletheiaSecurityHive: undefined } });
+      });
+      await dwell();
+    });
+  });
+
+  // ── G9 — Founder Deployed Execution (4 tests) ─────────────────────────────
+
+  test.describe("G9 — Founder Deployed Execution", () => {
+    test("G9.1 — founder panel hidden for non-founder accounts", async () => {
+      const { overlay, command } = await getGlassWindows(app.browser);
+
+      await command.evaluate(() => {
+        window.glass.send({
+          type: "e2e-set-state",
+          patch: { iivoAccountLink: undefined, aletheiaDeployedExecution: undefined },
+        });
+      });
+
+      await openAletheiaDashboard(overlay);
+
+      await expect(
+        overlay.locator('[data-testid="aletheia-dashboard-founder-command-tier"]'),
+      ).toHaveCount(0);
+
+      await overlay.evaluate(() => window.glass.closeAletheiaDashboard());
+      await dwell();
+    });
+
+    test("G9.2 — founder panel renders invoke button when inactive", async () => {
+      const { overlay, command } = await getGlassWindows(app.browser);
+
+      await command.evaluate((patch) => {
+        window.glass.send({ type: "e2e-set-state", patch });
+      }, {
+        ...e2eFounderAccountLinkPatch(),
+        companionModeActive: true,
+        aletheiaDeployedExecution: undefined,
+      });
+
+      await openAletheiaDashboard(overlay);
+
+      await expect(
+        overlay.locator('[data-testid="aletheia-dashboard-founder-command-tier"]'),
+      ).toBeVisible({ timeout: 5_000 });
+      await expect(
+        overlay.locator('[data-testid="aletheia-dashboard-invoke-deployed-execution"]'),
+      ).toBeEnabled();
+
+      await overlay.evaluate(() => window.glass.closeAletheiaDashboard());
+      await command.evaluate(() => {
+        window.glass.send({
+          type: "e2e-set-state",
+          patch: { aletheiaDeployedExecution: undefined, iivoAccountLink: undefined },
+        });
+      });
+      await dwell();
+    });
+
+    test("G9.3 — active Deployed Execution shows header pill and deactivate control", async () => {
+      const { overlay, command } = await getGlassWindows(app.browser);
+
+      await command.evaluate((patch) => {
+        window.glass.send({ type: "e2e-set-state", patch });
+      }, e2eDeployedExecutionPatch());
+
+      await openAletheiaDashboard(overlay);
+
+      await expect(
+        overlay.locator('[data-testid="aletheia-dashboard-deployed-execution-header"]'),
+      ).toContainText("Founder Command Tier");
+      await expect(
+        overlay.locator('[data-testid="aletheia-dashboard-deactivate-deployed-execution"]'),
+      ).toBeVisible({ timeout: 5_000 });
+
+      await overlay.evaluate(() => window.glass.closeAletheiaDashboard());
+      await command.evaluate(() => {
+        window.glass.send({
+          type: "e2e-set-state",
+          patch: { aletheiaDeployedExecution: undefined, iivoAccountLink: undefined },
+        });
+      });
+      await dwell();
+    });
+
+    test("G9.4 — strip shows founder-tier marker when Deployed Execution active", async () => {
+      const { overlay, command } = await getGlassWindows(app.browser);
+
+      await command.evaluate((patch) => {
+        window.glass.send({ type: "e2e-set-state", patch });
+      }, e2eDeployedExecutionPatch());
+
+      await ensureStripReady(app.browser);
+
+      await expect(
+        overlay.locator(".builder-tab--aletheia--founder-tier"),
+      ).toBeVisible({ timeout: 5_000 });
+
+      await command.evaluate(() => {
+        window.glass.send({
+          type: "e2e-set-state",
+          patch: { aletheiaDeployedExecution: undefined, iivoAccountLink: undefined },
+        });
       });
       await dwell();
     });

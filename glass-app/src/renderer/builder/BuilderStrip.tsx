@@ -13,6 +13,7 @@ import {
   useBuilderStripClickThrough,
 } from "./useBuilderStripClickThrough.ts";
 import { dispatchAletheiaCommand } from "../../shared/aletheiaAuthority.ts";
+import { pendingAletheiaAdviceCards } from "../../shared/aletheiaPendingAdvice.ts";
 import { ensureAletheiaDispatchRegistered } from "../aletheia/registerAletheiaDispatch.ts";
 import { send, useGlassState } from "../useGlassState.ts";
 import { showPowerUserTabs } from "../../shared/minimalPublicFlag.ts";
@@ -81,6 +82,9 @@ export function BuilderStrip({
       && glassState.aletheiaDelegatedLoop.phase !== "failed"
       && glassState.aletheiaDelegatedLoop.phase !== "cancelled")
     || glassState.aletheiaResearchConversation?.phase === "researching";
+
+  const pendingAdviceCount = pendingAletheiaAdviceCards(glassState.aletheiaPendingAdvice).length;
+  const deployedExecutionActive = glassState.aletheiaDeployedExecution?.active === true;
 
   const companionTooltip = aletheiaMenuOpen
     ? "Aletheia — choose Activate or Dashboard"
@@ -421,7 +425,7 @@ export function BuilderStrip({
           <div className="builder-strip__aletheia-wrap">
             <button
               type="button"
-              className={`builder-tab builder-tab--aletheia${companion.active ? " builder-tab--companion--active" : ""}${delegatedTaskRunning ? " builder-tab--aletheia--delegated" : ""}${aletheiaSweeping ? " builder-tab--aletheia--revealing" : ""}${aletheiaMenuOpen ? " builder-tab--aletheia-menu-open" : ""}${glassState.aletheiaDashboardActive ? " builder-tab--active" : ""}`}
+              className={`builder-tab builder-tab--aletheia${companion.active ? " builder-tab--companion--active" : ""}${delegatedTaskRunning ? " builder-tab--aletheia--delegated" : ""}${deployedExecutionActive ? " builder-tab--aletheia--founder-tier" : ""}${aletheiaSweeping ? " builder-tab--aletheia--revealing" : ""}${aletheiaMenuOpen ? " builder-tab--aletheia-menu-open" : ""}${glassState.aletheiaDashboardActive ? " builder-tab--active" : ""}`}
               onClick={handleAletheiaClick}
               onPointerEnter={replayAletheiaTruthSweep}
               aria-label="Aletheia — Activate or Dashboard"
@@ -447,6 +451,15 @@ export function BuilderStrip({
                 <span className="builder-tab__aletheia-label-glow">Aletheia</span>
                 <span className="builder-tab__aletheia-label-face">Aletheia</span>
               </span>
+              {pendingAdviceCount > 0 && companion.active ? (
+                <span
+                  className="builder-tab__aletheia-advice-badge"
+                  aria-hidden="true"
+                  data-testid="builder-strip-aletheia-advice-badge"
+                >
+                  {pendingAdviceCount}
+                </span>
+              ) : null}
             </button>
             <AletheiaStripMenu
               open={aletheiaMenuOpen}

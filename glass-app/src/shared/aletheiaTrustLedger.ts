@@ -5,6 +5,7 @@
  */
 
 import type { ActionKind, ActionLedgerEntry, PipelineStage } from "./aletheiaExecution.ts";
+import { FOUNDER_COMMAND_LEDGER_ATTRIBUTION } from "./aletheiaFounderCommandTier.ts";
 
 export interface AletheiaTrustActivityRow {
   id: string;
@@ -17,6 +18,8 @@ export interface AletheiaTrustActivityRow {
   /** Optional second line — scope, method, or error detail. */
   detail?: string;
   ok: boolean | null;
+  /** B8 — ledger attribution when tagged (e.g. founder command session). */
+  attributionLabel?: string;
 }
 
 export interface AletheiaTrustActivitySnapshot {
@@ -77,6 +80,14 @@ export function formatTrustLedgerHeadline(entry: ActionLedgerEntry): string {
   return `${stage} · ${kind} — ${entry.summary}`;
 }
 
+export function ledgerAttributionLabel(attribution?: string | null): string | undefined {
+  if (!attribution) return undefined;
+  if (attribution === FOUNDER_COMMAND_LEDGER_ATTRIBUTION) {
+    return "Founder command session";
+  }
+  return attribution;
+}
+
 export function formatTrustLedgerDetail(entry: ActionLedgerEntry): string | undefined {
   if (entry.errorMessage?.trim() && !formatTrustLedgerHeadline(entry).includes(entry.errorMessage.trim())) {
     return entry.errorMessage.trim();
@@ -99,6 +110,7 @@ export function ledgerRowFromEntry(entry: ActionLedgerEntry): AletheiaTrustActiv
     headline: formatTrustLedgerHeadline(entry),
     detail: formatTrustLedgerDetail(entry),
     ok: entry.ok,
+    attributionLabel: ledgerAttributionLabel(entry.attribution),
   };
 }
 

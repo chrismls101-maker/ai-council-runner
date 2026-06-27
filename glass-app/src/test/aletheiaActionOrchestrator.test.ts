@@ -163,6 +163,39 @@ test("proposeIntent stops at awaiting-confirmation", async () => {
   assert.equal(snapshot?.pendingConfirmation?.targetDescription, "Glass shell");
 });
 
+test("deployed execution auto-confirms shell intent without pending confirmation", async () => {
+  let snapshot: AletheiaActionPipelineSnapshot | undefined;
+  let actionResult:
+    | { id: string; type: string; status: string; message: string }
+    | undefined;
+  const { intentFromShell } = await import("../shared/aletheiaExecution.ts");
+
+  const orchestrator = new AletheiaActionOrchestrator(
+    {
+      getPipelineSnapshot: () => snapshot,
+      setPipelineSnapshot: (next) => {
+        snapshot = next;
+      },
+      setActionResult: (input) => {
+        actionResult = input;
+      },
+      getSessionId: () => "test-session",
+      getDeployedExecutionActive: () => true,
+      push: () => {},
+    },
+    memoryLedger().port,
+    mockExecutor(),
+  );
+
+  await orchestrator.proposeIntent(
+    intentFromShell({ command: "npm test", sessionId: "test-session", glassActionId: "deployed-shell" }),
+  );
+
+  assert.equal(snapshot?.pendingConfirmation, undefined);
+  assert.equal(snapshot?.lastResult?.ok, true);
+  assert.equal(actionResult?.status, "ok");
+});
+
 test("confirmAction executes pending intent", async () => {
   let snapshot: AletheiaActionPipelineSnapshot | undefined;
   let actionResult:

@@ -85,12 +85,24 @@ export function assertConfirmedForExecution(
   return { ok: true };
 }
 
-/** Full gate: scope + confirmation. */
+/** Full gate: scope + confirmation. Deployed Execution accepts founder-auto confirmation. */
 export function passAuthorityGate(
   intent: ActionIntent,
   confirmation: ActionConfirmation | undefined,
+  options?: { deployedExecutionActive?: boolean },
 ): AuthorityGateResult {
   const scope = validateActionScope(intent);
   if (!scope.ok) return scope;
+
+  if (confirmation?.confirmedBy === "founder-auto") {
+    if (!options?.deployedExecutionActive) {
+      return { ok: false, reason: "Founder-auto confirmation requires Deployed Execution." };
+    }
+    if (confirmation.intentId !== intent.id) {
+      return { ok: false, reason: "Confirmation does not match this action intent." };
+    }
+    return { ok: true };
+  }
+
   return assertConfirmedForExecution(intent, confirmation);
 }

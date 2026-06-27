@@ -95,6 +95,13 @@
   border-color: rgba(251, 191, 36, 0.34);
 }
 
+.aletheia-dashboard__status-pill--founder-tier {
+  color: rgba(254, 243, 199, 0.98);
+  background: rgba(146, 64, 14, 0.28);
+  border-color: rgba(251, 191, 36, 0.42);
+  box-shadow: 0 0 10px rgba(251, 191, 36, 0.18);
+}
+
 .aletheia-dashboard__degraded {
   margin-bottom: 18px;
   padding: 12px 14px;

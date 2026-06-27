@@ -5,6 +5,7 @@ import {
   buildAletheiaTrustActivity,
   formatTrustLedgerHeadline,
   kindLabel,
+  ledgerAttributionLabel,
   stageLabel,
 } from "../shared/aletheiaTrustLedger.ts";
 
@@ -57,4 +58,21 @@ test("buildAletheiaTrustActivity filters by session and sorts newest first", () 
 test("stage and kind labels are human readable", () => {
   assert.equal(stageLabel("awaiting-confirmation"), "Awaiting approval");
   assert.equal(kindLabel("file-write"), "File write");
+});
+
+test("ledgerAttributionLabel maps founder command session tag", () => {
+  assert.equal(ledgerAttributionLabel("founder-command-session"), "Founder command session");
+  assert.equal(ledgerAttributionLabel(undefined), undefined);
+});
+
+test("buildAletheiaTrustActivity surfaces attribution labels", () => {
+  const snapshot = buildAletheiaTrustActivity([
+    baseEntry({
+      id: "founder-row",
+      attribution: "founder-command-session",
+      stage: "complete",
+      ok: true,
+    }),
+  ]);
+  assert.equal(snapshot.entries[0]?.attributionLabel, "Founder command session");
 });

@@ -316,7 +316,12 @@ import { registerDashboardIpc, setDashboardIpcAuth, isDashboardIpcSender } from 
 import { registerAletheiaDashboardIpc, setAletheiaDashboardIpcAuth } from "./aletheiaDashboardIpc.ts";
 import { closeDatabase, gracefulDatabaseShutdown, initDatabase } from "./glassDatabase.ts";
 import { createAletheiaSessionsTable, getRecentAletheiaSessions } from "./aletheiaSessionStore.ts";
-import { createAletheiaActionLedgerTable, getRecentActionLedgerEntries, setAletheiaActionLedgerChangedHandler } from "./aletheiaActionLedgerStore.ts";
+import {
+  appendActionLedgerEntry,
+  createAletheiaActionLedgerTable,
+  getRecentActionLedgerEntries,
+  setAletheiaActionLedgerChangedHandler,
+} from "./aletheiaActionLedgerStore.ts";
 import {
   appendAletheiaNote,
   createAletheiaNotesTable,
@@ -360,6 +365,22 @@ import {
   type AletheiaSecurityHiveHost,
 } from "./aletheiaSecurityHivePlane.ts";
 import {
+  activateDeployedExecution,
+  canInvokeDeployedExecution,
+  deactivateDeployedExecution,
+  DEPLOYED_EXECUTION_CONFIRMATION,
+  DEPLOYED_EXECUTION_DEACTIVATION,
+  effectiveBoundedLoopMaxIterations,
+  founderCommandBoundaryNarration,
+  founderCommandBoundaryStage,
+  FOUNDER_COMMAND_LEDGER_ATTRIBUTION,
+  isDeployedExecutionActive,
+  isDeployedExecutionEffective,
+  isFounderAccount,
+  makeFounderCommandBoundaryIntent,
+  type AletheiaDeployedExecutionSnapshot,
+} from "../shared/aletheiaFounderCommandTier.ts";
+import {
   buildAletheiaSurfaceContext,
   resolveAletheiaSurface,
   spokenTextForSurface,
@@ -367,9 +388,9 @@ import {
 } from "../shared/aletheiaSurfaceDoctrine.ts";
 import {
   AletheiaActionOrchestrator,
+  createActionLedgerPort,
   currentAletheiaActionSessionId,
   defaultActionExecutorPort,
-  defaultActionLedgerPort,
   type AletheiaActionOrchestratorHost,
 } from "./aletheiaActionOrchestratorHost.ts";
 import { AletheiaPermissionMonitor } from "./aletheiaPermissionMonitor.ts";
@@ -1311,6 +1332,8 @@ interface AppState {
   aletheiaTrustActivity?: import("../shared/aletheiaTrustLedger.ts").AletheiaTrustActivitySnapshot;
   /** B7 — security hive agents, threats, and operational mode. */
   aletheiaSecurityHive?: SecurityHiveSnapshot;
+  /** B8 — founder-only Deployed Execution session. */
+  aletheiaDeployedExecution?: AletheiaDeployedExecutionSnapshot;
   /** Whether the dock terminal panel is open. */
   glassDockTerminalOpen?: boolean;
   /** Active PTY session id. */
@@ -1934,6 +1957,46 @@ let agentProxyServer: import("./agentProxyServer.ts").AgentProxyServer | null = 
 // Action Execution Engine — cancel handles for running shell commands
 const shellCancels = new Map<string, () => void>();
 
+function deployedExecutionActiveInState(): boolean {
+  return isDeployedExecutionEffective(state.aletheiaDeployedExecution, state.iivoAccountLink);
+}
+
+function clearAletheiaDeployedExecution(
+  reason: "explicit" | "session_end" | "account_unlink",
+  options?: { push?: boolean },
+): void {
+  if (!isDeployedExecutionActive(state.aletheiaDeployedExecution)) return;
+
+  const founderSession =
+    reason === "account_unlink"
+      ? isFounderAccount(state.iivoAccountLink)
+      : deployedExecutionActiveInState() || isFounderAccount(state.iivoAccountLink);
+
+  if (founderSession) {
+    const sessionId = state.aletheiaDeployedExecution?.sessionId ?? currentAletheiaActionSessionId();
+    appendFounderCommandBoundaryLedger("closed", sessionId);
+  }
+
+  state.aletheiaDeployedExecution = deactivateDeployedExecution();
+  if (state.companionModeActive) {
+    refreshAletheiaPersonaBehaviorState();
+  }
+
+  if (reason === "explicit") {
+    speakAletheiaAdviceAck(DEPLOYED_EXECUTION_DEACTIVATION);
+  }
+
+  if (options?.push !== false) {
+    push();
+  }
+}
+
+function currentAletheiaLedgerAttribution(): string | undefined {
+  return deployedExecutionActiveInState() ? FOUNDER_COMMAND_LEDGER_ATTRIBUTION : undefined;
+}
+
+const aletheiaActionLedgerPort = createActionLedgerPort(() => currentAletheiaLedgerAttribution());
+
 const aletheiaActionOrchestratorHost: AletheiaActionOrchestratorHost = {
   getPipelineSnapshot: () => state.aletheiaActionPipeline,
   setPipelineSnapshot: (snapshot) => {
@@ -1945,6 +2008,7 @@ const aletheiaActionOrchestratorHost: AletheiaActionOrchestratorHost = {
   getSessionId: currentAletheiaActionSessionId,
   getPermissionPlane: () => state.aletheiaPermissionPlane,
   getSecurityHive: () => state.aletheiaSecurityHive,
+  getDeployedExecutionActive: () => deployedExecutionActiveInState(),
   onActionVerified: (intent, result) => {
     verifyAletheiaActionForSecurity(aletheiaSecurityHiveHost, intent, result);
   },
@@ -1955,6 +2019,7 @@ const aletheiaActionOrchestratorHost: AletheiaActionOrchestratorHost = {
         setSnapshot: (snapshot) => {
           state.aletheiaBoundedLoop = snapshot;
         },
+        getLedgerAttribution: () => currentAletheiaLedgerAttribution(),
         push,
       },
       intent,
@@ -1964,7 +2029,7 @@ const aletheiaActionOrchestratorHost: AletheiaActionOrchestratorHost = {
 };
 const aletheiaActionOrchestrator = new AletheiaActionOrchestrator(
   aletheiaActionOrchestratorHost,
-  defaultActionLedgerPort,
+  aletheiaActionLedgerPort,
   defaultActionExecutorPort,
 );
 
@@ -4500,6 +4565,7 @@ function refreshAletheiaPersonaBehaviorState(now = Date.now()): void {
     persona: state.persona,
     accountLink: state.iivoAccountLink,
     glassDevMode: !app.isPackaged,
+    deployedExecutionActive: deployedExecutionActiveInState(),
     now,
   });
 }
@@ -4583,6 +4649,51 @@ function speakAletheiaAdviceAck(text: string): void {
     text: spoken,
     nonce: (state.aletheiaAdviceSpeak?.nonce ?? 0) + 1,
   };
+}
+
+function appendFounderCommandBoundaryLedger(kind: "opened" | "closed", sessionId: string): void {
+  const intent = makeFounderCommandBoundaryIntent(sessionId);
+  appendActionLedgerEntry({
+    intent,
+    stage: founderCommandBoundaryStage(kind),
+    narration: founderCommandBoundaryNarration(kind, sessionId),
+    ok: true,
+    attribution: FOUNDER_COMMAND_LEDGER_ATTRIBUTION,
+  });
+}
+
+function invokeAletheiaDeployedExecution(): void {
+  if (!canInvokeDeployedExecution(state.iivoAccountLink)) {
+    state.lastNotice = "Deployed Execution is founder-only.";
+    push();
+    return;
+  }
+  if (!state.companionModeActive) {
+    state.lastNotice = "Activate Aletheia before invoking Deployed Execution.";
+    push();
+    return;
+  }
+  if (deployedExecutionActiveInState()) {
+    state.lastNotice = "Deployed Execution is already active.";
+    push();
+    return;
+  }
+  const sessionId = currentAletheiaActionSessionId();
+  state.aletheiaDeployedExecution = activateDeployedExecution(sessionId);
+  appendFounderCommandBoundaryLedger("opened", sessionId);
+  refreshAletheiaPersonaBehaviorState();
+  speakAletheiaAdviceAck(DEPLOYED_EXECUTION_CONFIRMATION);
+  push();
+}
+
+function deactivateAletheiaDeployedExecution(reason: "explicit" | "session_end" = "explicit"): void {
+  if (reason === "explicit" && !canInvokeDeployedExecution(state.iivoAccountLink)) {
+    state.lastNotice = "Deployed Execution is founder-only.";
+    push();
+    return;
+  }
+  if (!isDeployedExecutionActive(state.aletheiaDeployedExecution)) return;
+  clearAletheiaDeployedExecution(reason);
 }
 
 async function handleAletheiaCoordination(intent: CoordinationIntent): Promise<void> {
@@ -4872,6 +4983,7 @@ async function proposeActionFromApprovedAdvice(
     body: card.body,
     command: terminalBlock?.command,
     targetApp: state.activeApp,
+    maxLoopIterations: effectiveBoundedLoopMaxIterations(3, deployedExecutionActiveInState()),
   });
   if (!intent) return false;
 
@@ -5414,6 +5526,9 @@ function snapshot(): GlassState {
     aletheiaDisplayAwareness: state.aletheiaDisplayAwareness,
     aletheiaTrustActivity: state.aletheiaTrustActivity,
     aletheiaSecurityHive: state.aletheiaSecurityHive,
+    aletheiaDeployedExecution: isFounderAccount(state.iivoAccountLink)
+      ? state.aletheiaDeployedExecution
+      : undefined,
     glassDockTerminalOpen: state.glassDockTerminalOpen,
     glassDockTerminalId: state.glassDockTerminalId,
     glassDockTerminalTabs: state.glassDockTerminalTabs,
@@ -8524,6 +8639,12 @@ async function handleCommand(
           };
           await persistIivoAccountLink(link);
           state.iivoAccountLink = link;
+          if (
+            isDeployedExecutionActive(state.aletheiaDeployedExecution)
+            && !canInvokeDeployedExecution(link)
+          ) {
+            clearAletheiaDeployedExecution("account_unlink", { push: false });
+          }
           if (state.companionModeActive) refreshAletheiaPersonaBehaviorState();
           push();
         } catch (err) {
@@ -8536,6 +8657,7 @@ async function handleCommand(
     }
     case "disconnect-iivo-account": {
       (async () => {
+        clearAletheiaDeployedExecution("account_unlink", { push: false });
         await clearIivoAccountLink();
         state.iivoAccountLink = null;
         if (state.companionModeActive) refreshAletheiaPersonaBehaviorState();
@@ -9483,6 +9605,16 @@ async function handleCommand(
 
     case "dismiss-aletheia-security-containment": {
       dismissSecurityContainment(aletheiaSecurityHiveHost);
+      return;
+    }
+
+    case "invoke-aletheia-deployed-execution": {
+      invokeAletheiaDeployedExecution();
+      return;
+    }
+
+    case "deactivate-aletheia-deployed-execution": {
+      deactivateAletheiaDeployedExecution("explicit");
       return;
     }
 
@@ -12032,6 +12164,8 @@ function deactivateCompanionMode(sessionSummary?: string): void {
       pendingActionSummary: state.aletheiaActionPipeline?.pendingConfirmation?.summary,
       frontApp: state.activeApp,
     });
+
+  clearAletheiaDeployedExecution("session_end", { push: false });
 
   state.companionModeActive = false;
   state.companionModeToggleNonce += 1;

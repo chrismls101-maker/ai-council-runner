@@ -1051,6 +1051,9 @@ export type GlassCommand =
   | { type: "delete-aletheia-note"; noteId: string }
   /** B7 — clear an active security containment hold after user review. */
   | { type: "dismiss-aletheia-security-containment" }
+  /** B8 — founder-only Deployed Execution invoke / deactivate. */
+  | { type: "invoke-aletheia-deployed-execution" }
+  | { type: "deactivate-aletheia-deployed-execution" }
   /** E2E — patch GlassState fields for deterministic dashboard tests. */
   | { type: "e2e-set-state"; patch: Partial<GlassState> }
   // ── Glass built-in terminal (PTY) ─────────────────────────────────────────
@@ -1518,6 +1521,8 @@ export interface GlassState {
   aletheiaTrustActivity?: import("./aletheiaTrustLedger.ts").AletheiaTrustActivitySnapshot;
   /** B7 — security hive agents, threats, and operational mode. */
   aletheiaSecurityHive?: import("./aletheiaSecurityHive.ts").SecurityHiveSnapshot;
+  /** B8 — founder-only Deployed Execution session (omitted from snapshot for non-founders). */
+  aletheiaDeployedExecution?: import("./aletheiaFounderCommandTier.ts").AletheiaDeployedExecutionSnapshot;
   // ── Design-to-Code Bridge (#163) ─────────────────────────────────────────
   /** Active design capture cards keyed by feed item id. */
   designCaptures?: Record<string, {

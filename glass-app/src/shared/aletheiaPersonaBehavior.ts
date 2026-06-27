@@ -5,6 +5,7 @@
  */
 
 import type { IivoAccountLink } from "./iivoAccountLink.ts";
+import { isFounderAccount } from "./aletheiaFounderCommandTier.ts";
 
 export type GlassSortingHatPersona = "developer" | "sales" | "operator" | "writer" | "general";
 
@@ -36,18 +37,22 @@ export interface AletheiaPersonaBehaviorSnapshot {
 export interface AletheiaPersonaBehaviorInput {
   persona?: GlassSortingHatPersona;
   accountLink?: IivoAccountLink | null;
+  /** @deprecated Not used for founder tier — only explicit Deployed Execution activates founder mode. */
   glassDevMode?: boolean;
+  deployedExecutionActive?: boolean;
   now?: number;
 }
 
 const DEFAULT_PERSONA: GlassSortingHatPersona = "general";
 
-export function isFounderCommandTier(input: Pick<AletheiaPersonaBehaviorInput, "accountLink" | "glassDevMode">): boolean {
-  const role = input.accountLink?.role;
-  if (role === "founder") return true;
-  if (input.glassDevMode && role === "admin") return true;
-  return false;
+/** True when founder explicitly invoked Deployed Execution (B8) — not passive account role. */
+export function isFounderCommandTier(
+  input: Pick<AletheiaPersonaBehaviorInput, "accountLink" | "deployedExecutionActive">,
+): boolean {
+  return input.deployedExecutionActive === true && isFounderAccount(input.accountLink);
 }
+
+export { isFounderAccount } from "./aletheiaFounderCommandTier.ts";
 
 export function resolveAletheiaOperatingMode(
   persona: GlassSortingHatPersona,

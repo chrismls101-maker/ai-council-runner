@@ -25,10 +25,16 @@ const adminLink: IivoAccountLink = {
   role: "admin",
 };
 
-test("isFounderCommandTier recognizes founder and dev admin", () => {
-  assert.equal(isFounderCommandTier({ accountLink: founderLink }), true);
-  assert.equal(isFounderCommandTier({ accountLink: adminLink, glassDevMode: true }), true);
-  assert.equal(isFounderCommandTier({ accountLink: adminLink, glassDevMode: false }), false);
+test("isFounderCommandTier requires explicit Deployed Execution", () => {
+  assert.equal(
+    isFounderCommandTier({ accountLink: founderLink, deployedExecutionActive: true }),
+    true,
+  );
+  assert.equal(isFounderCommandTier({ accountLink: founderLink }), false);
+  assert.equal(
+    isFounderCommandTier({ accountLink: adminLink, deployedExecutionActive: true }),
+    false,
+  );
 });
 
 test("resolveAletheiaOperatingMode maps persona and founder tier", () => {
@@ -37,14 +43,20 @@ test("resolveAletheiaOperatingMode maps persona and founder tier", () => {
   assert.equal(resolveAletheiaOperatingMode("general", true), "founder_operational");
 });
 
-test("resolveAletheiaPersonaBehavior differs founder vs general user", () => {
+test("resolveAletheiaPersonaBehavior differs founder tier vs general user", () => {
   const founder = resolveAletheiaPersonaBehavior({
+    persona: "general",
+    accountLink: founderLink,
+    deployedExecutionActive: true,
+  });
+  const founderPassive = resolveAletheiaPersonaBehavior({
     persona: "general",
     accountLink: founderLink,
   });
   const guided = resolveAletheiaPersonaBehavior({ persona: "general" });
 
   assert.equal(founder.operatingMode, "founder_operational");
+  assert.equal(founderPassive.operatingMode, "guided");
   assert.equal(guided.operatingMode, "guided");
   assert.equal(founder.initiativeLevel, "high");
   assert.equal(guided.initiativeLevel, "low");

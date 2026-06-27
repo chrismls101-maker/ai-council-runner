@@ -75,6 +75,8 @@ export interface ActionLedgerEntry {
   ok: boolean | null;
   errorMessage: string | null;
   createdAt: number;
+  /** B8 — founder-command-session when logged under Deployed Execution. */
+  attribution?: string | null;
 }
 
 export interface OrchestratorOptions {
@@ -216,10 +218,11 @@ export function intentFromAdviceApproval(input: {
   body: string;
   command?: string;
   targetApp?: string;
+  maxLoopIterations?: number;
 }): ActionIntent | null {
   if (input.kind === "terminal_error" && input.command?.trim()) {
     const command = input.command.trim();
-    const maxIterations = 3;
+    const maxIterations = input.maxLoopIterations ?? 3;
     return intentFromShell({
       command,
       sessionId: input.sessionId,

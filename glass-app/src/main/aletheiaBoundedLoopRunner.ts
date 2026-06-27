@@ -19,6 +19,7 @@ import { appendActionLedgerEntry } from "./aletheiaActionLedgerStore.ts";
 export interface AletheiaBoundedLoopHost {
   getSnapshot: () => AletheiaBoundedLoopSnapshot | undefined;
   setSnapshot: (snapshot: AletheiaBoundedLoopSnapshot | undefined) => void;
+  getLedgerAttribution?: () => string | undefined;
   push: () => void;
 }
 
@@ -45,11 +46,14 @@ export async function runAletheiaBoundedTerminalLoop(
   host.setSnapshot(snapshot);
   host.push();
 
+  const attribution = host.getLedgerAttribution?.() ?? null;
+
   appendActionLedgerEntry({
     intent,
     stage: "planning",
     narration: `${scope.declaration} Confirmed by ${confirmation.confirmedBy}.`,
     ok: true,
+    attribution,
   });
 
   let finalOk = false;
@@ -60,6 +64,7 @@ export async function runAletheiaBoundedTerminalLoop(
       stage: "executing",
       narration: `Bounded loop iteration ${iteration}/${scope.maxIterations}: running command.`,
       ok: null,
+      attribution,
     });
 
     const loopIntent: ActionIntent = {
@@ -80,6 +85,7 @@ export async function runAletheiaBoundedTerminalLoop(
         : `Iteration ${iteration} failed: ${verified.errorMessage ?? verified.output ?? "unknown error"}`,
       ok: verified.ok,
       errorMessage: verified.ok ? null : verified.errorMessage ?? null,
+      attribution,
     });
 
     snapshot = appendBoundedLoopAudit(snapshot, {
@@ -114,6 +120,7 @@ export async function runAletheiaBoundedTerminalLoop(
     }),
     ok: finalOk,
     errorMessage: finalOk ? null : summary,
+    attribution,
   });
 
   return { ok: finalOk, summary };
