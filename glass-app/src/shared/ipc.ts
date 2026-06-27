@@ -1506,6 +1506,8 @@ export interface GlassState {
   aletheiaNotes?: import("./aletheiaNotes.ts").AletheiaNotesSnapshot;
   /** B4.3 — attention recovery brief after a meaningful gap. */
   aletheiaAttentionRecovery?: import("./aletheiaAttentionRecovery.ts").AletheiaAttentionRecoverySnapshot;
+  /** B5.1 — relationship thread across app switches while companion is active. */
+  aletheiaRelationshipThread?: import("./aletheiaRelationshipThread.ts").AletheiaRelationshipThreadSnapshot;
   // ── Design-to-Code Bridge (#163) ─────────────────────────────────────────
   /** Active design capture cards keyed by feed item id. */
   designCaptures?: Record<string, {

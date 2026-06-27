@@ -14,6 +14,8 @@ import {
 import { categoryLabel } from "../../shared/aletheiaNotes.ts";
 import type { AletheiaNote } from "../../shared/aletheiaNotes.ts";
 import type { AletheiaAttentionRecoverySnapshot } from "../../shared/aletheiaAttentionRecovery.ts";
+import type { AletheiaRelationshipThreadSnapshot } from "../../shared/aletheiaRelationshipThread.ts";
+import { relationshipEventKindLabel } from "../../shared/aletheiaRelationshipThread.ts";
 import { pendingAletheiaAdviceCards } from "../../shared/aletheiaPendingAdvice.ts";
 import type { AletheiaAdviceCard } from "../../shared/aletheiaPendingAdvice.ts";
 import { formatActionConfirmationCard } from "../../shared/aletheiaActionConfirmation.ts";
@@ -135,6 +137,7 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
   const researchConversation = glassState.aletheiaResearchConversation;
   const aletheiaNotes = glassState.aletheiaNotes;
   const attentionRecovery = glassState.aletheiaAttentionRecovery;
+  const relationshipThread = glassState.aletheiaRelationshipThread;
   const personaBehavior = useMemo(
     () =>
       glassState.aletheiaPersonaBehavior
@@ -352,6 +355,10 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
               companionActive={companionActive}
               recovery={attentionRecovery}
             />
+            <RelationshipThreadPanel
+              companionActive={companionActive}
+              thread={relationshipThread}
+            />
             <PersonaBehaviorPanel
               companionActive={companionActive}
               personaBehavior={personaBehavior}
@@ -448,6 +455,55 @@ function AttentionRecoveryPanel({
           </li>
         ))}
       </ul>
+    </section>
+  );
+}
+
+function RelationshipThreadPanel({
+  companionActive,
+  thread,
+}: {
+  companionActive: boolean;
+  thread?: AletheiaRelationshipThreadSnapshot;
+}): JSX.Element | null {
+  if (!companionActive || !thread) return null;
+
+  return (
+    <section className="aletheia-dashboard__panel" data-testid="aletheia-dashboard-relationship-thread">
+      <p className="aletheia-dashboard__panel-label">Relationship thread</p>
+      <p className="aletheia-dashboard__panel-copy">
+        What Aletheia noticed while you moved between apps — she briefs you when you return to your work context.
+      </p>
+      {thread.awayApp ? (
+        <p className="aletheia-dashboard__panel-meta" data-testid="aletheia-dashboard-relationship-away">
+          Away in {thread.awayApp}
+          {thread.focusApp ? ` · work anchor ${thread.focusApp}` : ""}
+        </p>
+      ) : thread.focusApp ? (
+        <p className="aletheia-dashboard__panel-meta" data-testid="aletheia-dashboard-relationship-focus">
+          Work anchor: {thread.focusApp}
+        </p>
+      ) : null}
+      {thread.lastReturnBrief ? (
+        <p className="aletheia-dashboard__panel-copy" data-testid="aletheia-dashboard-relationship-last-brief">
+          {thread.lastReturnBrief}
+        </p>
+      ) : null}
+      {thread.events.length === 0 ? (
+        <p className="aletheia-dashboard__panel-footnote" data-testid="aletheia-dashboard-relationship-empty">
+          No queued events yet — switch apps or run a failing command while companion is active.
+        </p>
+      ) : (
+        <ul className="aletheia-dashboard__recovery-list" data-testid="aletheia-dashboard-relationship-events">
+          {thread.events.slice(0, 8).map((event) => (
+            <li key={event.id} className="aletheia-dashboard__recovery-row">
+              <span className="aletheia-dashboard__notes-meta">{relationshipEventKindLabel(event.kind)}</span>
+              {" "}
+              {event.summary}
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

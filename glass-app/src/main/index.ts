@@ -329,6 +329,13 @@ import {
 import { buildAletheiaAttentionRecovery } from "../shared/aletheiaAttentionRecovery.ts";
 import { buildAletheiaSessionEndSummary } from "../shared/aletheiaSessionEndSummary.ts";
 import {
+  appendRelationshipEvent,
+  buildRelationshipReturnBrief,
+  clearCompanionAway,
+  emptyAletheiaRelationshipThread,
+  markCompanionAway,
+} from "../shared/aletheiaRelationshipThread.ts";
+import {
   AletheiaActionOrchestrator,
   currentAletheiaActionSessionId,
   defaultActionExecutorPort,
@@ -1266,6 +1273,8 @@ interface AppState {
   aletheiaNotes?: import("../shared/aletheiaNotes.ts").AletheiaNotesSnapshot;
   /** B4.3 — attention recovery brief after a meaningful gap. */
   aletheiaAttentionRecovery?: import("../shared/aletheiaAttentionRecovery.ts").AletheiaAttentionRecoverySnapshot;
+  /** B5.1 — relationship thread events across app switches. */
+  aletheiaRelationshipThread?: import("../shared/aletheiaRelationshipThread.ts").AletheiaRelationshipThreadSnapshot;
   /** Whether the dock terminal panel is open. */
   glassDockTerminalOpen?: boolean;
   /** Active PTY session id. */
@@ -2079,6 +2088,11 @@ function handleAletheiaSidecarDegradation(
     degradedAt: Date.now(),
     alertNonce: aletheiaSidecarAlertNonce,
   };
+  recordAletheiaRelationshipEvent({
+    kind: "sidecar_degraded",
+    summary: primary.narration,
+    detail: primary.serviceId,
+  });
 }
 
 async function refreshAletheiaSidecarPlane(now = Date.now()): Promise<AletheiaSidecarManagerSnapshot> {
@@ -3859,6 +3873,10 @@ function startPerceptionLoop(): void {
           }
           lastApp = appName;
           state.activeApp = appName;
+          if (oldApp && oldApp !== appName) {
+            handleCompanionAppSwitch(oldApp, appName);
+            refreshAletheiaObservationPlaneState();
+          }
           push(); // push on app switch so overlay can react
         }
       } catch {
@@ -4311,6 +4329,71 @@ function refreshAletheiaAmbientSynthesisState(): AletheiaAmbientSynthesisSnapsho
     push,
   });
   return snapshot;
+}
+
+/** Dedupes terminal error rows in the relationship thread. */
+let lastRelationshipTerminalErrorKey = "";
+
+function recordAletheiaRelationshipEvent(
+  input: Parameters<typeof appendRelationshipEvent>[1],
+): void {
+  if (!state.companionModeActive || state.companionPrivacy?.active) return;
+  state.aletheiaRelationshipThread = appendRelationshipEvent(
+    state.aletheiaRelationshipThread,
+    input,
+  );
+}
+
+function handleCompanionAppSwitch(fromApp: string, toApp: string): void {
+  if (!state.companionModeActive || state.companionPrivacy?.active) return;
+  const from = fromApp.trim();
+  const to = toApp.trim();
+  if (!from || !to || from === to) return;
+  if (/(electron|iivo|glass)/i.test(from) || /(electron|iivo|glass)/i.test(to)) return;
+
+  let thread = state.aletheiaRelationshipThread ?? emptyAletheiaRelationshipThread();
+  if (!thread.focusApp) {
+    thread = { ...thread, focusApp: from };
+  }
+
+  thread = appendRelationshipEvent(thread, {
+    kind: "app_switch",
+    summary: `Switched to ${to}`,
+    detail: `From ${from}`,
+  });
+
+  const leftFocus = Boolean(thread.focusApp && from === thread.focusApp && to !== thread.focusApp);
+  const returnedToFocus = Boolean(thread.awayApp && to === thread.focusApp);
+
+  if (leftFocus) {
+    thread = markCompanionAway(thread, to);
+  } else if (returnedToFocus) {
+    const briefResult = buildRelationshipReturnBrief(thread, to);
+    if (briefResult) {
+      thread = briefResult.snapshot;
+      speakAletheiaAdviceAck(briefResult.brief);
+    } else {
+      thread = clearCompanionAway(thread);
+    }
+  }
+
+  state.aletheiaRelationshipThread = thread;
+  push();
+}
+
+function maybeRecordTerminalErrorForRelationship(): void {
+  if (!state.companionModeActive || state.companionPrivacy?.active) return;
+  const block = getLastTerminalErrorBlock();
+  if (!block) return;
+  const key = `${block.command}:${block.exitCode ?? "x"}:${block.output.slice(0, 80)}`;
+  if (key === lastRelationshipTerminalErrorKey) return;
+  lastRelationshipTerminalErrorKey = key;
+  recordAletheiaRelationshipEvent({
+    kind: "terminal_error",
+    summary: `Terminal error on ${block.command}`,
+    detail: block.output.slice(0, 240),
+  });
+  push();
 }
 
 function refreshAletheiaPersonaBehaviorState(now = Date.now()): void {
@@ -5217,6 +5300,7 @@ function snapshot(): GlassState {
     aletheiaPersonaBehavior: state.aletheiaPersonaBehavior,
     aletheiaNotes: state.aletheiaNotes,
     aletheiaAttentionRecovery: state.aletheiaAttentionRecovery,
+    aletheiaRelationshipThread: state.aletheiaRelationshipThread,
     glassDockTerminalOpen: state.glassDockTerminalOpen,
     glassDockTerminalId: state.glassDockTerminalId,
     glassDockTerminalTabs: state.glassDockTerminalTabs,
@@ -11769,6 +11853,11 @@ function applyCompanionModeActivation(): void {
   refreshAletheiaAttentionRecoveryState(gapMs);
   lastCompanionDeactivatedAt = 0;
   endedSessionRecoveryHints = null;
+  state.aletheiaRelationshipThread = emptyAletheiaRelationshipThread();
+  if (state.activeApp) {
+    state.aletheiaRelationshipThread.focusApp = state.activeApp;
+  }
+  lastRelationshipTerminalErrorKey = "";
   aletheiaPermissionMonitor.setCompanionActive(true);
   aletheiaSidecarManager.setCompanionActive(true);
   beginAletheiaSession(state.activeApp);
@@ -11821,6 +11910,8 @@ function deactivateCompanionMode(sessionSummary?: string): void {
   clearAletheiaResearchConversationState(aletheiaResearchConversationHost);
   state.aletheiaPersonaBehavior = undefined;
   state.aletheiaAttentionRecovery = undefined;
+  state.aletheiaRelationshipThread = undefined;
+  lastRelationshipTerminalErrorKey = "";
   abortAletheiaCompanionOperation();
   pendingLoopDecisionResolver = null;
   loopCancelRequested = false;
@@ -14100,6 +14191,7 @@ function registerIpc(): void {
       return;
     }
     pushTerminalContext(normalized);
+    maybeRecordTerminalErrorForRelationship();
   });
 
   // ── Persistent Smart Scrollback (Task #47) ────────────────────────────────
@@ -14754,9 +14846,22 @@ app.whenReady().then(() =>
     resolveCaptureTarget: () => resolveCaptureDisplay(state.glassSettings.displayTarget),
     getConfig: () => config,
     onDigest: (result) => {
+      const prev = state.workingContext;
       latestDigest = result;
       state.workingContext = result.text;
       state.workingContextAge = result.capturedAt;
+      if (
+        state.companionModeActive
+        && !state.companionPrivacy?.active
+        && result.text
+        && result.text !== prev
+      ) {
+        recordAletheiaRelationshipEvent({
+          kind: "screen_context_change",
+          summary: "Screen context updated",
+          detail: result.text.slice(0, 240),
+        });
+      }
       refreshAletheiaObservationPlaneState();
       push();
     },
