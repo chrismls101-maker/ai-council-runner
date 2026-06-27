@@ -51,6 +51,9 @@ export const ALETHEIA_ALLOWED_COMMANDS = new Set([
   "add-aletheia-note",
   "update-aletheia-note",
   "delete-aletheia-note",
+
+  // B7 — security hive containment hold (session control, not Glass infra)
+  "dismiss-aletheia-security-containment",
 ] as const);
 
 export type AletheiaAllowedCommand = typeof ALETHEIA_ALLOWED_COMMANDS extends Set<infer T>

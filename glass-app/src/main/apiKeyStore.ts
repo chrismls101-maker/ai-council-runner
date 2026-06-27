@@ -55,6 +55,13 @@ function writeStore(keys: StoredApiKey[]): void {
   writeFileSync(storePath(), JSON.stringify(keys, null, 2), "utf-8");
 }
 
+let onApiKeyAccess: ((id: string) => void) | null = null;
+
+/** B7 — Key Guardian observes safeStorage decrypt patterns. */
+export function setApiKeyAccessHandler(handler: ((id: string) => void) | null): void {
+  onApiKeyAccess = handler;
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -79,7 +86,9 @@ export function getApiKeyValue(id: string): string | null {
   if (!entry) return null;
   try {
     const buf = Buffer.from(entry.encryptedValue, "base64");
-    return safeStorage.decryptString(buf);
+    const value = safeStorage.decryptString(buf);
+    onApiKeyAccess?.(normalizedId);
+    return value;
   } catch {
     return null;
   }

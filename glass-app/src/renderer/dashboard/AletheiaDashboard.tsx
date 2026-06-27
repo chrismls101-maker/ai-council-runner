@@ -20,6 +20,8 @@ import type { AletheiaDisplayAwarenessSnapshot } from "../../shared/aletheiaDisp
 import type { ConnectedDisplaySnapshot } from "../../shared/displayInfo.ts";
 import type { AletheiaTrustActivitySnapshot } from "../../shared/aletheiaTrustLedger.ts";
 import { kindLabel, stageLabel } from "../../shared/aletheiaTrustLedger.ts";
+import type { SecurityHiveSnapshot } from "../../shared/aletheiaSecurityHive.ts";
+import { agentLabel, threatCategoryLabel } from "../../shared/aletheiaSecurityHive.ts";
 import { resolveAletheiaSurface } from "../../shared/aletheiaSurfaceDoctrine.ts";
 import { pendingAletheiaAdviceCards } from "../../shared/aletheiaPendingAdvice.ts";
 import type { AletheiaAdviceCard } from "../../shared/aletheiaPendingAdvice.ts";
@@ -121,6 +123,10 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
     send({ type: "dismiss-aletheia-sidecar-alert" });
   }, []);
 
+  const handleDismissSecurityContainment = useCallback((): void => {
+    dispatchAletheiaCommand("dismiss-aletheia-security-containment");
+  }, []);
+
   const handleRunBootstrap = useCallback((): void => {
     send({ type: "run-aletheia-bootstrap" });
   }, []);
@@ -145,6 +151,7 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
   const relationshipThread = glassState.aletheiaRelationshipThread;
   const displayAwareness = glassState.aletheiaDisplayAwareness;
   const trustActivity = glassState.aletheiaTrustActivity;
+  const securityHive = glassState.aletheiaSecurityHive;
   const personaBehavior = useMemo(
     () =>
       glassState.aletheiaPersonaBehavior
@@ -397,6 +404,10 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
             <TrustActivityPanel
               companionActive={companionActive}
               trustActivity={trustActivity}
+            />
+            <SecurityHivePanel
+              securityHive={securityHive}
+              onDismissContainment={handleDismissSecurityContainment}
             />
             <DelegatedPresencePanel
               companionActive={companionActive}
@@ -1040,6 +1051,104 @@ function BoundedLoopPanel({
               <p className="aletheia-dashboard__panel-copy">{boundedLoop.summary}</p>
             </div>
           ) : null}
+        </>
+      )}
+    </section>
+  );
+}
+
+function SecurityHivePanel({
+  securityHive,
+  onDismissContainment,
+}: {
+  securityHive?: SecurityHiveSnapshot;
+  onDismissContainment: () => void;
+}): JSX.Element {
+  const mode = securityHive?.mode ?? "full";
+  const showDismiss =
+    securityHive?.activeContainment === true
+    || securityHive?.newActionsBlocked === true
+    || mode === "hold"
+    || mode === "locked";
+  const modeClass =
+    mode === "full"
+      ? undefined
+      : mode === "locked"
+        ? "aletheia-dashboard__degraded--warn"
+        : "aletheia-dashboard__degraded";
+
+  return (
+    <section className="aletheia-dashboard__panel" data-testid="aletheia-dashboard-security-hive">
+      <p className="aletheia-dashboard__panel-label">Security hive</p>
+      {!securityHive ? (
+        <p className="aletheia-dashboard__panel-copy" data-testid="aletheia-dashboard-security-empty">
+          Security agents initialize when Glass boots — Watcher, Verifier, Containment, and Key Guardian.
+        </p>
+      ) : (
+        <>
+          <div
+            className={modeClass ? `aletheia-dashboard__degraded ${modeClass}` : undefined}
+            data-testid="aletheia-dashboard-security-mode"
+          >
+            <p className="aletheia-dashboard__degraded-label">
+              {mode === "full" ? "Full posture" : `${mode.charAt(0).toUpperCase()}${mode.slice(1)} mode`}
+            </p>
+            <p className="aletheia-dashboard__degraded-detail">{securityHive.modeNarration}</p>
+            {showDismiss ? (
+              <button
+                type="button"
+                className="aletheia-dashboard__secondary-btn"
+                data-testid="aletheia-dashboard-security-dismiss"
+                onClick={onDismissContainment}
+              >
+                Clear security hold
+              </button>
+            ) : null}
+          </div>
+          <ul className="aletheia-dashboard__bounded-audit" data-testid="aletheia-dashboard-security-agents">
+            {securityHive.agents.map((row) => (
+              <li
+                key={row.agentId}
+                className={
+                  row.health === "healthy"
+                    ? "aletheia-dashboard__bounded-audit-row--ok"
+                    : row.health === "offline"
+                      ? "aletheia-dashboard__bounded-audit-row--error"
+                      : undefined
+                }
+              >
+                <span className="aletheia-dashboard__notes-meta">
+                  {agentLabel(row.agentId)} · {row.health}
+                </span>
+                {" "}
+                {row.lastReport ?? row.role}
+              </li>
+            ))}
+          </ul>
+          {securityHive.recentThreats.length > 0 ? (
+            <ul className="aletheia-dashboard__bounded-audit" data-testid="aletheia-dashboard-security-threats">
+              {securityHive.recentThreats.map((threat) => (
+                <li key={threat.id}>
+                  <span className="aletheia-dashboard__notes-meta">
+                    {threatCategoryLabel(threat.category)} · {threat.severity}
+                  </span>
+                  {" "}
+                  {threat.briefing}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="aletheia-dashboard__panel-footnote" data-testid="aletheia-dashboard-security-threats-empty">
+              No active threat signals — hive is observing bus traffic and keychain access.
+            </p>
+          )}
+          <p className="aletheia-dashboard__panel-footnote">
+            {securityHive.newActionsBlocked
+              ? "New actions are paused until verification restores."
+              : securityHive.keychainPerimeterActive
+                ? "Key Guardian is holding the keychain perimeter."
+                : "All four agents report healthy."}
+          </p>
         </>
       )}
     </section>

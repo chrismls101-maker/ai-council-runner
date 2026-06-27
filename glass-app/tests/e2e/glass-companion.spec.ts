@@ -11,7 +11,8 @@
  *   G5 — Dashboard mutual exclusion                                      [ 4 tests]
  *   G6 — Server degraded banner                                          [ 5 tests]
  *   G7 — IPC boundary regression                                         [ 5 tests]
- *                                                            Total:       42 tests
+ *   G8 — Security hive panel + containment dismiss                         [ 4 tests]
+ *                                                            Total:       46 tests
  *
  * Stub notes:
  *   - Mic / audio capture: no real hardware used. Companion is toggled via
@@ -53,6 +54,10 @@ import {
   assertAletheiaAllowed,
   dispatchAletheiaCommand,
 } from "../../src/shared/aletheiaAuthority.ts";
+import {
+  appendThreatSignal,
+  initialSecurityHiveSnapshot,
+} from "../../src/shared/aletheiaSecurityHive.ts";
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -96,6 +101,19 @@ async function waitForAletheiaDashboard(overlay: Page): Promise<void> {
 async function openAletheiaDashboard(overlay: Page): Promise<void> {
   await overlay.evaluate(() => window.glass.openAletheiaDashboard());
   await waitForAletheiaDashboard(overlay);
+}
+
+function e2eHoldModeSecurityHivePatch(): { aletheiaSecurityHive: ReturnType<typeof appendThreatSignal> } {
+  return {
+    aletheiaSecurityHive: appendThreatSignal(initialSecurityHiveSnapshot(), {
+      id: "e2e-hold",
+      category: "prompt_injection",
+      severity: "high",
+      briefing: "E2E security hold — review and clear when ready.",
+      source: "heuristic",
+      detectedAt: Date.now(),
+    }),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1026,6 +1044,103 @@ test.describe("Electron companion suite", () => {
 
       expect(glassOk).toBe(true);
       expect(aletheiaOk).toBe(true);
+      await dwell();
+    });
+  });
+
+  // ── G8 — Security hive panel (4 tests) ────────────────────────────────────
+
+  test.describe("G8 — Security hive panel", () => {
+    test("G8.1 — security hive panel renders with full posture snapshot", async () => {
+      const { overlay, command } = await getGlassWindows(app.browser);
+
+      await command.evaluate((patch) => {
+        window.glass.send({
+          type: "e2e-set-state",
+          patch,
+        });
+      }, { aletheiaSecurityHive: initialSecurityHiveSnapshot() });
+
+      await openAletheiaDashboard(overlay);
+
+      await expect(
+        overlay.locator('[data-testid="aletheia-dashboard-security-hive"]'),
+      ).toBeVisible({ timeout: 5_000 });
+      await expect(
+        overlay.locator('[data-testid="aletheia-dashboard-security-mode"]'),
+      ).toContainText("Full posture");
+
+      await overlay.evaluate(() => window.glass.closeAletheiaDashboard());
+      await command.evaluate(() => {
+        window.glass.send({ type: "e2e-set-state", patch: { aletheiaSecurityHive: undefined } });
+      });
+      await dwell();
+    });
+
+    test("G8.2 — hold mode snapshot: dismiss button visible", async () => {
+      const { overlay, command } = await getGlassWindows(app.browser);
+
+      await command.evaluate((patch) => {
+        window.glass.send({ type: "e2e-set-state", patch });
+      }, e2eHoldModeSecurityHivePatch());
+
+      await openAletheiaDashboard(overlay);
+
+      await expect(
+        overlay.locator('[data-testid="aletheia-dashboard-security-dismiss"]'),
+      ).toBeVisible({ timeout: 5_000 });
+      await expect(
+        overlay.locator('[data-testid="aletheia-dashboard-security-mode"]'),
+      ).toContainText(/Hold mode/i);
+
+      await overlay.evaluate(() => window.glass.closeAletheiaDashboard());
+      await command.evaluate(() => {
+        window.glass.send({ type: "e2e-set-state", patch: { aletheiaSecurityHive: undefined } });
+      });
+      await dwell();
+    });
+
+    test("G8.3 — dismiss clears security hold and restores full posture", async () => {
+      const { overlay, command } = await getGlassWindows(app.browser);
+
+      await command.evaluate((patch) => {
+        window.glass.send({ type: "e2e-set-state", patch });
+      }, e2eHoldModeSecurityHivePatch());
+
+      await openAletheiaDashboard(overlay);
+      await clickOverlayTestId(overlay, "aletheia-dashboard-security-dismiss");
+
+      await expect
+        .poll(async () => {
+          const state = await readGlassState(command);
+          return state.aletheiaSecurityHive?.mode;
+        })
+        .toBe("full");
+
+      await overlay.evaluate(() => window.glass.closeAletheiaDashboard());
+      await command.evaluate(() => {
+        window.glass.send({ type: "e2e-set-state", patch: { aletheiaSecurityHive: undefined } });
+      });
+      await dwell();
+    });
+
+    test("G8.4 — threat list renders when recentThreats are present", async () => {
+      const { overlay, command } = await getGlassWindows(app.browser);
+
+      await command.evaluate((patch) => {
+        window.glass.send({ type: "e2e-set-state", patch });
+      }, e2eHoldModeSecurityHivePatch());
+
+      await openAletheiaDashboard(overlay);
+
+      const threats = overlay.locator('[data-testid="aletheia-dashboard-security-threats"]');
+      await expect(threats).toBeVisible({ timeout: 5_000 });
+      await expect(threats).toContainText("Prompt injection");
+
+      await overlay.evaluate(() => window.glass.closeAletheiaDashboard());
+      await command.evaluate(() => {
+        window.glass.send({ type: "e2e-set-state", patch: { aletheiaSecurityHive: undefined } });
+      });
       await dwell();
     });
   });

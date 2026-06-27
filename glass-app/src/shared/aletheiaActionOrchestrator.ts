@@ -22,6 +22,8 @@ import {
   readBoundedLoopConfig,
 } from "../shared/aletheiaExecution.ts";
 import { passAuthorityGate } from "../shared/aletheiaAuthorityGate.ts";
+import { canExecuteNewAction } from "../shared/aletheiaSecurityHive.ts";
+import type { SecurityHiveSnapshot } from "../shared/aletheiaSecurityHive.ts";
 import { canExecuteActionOnPermissionPlane } from "../shared/aletheiaPermissionControlPlane.ts";
 import type { AletheiaPermissionControlPlaneSnapshot } from "../shared/aletheiaPermissionControlPlane.ts";
 
@@ -50,6 +52,8 @@ export interface AletheiaActionOrchestratorHost {
   }) => void;
   getSessionId: () => string;
   getPermissionPlane?: () => AletheiaPermissionControlPlaneSnapshot | undefined;
+  getSecurityHive?: () => SecurityHiveSnapshot | undefined;
+  onActionVerified?: (intent: ActionIntent, result: ActionResult) => void;
   runBoundedLoop?: (
     intent: ActionIntent,
     confirmation: ActionConfirmation,
@@ -241,6 +245,38 @@ export class AletheiaActionOrchestrator {
       ok: true,
     });
 
+    const securityGate = canExecuteNewAction(this.host.getSecurityHive?.());
+    if (!securityGate.ok) {
+      this.recordStage(intent, "failed");
+      this.ledger.appendStage(intent, "failed", {
+        narration: securityGate.reason,
+        ok: false,
+        errorMessage: securityGate.reason,
+      });
+      if (intent.glassActionId) {
+        this.host.setActionResult({
+          id: intent.glassActionId,
+          type: intent.kind === "keystroke" ? "inject-keystrokes" : "write-file",
+          status: "error",
+          message: securityGate.reason,
+        });
+      }
+      this.syncPipeline({
+        pendingConfirmation: undefined,
+        lastResult: {
+          intentId: intent.id,
+          stage: "failed",
+          narration: securityGate.reason,
+          ok: false,
+          message: securityGate.reason,
+          updatedAt: Date.now(),
+          glassActionId: intent.glassActionId,
+        },
+      });
+      this.host.push();
+      return;
+    }
+
     const permissionGate = canExecuteActionOnPermissionPlane(
       intent.kind,
       this.host.getPermissionPlane?.(),
@@ -301,6 +337,7 @@ export class AletheiaActionOrchestrator {
     const rawResult = await this.executor.execute(intent);
     this.recordStage(intent, "verifying");
     const verified = await this.executor.verify(intent, rawResult);
+    this.host.onActionVerified?.(intent, verified);
     this.ledger.appendResult(intent, verified);
 
     const finalStage = verified.ok ? "complete" : "failed";

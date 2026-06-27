@@ -1049,6 +1049,10 @@ export type GlassCommand =
   | { type: "add-aletheia-note"; body: string; category?: import("./aletheiaNotes.ts").AletheiaNoteCategory }
   | { type: "update-aletheia-note"; noteId: string; body: string }
   | { type: "delete-aletheia-note"; noteId: string }
+  /** B7 — clear an active security containment hold after user review. */
+  | { type: "dismiss-aletheia-security-containment" }
+  /** E2E — patch GlassState fields for deterministic dashboard tests. */
+  | { type: "e2e-set-state"; patch: Partial<GlassState> }
   // ── Glass built-in terminal (PTY) ─────────────────────────────────────────
   | { type: "glass-terminal-open" }
   | { type: "glass-terminal-close" }
@@ -1512,6 +1516,8 @@ export interface GlassState {
   aletheiaDisplayAwareness?: import("./aletheiaDisplayAwareness.ts").AletheiaDisplayAwarenessSnapshot;
   /** B6 — live trust activity and human-legible audit trail from action ledger. */
   aletheiaTrustActivity?: import("./aletheiaTrustLedger.ts").AletheiaTrustActivitySnapshot;
+  /** B7 — security hive agents, threats, and operational mode. */
+  aletheiaSecurityHive?: import("./aletheiaSecurityHive.ts").SecurityHiveSnapshot;
   // ── Design-to-Code Bridge (#163) ─────────────────────────────────────────
   /** Active design capture cards keyed by feed item id. */
   designCaptures?: Record<string, {

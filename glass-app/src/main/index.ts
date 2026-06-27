@@ -284,6 +284,7 @@ import {
   deleteApiKey,
   touchApiKey,
   isApiKeyEncryptionAvailable,
+  setApiKeyAccessHandler,
 } from "./apiKeyStore.ts";
 import { IdeChromeOrchestrator } from "./glassIdeChromeOrchestrator.ts";
 import { isPtyErrorLine } from "../shared/glassIdeChromeOrchestrator.ts";
@@ -346,6 +347,18 @@ import {
   buildAletheiaTrustActivity,
   trustActivitySnapshotsEqual,
 } from "../shared/aletheiaTrustLedger.ts";
+import {
+  initialSecurityHiveSnapshot,
+  type SecurityHiveSnapshot,
+} from "../shared/aletheiaSecurityHive.ts";
+import {
+  initAletheiaSecurityHivePlane,
+  dismissSecurityContainment,
+  onAletheiaActionLedgerEntryForSecurity,
+  recordSecurityKeychainAccess,
+  verifyAletheiaActionForSecurity,
+  type AletheiaSecurityHiveHost,
+} from "./aletheiaSecurityHivePlane.ts";
 import {
   buildAletheiaSurfaceContext,
   resolveAletheiaSurface,
@@ -1296,6 +1309,8 @@ interface AppState {
   aletheiaDisplayAwareness?: import("../shared/aletheiaDisplayAwareness.ts").AletheiaDisplayAwarenessSnapshot;
   /** B6 — live trust activity and human-legible audit trail from action ledger. */
   aletheiaTrustActivity?: import("../shared/aletheiaTrustLedger.ts").AletheiaTrustActivitySnapshot;
+  /** B7 — security hive agents, threats, and operational mode. */
+  aletheiaSecurityHive?: SecurityHiveSnapshot;
   /** Whether the dock terminal panel is open. */
   glassDockTerminalOpen?: boolean;
   /** Active PTY session id. */
@@ -1929,6 +1944,10 @@ const aletheiaActionOrchestratorHost: AletheiaActionOrchestratorHost = {
   },
   getSessionId: currentAletheiaActionSessionId,
   getPermissionPlane: () => state.aletheiaPermissionPlane,
+  getSecurityHive: () => state.aletheiaSecurityHive,
+  onActionVerified: (intent, result) => {
+    verifyAletheiaActionForSecurity(aletheiaSecurityHiveHost, intent, result);
+  },
   runBoundedLoop: (intent, confirmation) =>
     runAletheiaBoundedTerminalLoop(
       {
@@ -1948,6 +1967,21 @@ const aletheiaActionOrchestrator = new AletheiaActionOrchestrator(
   defaultActionLedgerPort,
   defaultActionExecutorPort,
 );
+
+const aletheiaSecurityHiveHost: AletheiaSecurityHiveHost = {
+  getSnapshot: () => state.aletheiaSecurityHive,
+  setSnapshot: (snapshot) => {
+    state.aletheiaSecurityHive = snapshot;
+  },
+  push,
+  getSessionId: currentAletheiaActionSessionId,
+  onContainmentActivated: () => {
+    requestAletheiaLoopCancel();
+  },
+  onLockedMode: () => {
+    requestAletheiaLoopCancel();
+  },
+};
 
 const aletheiaAgentCoordinatorHost: AletheiaAgentCoordinatorHost = {
   getSnapshot: () => state.aletheiaAgentActivity,
@@ -1983,6 +2017,7 @@ const aletheiaDelegatedPresenceHost: AletheiaDelegatedPresenceHost = {
 
 let pendingLoopDecisionResolver: ((decision: LoopDecision) => void) | null = null;
 let loopCancelRequested = false;
+let teardownAletheiaSecurityHivePlane: (() => void) | null = null;
 
 function requestAletheiaLoopCancel(): void {
   loopCancelRequested = true;
@@ -5378,6 +5413,7 @@ function snapshot(): GlassState {
     aletheiaRelationshipThread: state.aletheiaRelationshipThread,
     aletheiaDisplayAwareness: state.aletheiaDisplayAwareness,
     aletheiaTrustActivity: state.aletheiaTrustActivity,
+    aletheiaSecurityHive: state.aletheiaSecurityHive,
     glassDockTerminalOpen: state.glassDockTerminalOpen,
     glassDockTerminalId: state.glassDockTerminalId,
     glassDockTerminalTabs: state.glassDockTerminalTabs,
@@ -9442,6 +9478,19 @@ async function handleCommand(
     case "dismiss-aletheia-sidecar-alert": {
       state.aletheiaSidecarAlert = undefined;
       push();
+      return;
+    }
+
+    case "dismiss-aletheia-security-containment": {
+      dismissSecurityContainment(aletheiaSecurityHiveHost);
+      return;
+    }
+
+    case "e2e-set-state": {
+      if (process.env.IIVO_GLASS_E2E === "1") {
+        Object.assign(state, command.patch);
+        push();
+      }
       return;
     }
 
@@ -14772,6 +14821,10 @@ app.whenReady().then(() =>
   createAletheiaSessionsTable();
   createAletheiaActionLedgerTable();
   setAletheiaActionLedgerChangedHandler(() => {
+    const latestEntry = getRecentActionLedgerEntries(1)[0];
+    if (latestEntry) {
+      onAletheiaActionLedgerEntryForSecurity(aletheiaSecurityHiveHost, latestEntry);
+    }
     if (refreshAletheiaTrustActivityState()) {
       if (state.companionModeActive || state.aletheiaDashboardActive) {
         push();
@@ -14779,6 +14832,7 @@ app.whenReady().then(() =>
     }
   });
   refreshAletheiaTrustActivityState();
+  state.aletheiaSecurityHive = initialSecurityHiveSnapshot();
   createAletheiaNotesTable();
   refreshAletheiaNotesState();
   if (dbInit.recoveredFromCorruption) {
@@ -14813,6 +14867,10 @@ app.whenReady().then(() =>
     getOutputDir: () => resolveAgentOutputFolder(state.glassSettings),
   });
   initAletheiaAgentCoordinatorPlane(aletheiaAgentCoordinatorHost);
+  teardownAletheiaSecurityHivePlane = initAletheiaSecurityHivePlane(aletheiaSecurityHiveHost);
+  setApiKeyAccessHandler((keyId) => {
+    recordSecurityKeychainAccess(aletheiaSecurityHiveHost, keyId);
+  });
 
   // Wire: audio build plan ready → surface "Build from video" feed card
   agentBus.subscribe<AudioBuildPlanPayload>(
@@ -15057,6 +15115,8 @@ app.on("will-quit", () => {
   teardownGlassDashboard();
   teardownGlassSettings();
   teardownAgentChains();
+  teardownAletheiaSecurityHivePlane?.();
+  teardownAletheiaSecurityHivePlane = null;
   stopAllWatchers();
   closeAllIndexDbs();
   unregisterCommandBarHotkeys();
