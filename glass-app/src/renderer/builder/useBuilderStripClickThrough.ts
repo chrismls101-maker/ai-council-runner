@@ -18,9 +18,6 @@ function isOverFullscreenWorkspace(x: number, y: number): boolean {
 /** Keep overlay OS-interactive while a builder panel is open or pointer is over strip UI. */
 export function syncBuilderStripPanelOpen(open: boolean, panel?: string): void {
   window.glass?.setBuilderStripPanelOpen?.(open, panel);
-  if (open) {
-    window.glass?.setOverlayPointerOverBuilderStrip?.(true);
-  }
 }
 
 export function syncAletheiaStripMenuOpen(open: boolean): void {

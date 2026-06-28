@@ -31,6 +31,8 @@ import { GlassHoverTooltip } from "../components/GlassHoverTooltip.tsx";
 import { DashboardSetupView } from "./DashboardSetupView.tsx";
 import { armDashboardOverlayPointer } from "../glassTextInteraction.ts";
 import { SpendTrackerPanel } from "../builder/SpendTrackerPanel.tsx";
+import { MemoryNotesPanel } from "./memoryNotes/MemoryNotesPanel.tsx";
+import "./memoryNotes/memoryNotes.css";
 import "../styles/glass.css";
 
 type ProviderDot = "ok" | "missing" | "unconfigured";
@@ -233,6 +235,7 @@ export function GlassDashboard({ visible = true, onClose }: GlassDashboardProps)
   const [userContext, setUserContext] = useState<UserContextRow[]>([]);
   const [retentionSummary, setRetentionSummary] = useState<RetentionSummary | null>(null);
   const [busHealth, setBusHealth] = useState<AgentBusHealthSnapshot | null>(null);
+  const [expandedMessageIds, setExpandedMessageIds] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     void window.glass.getState().then(setGlassState);
@@ -554,16 +557,40 @@ export function GlassDashboard({ visible = true, onClose }: GlassDashboardProps)
       {loadingMessages ? (
         <p className="glass-dashboard__loading">Loading…</p>
       ) : sessionMessages.length > 0 ? (
-        <ul className="glass-dashboard__message-list">
-          {sessionMessages.map((msg) => (
+        <ul className="glass-dashboard__message-list glass-dashboard__message-list--scroll">
+          {sessionMessages.map((msg) => {
+            const expanded = expandedMessageIds.has(msg.id);
+            const long = msg.content.length > 320;
+            return (
             <li
               key={msg.id}
               className={`glass-dashboard__message glass-dashboard__message--${msg.role}`}
             >
               <span className="glass-dashboard__message-role">{msg.role}</span>
-              <p className="glass-dashboard__message-content">{msg.content}</p>
+              <p
+                className={`glass-dashboard__message-content${long && !expanded ? " glass-dashboard__message-content--clamped" : ""}`}
+              >
+                {msg.content}
+              </p>
+              {long ? (
+                <button
+                  type="button"
+                  className="memory-note-card__btn"
+                  onClick={() => {
+                    setExpandedMessageIds((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(msg.id)) next.delete(msg.id);
+                      else next.add(msg.id);
+                      return next;
+                    });
+                  }}
+                >
+                  {expanded ? "Show less" : "View full"}
+                </button>
+              ) : null}
             </li>
-          ))}
+            );
+          })}
         </ul>
       ) : (
         <div className="glass-dashboard__empty glass-dashboard__empty--compact">
@@ -575,30 +602,47 @@ export function GlassDashboard({ visible = true, onClose }: GlassDashboardProps)
 
   const renderMemoryTable = (): JSX.Element => (
     <section className="glass-dashboard__memory glass-dashboard__memory--view">
-      <p className="glass-dashboard__section-label">What IIVO knows</p>
+      <p className="glass-dashboard__section-label">Learned preferences</p>
       {userContext.length > 0 ? (
         <ul className="glass-dashboard__context-list">
           {userContext.map((entry) => (
-            <li key={entry.key} className="glass-dashboard__context-item">
-              <span className="glass-dashboard__context-key">{entry.key.replace(/_/g, " ")}</span>
-              <span className="glass-dashboard__context-value">{entry.value}</span>
-              <span className={contextSourceClass(entry.source)}>{entry.source}</span>
-              <button
-                type="button"
-                className="glass-dashboard__context-delete"
-                aria-label={`Remove ${entry.key}`}
-                onClick={() => void handleDeleteContext(entry.key)}
-              >
-                ×
-              </button>
+            <li key={entry.key} className="glass-dashboard__context-card">
+              <span className="glass-dashboard__context-card-key">
+                {entry.key.replace(/_/g, " ")}
+              </span>
+              <p className="glass-dashboard__context-card-value" title={entry.value}>
+                {entry.value}
+              </p>
+              <div className="memory-note-card__badges">
+                <span className={contextSourceClass(entry.source)}>{entry.source}</span>
+              </div>
+              <div className="memory-note-card__actions">
+                <button
+                  type="button"
+                  className="glass-dashboard__context-delete memory-note-card__btn"
+                  aria-label={`Remove ${entry.key}`}
+                  onClick={() => void handleDeleteContext(entry.key)}
+                >
+                  Remove
+                </button>
+              </div>
             </li>
           ))}
         </ul>
       ) : (
         <div className="glass-dashboard__empty glass-dashboard__empty--compact">
-          <p>Nothing learned yet</p>
+          <p>No learned preferences yet</p>
         </div>
       )}
+
+      <div className="glass-dashboard__memory-section" data-testid="glass-dashboard-aletheia-notes">
+        <MemoryNotesPanel
+          notes={glassState?.aletheiaNotes?.notes ?? []}
+          readOnly
+          listLimit={15}
+          panelTestId="glass-dashboard-memory-notes"
+        />
+      </div>
     </section>
   );
 
@@ -664,6 +708,20 @@ export function GlassDashboard({ visible = true, onClose }: GlassDashboardProps)
             <p className="glass-dashboard__section-label">AI Spend</p>
             <SpendTrackerPanel />
           </section>
+
+          {(glassState?.aletheiaNotes?.notes?.length ?? 0) > 0 ? (
+            <section
+              className="glass-dashboard__memory-section"
+              data-testid="glass-dashboard-recent-notes"
+            >
+              <MemoryNotesPanel
+                notes={glassState?.aletheiaNotes?.notes ?? []}
+                readOnly
+                listLimit={5}
+                panelTestId="glass-dashboard-overview-notes"
+              />
+            </section>
+          ) : null}
         </>
       );
     }

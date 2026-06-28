@@ -46,6 +46,9 @@ export function migrateSession(
     pendingRefinementFeedback: raw.pendingRefinementFeedback,
     statusLine: raw.statusLine,
     fileReadGranted: raw.fileReadGranted,
+    glassProjectId: raw.glassProjectId,
+    glassProjectSaveStatus: raw.glassProjectSaveStatus,
+    glassProjectSaveError: raw.glassProjectSaveError,
   };
 }
 
@@ -78,6 +81,9 @@ export function writeDesignSession(
     pendingRefinementFeedback: session.pendingRefinementFeedback,
     statusLine: session.statusLine,
     fileReadGranted: session.fileReadGranted,
+    glassProjectId: session.glassProjectId,
+    glassProjectSaveStatus: session.glassProjectSaveStatus,
+    glassProjectSaveError: session.glassProjectSaveError,
   };
 }
 

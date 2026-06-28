@@ -339,11 +339,8 @@ import {
   listAletheiaNotes,
   updateAletheiaNote,
 } from "./aletheiaNotesStore.ts";
-import {
-  formatAletheiaNotesContext,
-  selectRelevantAletheiaNotes,
-  type AppendAletheiaNoteInput,
-} from "../shared/aletheiaNotes.ts";
+import { type AppendAletheiaNoteInput } from "../shared/aletheiaNotes.ts";
+import { memoryContractForFeature } from "../shared/memory/memoryFeatureRegistry.ts";
 import { buildAletheiaAttentionRecovery } from "../shared/aletheiaAttentionRecovery.ts";
 import { buildAletheiaSessionEndSummary } from "../shared/aletheiaSessionEndSummary.ts";
 import {
@@ -995,16 +992,12 @@ import { loadGlassStorageProjectDetail } from "./storage/glassStorageProjectDeta
 import type { DesignStack, DesignToCodeAction } from "../shared/designToCode.ts";
 import {
   buildDesignToCodeAletheiaNote,
-  formatDesignToCodeAskContext,
-  filterRecentDesignToCodeNotes,
+  shouldPersistLatestDesignToCodeProjectPointer,
 } from "../shared/design/designToCodeAletheiaContext.ts";
+import { resolveAletheiaDiagnosticContext } from "../shared/memory/resolveAletheiaDiagnosticContext.ts";
 import { ingestDesignToCodeGlassMemory } from "./design/designToCodeMemoryService.ts";
 import { isExplicitDesignToCodeRememberText } from "../shared/design/designToCodeMemoryBridge.ts";
 import type { DesignToCodeMemoryEvent } from "../shared/design/designToCodeMemoryIngestion.ts";
-import {
-  buildDesignToCodeProjectRecallAskContext,
-  isDesignToCodeRecallPrompt,
-} from "../shared/design/designToCodeProjectRecall.ts";
 import { computeUnifiedDiff, collapseUnchanged } from "../shared/diff.ts";
 import {
   createPtySession,
@@ -4817,16 +4810,31 @@ function captureAletheiaSessionNote(input: AppendAletheiaNoteInput): void {
   refreshAletheiaNotesState();
 }
 
+function persistLatestDesignToCodeProjectId(projectId: string | null | undefined): void {
+  const trimmed = projectId?.trim() || undefined;
+  state.latestDesignToCodeProjectId = trimmed ?? null;
+  glassUserSettings = {
+    ...glassUserSettings,
+    latestDesignToCodeProjectId: trimmed,
+  };
+  state.glassSettings = glassUserSettings;
+  void persistGlassUserSettings(glassUserSettings);
+}
+
 function noteDesignToCodeForAletheia(
   feedItemId: string,
   event: import("../shared/design/designToCodeAletheiaContext.ts").DesignToCodeAletheiaEvent,
   error?: string,
 ): void {
+  const contract = memoryContractForFeature("design-to-code");
+  if (!contract?.emitsEventNotes) return;
+
   const session = getDesignSession(state, feedItemId);
   if (!session) return;
   const note = buildDesignToCodeAletheiaNote({ event, session, error });
-  const projectId = session.glassProjectId ?? session.feedItemId;
-  state.latestDesignToCodeProjectId = projectId;
+  if (shouldPersistLatestDesignToCodeProjectPointer(event, session)) {
+    persistLatestDesignToCodeProjectId(session.glassProjectId ?? session.feedItemId);
+  }
   captureAletheiaSessionNote({
     body: note.body,
     rationale: note.rationale,
@@ -4844,6 +4852,9 @@ function queueDesignToCodeGlassMemoryIngestion(input: {
   error?: string;
   explicitRememberText?: string;
 }): void {
+  const contract = memoryContractForFeature("design-to-code");
+  if (!contract?.emitsSemanticMemory) return;
+
   const session = input.feedItemId
     ? getDesignSession(state, input.feedItemId)
     : undefined;
@@ -5664,20 +5675,19 @@ function resolveAskUserContextForSubmit(
     || !gate.suppressAmbientSynthesis
     || gate.requireConfirmObservedContext;
   const termCtx = includeTerminal ? getTerminalContextString() : null;
-  const designToCodeCtx = formatDesignToCodeAskContext(state.designCaptures);
-  const designToCodeRecallCtx = buildDesignToCodeProjectRecallAskContext({
+  const designDiagnosticCtx = resolveAletheiaDiagnosticContext({
     prompt,
-    latestProjectId: state.latestDesignToCodeProjectId,
+    companionModeActive: state.companionModeActive,
     notes: state.aletheiaNotes?.notes,
-    captures: state.designCaptures,
     projects: state.glassStorageProjects,
+    captures: state.designCaptures,
+    latestProjectId: state.latestDesignToCodeProjectId,
   });
 
   const parts = [
     profileContext,
     ambientContext,
-    designToCodeCtx,
-    designToCodeRecallCtx,
+    designDiagnosticCtx,
     termCtx,
   ].filter(Boolean);
   const surface = resolveAletheiaSurface({
@@ -5692,13 +5702,6 @@ function resolveAskUserContextForSubmit(
   const personaDirective = state.aletheiaPersonaBehavior?.promptDirective;
   if (personaDirective && state.companionModeActive) {
     parts.unshift(personaDirective);
-  }
-  if (state.companionModeActive && state.aletheiaNotes?.notes.length) {
-    const notes = isDesignToCodeRecallPrompt(prompt)
-      ? filterRecentDesignToCodeNotes(state.aletheiaNotes.notes, Date.now(), 5, null)
-      : selectRelevantAletheiaNotes(state.aletheiaNotes.notes, prompt);
-    const notesContext = formatAletheiaNotesContext(notes);
-    if (notesContext) parts.unshift(notesContext);
   }
   return parts.length > 0 ? parts.join("\n\n") : undefined;
 }
@@ -7115,7 +7118,6 @@ async function submitCommand(
     queueDesignToCodeGlassMemoryIngestion({
       event: "explicit_remember",
       explicitRememberText: rawText.trim(),
-      feedItemId: state.latestDesignToCodeProjectId ?? undefined,
     });
   }
 
@@ -10296,7 +10298,6 @@ async function handleCommand(
         queueDesignToCodeGlassMemoryIngestion({
           event: "explicit_remember",
           explicitRememberText: command.body,
-          feedItemId: state.latestDesignToCodeProjectId ?? undefined,
         });
       }
       push();
@@ -11701,7 +11702,7 @@ async function persistDesignToCodeToGlassStorage(input: {
     glassProjectSaveError: result.error,
   });
   if (result.record?.id) {
-    state.latestDesignToCodeProjectId = result.record.id;
+    persistLatestDesignToCodeProjectId(result.record.id);
   }
   await refreshGlassStorageProjectsState();
   push();
@@ -14131,15 +14132,22 @@ function registerIpc(): void {
   });
 
   // ── Glass Storage Projects full-screen workspace ───────────────────────────
+  ipcMain.on(IPC.refreshGlassStorageProjects, (event) => {
+    if (!isOverlayIpcSender(event.sender)) return;
+    void refreshGlassStorageProjectsState().then(() => push());
+  });
+
   ipcMain.on(IPC.openGlassStorageProjects, (event, projectId: unknown) => {
     if (!isOverlayIpcSender(event.sender)) return;
-    state.glassStorageProjectsActive = true;
-    if (typeof projectId === "string" && projectId.trim()) {
-      state.glassStorageProjectsSelectedId = projectId.trim();
-    }
-    syncIdeChromeFromState();
-    push();
-    setImmediate(() => notifyGlassStorageProjectsMounted());
+    void refreshGlassStorageProjectsState().then(() => {
+      state.glassStorageProjectsActive = true;
+      if (typeof projectId === "string" && projectId.trim()) {
+        state.glassStorageProjectsSelectedId = projectId.trim();
+      }
+      syncIdeChromeFromState();
+      push();
+      setImmediate(() => notifyGlassStorageProjectsMounted());
+    });
   });
 
   ipcMain.on(IPC.closeGlassStorageProjects, (event) => {
@@ -14150,10 +14158,10 @@ function registerIpc(): void {
     push();
   });
 
-  ipcMain.on(IPC.glassStorageProjectsMounted, (event) => {
+  ipcMain.on(IPC.glassStorageProjectsMounted, (event, focusKeyboard: unknown) => {
     if (!isOverlayIpcSender(event.sender)) return;
     if (state.glassStorageProjectsActive !== true) return;
-    notifyGlassStorageProjectsMounted();
+    notifyGlassStorageProjectsMounted(focusKeyboard === true);
   });
 
   ipcMain.handle(IPC.getGlassStorageProjectThumb, async (_event, projectId: unknown) => {
@@ -15797,6 +15805,7 @@ app.whenReady().then(() =>
   registerIivoServerDegradedReporter(markIivoServerDegraded);
   registerIivoServerRecoveredReporter(clearIivoServerDegradedSource);
   state.glassSettings = glassUserSettings;
+  state.latestDesignToCodeProjectId = glassUserSettings.latestDesignToCodeProjectId ?? null;
   state.agentHistory = loadAgentHistory();
   state.glassStorageProjects = await loadGlassStorageProjectsIndex(app.getPath("userData"));
   migrateAnthropicKeyFromEnv();

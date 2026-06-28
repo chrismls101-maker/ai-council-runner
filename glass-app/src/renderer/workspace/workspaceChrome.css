@@ -2,7 +2,8 @@
 
 .research-chrome,
 .writing-chrome,
-.code-analyst-chrome {
+.code-analyst-chrome,
+.glass-storage-chrome {
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   background: linear-gradient(
     180deg,
@@ -120,6 +121,7 @@
 .research-chrome__right,
 .writing-chrome__right,
 .code-analyst-chrome__right,
+.glass-storage-chrome__right,
 .gide-header__right {
   display: flex;
   align-items: center;

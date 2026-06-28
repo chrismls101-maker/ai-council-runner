@@ -1,8 +1,11 @@
 node_modules
 desktop-glass
 !desktop-glass/glass-update-manifest.json
+glass-app
+!glass-app/glass-update-manifest.json
 dist
 .git
+.cursor
 .env
 .env.*
 !.env.example

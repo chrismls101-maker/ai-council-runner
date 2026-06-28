@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { LayoutGrid, Folder } from "lucide-react";
 import type React from "react";
 import { PromptLibraryPanel } from "./PromptLibraryPanel.tsx";
@@ -52,6 +52,24 @@ export function BuilderStrip({
   const [aletheiaMenuOpen, setAletheiaMenuOpen] = useState(false);
   const aletheiaSweepGenRef = useRef(0);
   const aletheiaButtonRef = useRef<HTMLButtonElement>(null);
+  const storageTabRef = useRef<HTMLButtonElement>(null);
+  const [storagePanelAnchorRight, setStoragePanelAnchorRight] = useState<number | null>(null);
+
+  useLayoutEffect(() => {
+    if (activeTab !== "storage") {
+      setStoragePanelAnchorRight(null);
+      return;
+    }
+    const measure = (): void => {
+      const el = storageTabRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      setStoragePanelAnchorRight(Math.max(0, window.innerWidth - rect.right));
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [activeTab]);
 
   const replayAletheiaTruthSweep = useCallback((): void => {
     aletheiaSweepGenRef.current += 1;
@@ -360,7 +378,16 @@ export function BuilderStrip({
       {/* Panel — floats above the strip, inside the overlay */}
       {activeTab !== null && (
         <div
-          className={`builder-panel-host${activeTab === "agents" ? " builder-panel-host--agents" : ""}`}
+          className={[
+            "builder-panel-host",
+            activeTab === "agents" && "builder-panel-host--agents",
+            activeTab === "storage" && "builder-panel-host--storage",
+          ].filter(Boolean).join(" ")}
+          style={
+            activeTab === "storage" && storagePanelAnchorRight != null
+              ? { right: `${storagePanelAnchorRight}px` }
+              : undefined
+          }
           onPointerEnter={handlePointerEnter}
           onPointerLeave={handlePointerLeave}
           onPointerDownCapture={handlePointerDownCapture}
@@ -491,6 +518,7 @@ export function BuilderStrip({
           placement="auto"
         >
           <button
+            ref={storageTabRef}
             type="button"
             className={`builder-tab builder-tab--storage glass-btn-depth-3${activeTab === "storage" ? " builder-tab--active" : ""}${glassState.glassStorageProjectsActive ? " builder-tab--storage-open" : ""}`}
             data-testid="glass-builder-strip-storage"

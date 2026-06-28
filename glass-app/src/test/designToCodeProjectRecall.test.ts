@@ -46,6 +46,8 @@ describe("designToCodeProjectRecall", () => {
   test("recognizes recap prompts", () => {
     assert.equal(isDesignToCodeRecallPrompt("what did you save?"), true);
     assert.equal(isDesignToCodeRecallPrompt("show me the last design to code thing"), true);
+    assert.equal(isDesignToCodeRecallPrompt("where is it?"), true);
+    assert.equal(isDesignToCodeRecallPrompt("where did you save the component?"), true);
     assert.equal(isDesignToCodeRecallPrompt("summarize my calendar"), false);
   });
 

@@ -5,7 +5,11 @@ import {
   DESIGN_STACK_LABELS,
   DESIGN_TO_CODE_ACTION_LABELS,
 } from "../../shared/design/designStackRegistry.ts";
-import { ensureOverlayInteractive } from "../glassTextInteraction.ts";
+import {
+  armGlassStorageProjectsOverlayPointer,
+  ensureOverlayInteractive,
+  prepareGlassTextPointerDown,
+} from "../glassTextInteraction.ts";
 import "./GlassStorageProjectsBrowser.css";
 
 interface GlassStorageProjectsBrowserProps {
@@ -66,27 +70,26 @@ export function GlassStorageProjectsBrowser({
     window.glass.openGlassStorageProjects(projectId);
   }, [onSelect]);
 
-  const handleOpenProjects = useCallback((): void => {
-    window.glass.openGlassStorageProjects();
-  }, []);
-
   if (!designProjects.length) {
+    if (compact) {
+      return (
+        <div className="gspb-empty-inline gspb-empty-inline--compact" data-testid="glass-storage-projects-empty">
+          <p className="gspb-empty-inline__title">No saved projects yet</p>
+          <p className="gspb-empty-inline__desc">
+            Design to Code results auto-save here after each successful run.
+          </p>
+        </div>
+      );
+    }
     return (
-      <div className={`gspb-empty${compact ? " gspb-empty--compact" : ""}`}>
-        <p className="gspb-empty__title">No saved projects yet</p>
-        <p className="gspb-empty__desc">
-          Design to Code results auto-save here after each successful run.
+      <div className="gspb gspb--list-empty" data-testid="glass-storage-projects-empty">
+        <div className="gspb-section-head">
+          <span className="gspb-section-head__title">Design to Code</span>
+          <span className="gspb-section-head__count">0</span>
+        </div>
+        <p className="gspb-empty-inline__desc gspb-empty-inline__desc--list">
+          No projects saved yet.
         </p>
-        {!compact ? (
-          <button
-            type="button"
-            className="gspb-empty__cta"
-            onClick={handleOpenProjects}
-            onPointerDown={ensureOverlayInteractive}
-          >
-            Open Projects
-          </button>
-        ) : null}
       </div>
     );
   }
@@ -127,7 +130,10 @@ export function GlassStorageProjectsBrowser({
                 ].filter(Boolean).join(" ")}
                 data-testid={`glass-storage-project-${project.id}`}
                 aria-current={isSelected ? "true" : undefined}
-                onPointerDown={ensureOverlayInteractive}
+                onPointerDown={(event) => {
+                  prepareGlassTextPointerDown(event);
+                  armGlassStorageProjectsOverlayPointer(true);
+                }}
                 onClick={() => handleCardClick(project.id)}
               >
                 <ProjectThumb projectId={project.id} alt={project.title} />

@@ -45,3 +45,20 @@ Session state lives in `GlassState.designCaptures` keyed by capture feed item id
 `ready` → `captured` → `awaiting_permission` (match-codebase) → `reading` → `analyzing` → `generating` → `verifying` → `done` | `failed`
 
 Legacy `permission` maps to `awaiting_permission` in the session store.
+
+## Glass Storage & memory routing
+
+Successful runs auto-save to **Glass Storage → Projects** (`glass-storage/design-to-code/<projectId>/`).
+
+| Layer | What D2C writes | Persists restart? |
+|-------|-----------------|-------------------|
+| `designCaptures` | Live session UI | No |
+| `aletheia_notes` | Event notes + `linkedProjectId` | Yes |
+| Projects index + artifacts | Full bundle on save | Yes |
+| Glass Memory (`memories`, `user_context`) | Selective patterns/preferences only | Yes |
+| `latestDesignToCodeProjectId` in settings | Last saved project pointer | Yes |
+
+Recall on asks: [`resolveAletheiaDiagnosticContext`](../../src/shared/memory/resolveAletheiaDiagnosticContext.ts) (notes + project metadata without companion) + [`hydrateContext`](../../src/main/glassMemoryEngine.ts) (semantic).
+
+Full architecture: [MEMORY_ARCHITECTURE.md](./MEMORY_ARCHITECTURE.md). Contract: [`memoryFeatureRegistry.ts`](../../src/shared/memory/memoryFeatureRegistry.ts) (`design-to-code` entry).
+

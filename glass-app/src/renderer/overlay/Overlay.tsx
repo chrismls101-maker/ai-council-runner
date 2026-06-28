@@ -1151,7 +1151,7 @@ export function Overlay(): JSX.Element {
     <div
       className={overlayRootClassName(
         "overlay-root",
-        state.glassIdeActive && "overlay-root--ide-active",
+        state.glassIdeActive && !fullscreenWorkspaceActive(state) && "overlay-root--ide-active",
         fullscreenWorkspaceActive(state) && "overlay-root--workspace-active",
         translateFocusActive && "overlay-root--translate-active",
         paletteModalOpenForState(state) && "overlay-root--palette-open",
@@ -1265,7 +1265,7 @@ export function Overlay(): JSX.Element {
 
       <PaletteLayer state={state} lastTerminalBlock={lastTerminalBlock} />
       {responsePanel}
-      {state.glassIdeActive ? (
+      {state.glassIdeActive && !fullscreenWorkspaceActive(state) ? (
         <GlassIdeShell
           state={state}
           answer={coderAnswer}

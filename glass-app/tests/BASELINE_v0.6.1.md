@@ -145,7 +145,20 @@ Terminal features: PTY sessions via `node-pty`, `/run <command>` command bar syn
 - `src/test/designToCode.test.ts`, `designScreenSpecSchema.test.ts`, `designPromptBuilders.test.ts`, `designQualityAnalyzer.test.ts`
 - `docs/architecture/DESIGN_TO_CODE.md` — pipeline overview
 
-**Pipeline notes:** Spec and verify use Anthropic Haiku via `askAnthropicHaikuVision` (no feed pollution). Generation uses `submitCommand` with `presetImageDataUrl`. Refinement reuses stored spec, style pack, and `refinementHistory`.
+**Pipeline notes:** Spec and verify use Anthropic Haiku via `askAnthropicHaikuVision` (no feed pollution). Generation uses `submitCommand` with `presetImageDataUrl`. Refinement reuses stored spec, style pack, and `refinementHistory`. Memory routing: Aletheia notes + Projects on save/fail; selective Glass Memory ingestion; diagnostic recall via `resolveAletheiaDiagnosticContext` (see `docs/architecture/MEMORY_ARCHITECTURE.md`).
+
+---
+
+### Memory architecture audit (cross-feature)
+
+**What it does:** Inventories all Glass memory/storage layers (vector memory, Aletheia notes, Projects, ephemeral session state, companion, cloud vault), documents retention and ID cross-links, unifies Design to Code diagnostic recall without companion gate, and provides `scripts/glass-memory-audit.mjs` for verification.
+
+**Key files:**
+- `docs/architecture/MEMORY_ARCHITECTURE.md`
+- `src/shared/memory/memoryLayerAudit.ts`, `memoryRoutingContract.ts`, `memoryFeatureRegistry.ts`
+- `src/shared/memory/resolveAletheiaDiagnosticContext.ts`, `glassStorageProjectRecall.ts`
+- `scripts/glass-memory-audit.mjs`
+- `src/test/resolveAletheiaDiagnosticContext.test.ts`, `glassStorageProjectRecall.test.ts`, `glassMemoryRestartRecall.test.ts`, `designToCodeSessionStore.test.ts`
 
 ---
 

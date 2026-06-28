@@ -1,4 +1,4 @@
-import type { JSX, ReactNode } from "react";
+import type { JSX } from "react";
 import GlassIntroTerminalDemo from "./GlassIntroTerminalDemo";
 import type { GlassIntroPhase } from "./glassCinematicIntro";
 
@@ -28,7 +28,7 @@ const WINDOW_PHASES: Partial<Record<GlassIntroPhase, IntroSceneWindow>> = {
   "safari-click": "finder",
 };
 
-const SCENE_ACT: Partial<Record<IntroSceneWindow, number>> = {
+const SCENE_ACT: Partial<Record<Exclude<IntroSceneWindow, null>, number>> = {
   pdf: 1,
   notes: 2,
   terminal: 3,

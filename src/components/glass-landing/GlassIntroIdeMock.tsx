@@ -234,7 +234,7 @@ export default function GlassIntroIdeMock({ phase }: { phase: GlassIntroPhase })
   if (!IDE_PHASES.has(phase) || !beat) return null;
 
   const zooming = beat === "zoom";
-  const streamItems = INTRO_IDE_STREAM_ITEMS.slice(0, streamCount).map((item, index) => {
+  const streamItems = INTRO_IDE_STREAM_ITEMS.slice(0, streamCount).map((item) => {
     if (item.kind === "text" && item.live && liveAnswer) {
       return { ...item, text: liveAnswer };
     }

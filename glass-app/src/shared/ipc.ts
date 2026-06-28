@@ -295,6 +295,8 @@ export const IPC = {
   closeWritingStudio: "glass:close-writing-studio",
   /** Renderer → main: Writing Studio mounted — force overlay clicks + focus. */
   writingStudioMounted: "glass:writing-studio-mounted",
+  /** Renderer → main: reload saved projects index from disk into shared state. */
+  refreshGlassStorageProjects: "glass:refresh-glass-storage-projects",
   /** Renderer → main: open Glass Storage Projects full-screen workspace. */
   openGlassStorageProjects: "glass:open-glass-storage-projects",
   /** Renderer → main: hide Glass Storage Projects workspace. */

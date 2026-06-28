@@ -48,6 +48,17 @@ describe("designToCodeMemoryIngestion", () => {
     assert.ok(decisions.some((d) => d.kind === "episodic" && d.tag.includes("failure:save")));
   });
 
+  test("does not ingest episodic memory on first save alone", () => {
+    const decisions = evaluateDesignToCodeMemoryIngestion({
+      event: "save_succeeded",
+      stack: "react-tsx",
+      action: "react",
+      projects: [],
+      now: NOW,
+    });
+    assert.equal(decisions.length, 0);
+  });
+
   test("does not ingest preference until three successes", () => {
     const decisions = evaluateDesignToCodeMemoryIngestion({
       event: "save_succeeded",

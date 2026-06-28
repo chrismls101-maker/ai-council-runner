@@ -567,6 +567,21 @@
   animation: builder-panel-open-right 0.28s cubic-bezier(0.22, 0.8, 0.22, 1) both;
 }
 
+/* Glass Storage — popover anchored above the Storage tab */
+.builder-panel-host--storage {
+  left: auto;
+  width: min(400px, calc(100vw - 24px));
+  justify-content: flex-end;
+  align-items: flex-end;
+}
+
+.builder-panel-host--storage .builder-panel {
+  width: 100%;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: var(--builder-panel-radius, 12px);
+  animation: builder-panel-open 0.24s cubic-bezier(0.22, 0.8, 0.22, 1) both;
+}
+
 @keyframes builder-panel-open-right {
   from {
     opacity: 0;

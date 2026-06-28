@@ -1,4 +1,5 @@
-import { FolderKanban, FolderOpen } from "lucide-react";
+import { useEffect } from "react";
+import { FolderKanban } from "lucide-react";
 import { useGlassState } from "../useGlassState.ts";
 import { GlassStorageProjectsBrowser } from "../storage/GlassStorageProjectsBrowser.tsx";
 import "./GlassStoragePanel.css";
@@ -11,6 +12,10 @@ interface GlassStoragePanelProps {
 export function GlassStoragePanel({ onClose, onOpenProjects }: GlassStoragePanelProps): JSX.Element {
   const state = useGlassState();
   const projects = state.glassStorageProjects ?? [];
+
+  useEffect(() => {
+    window.glass.refreshGlassStorageProjects();
+  }, []);
 
   const handleProjects = (projectId?: string): void => {
     if (projectId) {
@@ -61,22 +66,6 @@ export function GlassStoragePanel({ onClose, onOpenProjects }: GlassStoragePanel
           <span className="gsp-item__meta">
             <span className="gsp-item__name">Projects</span>
             <span className="gsp-item__desc">Browse all saved Design to Code projects</span>
-          </span>
-          <span className="gsp-item__chevron" aria-hidden="true">›</span>
-        </button>
-
-        <button
-          type="button"
-          className="gsp-item gsp-item--secondary"
-          data-testid="glass-storage-coder-workspace-item"
-          onClick={() => handleProjects()}
-        >
-          <span className="gsp-item__icon gsp-item__icon--muted" aria-hidden="true">
-            <FolderOpen size={18} strokeWidth={1.75} />
-          </span>
-          <span className="gsp-item__meta">
-            <span className="gsp-item__name">Coder workspace</span>
-            <span className="gsp-item__desc">Open or switch Glass Coder project folders</span>
           </span>
           <span className="gsp-item__chevron" aria-hidden="true">›</span>
         </button>

@@ -587,14 +587,17 @@ const glassApi = {
   notifyWritingStudioMounted(): void {
     ipcRenderer.send(IPC.writingStudioMounted);
   },
+  refreshGlassStorageProjects(): void {
+    ipcRenderer.send(IPC.refreshGlassStorageProjects);
+  },
   openGlassStorageProjects(projectId?: string): void {
     ipcRenderer.send(IPC.openGlassStorageProjects, projectId ?? "");
   },
   closeGlassStorageProjects(): void {
     ipcRenderer.send(IPC.closeGlassStorageProjects);
   },
-  notifyGlassStorageProjectsMounted(): void {
-    ipcRenderer.send(IPC.glassStorageProjectsMounted);
+  notifyGlassStorageProjectsMounted(focusKeyboard = false): void {
+    ipcRenderer.send(IPC.glassStorageProjectsMounted, focusKeyboard);
   },
   getGlassStorageProjectThumb(projectId: string): Promise<string | null> {
     return ipcRenderer.invoke(IPC.getGlassStorageProjectThumb, projectId) as Promise<string | null>;

@@ -9,6 +9,7 @@ import {
   filterRecentDesignToCodeNotes,
   isAletheiaDiagnosticPrompt,
 } from "./designToCodeAletheiaContext.ts";
+import { resolveProjectMetadataForRecall } from "../memory/glassStorageProjectRecall.ts";
 
 /** User is asking about a recent Design to Code run or saved project. */
 export function isDesignToCodeRecallPrompt(prompt: string): boolean {
@@ -16,7 +17,9 @@ export function isDesignToCodeRecallPrompt(prompt: string): boolean {
   const lower = prompt.trim().toLowerCase();
   return (
     /\bwhat did you save\b/.test(lower)
+    || /\bwhere is it\b/.test(lower)
     || /\bwhere did you save\b/.test(lower)
+    || /\bwhere is (the|my) (project|save|output)\b/.test(lower)
     || /\b(last|recent|latest)\b.*\b(design to code|design-to-code)\b/.test(lower)
     || /\b(design to code|design-to-code)\b.*\b(last|recent|latest)\b/.test(lower)
     || /\bshow me\b.*\b(design to code|saved project|glass storage)\b/.test(lower)
@@ -60,34 +63,43 @@ export function collectDesignToCodeRecallProjectIds(input: {
   return ids.slice(0, input.limit ?? 3);
 }
 
-function projectStatusLine(record: GlassProjectRecord): string {
-  if (record.status === "failed") {
-    return record.saveError
-      ? `save incomplete — ${record.saveError}`
-      : "save incomplete";
-  }
-  if (record.status === "warning") {
-    return record.warningSummary
-      ? `saved with fidelity notes — ${record.warningSummary}`
-      : "saved with fidelity notes";
-  }
-  return "saved in Glass Storage → Projects";
-}
-
 function formatProjectRecallLine(record: GlassProjectRecord): string {
-  const action = record.action ? DESIGN_TO_CODE_ACTION_LABELS[record.action] : "Design to Code";
-  const stack = record.stack ? DESIGN_STACK_LABELS[record.stack] : null;
+  const meta = resolveProjectMetadataForRecall(record.id, [record]);
+  if (!meta) return `- projectId=${record.id} (metadata unavailable)`;
+  const action = meta.action ? DESIGN_TO_CODE_ACTION_LABELS[meta.action] : "Design to Code";
+  const stack = meta.stack ? DESIGN_STACK_LABELS[meta.stack] : null;
+  const statusLine =
+    meta.status === "failed"
+      ? meta.saveError
+        ? `save incomplete — ${meta.saveError}`
+        : "save incomplete"
+      : meta.status === "warning"
+        ? meta.warningSummary
+          ? `saved with fidelity notes — ${meta.warningSummary}`
+          : "saved with fidelity notes"
+        : "saved in Glass Storage → Projects";
   const parts = [
-    `projectId=${record.id}`,
-    `title="${record.title}"`,
+    `projectId=${meta.id}`,
+    `title="${meta.title}"`,
     action,
     stack,
-    record.detectedFileName ? `file=${record.detectedFileName}` : null,
-    projectStatusLine(record),
-    record.revisionCount ? `${record.revisionCount} revision(s)` : null,
+    meta.detectedFileName ? `file=${meta.detectedFileName}` : null,
+    statusLine,
+    meta.revisionCount ? `${meta.revisionCount} revision(s)` : null,
     "location=Glass Storage → Projects",
   ].filter(Boolean);
   return `- ${parts.join(" · ")}`;
+}
+
+function formatProjectRecallLineFromId(
+  projectId: string,
+  projects: readonly GlassProjectRecord[],
+): string | null {
+  const meta = resolveProjectMetadataForRecall(projectId, projects);
+  if (!meta) return null;
+  const record = projects.find((p) => p.id === meta.id);
+  if (!record) return null;
+  return formatProjectRecallLine(record);
 }
 
 /**
@@ -99,11 +111,10 @@ export function formatDesignToCodeProjectRecallContext(
 ): string | undefined {
   if (!projectIds.length || !projects.length) return undefined;
 
-  const byId = new Map(projects.map((p) => [p.id, p]));
   const lines: string[] = [];
   for (const id of projectIds) {
-    const record = byId.get(id);
-    if (record) lines.push(formatProjectRecallLine(record));
+    const line = formatProjectRecallLineFromId(id, projects);
+    if (line) lines.push(line);
   }
 
   if (!lines.length) return undefined;

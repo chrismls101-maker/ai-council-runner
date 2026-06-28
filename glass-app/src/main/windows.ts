@@ -436,10 +436,37 @@ function transitionOverlayWorkspaceFlag(current: boolean, next: boolean): boolea
   return next;
 }
 
+function overlayWorkspaceWantsKeyboardCapture(): boolean {
+  return (
+    overlayResearchExplorerActive
+    || overlayCodeAnalystExplorerActive
+    || overlayWritingStudioActive
+    || overlayGlassDashboardActive
+    || overlayAletheiaDashboardActive
+  );
+}
+
+/** Glass Storage Projects — clicks inside, but no global keyboard steal until user focuses in. */
+function applyGlassStorageProjectsPassiveOverlayMode(): void {
+  if (!windows?.overlay || windows.overlay.isDestroyed()) return;
+  if (!overlayGlassStorageProjectsActive) return;
+  const overlay = windows.overlay;
+  const cancelPassthrough = (overlay as BrowserWindow & { _cancelPassthroughDebounced?: () => void })
+    ._cancelPassthroughDebounced;
+  cancelPassthrough?.();
+  debugSetIgnoreMouseEvents(overlay, "overlay", false);
+  overlay.setFocusable(false);
+  overlay.showInactive();
+}
+
 /** Full-screen workspace (Research / Code Analyst) — OS must accept clicks + keyboard. */
 function applyFullscreenWorkspaceOverlayMode(): void {
   if (!windows?.overlay || windows.overlay.isDestroyed()) return;
   if (!overlayFullscreenWorkspaceActive()) return;
+  if (overlayGlassStorageProjectsActive && !overlayWorkspaceWantsKeyboardCapture()) {
+    applyGlassStorageProjectsPassiveOverlayMode();
+    return;
+  }
   const overlay = windows.overlay;
   const cancelPassthrough = (overlay as BrowserWindow & { _cancelPassthroughDebounced?: () => void })
     ._cancelPassthroughDebounced;
@@ -455,11 +482,33 @@ function applyFullscreenWorkspaceOverlayMode(): void {
   }
 }
 
+function focusGlassStorageProjectsOverlay(): void {
+  if (!windows?.overlay || windows.overlay.isDestroyed()) return;
+  if (!overlayGlassStorageProjectsActive) return;
+  const overlay = windows.overlay;
+  const cancelPassthrough = (overlay as BrowserWindow & { _cancelPassthroughDebounced?: () => void })
+    ._cancelPassthroughDebounced;
+  cancelPassthrough?.();
+  debugSetIgnoreMouseEvents(overlay, "overlay", false);
+  overlay.setFocusable(true);
+  overlay.show();
+  overlay.focus();
+  overlay.webContents.focus();
+}
+
+function applyActiveFullscreenWorkspaceOverlayMode(): void {
+  if (overlayGlassStorageProjectsActive && !overlayWorkspaceWantsKeyboardCapture()) {
+    applyGlassStorageProjectsPassiveOverlayMode();
+    return;
+  }
+  applyFullscreenWorkspaceOverlayMode();
+}
+
 function applyBuilderStripOverlayInteractivity(): void {
   if (!windows?.overlay || windows.overlay.isDestroyed()) return;
   const overlay = windows.overlay;
   if (overlayFullscreenWorkspaceActive()) {
-    applyFullscreenWorkspaceOverlayMode();
+    applyActiveFullscreenWorkspaceOverlayMode();
     return;
   }
   if (overlayPaletteModalActive()) {
@@ -539,7 +588,7 @@ export function setOverlayAletheiaDashboardActive(active: boolean): void {
 
 function syncFullscreenWorkspaceOverlay(): void {
   if (overlayFullscreenWorkspaceActive()) {
-    applyFullscreenWorkspaceOverlayMode();
+    applyActiveFullscreenWorkspaceOverlayMode();
     if (windows) raiseChromeAboveOverlay(windows);
     return;
   }
@@ -568,9 +617,13 @@ export function notifyWritingStudioMounted(): void {
   applyFullscreenWorkspaceOverlayMode();
 }
 
-/** Renderer mounted Glass Storage Projects — re-assert focus + click capture. */
-export function notifyGlassStorageProjectsMounted(): void {
-  applyFullscreenWorkspaceOverlayMode();
+/** Renderer mounted Glass Storage Projects — re-assert click capture (keyboard on demand). */
+export function notifyGlassStorageProjectsMounted(focusKeyboard = false): void {
+  if (focusKeyboard) {
+    focusGlassStorageProjectsOverlay();
+    return;
+  }
+  applyGlassStorageProjectsPassiveOverlayMode();
 }
 
 /** Renderer mounted Glass Dashboard — re-assert focus + click capture. */
@@ -630,7 +683,7 @@ function applyOverlayPaletteModalInteractivity(): void {
   if (!windows?.overlay || windows.overlay.isDestroyed()) return;
   const overlay = windows.overlay;
   if (overlayFullscreenWorkspaceActive()) {
-    applyFullscreenWorkspaceOverlayMode();
+    applyActiveFullscreenWorkspaceOverlayMode();
     return;
   }
   const cancelPassthrough = (overlay as BrowserWindow & { _cancelPassthroughDebounced?: () => void })

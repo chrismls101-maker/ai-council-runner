@@ -129,6 +129,11 @@ function buildSettingsFromParsed(parsed: Partial<GlassUserSettings>): GlassUserS
       glassIdeStreamWidthPx: parsed.glassIdeStreamWidthPx,
       glassIdeEditorSplitRatio: parsed.glassIdeEditorSplitRatio,
       glassIdeAletheiaFirstErrorHintShown: parsed.glassIdeAletheiaFirstErrorHintShown === true,
+      latestDesignToCodeProjectId:
+        typeof parsed.latestDesignToCodeProjectId === "string"
+        && parsed.latestDesignToCodeProjectId.trim()
+          ? parsed.latestDesignToCodeProjectId.trim()
+          : undefined,
     };
 }
 

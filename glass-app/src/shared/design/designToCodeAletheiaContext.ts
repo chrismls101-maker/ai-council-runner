@@ -88,6 +88,15 @@ export function formatDesignToCodeAskContext(
   ].join("\n");
 }
 
+/** Persist settings recall pointer only when a Glass Storage project exists or save completed. */
+export function shouldPersistLatestDesignToCodeProjectPointer(
+  event: DesignToCodeAletheiaEvent,
+  session: DesignToCodeSession,
+): boolean {
+  if (event === "save_succeeded" || event === "save_failed") return true;
+  return event === "generation_failed" && Boolean(session.glassProjectId?.trim());
+}
+
 export function buildDesignToCodeAletheiaNote(input: {
   event: DesignToCodeAletheiaEvent;
   session: DesignToCodeSession;
@@ -103,6 +112,7 @@ export function buildDesignToCodeAletheiaNote(input: {
       return {
         body: `Design to Code: ${action}${target} — generation failed.`,
         rationale: input.session.statusLine ?? input.error,
+        linkedProjectId: projectId,
       };
     case "save_failed":
       return {

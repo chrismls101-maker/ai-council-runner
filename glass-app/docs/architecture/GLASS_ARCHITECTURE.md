@@ -105,6 +105,8 @@ Speech-to-text across multiple providers. Deepgram for high-accuracy streaming. 
 ### IIVO Memory
 Persistent cross-session intelligence. Knows the user's history, preferences, past research, past builds. Any agent can query IIVO Memory to get relevant context without the user re-explaining.
 
+**Memory architecture (layers, retention, ID linking, feature routing):** see [MEMORY_ARCHITECTURE.md](./MEMORY_ARCHITECTURE.md).
+
 - Lives in: `src/main/iivoAccountStore.ts`, `src/shared/iivoMemoryClient.ts`
 - Status: **Partial** — exists, needs deeper agent integration
 

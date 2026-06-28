@@ -4,9 +4,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Sun } from "lucide-react";
 import { useGlassState } from "../useGlassState.ts";
-import { GlassIdeProjectGate } from "../overlay/GlassIdeProjectGate.tsx";
 import { GlassStorageProjectsBrowser } from "./GlassStorageProjectsBrowser.tsx";
 import { DesignToCodeProjectDetail } from "./DesignToCodeProjectDetail.tsx";
+import { GlassStorageProjectsEmptyHero } from "./GlassStorageProjectsEmptyHero.tsx";
 import {
   armGlassStorageProjectsOverlayPointer,
   prepareGlassTextPointerDown,
@@ -20,9 +20,9 @@ const THEME_KEY = "glass-storage-projects-theme";
 
 function readTheme(): Theme {
   try {
-    return localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light";
+    return localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark";
   } catch {
-    return "light";
+    return "dark";
   }
 }
 
@@ -39,13 +39,12 @@ export function GlassStorageProjects({ visible = true, onClose }: Props): JSX.El
     [projects],
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [showWorkspace, setShowWorkspace] = useState(false);
   const [theme, setTheme] = useState<Theme>(() => readTheme());
 
   useEffect(() => {
     if (!visible) return;
+    window.glass.refreshGlassStorageProjects();
     document.body.classList.add("glass-body--workspace-active");
-    armGlassStorageProjectsOverlayPointer();
     return () => {
       document.body.classList.remove("glass-body--workspace-active");
     };
@@ -83,23 +82,8 @@ export function GlassStorageProjects({ visible = true, onClose }: Props): JSX.El
     onClose();
   }, [onClose]);
 
-  const handleOpenFolder = useCallback((): void => {
-    armGlassStorageProjectsOverlayPointer();
-    void window.glass.agentPickWorkspaceRoot();
-  }, []);
-
-  const handleCreateProject = useCallback((): void => {
-    armGlassStorageProjectsOverlayPointer();
-    void window.glass.glassIdeCreateProject();
-  }, []);
-
-  const handleSelectRecent = useCallback((folderPath: string): void => {
-    armGlassStorageProjectsOverlayPointer();
-    void window.glass.glassIdeSelectWorkspace({ folder: folderPath });
-  }, []);
-
   const handleSelectProject = useCallback((projectId: string): void => {
-    armGlassStorageProjectsOverlayPointer();
+    armGlassStorageProjectsOverlayPointer(true);
     setSelectedId(projectId);
   }, []);
 
@@ -116,7 +100,7 @@ export function GlassStorageProjects({ visible = true, onClose }: Props): JSX.El
 
       <header
         className="glass-storage-chrome"
-        onPointerDownCapture={() => armGlassStorageProjectsOverlayPointer()}
+        onPointerDownCapture={() => armGlassStorageProjectsOverlayPointer(true)}
       >
         <div className="glass-storage-chrome__left">
           <span className="glass-storage-chrome__title">Projects</span>
@@ -147,7 +131,10 @@ export function GlassStorageProjects({ visible = true, onClose }: Props): JSX.El
         </div>
       </header>
 
-      <div className="glass-storage-projects__main">
+      <div
+        className="glass-storage-projects__main"
+        onPointerDownCapture={() => armGlassStorageProjectsOverlayPointer(true)}
+      >
         <div className="glass-storage-projects__split">
           <aside className="glass-storage-projects__list-pane">
             <GlassStorageProjectsBrowser
@@ -160,40 +147,14 @@ export function GlassStorageProjects({ visible = true, onClose }: Props): JSX.El
           <section className="glass-storage-projects__detail-pane" aria-label="Project detail">
             {selectedId ? (
               <DesignToCodeProjectDetail key={selectedId} projectId={selectedId} />
+            ) : designProjects.length === 0 ? (
+              <GlassStorageProjectsEmptyHero onCapture={handleHide} />
             ) : (
               <div className="glass-storage-projects__detail-empty">
                 <p>Select a saved Design to Code project to view its output, files, and refinements.</p>
               </div>
             )}
           </section>
-        </div>
-
-        <div className="glass-storage-projects__workspace">
-          <button
-            type="button"
-            className="glass-storage-projects__workspace-toggle"
-            onPointerDown={prepareGlassTextPointerDown}
-            onClick={() => setShowWorkspace((v) => !v)}
-            aria-expanded={showWorkspace}
-          >
-            {showWorkspace ? "Hide Coder workspace" : "Coder workspace folders"}
-          </button>
-          {showWorkspace ? (
-            <div className="glass-storage-projects__workspace-panel">
-              <GlassIdeProjectGate
-                state={state}
-                title="Coder workspace"
-                subtitle="Open or create a folder for Glass Coder agents — separate from saved Design to Code projects."
-                icon="◇"
-                embedded
-                hideFooterExit
-                onOpenFolder={handleOpenFolder}
-                onCreateProject={handleCreateProject}
-                onSelectRecent={handleSelectRecent}
-                onExit={handleHide}
-              />
-            </div>
-          ) : null}
         </div>
       </div>
     </div>

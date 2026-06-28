@@ -6,6 +6,7 @@ The server runs on [Railway](https://railway.app) as a Dockerized Node 22 servic
 
 **`railway.toml`** configures:
 - Multi-stage Dockerfile build (node:22-alpine, omits devDeps in final image)
+- `.dockerignore` excludes `glass-app/` (Electron tree) from the build context; only `glass-app/glass-update-manifest.json` is copied into the image
 - Healthcheck at `GET /api/health` — Railway restarts the container if this fails
 - `on_failure` restart policy with up to 3 retries
 

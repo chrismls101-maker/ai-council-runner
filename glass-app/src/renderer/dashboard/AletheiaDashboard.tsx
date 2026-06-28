@@ -11,8 +11,8 @@ import {
   operatingModeLabel,
   resolveAletheiaPersonaBehavior,
 } from "../../shared/aletheiaPersonaBehavior.ts";
-import { categoryLabel } from "../../shared/aletheiaNotes.ts";
-import type { AletheiaNote } from "../../shared/aletheiaNotes.ts";
+import { MemoryNotesPanel } from "./memoryNotes/MemoryNotesPanel.tsx";
+import "./memoryNotes/memoryNotes.css";
 import type { AletheiaAttentionRecoverySnapshot } from "../../shared/aletheiaAttentionRecovery.ts";
 import type { AletheiaRelationshipThreadSnapshot } from "../../shared/aletheiaRelationshipThread.ts";
 import { relationshipEventKindLabel } from "../../shared/aletheiaRelationshipThread.ts";
@@ -478,7 +478,7 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
 
           <div className="aletheia-dashboard__bento">
             <div className="aletheia-dashboard__bento-cell aletheia-dashboard__bento-cell--notes">
-              <AletheiaNotesPanel
+              <MemoryNotesPanel
                 companionActive={companionActive}
                 notes={aletheiaNotes?.notes ?? []}
                 featured
@@ -726,7 +726,7 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
           onRunBootstrap={handleRunBootstrap}
           onOpenSetup={handleOpenGlassSetup}
         />
-        <AletheiaNotesPanel
+        <MemoryNotesPanel
           companionActive={companionActive}
           notes={aletheiaNotes?.notes ?? []}
           onAdd={handleAddNote}
@@ -2284,7 +2284,9 @@ function ObservationPanel({
           {ambientSynthesis?.ready && ambientSynthesis.connectedPicture ? (
             <div data-testid="aletheia-dashboard-ambient-synthesis">
               <p className="aletheia-dashboard__panel-footnote">Connected picture</p>
-              <p className="aletheia-dashboard__panel-copy">{ambientSynthesis.connectedPicture}</p>
+              <p className="aletheia-dashboard__panel-copy memory-note-card__summary">
+                {ambientSynthesis.connectedPicture}
+              </p>
               {ambientSynthesis.connections.length > 1 ? (
                 <ul className="aletheia-dashboard__stat-list">
                   {ambientSynthesis.connections.slice(1, 3).map((row) => (
@@ -2667,146 +2669,6 @@ function SessionMessageDetail({
         );
       })}
     </ul>
-  );
-}
-
-function AletheiaNotesPanel({
-  companionActive,
-  notes,
-  featured = false,
-  onAdd,
-  onUpdate,
-  onDelete,
-}: {
-  companionActive: boolean;
-  notes: AletheiaNote[];
-  featured?: boolean;
-  onAdd: (body: string) => void;
-  onUpdate: (noteId: string, body: string) => void;
-  onDelete: (noteId: string) => void;
-}): JSX.Element {
-  const [draft, setDraft] = useState("");
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editDraft, setEditDraft] = useState("");
-  const inputRows = featured ? 4 : 2;
-  const listLimit = featured ? 20 : 12;
-
-  return (
-    <section
-      className={`aletheia-dashboard__panel${featured ? " aletheia-dashboard__panel--notes-featured" : ""}`}
-      data-testid="aletheia-dashboard-notes"
-    >
-      <p className="aletheia-dashboard__panel-label">Notes</p>
-      {!featured ? (
-        <p className="aletheia-dashboard__panel-copy">
-          What Aletheia remembers across sessions — decisions, rationales, and research you saved.
-          Distinct from the audit trail and from Glass Memory admin.
-        </p>
-      ) : (
-        <p className="aletheia-dashboard__panel-copy aletheia-dashboard__panel-copy--compact">
-          Living memory — what Aletheia carries across sessions.
-        </p>
-      )}
-      {companionActive ? (
-        <div className="aletheia-dashboard__notes-add" data-testid="aletheia-dashboard-notes-add">
-          <textarea
-            className="aletheia-dashboard__notes-input"
-            rows={inputRows}
-            placeholder="Add a note Aletheia should remember…"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-          />
-          <button
-            type="button"
-            className="aletheia-dashboard__secondary-btn"
-            data-testid="aletheia-dashboard-notes-add-btn"
-            disabled={!draft.trim()}
-            onClick={() => {
-              const body = draft.trim();
-              if (!body) return;
-              onAdd(body);
-              setDraft("");
-            }}
-          >
-            Add note
-          </button>
-        </div>
-      ) : null}
-      {notes.length === 0 ? (
-        <p className="aletheia-dashboard__panel-footnote" data-testid="aletheia-dashboard-notes-empty">
-          No notes yet — approve advice, confirm actions, or save research to build memory.
-        </p>
-      ) : (
-        <ul className="aletheia-dashboard__notes-list" data-testid="aletheia-dashboard-notes-list">
-          {notes.slice(0, listLimit).map((note) => (
-            <li key={note.id} className="aletheia-dashboard__notes-row">
-              {editingId === note.id ? (
-                <>
-                  <textarea
-                    className="aletheia-dashboard__notes-input"
-                    rows={inputRows}
-                    value={editDraft}
-                    onChange={(event) => setEditDraft(event.target.value)}
-                  />
-                  <div className="aletheia-dashboard__confirm-actions">
-                    <button
-                      type="button"
-                      className="aletheia-dashboard__primary-btn"
-                      onClick={() => {
-                        const body = editDraft.trim();
-                        if (!body) return;
-                        onUpdate(note.id, body);
-                        setEditingId(null);
-                      }}
-                    >
-                      Save
-                    </button>
-                    <button
-                      type="button"
-                      className="aletheia-dashboard__secondary-btn"
-                      onClick={() => setEditingId(null)}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <p className="aletheia-dashboard__notes-meta">
-                    {categoryLabel(note.category)} · {note.source}
-                  </p>
-                  <p className="aletheia-dashboard__panel-copy">{note.body}</p>
-                  {note.rationale ? (
-                    <p className="aletheia-dashboard__panel-footnote">{note.rationale}</p>
-                  ) : null}
-                  <div className="aletheia-dashboard__confirm-actions">
-                    <button
-                      type="button"
-                      className="aletheia-dashboard__secondary-btn"
-                      data-testid={`aletheia-dashboard-note-edit-${note.id}`}
-                      onClick={() => {
-                        setEditingId(note.id);
-                        setEditDraft(note.body);
-                      }}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      className="aletheia-dashboard__secondary-btn"
-                      data-testid={`aletheia-dashboard-note-delete-${note.id}`}
-                      onClick={() => onDelete(note.id)}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
   );
 }
 

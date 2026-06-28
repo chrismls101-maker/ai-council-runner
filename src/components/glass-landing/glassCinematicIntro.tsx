@@ -29,7 +29,6 @@ import {
   silenceIntroMusic,
   unlockIntroAudio,
   startIntroMusic,
-  stopIntroMusic,
 } from "./glassIntroBootSound";
 import {
   INTRO_CMD_RESPONSE_TYPE_MS,

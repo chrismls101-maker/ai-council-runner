@@ -6,6 +6,7 @@ import {
   filterRecentDesignToCodeNotes,
   formatDesignToCodeAskContext,
   isAletheiaDiagnosticPrompt,
+  shouldPersistLatestDesignToCodeProjectPointer,
 } from "../shared/design/designToCodeAletheiaContext.ts";
 
 function session(overrides: Partial<DesignToCodeSession> = {}): DesignToCodeSession {
@@ -48,6 +49,37 @@ describe("designToCodeAletheiaContext", () => {
     assert.match(note.body, /saving to Glass Storage failed/);
     assert.equal(note.rationale, "permission denied");
     assert.equal(note.linkedProjectId, "cap-1");
+  });
+
+  test("generation_failed note includes linkedProjectId", () => {
+    const note = buildDesignToCodeAletheiaNote({
+      event: "generation_failed",
+      session: session({ phase: "failed", statusLine: "API timeout" }),
+      error: "API timeout",
+    });
+    assert.match(note.body, /generation failed/);
+    assert.equal(note.linkedProjectId, "cap-1");
+  });
+
+  test("shouldPersistLatestDesignToCodeProjectPointer skips gen-fail before save", () => {
+    assert.equal(
+      shouldPersistLatestDesignToCodeProjectPointer(
+        "generation_failed",
+        session({ phase: "failed" }),
+      ),
+      false,
+    );
+    assert.equal(
+      shouldPersistLatestDesignToCodeProjectPointer(
+        "generation_failed",
+        session({ phase: "failed", glassProjectId: "proj-existing" }),
+      ),
+      true,
+    );
+    assert.equal(
+      shouldPersistLatestDesignToCodeProjectPointer("save_succeeded", session()),
+      true,
+    );
   });
 
   test("filters recent design-to-code notes", () => {

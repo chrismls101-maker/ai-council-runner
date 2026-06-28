@@ -138,6 +138,8 @@ export interface GlassUserSettings {
   coderComposerMode?: import("./glassComposerMode.ts").GlassCoderComposerMode;
   /** Aletheia — first IDE error spoken hint already delivered. */
   glassIdeAletheiaFirstErrorHintShown?: boolean;
+  /** Last saved Design to Code project id (Glass Storage recall pointer). */
+  latestDesignToCodeProjectId?: string | null;
 }
 
 export const DEFAULT_GLASS_CODER_INDEX_SETTINGS = {

@@ -47,11 +47,11 @@ export function armAletheiaDashboardOverlayPointer(): void {
   window.glass?.notifyAletheiaDashboardMounted?.();
 }
 
-/** Glass Storage Projects — full-screen overlay must capture clicks and keyboard. */
-export function armGlassStorageProjectsOverlayPointer(): void {
+/** Glass Storage Projects — full-screen overlay must capture clicks; keyboard only when focused in. */
+export function armGlassStorageProjectsOverlayPointer(focusKeyboard = false): void {
   clickThroughEnabled = false;
   window.glass?.setOverlayPointerOverBuilderStrip?.(true);
-  window.glass?.notifyGlassStorageProjectsMounted?.();
+  window.glass?.notifyGlassStorageProjectsMounted?.(focusKeyboard);
 }
 
 /** Glass IDE + embedded terminal — keep the full-screen overlay OS-interactive. */
@@ -93,7 +93,7 @@ export function prepareGlassTextPointerDown(event: ReactPointerEvent): void {
     return;
   }
   if (target.closest(".glass-storage-projects")) {
-    armGlassStorageProjectsOverlayPointer();
+    armGlassStorageProjectsOverlayPointer(true);
     return;
   }
   if (event.currentTarget.ownerDocument?.body?.classList.contains("glass-body--command")) {
