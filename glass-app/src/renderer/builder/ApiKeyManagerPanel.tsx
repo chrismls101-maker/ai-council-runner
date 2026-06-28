@@ -6,6 +6,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import type { ApiKeyMeta } from "../../shared/ipc.ts";
+import { SpendTrackerPanel } from "./SpendTrackerPanel.tsx";
 import "./ApiKeyManagerPanel.css";
 
 // ---------------------------------------------------------------------------
@@ -316,9 +317,12 @@ interface ApiKeyManagerPanelProps {
   onClose: () => void;
 }
 
+type ApiKeyManagerSection = "keys" | "spend";
+
 export function ApiKeyManagerPanel({
   onClose,
 }: ApiKeyManagerPanelProps): JSX.Element {
+  const [section, setSection] = useState<ApiKeyManagerSection>("keys");
   const [keys, setKeys] = useState<ApiKeyMeta[]>([]);
   const [query, setQuery] = useState("");
   const [editState, setEditState] = useState<EditState | null>(null);
@@ -490,24 +494,48 @@ export function ApiKeyManagerPanel({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", position: "relative" }}>
-      {/* Header */}
       <div className="akmgr-header">
-        <span className="akmgr-title">API Keys</span>
-        <div className="akmgr-header-actions">
+        <div className="akmgr-tabs" role="tablist" aria-label="API keys and spend">
           <button
             type="button"
-            className="akmgr-btn-add"
-            onClick={handleAdd}
-            disabled={encryptionUnavailable}
+            role="tab"
+            className={`akmgr-tab${section === "keys" ? " akmgr-tab--active" : ""}`}
+            aria-selected={section === "keys"}
+            onClick={() => setSection("keys")}
           >
-            <span>+</span> Add
+            Keys
           </button>
+          <button
+            type="button"
+            role="tab"
+            className={`akmgr-tab${section === "spend" ? " akmgr-tab--active" : ""}`}
+            aria-selected={section === "spend"}
+            onClick={() => setSection("spend")}
+          >
+            Spend
+          </button>
+        </div>
+        <div className="akmgr-header-actions">
+          {section === "keys" ? (
+            <button
+              type="button"
+              className="akmgr-btn-add"
+              onClick={handleAdd}
+              disabled={encryptionUnavailable}
+            >
+              <span>+</span> Add
+            </button>
+          ) : null}
           <button type="button" className="akmgr-btn-close" onClick={onClose}>
             ×
           </button>
         </div>
       </div>
 
+      {section === "spend" ? (
+        <SpendTrackerPanel embedded />
+      ) : (
+        <>
       {/* Search */}
       {encryptionUnavailable && (
         <div className="akmgr-warning">
@@ -564,6 +592,8 @@ export function ApiKeyManagerPanel({
 
       {/* Toast */}
       {toast && <div className="akmgr-toast">{toast}</div>}
+        </>
+      )}
     </div>
   );
 }

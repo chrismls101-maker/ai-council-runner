@@ -1,0 +1,218 @@
+.glass-storage-projects {
+  --storage-panel-border: rgba(255, 255, 255, 0.20);
+  --storage-panel-fallback: rgb(12, 14, 20);
+  --storage-text-primary: rgba(255, 255, 255, 0.92);
+  --storage-text-muted: rgba(255, 255, 255, 0.45);
+  --storage-accent: #fbbf24;
+}
+
+.glass-storage-projects--light {
+  --storage-panel-frost-start: rgba(255, 255, 255, 0.10);
+  --storage-panel-frost-end: rgba(255, 255, 255, 0.04);
+  --storage-panel-base: rgba(12, 14, 20, 0.88);
+  --storage-panel-blur: 14px;
+  --storage-panel-saturate: 150%;
+}
+
+.glass-storage-projects--dark {
+  --storage-panel-frost-start: rgba(255, 255, 255, 0.12);
+  --storage-panel-frost-end: rgba(255, 255, 255, 0.05);
+  --storage-panel-base: rgb(12, 14, 20);
+  --storage-panel-blur: 0px;
+  --storage-panel-saturate: 100%;
+}
+
+.glass-storage-projects--light,
+.glass-storage-projects--dark {
+  --storage-panel-solid:
+    linear-gradient(
+      160deg,
+      var(--storage-panel-frost-start) 0%,
+      var(--storage-panel-frost-end) 100%
+    ),
+    var(--storage-panel-base);
+}
+
+.glass-storage-projects {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: var(--builder-strip-top-from-bottom, 52px);
+  z-index: 200;
+  overflow: hidden;
+  pointer-events: auto;
+  background: transparent;
+  -webkit-font-smoothing: antialiased;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.glass-storage-projects--hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.glass-storage-projects__glass {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: var(--storage-panel-solid);
+  backdrop-filter: blur(var(--storage-panel-blur)) saturate(var(--storage-panel-saturate));
+  -webkit-backdrop-filter: blur(var(--storage-panel-blur)) saturate(var(--storage-panel-saturate));
+}
+
+.glass-storage-projects--dark .glass-storage-projects__glass {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass-storage-projects__glass {
+    background: var(--storage-panel-fallback);
+  }
+}
+
+.glass-storage-chrome {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 52px;
+  padding: 0 16px 0 12px;
+  pointer-events: auto;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(
+    180deg,
+    rgba(10, 12, 18, 0.62) 0%,
+    rgba(10, 12, 18, 0.22) 100%
+  );
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+}
+
+.glass-storage-chrome__left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.glass-storage-chrome__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--storage-text-primary);
+  letter-spacing: 0.02em;
+}
+
+.glass-storage-chrome__subtitle {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(251, 191, 36, 0.72);
+}
+
+.glass-storage-projects__main {
+  position: absolute;
+  inset: 52px 0 0;
+  z-index: 10;
+  overflow: auto;
+  pointer-events: auto;
+  padding: 20px 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.glass-storage-projects__split {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+  max-width: 1120px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.glass-storage-projects__list-pane {
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.glass-storage-projects__detail-pane {
+  min-height: 320px;
+  max-height: calc(100vh - 180px);
+  overflow: auto;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.glass-storage-projects__detail-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 240px;
+  padding: 24px;
+  text-align: center;
+}
+
+.glass-storage-projects__detail-empty p {
+  margin: 0;
+  max-width: 280px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(140, 165, 210, 0.55);
+}
+
+.glass-storage-projects__content {
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.glass-storage-projects__workspace {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 16px;
+  max-width: 1120px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.glass-storage-projects__workspace-toggle {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.glass-storage-projects__workspace-toggle:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.glass-storage-projects__workspace-panel {
+  margin-top: 14px;
+}
+
+.glass-storage-projects__workspace-panel .gide-project-gate {
+  min-height: auto;
+}

@@ -206,11 +206,11 @@
 
 .companion-presence__sketch-path {
   fill: none;
-  stroke: rgba(251, 191, 36, 0.92);
+  stroke: rgba(196, 181, 253, 0.92);
   stroke-width: 0.004;
   stroke-linecap: round;
   stroke-linejoin: round;
-  filter: drop-shadow(0 0 0.004rem rgba(251, 191, 36, 0.55));
+  filter: drop-shadow(0 0 0.004rem rgba(167, 139, 250, 0.55));
   animation: companion-trace-draw 1s ease-out forwards;
 }
 

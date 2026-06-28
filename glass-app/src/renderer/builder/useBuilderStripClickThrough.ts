@@ -1,8 +1,9 @@
 import { useEffect } from "react";
 
-const BUILDER_UI_SELECTOR = ".builder-strip, .builder-panel, .builder-panel-host";
+const BUILDER_UI_SELECTOR =
+  ".builder-strip, .builder-panel, .builder-panel-host, .aletheia-strip-menu";
 const FULLSCREEN_WORKSPACE_SELECTOR =
-  ".research-explorer, .code-analyst-explorer, .writing-studio, .glass-dashboard-shell:not(.glass-dashboard-shell--hidden), .aletheia-dashboard-shell:not(.aletheia-dashboard-shell--hidden)";
+  ".research-explorer, .code-analyst-explorer, .writing-studio, .glass-storage-projects, .glass-dashboard-shell:not(.glass-dashboard-shell--hidden), .aletheia-dashboard-shell:not(.aletheia-dashboard-shell--hidden)";
 
 function isOverBuilderUi(x: number, y: number): boolean {
   const hit = document.elementFromPoint(x, y);
@@ -15,28 +16,51 @@ function isOverFullscreenWorkspace(x: number, y: number): boolean {
 }
 
 /** Keep overlay OS-interactive while a builder panel is open or pointer is over strip UI. */
-export function syncBuilderStripPanelOpen(open: boolean): void {
-  window.glass?.setBuilderStripPanelOpen?.(open);
+export function syncBuilderStripPanelOpen(open: boolean, panel?: string): void {
+  window.glass?.setBuilderStripPanelOpen?.(open, panel);
+  if (open) {
+    window.glass?.setOverlayPointerOverBuilderStrip?.(true);
+  }
+}
+
+export function syncAletheiaStripMenuOpen(open: boolean): void {
+  window.glass?.setAletheiaStripMenuOpen?.(open);
   if (open) {
     window.glass?.setOverlayPointerOverBuilderStrip?.(true);
   }
 }
 
 /** Toggle OS overlay interactivity for strip/panel clicks; restore passthrough elsewhere. */
-export function useBuilderStripClickThrough(panelOpen: boolean): void {
-  // Sync panel-open to main immediately when tab state changes — no cleanup that
-  // resets on every panelOpen transition (that race made the strip "vanish").
-  useEffect(() => {
-    syncBuilderStripPanelOpen(panelOpen);
-  }, [panelOpen]);
+export function useBuilderStripClickThrough(
+  activeTab: string | null,
+  aletheiaMenuOpen = false,
+): void {
+  const panelOpen = activeTab !== null;
+  const keepOverlayInteractive = panelOpen || aletheiaMenuOpen;
 
   useEffect(() => {
+    syncBuilderStripPanelOpen(panelOpen, activeTab ?? undefined);
+  }, [panelOpen, activeTab]);
+
+  useEffect(() => {
+    if (aletheiaMenuOpen) {
+      armBuilderStripInteractive();
+      syncAletheiaStripMenuOpen(true);
+    } else {
+      syncAletheiaStripMenuOpen(false);
+    }
+  }, [aletheiaMenuOpen]);
+
+  useEffect(() => {
+    let lastPointerOver: boolean | null = null;
     const setPointerOver = (over: boolean): void => {
+      if (lastPointerOver === over) return;
+      lastPointerOver = over;
       window.glass?.setOverlayPointerOverBuilderStrip?.(over);
     };
 
     const syncInteractive = (x: number, y: number): void => {
-      if (panelOpen || isOverFullscreenWorkspace(x, y)) {
+      if (keepOverlayInteractive || isOverFullscreenWorkspace(x, y)) {
         setPointerOver(true);
         return;
       }
@@ -48,7 +72,7 @@ export function useBuilderStripClickThrough(panelOpen: boolean): void {
     };
 
     const onLeave = (): void => {
-      if (!panelOpen && !document.querySelector(FULLSCREEN_WORKSPACE_SELECTOR)) {
+      if (!keepOverlayInteractive && !document.querySelector(FULLSCREEN_WORKSPACE_SELECTOR)) {
         setPointerOver(false);
       }
     };
@@ -66,12 +90,13 @@ export function useBuilderStripClickThrough(panelOpen: boolean): void {
       document.removeEventListener("mouseleave", onLeave);
       document.removeEventListener("pointerdown", onPointerDown, true);
     };
-  }, [panelOpen]);
+  }, [keepOverlayInteractive]);
 
   // Reset main-process flags only when the strip unmounts — not on tab toggles.
   useEffect(() => {
     return () => {
       syncBuilderStripPanelOpen(false);
+      syncAletheiaStripMenuOpen(false);
       window.glass?.setOverlayPointerOverBuilderStrip?.(false);
     };
   }, []);

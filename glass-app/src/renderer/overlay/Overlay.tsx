@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import { armAletheiaDashboardOverlayPointer, armCodeAnalystOverlayPointer, armDashboardOverlayPointer, armResearchOverlayPointer, armWritingStudioOverlayPointer, ensureOverlayInteractive } from "../glassTextInteraction.ts";
-import "./OverlayExitGlass.css";
+import { armAletheiaDashboardOverlayPointer, armCodeAnalystOverlayPointer, armDashboardOverlayPointer, armGlassStorageProjectsOverlayPointer, armResearchOverlayPointer, armWritingStudioOverlayPointer, ensureOverlayInteractive } from "../glassTextInteraction.ts";
 import { BuilderStrip } from "../builder/BuilderStrip.tsx";
 import { armBuilderStripInteractive } from "../builder/useBuilderStripClickThrough.ts";
 import { shouldShowBuilderStrip } from "../../shared/builderStripVisibility.ts";
@@ -16,6 +15,12 @@ import { CopilotOverlay } from "./CopilotOverlay.tsx";
 import { GlassNotificationHost } from "./GlassNotificationHost.tsx";
 import { GlassUpdateOverlay } from "./GlassUpdateOverlay.tsx";
 import { OverlayGlassFrame } from "../shared/OverlayGlassFrame.tsx";
+import { OverlayComputerOperatorGlow } from "../shared/OverlayComputerOperatorGlow.tsx";
+import { OverlayComputerOperatorGhostCursor } from "../shared/OverlayComputerOperatorGhostCursor.tsx";
+import {
+  computerOperatorOverlayRootClass,
+  shouldMountComputerOperatorOverlayGlow,
+} from "../../shared/aletheiaComputerOperatorPresence.ts";
 import { GlassOnboardingOverlay } from "./GlassOnboardingOverlay.tsx";
 import { SortingHatScreen } from "../onboarding/SortingHatScreen.tsx";
 import { LanguagePickerScreen } from "../onboarding/LanguagePickerScreen.tsx";
@@ -36,6 +41,7 @@ import { ResearchExplorer } from "../research/ResearchExplorer.tsx";
 import { CodeAnalystExplorer } from "../code-analyst/CodeAnalystExplorer.tsx";
 import { WritingStudio } from "../writing/WritingStudio.tsx";
 import { GlassDashboard } from "../dashboard/GlassDashboard.tsx";
+import { GlassStorageProjects } from "../storage/GlassStorageProjects.tsx";
 import { AletheiaDashboard } from "../dashboard/AletheiaDashboard.tsx";
 import { resolveOverlayPanelNavigation } from "../../shared/panelTabRouting.ts";
 import "../dashboard/GlassDashboard.css";
@@ -221,6 +227,30 @@ function WritingStudioLayer({ state }: { state: GlassState }): JSX.Element | nul
   );
 }
 
+function GlassStorageProjectsLayer({ state }: { state: GlassState }): JSX.Element | null {
+  const everOpenedRef = useRef(false);
+  if (state.glassStorageProjectsActive) {
+    everOpenedRef.current = true;
+  }
+
+  useEffect(() => {
+    if (!state.glassStorageProjectsActive) return;
+    armGlassStorageProjectsOverlayPointer();
+    return () => {
+      armBuilderStripInteractive();
+    };
+  }, [state.glassStorageProjectsActive]);
+
+  if (!everOpenedRef.current && !state.glassStorageProjectsActive) return null;
+
+  return (
+    <GlassStorageProjects
+      visible={state.glassStorageProjectsActive === true}
+      onClose={() => window.glass.closeGlassStorageProjects()}
+    />
+  );
+}
+
 function AletheiaDashboardLayer({ state }: { state: GlassState }): JSX.Element | null {
   const everOpenedRef = useRef(false);
   if (state.aletheiaDashboardActive) {
@@ -276,6 +306,7 @@ function OverlayWorkspaceLayers({ state }: { state: GlassState }): JSX.Element {
       <ResearchExplorerLayer state={state} />
       <CodeAnalystExplorerLayer state={state} />
       <WritingStudioLayer state={state} />
+      <GlassStorageProjectsLayer state={state} />
       <GlassDashboardLayer state={state} />
       <AletheiaDashboardLayer state={state} />
     </>
@@ -286,6 +317,7 @@ function fullscreenWorkspaceActive(state: GlassState): boolean {
   return state.researchExplorerActive === true
     || state.codeAnalystExplorerActive === true
     || state.writingStudioActive === true
+    || state.glassStorageProjectsActive === true
     || state.glassDashboardActive === true
     || state.aletheiaDashboardActive === true;
 }
@@ -303,6 +335,22 @@ function paletteModalOpenForState(state: GlassState): boolean {
   return !!(state.commandPaletteOpen || state.powersMenuOpen);
 }
 
+function renderComputerOperatorOverlayGlow(state: GlassState): JSX.Element | null {
+  if (!shouldMountComputerOperatorOverlayGlow(state.aletheiaComputerOperator?.phase)) {
+    return null;
+  }
+  return (
+    <>
+      <OverlayComputerOperatorGlow operator={state.aletheiaComputerOperator} />
+      <OverlayComputerOperatorGhostCursor operator={state.aletheiaComputerOperator} />
+    </>
+  );
+}
+
+function computerOperatorOverlayRootModifier(state: GlassState): string | false {
+  return computerOperatorOverlayRootClass(state.aletheiaComputerOperator?.phase);
+}
+
 function CompanionPresenceLayer({ state }: { state: GlassState }): JSX.Element {
   const companion = useGlassCompanion();
   return (
@@ -311,53 +359,6 @@ function CompanionPresenceLayer({ state }: { state: GlassState }): JSX.Element {
       companionActive={state.companionModeActive === true}
       activeManifestations={companion.activeManifestations}
     />
-  );
-}
-
-function shouldShowExitGlassButton(state: GlassState): boolean {
-  return !state.researchExplorerActive
-    && !state.codeAnalystExplorerActive
-    && !state.writingStudioActive
-    && !state.glassDashboardActive
-    && !state.aletheiaDashboardActive
-    && !state.glassIdeActive;
-}
-
-function ExitGlassButton({ state }: { state: GlassState }): JSX.Element | null {
-  const show = shouldShowExitGlassButton(state);
-
-  useEffect(() => {
-    return () => {
-      window.glass?.setOverlayPointerOverExitControl?.(false);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!show) {
-      window.glass?.setOverlayPointerOverExitControl?.(false);
-    }
-  }, [show]);
-
-  if (!show) return null;
-
-  const armExitPointer = (over: boolean): void => {
-    window.glass?.setOverlayPointerOverExitControl?.(over);
-    if (over) ensureOverlayInteractive();
-  };
-
-  return (
-    <button
-      type="button"
-      className="overlay-exit-glass"
-      data-testid="glass-exit-control"
-      aria-label="Exit Glass"
-      onPointerEnter={() => armExitPointer(true)}
-      onPointerLeave={() => armExitPointer(false)}
-      onPointerDownCapture={() => armExitPointer(true)}
-      onClick={() => send({ type: "glass-quit" })}
-    >
-      Exit Glass
-    </button>
   );
 }
 
@@ -984,11 +985,13 @@ export function Overlay(): JSX.Element {
             "overlay-root--builder-strip-only",
             fullscreenWorkspaceActive(state) && "overlay-root--workspace-active",
             paletteModalOpenForState(state) && "overlay-root--palette-open",
+            computerOperatorOverlayRootModifier(state),
           )}
           data-testid="glass-overlay-root"
           style={overlayLayoutStyle(state)}
         >
           <OverlayGlassFrame />
+          {renderComputerOperatorOverlayGlow(state)}
           <CompanionPresenceLayer state={state} />
           <BuilderStripLayer
             state={state}
@@ -999,14 +1002,27 @@ export function Overlay(): JSX.Element {
           <GlassDebriefPanel />
           {responsePanel}
           <OverlayWorkspaceLayers state={state} />
-          <ExitGlassButton state={state} />
         </div>
       );
     }
     return (
       <>
         <GlassDebriefPanel />
-        <div className="overlay-root overlay-root--hidden" />
+        {shouldMountComputerOperatorOverlayGlow(state.aletheiaComputerOperator?.phase) ? (
+          <div
+            className={overlayRootClassName(
+              "overlay-root",
+              "overlay-root--glow-only",
+              computerOperatorOverlayRootModifier(state),
+            )}
+            data-testid="glass-overlay-root"
+            style={overlayLayoutStyle(state)}
+          >
+            {renderComputerOperatorOverlayGlow(state)}
+          </div>
+        ) : (
+          <div className="overlay-root overlay-root--hidden" />
+        )}
       </>
     );
   }
@@ -1019,9 +1035,11 @@ export function Overlay(): JSX.Element {
           "overlay-root--captions-only",
           translateFocusActive && "overlay-root--translate-active",
           fullscreenWorkspaceActive(state) && "overlay-root--workspace-active",
+          computerOperatorOverlayRootModifier(state),
         )}
         data-testid="glass-overlay-root"
       >
+        {renderComputerOperatorOverlayGlow(state)}
         {state.liveTranslate ? (
           <LiveTranslateCaptionsOverlay
             runtime={state.liveTranslate}
@@ -1046,9 +1064,11 @@ export function Overlay(): JSX.Element {
           "overlay-root",
           "overlay-root--update-only",
           fullscreenWorkspaceActive(state) && "overlay-root--workspace-active",
+          computerOperatorOverlayRootModifier(state),
         )}
         data-testid="glass-overlay-root"
       >
+        {renderComputerOperatorOverlayGlow(state)}
         <GlassUpdateOverlay
           appUpdate={state.appUpdate}
           enterInteractive={enterInteractive}
@@ -1071,9 +1091,11 @@ export function Overlay(): JSX.Element {
           "overlay-root",
           "overlay-root--countdown-only",
           fullscreenWorkspaceActive(state) && "overlay-root--workspace-active",
+          computerOperatorOverlayRootModifier(state),
         )}
         data-testid="glass-overlay-root"
       >
+        {renderComputerOperatorOverlayGlow(state)}
         <ListenCountdownOverlay seconds={state.listenCountdownSeconds!} />
         <BuilderStripLayer
           state={state}
@@ -1098,10 +1120,12 @@ export function Overlay(): JSX.Element {
           "overlay-root",
           "overlay-root--notice-only",
           fullscreenWorkspaceActive(state) && "overlay-root--workspace-active",
+          computerOperatorOverlayRootModifier(state),
         )}
         data-testid="glass-overlay-root"
         style={overlayLayoutStyle(state)}
       >
+        {renderComputerOperatorOverlayGlow(state)}
         <GlassNotificationHost
           notification={notification}
           fading={fading}
@@ -1131,11 +1155,13 @@ export function Overlay(): JSX.Element {
         fullscreenWorkspaceActive(state) && "overlay-root--workspace-active",
         translateFocusActive && "overlay-root--translate-active",
         paletteModalOpenForState(state) && "overlay-root--palette-open",
+        computerOperatorOverlayRootModifier(state),
       )}
       data-testid="glass-overlay-root"
       style={overlayLayoutStyle(state)}
     >
       <OverlayPassiveLayer overlayMode={overlayMode} meetingsActive={state.meetingIntelligence != null} />
+      {renderComputerOperatorOverlayGlow(state)}
       <OverlayStatus state={state} />
 
       <GlassNotificationHost
@@ -1251,7 +1277,6 @@ export function Overlay(): JSX.Element {
         />
       ) : null}
       <OverlayWorkspaceLayers state={state} />
-      <ExitGlassButton state={state} />
     </div>
   );
 }

@@ -51,18 +51,39 @@ export async function waitForWindowPage(browser: Browser, htmlFile: string, time
   throw new Error(`Window ${htmlFile} not found. Open pages: ${urls.join(", ") || "none"}`);
 }
 
+export async function getGlassCoreWindows(browser: Browser): Promise<{
+  command: Page;
+  overlay: Page;
+  dock: Page;
+}> {
+  const [command, overlay, dock] = await Promise.all([
+    waitForWindowPage(browser, "command.html"),
+    waitForWindowPage(browser, "overlay.html"),
+    waitForWindowPage(browser, "index.html"),
+  ]);
+  return { command, overlay, dock };
+}
+
+/** Lazy panel window — opens via dock on first use. */
+export async function ensureGlassPanel(browser: Browser, dock: Page): Promise<Page> {
+  const existingPanel = allPages(browser).find((page) => page.url().includes("panel.html"));
+  if (existingPanel) {
+    await existingPanel.waitForLoadState("domcontentloaded").catch(() => undefined);
+    return existingPanel;
+  }
+
+  await dock.locator('[data-testid="glass-dock-open-panel"]').click();
+  return waitForWindowPage(browser, "panel.html");
+}
+
 export async function getGlassWindows(browser: Browser): Promise<{
   command: Page;
   overlay: Page;
   dock: Page;
   panel: Page;
 }> {
-  const [command, overlay, dock, panel] = await Promise.all([
-    waitForWindowPage(browser, "command.html"),
-    waitForWindowPage(browser, "overlay.html"),
-    waitForWindowPage(browser, "index.html"),
-    waitForWindowPage(browser, "panel.html"),
-  ]);
+  const { command, overlay, dock } = await getGlassCoreWindows(browser);
+  const panel = await ensureGlassPanel(browser, dock);
   return { command, overlay, dock, panel };
 }
 

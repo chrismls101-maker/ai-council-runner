@@ -49,6 +49,20 @@ async function pressShortcutAppleScript(appName: string, shortcut: string): Prom
     ]);
     return;
   }
+  if (shortcut === "page-down" || shortcut === "pagedown") {
+    await execFileAsync("osascript", [
+      "-e",
+      `tell application "System Events" to tell process "${processName}" to key code 121`,
+    ]);
+    return;
+  }
+  if (shortcut === "page-up" || shortcut === "pageup") {
+    await execFileAsync("osascript", [
+      "-e",
+      `tell application "System Events" to tell process "${processName}" to key code 116`,
+    ]);
+    return;
+  }
   throw new Error(`Unsupported shortcut: ${shortcut}`);
 }
 

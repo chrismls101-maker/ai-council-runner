@@ -49,9 +49,9 @@ const PANEL_WIDTH_MIN = 840;
 /** Wide setup dashboard — use most of the display without covering the whole screen. */
 const PANEL_WIDTH_MAX = 1800;
 /** Gap between dock edge and panel left edge. */
-export const PANEL_DOCK_GAP_PX = 4;
-/** Gap between panel bottom and builder strip top. */
-export const PANEL_ABOVE_BUILDER_STRIP_GAP_PX = 8;
+export const PANEL_DOCK_GAP_PX = 0;
+/** Gap between panel bottom and builder strip top (0 = flush on strip top edge). */
+export const PANEL_ABOVE_BUILDER_STRIP_GAP_PX = 0;
 const LISTEN_NOTES_PANEL_WIDTH_MIN = 320;
 const LISTEN_NOTES_PANEL_WIDTH_MAX = 420;
 const LISTEN_NOTES_PANEL_WIDTH_RATIO = 0.26;
@@ -60,6 +60,20 @@ const DOCK_MIN_WIDTH = 280;
 export const DOCK_MIN_WIDTH_VERTICAL = 128;
 /** Slim right icon rail — fixed column width. */
 export const DOCK_RAIL_MIN_WIDTH = 52;
+/** Extra width in left-rail dock OS window for side tooltips (transparent; sync useDockResize + glass.css). */
+export const DOCK_RAIL_TOOLTIP_SIDE_RESERVE_PX = 200;
+/** Bleed added around measured dock content in resizeDock (sync useDockResize). */
+export const DOCK_WINDOW_SIZE_PADDING_PX = 12;
+/** Reserve space above the dock pill for top-placed tooltips (sync useDockResize). */
+export const DOCK_TOOLTIP_TOP_RESERVE_PX = 44;
+/** Small vertical bleed inside the left-rail dock window (sync useDockResize). */
+export const DOCK_RAIL_VERTICAL_PADDING_PX = 12;
+/** Aliases used by useDockResize (keep in sync with glass.css dock-rail padding). */
+export const DOCK_SIZE_PADDING = DOCK_WINDOW_SIZE_PADDING_PX;
+export const DOCK_TOOLTIP_TOP_RESERVE = DOCK_TOOLTIP_TOP_RESERVE_PX;
+export const DOCK_RAIL_VERTICAL_PADDING = DOCK_RAIL_VERTICAL_PADDING_PX;
+export const DOCK_RAIL_TOOLTIP_SIDE_RESERVE = DOCK_RAIL_TOOLTIP_SIDE_RESERVE_PX;
+export const DOCK_TOOLTIP_SIDE_RESERVE = DOCK_RAIL_TOOLTIP_SIDE_RESERVE_PX;
 const DOCK_MIN_HEIGHT = 44;
 const DOCK_DEFAULT_HEIGHT = 84;
 const DOCK_MAX_HEIGHT_RATIO = 0.25;
@@ -310,8 +324,19 @@ export function settingsLayoutFromDisplay(ctx: DisplayLayoutContext): PanelLayou
   };
 }
 
+/** Visible dock chrome width for panel attach — excludes transparent tooltip reserve. */
+export function dockContentWidthForPanelAttach(
+  dockWindowWidth: number,
+  placement: "left-rail" | "top" = "left-rail",
+): number {
+  if (placement !== "left-rail") return dockWindowWidth;
+  return Math.max(
+    DOCK_RAIL_MIN_WIDTH,
+    dockWindowWidth - DOCK_RAIL_TOOLTIP_SIDE_RESERVE_PX,
+  );
+}
+
 /**
- * Side panel — emerges from the dock, spans to just above the builder strip.
  * Default: left-rail dock → panel opens to the right of the rail at full available width.
  */
 export function panelLayoutFromDisplay(
@@ -345,14 +370,15 @@ export function panelLayoutFromDisplay(
 
   const defaultRail = dockLeftRailLayoutFromDisplay(ctx);
   const dockX = options?.dockBounds?.x ?? defaultRail.x;
-  const dockW = options?.dockBounds?.width ?? defaultRail.width;
-  const x = dockX + dockW + PANEL_DOCK_GAP_PX;
-  const y = ctx.workArea.y + DOCK_TOP_MARGIN;
-  const availableWidth = rightEdge - x;
-  const width = Math.min(
-    PANEL_WIDTH_MAX,
-    Math.max(Math.min(PANEL_WIDTH_MIN, availableWidth), availableWidth),
-  );
+  const dockW = options?.dockBounds?.x != null && options?.dockBounds?.width != null
+    ? dockContentWidthForPanelAttach(options.dockBounds.width, placement)
+    : defaultRail.width;
+  const overlay = overlayLayoutFromDisplay(ctx);
+  const dockRight = dockX + dockW;
+  const panelRight = overlay.x + overlay.width;
+  const x = dockRight + PANEL_DOCK_GAP_PX;
+  const y = overlay.y;
+  const width = Math.max(480, panelRight - x);
   const height = Math.max(480, panelBottomY - y);
 
   return {

@@ -28,6 +28,8 @@ export interface AletheiaNote {
   category: AletheiaNoteCategory;
   source: AletheiaNoteSource;
   sessionId?: string;
+  /** Glass Storage project id when this note links to a saved bundle. */
+  linkedProjectId?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -43,6 +45,7 @@ export interface AppendAletheiaNoteInput {
   category?: AletheiaNoteCategory;
   source?: AletheiaNoteSource;
   sessionId?: string;
+  linkedProjectId?: string;
   now?: number;
 }
 
@@ -70,6 +73,7 @@ export function createAletheiaNote(input: AppendAletheiaNoteInput): AletheiaNote
     category: input.category ?? "general",
     source: input.source ?? "assistant",
     sessionId: input.sessionId,
+    linkedProjectId: input.linkedProjectId?.trim() || undefined,
     createdAt: now,
     updatedAt: now,
   };
@@ -139,7 +143,8 @@ export function formatAletheiaNotesContext(notes: readonly AletheiaNote[]): stri
       day: "numeric",
     });
     const rationale = note.rationale ? ` Reason: ${note.rationale}` : "";
-    return `- [${date}] ${note.body}${rationale}`;
+    const project = note.linkedProjectId ? ` [project ${note.linkedProjectId}]` : "";
+    return `- [${date}] ${note.body}${project}${rationale}`;
   });
 
   return [

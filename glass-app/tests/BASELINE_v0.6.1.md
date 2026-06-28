@@ -131,17 +131,21 @@ Terminal features: PTY sessions via `node-pty`, `/run <command>` command bar syn
 
 ### #163 — Design-to-Code
 
-**What it does:** ⌘⇧D (or the camera icon in the command bar) captures a screenshot of the current UI design and passes it to Glass AI. The user picks from four modes: **React component**, **HTML/CSS**, **Describe this design**, or **Match to my codebase**. The "match codebase" mode reads the currently open editor file and passes it as context so the AI matches the project's style.
+**What it does:** The command-bar wand captures a screenshot of the current UI design and passes it through a multi-stage pipeline: quality preflight → structured screen spec → optional codebase style pack → generation → verification (max one repair). The overlay **Design to Code** card offers four modes: **React component**, **HTML/CSS**, **Describe this design**, or **Match to my codebase**. Match-codebase still asks permission before reading the open editor file.
 
 **Key files:**
-- `src/shared/designToCode.ts` (NEW) — pure module: `DesignToCodeAction`, `DesignToCodeContext`, `ImportedFileContext`; `buildDesignToCodePrompt` for all 4 modes; `langTagFor` (language → fenced code tag); `isEditorAppName`; `DESIGN_TO_CODE_ACTION_LABELS`
-- `src/shared/commandFeed.ts` — added `"design-capture"` kind; `designImageDataUrl?`, `designDetectedFileName?` fields
-- `src/shared/ipc.ts` — added `design-capture-start`, `design-generate`, `design-generate-cancel` to `GlassCommand`; `designToCodeRunning`, `designToCodeImageDataUrl`, `designToCodeDetectedFile` in `GlassState`
-- `src/main/index.ts` — `runDesignGeneration`, `captureDesignScreenshot`, `cancelDesignGeneration`; 6 new command handlers
-- `src/renderer/command/CommandDesignIcon.tsx` — SVG trigger button in command bar
-- `src/renderer/overlay/OverlayFeedCard.tsx` — design-capture card renders screenshot thumbnail + 4 action buttons; `isWorking` phase includes `"permission"`
-- `src/renderer/styles/glass.css` — design-capture card, thumbnail, action button grid, loading state
-- `src/test/designToCode.test.ts` — 41 tests for all prompt-building paths
+- `src/shared/design/` — types, screen spec schema, modular prompt builders
+- `src/shared/designToCode.ts` — re-export barrel (stable imports)
+- `src/main/design/` — capture, quality, style pack, spec builder, generation orchestrator, verifier, session store
+- `src/shared/commandFeed.ts` — `"design-capture"` kind; thumbnail fields
+- `src/shared/ipc.ts` — `design-capture`, `design-recapture`, `design-generate`, grant/skip; extended `designCaptures` session
+- `src/main/index.ts` — thin IPC handlers delegating to design services
+- `src/renderer/overlay/DesignCaptureCard.tsx` — extracted card with quality warnings + recapture
+- `src/renderer/styles/glass.css` — quality strip, recapture, failed state
+- `src/test/designToCode.test.ts`, `designScreenSpecSchema.test.ts`, `designPromptBuilders.test.ts`, `designQualityAnalyzer.test.ts`
+- `docs/architecture/DESIGN_TO_CODE.md` — pipeline overview
+
+**Pipeline notes:** Spec and verify use Anthropic Haiku via `askAnthropicHaikuVision` (no feed pollution). Generation uses `submitCommand` with `presetImageDataUrl`. Refinement reuses stored spec, style pack, and `refinementHistory`.
 
 ---
 

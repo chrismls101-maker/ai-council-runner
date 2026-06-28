@@ -19,7 +19,7 @@ import {
   PANEL_DOCK_GAP_PX,
   type DisplayLayoutContext,
 } from "../shared/glassLayoutMath.ts";
-import { parseLayoutPreset } from "../shared/glassLayoutTypes.ts";
+import { DEFAULT_GLASS_LAYOUT_PRESET, parseLayoutPreset } from "../shared/glassLayoutTypes.ts";
 
 const macBook13: DisplayLayoutContext = {
   id: 1,
@@ -43,19 +43,33 @@ test("overlay uses selected display workArea", () => {
   assert.equal(layout.height, glassLayoutContentBottomY(macBook13) - macBook13.workArea.y);
 });
 
+test("panel attaches to visible dock chrome when OS window includes tooltip reserve", () => {
+  const overlay = overlayLayoutFromDisplay(macBook13);
+  const layout = panelLayoutFromDisplay(macBook13, DEFAULT_GLASS_LAYOUT_PRESET, {
+    dockBounds: { x: 24, y: 392, width: 265, height: 285 },
+    dockPlacement: "left-rail",
+  });
+  assert.equal(layout.x, 24 + (265 - 200));
+  assert.equal(layout.y, overlay.y);
+  assert.equal(layout.width, overlay.x + overlay.width - layout.x);
+});
+
 test("panel attaches to left dock rail and sits above builder strip", () => {
+  const overlay = overlayLayoutFromDisplay(macBook13);
   const rail = dockLeftRailLayoutFromDisplay(macBook13);
   const layout = panelLayoutFromDisplay(macBook13);
   assert.equal(layout.x, rail.x + rail.width + PANEL_DOCK_GAP_PX);
-  assert.equal(layout.y, macBook13.workArea.y + DOCK_TOP_MARGIN);
-  assert.equal(layout.width, 1800);
-  assert.equal(layout.height, panelContentBottomY(macBook13) - layout.y);
+  assert.equal(layout.y, overlay.y);
+  assert.equal(layout.width, overlay.x + overlay.width - layout.x);
+  assert.equal(layout.height, panelContentBottomY(macBook13) - overlay.y);
   assert.ok(layout.x + layout.width <= macBook13.workArea.x + macBook13.workArea.width);
 });
 
 test("panel uses most of external display width beside dock rail", () => {
+  const overlay = overlayLayoutFromDisplay(externalMonitor);
+  const rail = dockLeftRailLayoutFromDisplay(externalMonitor);
   const layout = panelLayoutFromDisplay(externalMonitor);
-  assert.equal(layout.width, 1800);
+  assert.equal(layout.width, overlay.x + overlay.width - (rail.x + rail.width + PANEL_DOCK_GAP_PX));
 });
 
 test("panel width scales down on narrow display", () => {
@@ -63,10 +77,10 @@ test("panel width scales down on narrow display", () => {
     ...externalMonitor,
     workArea: { x: 0, y: 0, width: 900, height: 700 },
   };
-  const layout = panelLayoutFromDisplay(narrow);
+  const overlay = overlayLayoutFromDisplay(narrow);
   const rail = dockLeftRailLayoutFromDisplay(narrow);
-  const available =
-    narrow.workArea.x + narrow.workArea.width - 24 - (rail.x + rail.width + PANEL_DOCK_GAP_PX);
+  const layout = panelLayoutFromDisplay(narrow);
+  const available = overlay.x + overlay.width - (rail.x + rail.width + PANEL_DOCK_GAP_PX);
   assert.equal(layout.width, available);
 });
 

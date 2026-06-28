@@ -2,6 +2,18 @@
  * AletheiaActionOrchestrator — unified trust/execution pipeline (P0.1 Binding).
  *
  * Pipeline: intent → plan → confirmation → execution → verification → report-back
+ *
+ * USE THIS when: Aletheia already knows exactly what to do and just needs to do it.
+ * Action kinds: shell, file-write, file-apply, keystroke, app-control, research, delegated.
+ * No screen capture, no grounding, no loop — single deterministic action per pipeline run.
+ *
+ * DO NOT USE THIS for multi-step GUI tasks that require looking at the current screen state.
+ * For those, use AletheiaComputerOperatorRunner (aletheiaComputerOperatorRunner.ts) which
+ * captures the screen, grounds targets via AX/OmniParser, and lets the LLM decide each step.
+ *
+ * Both pipelines share the same bottom-level executor (glassActions.ts / injectKeystrokes).
+ * The distinction is: orchestrator = "I know the answer, execute it";
+ *                     operator loop = "look at the screen and figure it out".
  */
 
 import type {

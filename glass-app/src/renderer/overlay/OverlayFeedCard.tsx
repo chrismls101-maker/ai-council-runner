@@ -12,14 +12,19 @@ import {
   prepareGlassTextContextMenu,
   prepareGlassTextPointerDown,
 } from "../glassTextInteraction.ts";
+import { AletheiaComputerSessionPanel } from "../builder/AletheiaComputerSessionPanel.tsx";
+import {
+  isComputerOperatorLiveUiSurface,
+  isComputerOperatorTerminalPhase,
+} from "../../shared/aletheiaComputerOperatorPresence.ts";
+import { ensureAletheiaDispatchRegistered } from "../aletheia/registerAletheiaDispatch.ts";
+import "../builder/AletheiaComputerGrantCard.css";
+import "../builder/AletheiaComputerLiveAudit.css";
+import { DesignCaptureCard } from "./DesignCaptureCard.tsx";
 import {
   DESIGN_TO_CODE_ACTION_LABELS,
-  DEFAULT_DESIGN_STACK,
-  DESIGN_STACK_LABELS,
   DESIGN_STACK_EXTENSIONS,
-  getActionLabel,
 } from "../../shared/designToCode.ts";
-import type { DesignToCodeAction, DesignStack } from "../../shared/designToCode.ts";
 
 export function ShellOutputCard({
   id,
@@ -88,144 +93,6 @@ function DiffView({ lines }: { lines: DiffLine[] }): JSX.Element {
   );
 }
 
-// ── DesignCaptureCard (#163) ──────────────────────────────────────────────────
-
-const DESIGN_ACTIONS: DesignToCodeAction[] = ["react", "html", "describe", "match-codebase"];
-
-function DesignCaptureCard({ item }: { item: GlassCommandFeedItem }): JSX.Element {
-  const state = useGlassState();
-  const capture = state.designCaptures?.[item.id];
-  const phase = capture?.phase ?? "ready";
-  const statusLine = capture?.statusLine;
-  const detectedFile = capture?.detectedFile;
-
-  const isWorking = phase === "reading" || phase === "generating" || phase === "permission";
-
-  return (
-    <article
-      className="overlay-design-card glass-answer-shell"
-      data-testid="glass-design-capture-card"
-      onPointerDownCapture={ensureOverlayInteractive}
-    >
-      <span className="glass-answer-shell__sheen" aria-hidden="true" />
-      <button
-        type="button"
-        className="overlay-feed-card__dismiss-x"
-        aria-label="Dismiss"
-        title="Dismiss"
-        onPointerDown={ensureOverlayInteractive}
-        onClick={() => send({ type: "remove-command-feed-item", id: item.id })}
-      >
-        ×
-      </button>
-
-      <div className="overlay-design-card__inner">
-        {/* Header */}
-        <div className="overlay-design-card__header">
-          <span className="overlay-design-card__icon" aria-hidden="true">✦</span>
-          <span className="overlay-design-card__title">Design to Code</span>
-          {detectedFile ? (
-            <span className="overlay-design-card__file">{detectedFile.fileName}</span>
-          ) : null}
-        </div>
-
-        {/* Screenshot thumbnail */}
-        {item.designImageDataUrl ? (
-          <div className="overlay-design-card__thumb-wrap">
-            <img
-              className="overlay-design-card__thumb"
-              src={item.designImageDataUrl}
-              alt="Captured screen"
-            />
-          </div>
-        ) : null}
-
-        {/* Permission prompt (match-codebase wants to read a file) */}
-        {phase === "permission" && capture?.pendingAction === "match-codebase" && detectedFile ? (
-          <div className="overlay-design-card__permission">
-            <p className="overlay-design-card__permission-text">
-              Allow Glass to read <strong>{detectedFile.fileName}</strong> to match your codebase style?
-            </p>
-            <div className="overlay-design-card__permission-btns">
-              <button
-                type="button"
-                className="gbtn gbtn--primary"
-                onPointerDown={ensureOverlayInteractive}
-                onClick={() => send({
-                  type: "design-grant-file-read",
-                  feedItemId: item.id,
-                  action: "match-codebase",
-                })}
-              >
-                Allow
-              </button>
-              <button
-                type="button"
-                className="gbtn gbtn--ghost"
-                onPointerDown={ensureOverlayInteractive}
-                onClick={() => send({
-                  type: "design-skip-file-read",
-                  feedItemId: item.id,
-                  action: "match-codebase",
-                })}
-              >
-                Skip
-              </button>
-            </div>
-          </div>
-        ) : phase === "done" ? (
-          <p className="overlay-design-card__status overlay-design-card__status--done">
-            ✓ Generated — see response above
-          </p>
-        ) : isWorking ? (
-          <p className="overlay-design-card__status overlay-design-card__status--working">
-            <span className="overlay-design-card__spinner" aria-hidden="true" />
-            {statusLine ?? "Working…"}
-          </p>
-        ) : (
-          /* Stack selector + 4 quick-action buttons */
-          <div className="overlay-design-card__actions">
-            <div className="overlay-design-card__stack-row">
-              <label className="overlay-design-card__stack-label" htmlFor="design-stack-select">Stack</label>
-              <select
-                id="design-stack-select"
-                className="overlay-design-card__stack-select"
-                value={(state.glassSettings.designStack ?? DEFAULT_DESIGN_STACK) as DesignStack}
-                onChange={(e) => send({ type: "set-design-stack", stack: e.target.value as DesignStack })}
-                onPointerDown={ensureOverlayInteractive}
-              >
-                {(Object.entries(DESIGN_STACK_LABELS) as [DesignStack, string][]).map(([k, label]) => (
-                  <option key={k} value={k}>{label}</option>
-                ))}
-              </select>
-            </div>
-            {DESIGN_ACTIONS.map((action) => {
-              const currentStack = (state.glassSettings.designStack ?? DEFAULT_DESIGN_STACK) as DesignStack;
-              return (
-                <button
-                  key={action}
-                  type="button"
-                  className="gbtn gbtn--ghost overlay-design-card__action-btn"
-                  onPointerDown={ensureOverlayInteractive}
-                  onClick={() => send({
-                    type: "design-generate",
-                    feedItemId: item.id,
-                    action,
-                  })}
-                >
-                  {getActionLabel(action, currentStack)}
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      <span className="glass-answer-shell__led ui-led-line" aria-hidden="true" />
-    </article>
-  );
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function FeedCard({
@@ -275,6 +142,10 @@ export function FeedCard({
   }, []);
 
   useEffect(() => {
+    ensureAletheiaDispatchRegistered();
+  }, []);
+
+  useEffect(() => {
     checkScrollMore();
     const el = scrollRef.current;
     if (!el) return;
@@ -289,6 +160,19 @@ export function FeedCard({
   const isResponse = item.kind === "response";
   const isError = item.kind === "error";
   const isChat = isOverlayChatFeedKind(item.kind);
+  const inlineComputerOperator = (() => {
+    const operator = state.aletheiaComputerOperator;
+    if (!item.computerOperatorLoopId || !operator) return null;
+    if (operator.loopId !== item.computerOperatorLoopId) return null;
+    if (operator.entrySurface !== "conversation") return null;
+    if (
+      isComputerOperatorLiveUiSurface(operator, "conversation")
+      || isComputerOperatorTerminalPhase(operator.phase)
+    ) {
+      return operator;
+    }
+    return null;
+  })();
 
   // ── /run shell output card ────────────────────────────────────────────────
   if (item.kind === "shell" && item.shellOutputId) {
@@ -500,7 +384,7 @@ export function FeedCard({
     );
   }
 
-  const prompt = userPrompt?.trim();
+  const prompt = userPrompt?.trim() || item.prompt?.trim();
   const showMergedChat = isChat && Boolean(prompt);
 
   const displayBody =
@@ -557,6 +441,44 @@ export function FeedCard({
           onPointerDownCapture={prepareGlassTextPointerDown}
         >
           <p className="glass-chat-reply__prompt glass-selectable-text">{prompt}</p>
+          {(() => {
+            const designWarnings =
+              item.designWarnings
+              ?? (item.designCaptureId
+                ? state.designCaptures?.[item.designCaptureId]?.latestWarnings
+                : undefined);
+            if (!designWarnings?.length) return null;
+            return (
+              <div className="overlay-feed-card__design-warnings" role="status">
+                <span className="overlay-feed-card__design-warnings-label">Fidelity notes</span>
+                <ul className="overlay-feed-card__design-warnings-list">
+                  {designWarnings.map((w) => (
+                    <li key={w}>{w}</li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })()}
+          {(() => {
+            const capture = item.designCaptureId
+              ? state.designCaptures?.[item.designCaptureId]
+              : undefined;
+            if (capture?.glassProjectSaveStatus === "saved") {
+              return (
+                <div className="overlay-feed-card__design-saved" role="status">
+                  Saved to Glass Storage → Projects
+                </div>
+              );
+            }
+            if (capture?.glassProjectSaveStatus === "failed") {
+              return (
+                <div className="overlay-feed-card__design-saved overlay-feed-card__design-saved--failed" role="status">
+                  Saving to Projects failed — use Retry save on the capture card
+                </div>
+              );
+            }
+            return null;
+          })()}
           <div
             ref={scrollRef}
             className="glass-chat-reply__scroll"
@@ -573,6 +495,13 @@ export function FeedCard({
                 <GlassMarkdown>{chatDisplayBody ?? ""}</GlassMarkdown>
               </div>
             )}
+            {inlineComputerOperator ? (
+              <AletheiaComputerSessionPanel
+                operator={inlineComputerOperator}
+                variant="inline"
+                lastPrompt={state.companionMemory?.lastPrompt}
+              />
+            ) : null}
             {hasMore && !isPending ? (
               <div className="glass-chat-reply__scroll-more" aria-hidden="true">
                 <span className="glass-chat-reply__scroll-more-arrow">↓</span>

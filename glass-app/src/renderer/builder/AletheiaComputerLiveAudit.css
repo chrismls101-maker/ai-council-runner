@@ -1,0 +1,86 @@
+.aletheia-computer-audit {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(167, 139, 250, 0.22);
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.aletheia-computer-audit--inline {
+  margin-top: 12px;
+  background: rgba(15, 23, 42, 0.42);
+}
+
+.aletheia-computer-audit--slide {
+  margin-top: 0;
+}
+
+.aletheia-computer-audit__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.aletheia-computer-audit__label {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(196, 181, 253, 0.92);
+}
+
+.aletheia-computer-audit__step {
+  margin: 0;
+  font-size: 11px;
+  color: rgba(226, 232, 240, 0.62);
+}
+
+.aletheia-computer-audit__belief,
+.aletheia-computer-audit__narrative,
+.aletheia-computer-audit__summary,
+.aletheia-computer-audit__pause {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(248, 250, 252, 0.9);
+}
+
+.aletheia-computer-audit__pause {
+  color: rgba(252, 165, 165, 0.92);
+}
+
+.aletheia-computer-audit__trail {
+  margin: 0 0 8px;
+  padding-left: 18px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: rgba(226, 232, 240, 0.72);
+}
+
+.aletheia-computer-audit__trail-row--ok {
+  color: rgba(134, 239, 172, 0.88);
+}
+
+.aletheia-computer-audit__trail-row--error {
+  color: rgba(252, 165, 165, 0.88);
+}
+
+.aletheia-computer-audit__stop,
+.aletheia-computer-audit__done {
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(226, 232, 240, 0.82);
+}
+
+.aletheia-computer-audit__done {
+  margin-top: 8px;
+}

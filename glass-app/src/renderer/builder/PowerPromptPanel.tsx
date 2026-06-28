@@ -49,13 +49,15 @@ const MODE_OPTIONS: ModeOption[] = [
 
 interface PowerPromptPanelProps {
   onClose: () => void;
+  /** Nested inside Prompt Library — hide duplicate panel chrome. */
+  embedded?: boolean;
 }
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export function PowerPromptPanel({ onClose }: PowerPromptPanelProps): JSX.Element {
+export function PowerPromptPanel({ onClose, embedded = false }: PowerPromptPanelProps): JSX.Element {
   const [intent, setIntent] = useState("");
   const [target, setTarget] = useState<PromptTarget>("claude");
   const [mode, setMode] = useState<PromptMode>("build");
@@ -166,22 +168,23 @@ export function PowerPromptPanel({ onClose }: PowerPromptPanelProps): JSX.Elemen
   const canGenerate = intent.trim().length > 0 && !generating;
 
   return (
-    <div className="pgen-panel">
-      {/* Header */}
-      <div className="pgen-header">
-        <span className="pgen-title">
-          <span className="pgen-title-icon">⚡</span>
-          Prompt Generator
-        </span>
-        <button
-          type="button"
-          className="pgen-btn-close"
-          onClick={onClose}
-          aria-label="Close"
-        >
-          ×
-        </button>
-      </div>
+    <div className={`pgen-panel${embedded ? " pgen-panel--embedded" : ""}`}>
+      {!embedded ? (
+        <div className="pgen-header">
+          <span className="pgen-title">
+            <span className="pgen-title-icon">⚡</span>
+            Prompt Generator
+          </span>
+          <button
+            type="button"
+            className="pgen-btn-close"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+      ) : null}
 
       {/* Editable context field */}
       <div className="pgen-context-wrap">

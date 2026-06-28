@@ -1,0 +1,105 @@
+/**
+ * Ambient screen-edge glow while Aletheia computer operator is live.
+ * Matches Claude computer-mode peripheral safety — user always knows clicks are autonomous.
+ */
+
+.overlay-computer-operator-glow {
+  position: fixed;
+  inset: var(--overlay-glass-frame-inset-top, 10px)
+    var(--overlay-glass-frame-inset-right, 7px)
+    var(--overlay-glass-frame-inset-bottom, var(--overlay-frame-bottom, 7px))
+    var(--overlay-glass-frame-inset-left, 7px);
+  pointer-events: none;
+  z-index: calc(var(--overlay-glass-frame-z, 130) + 1);
+  border-radius: 3px;
+  opacity: 1;
+  transition: opacity 0.65s ease;
+}
+
+.overlay-computer-operator-glow--running {
+  animation: overlay-computer-operator-glow-pulse 2.5s ease-in-out infinite;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.42),
+    inset 0 0 0 2px rgba(196, 181, 253, 0.28),
+    inset 0 0 56px rgba(167, 139, 250, 0.16),
+    inset 0 0 120px rgba(224, 231, 255, 0.06),
+    0 0 36px rgba(196, 181, 253, 0.22),
+    0 0 72px rgba(167, 139, 250, 0.14);
+}
+
+.overlay-computer-operator-glow--paused {
+  animation: overlay-computer-operator-glow-pulse-amber 2.1s ease-in-out infinite;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 237, 180, 0.55),
+    inset 0 0 0 2px rgba(251, 191, 36, 0.32),
+    inset 0 0 52px rgba(251, 191, 36, 0.14),
+    inset 0 0 96px rgba(255, 196, 100, 0.08),
+    0 0 32px rgba(251, 191, 36, 0.24),
+    0 0 64px rgba(245, 158, 11, 0.12);
+}
+
+.overlay-computer-operator-glow--exit {
+  opacity: 0;
+  animation: none;
+  box-shadow: none;
+}
+
+@keyframes overlay-computer-operator-glow-pulse {
+  0%,
+  100% {
+    opacity: 0.78;
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 255, 255, 0.32),
+      inset 0 0 0 2px rgba(196, 181, 253, 0.2),
+      inset 0 0 48px rgba(167, 139, 250, 0.12),
+      inset 0 0 96px rgba(224, 231, 255, 0.04),
+      0 0 28px rgba(196, 181, 253, 0.16),
+      0 0 56px rgba(167, 139, 250, 0.1);
+  }
+  50% {
+    opacity: 1;
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 255, 255, 0.52),
+      inset 0 0 0 3px rgba(196, 181, 253, 0.38),
+      inset 0 0 64px rgba(167, 139, 250, 0.22),
+      inset 0 0 140px rgba(224, 231, 255, 0.09),
+      0 0 44px rgba(196, 181, 253, 0.3),
+      0 0 88px rgba(167, 139, 250, 0.18);
+  }
+}
+
+@keyframes overlay-computer-operator-glow-pulse-amber {
+  0%,
+  100% {
+    opacity: 0.82;
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 237, 180, 0.42),
+      inset 0 0 0 2px rgba(251, 191, 36, 0.24),
+      inset 0 0 44px rgba(251, 191, 36, 0.1),
+      0 0 24px rgba(251, 191, 36, 0.18);
+  }
+  50% {
+    opacity: 1;
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 237, 180, 0.62),
+      inset 0 0 0 3px rgba(251, 191, 36, 0.4),
+      inset 0 0 56px rgba(251, 191, 36, 0.18),
+      0 0 36px rgba(251, 191, 36, 0.32);
+  }
+}
+
+.overlay-root--computer-operator-running .overlay-glass-border {
+  border-color: rgba(196, 181, 253, 0.28);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.28),
+    0 0 28px rgba(167, 139, 250, 0.12),
+    inset 0 0 20px rgba(224, 231, 255, 0.03);
+}
+
+.overlay-root--computer-operator-paused .overlay-glass-border {
+  border-color: rgba(251, 191, 36, 0.32);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.28),
+    0 0 24px rgba(251, 191, 36, 0.14),
+    inset 0 0 18px rgba(255, 196, 100, 0.04);
+}

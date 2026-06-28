@@ -4,6 +4,8 @@ import { createRoot } from "react-dom/client";
 import { Panel } from "./Panel.tsx";
 import { TranscriptionProvider } from "../TranscriptionProvider.tsx";
 import "../styles/glass.css";
+import "../styles/glassPanelChrome.css";
+import "../settings/GlassSettings.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

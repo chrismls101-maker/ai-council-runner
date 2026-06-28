@@ -34,6 +34,10 @@ html.glass-panel-window body.glass-body--panel {
   min-height: 100vh;
 }
 
+html.glass-panel-window .glass-body--panel #root {
+  padding: 0;
+}
+
 .panel {
   flex: 1;
   min-height: 0;

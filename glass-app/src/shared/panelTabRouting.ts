@@ -43,7 +43,7 @@ export function resolvePanelNavigation(tab: PanelTab): PanelNavigationTarget {
     case "diagnostics":
       return { panelTab: "diagnostics" };
     case "power-stack":
-      return { panelTab: "power-stack" };
+      return { panelTab: "session" };
     case "setup":
       return { panelTab: "session", openDashboardNav: "setup" };
     case "installations":

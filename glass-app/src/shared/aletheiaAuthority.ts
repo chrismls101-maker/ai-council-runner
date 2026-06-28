@@ -44,6 +44,16 @@ export const ALETHEIA_ALLOWED_COMMANDS = new Set([
   "continue-aletheia-loop",     // User chose to continue after a decision point
   "cancel-aletheia-loop",       // User chose to stop the loop
 
+  // Computer operator — conversation-driven GUI control loop
+  "prepare-aletheia-computer-operator",
+  "start-aletheia-computer-operator",
+  "grant-aletheia-computer-session",
+  "cancel-aletheia-computer-operator",
+  "dismiss-aletheia-computer-operator",
+  "revoke-aletheia-computer-persistent-grant",
+  "set-aletheia-use-computer-for-next-task",
+  "aletheia-use-computer-shortcut",
+
   // B3.4 — research conversation follow-up (session control, not Glass infra)
   "aletheia-research-follow-up", // Summarize / compare / draft from research thread
 

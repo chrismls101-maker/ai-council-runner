@@ -607,7 +607,13 @@ function HistoryView({ onBack }: { onBack: () => void }): JSX.Element {
 // Panel
 // ---------------------------------------------------------------------------
 
-export function SpendTrackerPanel({ onClose }: { onClose?: () => void }): JSX.Element {
+export function SpendTrackerPanel({
+  onClose,
+  embedded = false,
+}: {
+  onClose?: () => void;
+  embedded?: boolean;
+}): JSX.Element {
   const [view, setView] = useState<"main" | "history">("main");
   const [snapshot, setSnapshot] = useState<SpendSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
@@ -662,21 +668,45 @@ export function SpendTrackerPanel({ onClose }: { onClose?: () => void }): JSX.El
   const refreshedAt = snapshot?.refreshedAt;
 
   return (
-    <div className="sp-panel">
-      {/* Header */}
-      <div className="sp-header">
-        <div className="sp-title">
-          <span className="sp-title-icon">💸</span>
-          AI Spend
+    <div className={`sp-panel${embedded ? " sp-panel--embedded" : ""}`}>
+      {!embedded ? (
+        <div className="sp-header">
+          <div className="sp-title">
+            <span className="sp-title-icon">💸</span>
+            AI Spend
+          </div>
+          <div className="sp-header-actions">
+            <button
+              type="button"
+              className="sp-btn-history"
+              onClick={() => setView("history")}
+              title="View spend history"
+            >
+              📊
+            </button>
+            <button
+              type="button"
+              className="sp-btn-refresh"
+              onClick={handleRefresh}
+              disabled={loading}
+              title="Refresh"
+            >
+              {loading ? <span className="sp-spinner" /> : "↺"}
+            </button>
+            {onClose ? (
+              <button type="button" className="sp-btn-close" onClick={onClose} aria-label="Close">✕</button>
+            ) : null}
+          </div>
         </div>
-        <div className="sp-header-actions">
+      ) : (
+        <div className="sp-toolbar sp-toolbar--embedded">
           <button
             type="button"
             className="sp-btn-history"
             onClick={() => setView("history")}
             title="View spend history"
           >
-            📊
+            📊 History
           </button>
           <button
             type="button"
@@ -685,13 +715,10 @@ export function SpendTrackerPanel({ onClose }: { onClose?: () => void }): JSX.El
             disabled={loading}
             title="Refresh"
           >
-            {loading ? <span className="sp-spinner" /> : "↺"}
+            {loading ? <span className="sp-spinner" /> : "↺ Refresh"}
           </button>
-          {onClose && (
-            <button type="button" className="sp-btn-close" onClick={onClose} aria-label="Close">✕</button>
-          )}
         </div>
-      </div>
+      )}
 
       {/* Totals bar */}
       {snapshot && (totalToday != null || totalMonth != null) && (

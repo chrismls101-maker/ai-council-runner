@@ -2,6 +2,8 @@ import { test, expect, type Browser } from "@playwright/test";
 import fs from "node:fs";
 import {
   closeGlassApp,
+  ensureGlassPanel,
+  getGlassCoreWindows,
   getGlassWindows,
   getElectronE2eSkipReason,
   GLASS_ELECTRON_BIN,
@@ -50,7 +52,7 @@ async function ensureGlassSetupGreen(browser: Browser): Promise<void> {
   expect(state.systemAudioStatus).toBe("available");
 
   if (state.panelVisible) {
-    const { dock } = await getGlassWindows(browser);
+    const { dock } = await getGlassCoreWindows(browser);
     await dock.locator('[data-testid="glass-dock-open-panel"]').click();
     await expect
       .poll(async () => (await readGlassState(command)).panelVisible)
@@ -59,8 +61,12 @@ async function ensureGlassSetupGreen(browser: Browser): Promise<void> {
 }
 
 async function openPanel(browser: Browser) {
-  const { dock, panel } = await getGlassWindows(browser);
-  await dock.locator('[data-testid="glass-dock-open-panel"]').click();
+  const { dock, command } = await getGlassCoreWindows(browser);
+  const state = await readGlassState(command);
+  if (!state.panelVisible) {
+    await dock.locator('[data-testid="glass-dock-open-panel"]').click();
+  }
+  const panel = await ensureGlassPanel(browser, dock);
   await expect(panel.locator('[data-testid="glass-panel"]')).toBeVisible();
   return { dock, panel };
 }
@@ -81,8 +87,8 @@ test.beforeAll(async () => {
   }
 
   app = await launchGlassApp();
-  const windows = await getGlassWindows(app.browser);
-  commandPage = windows.command;
+  const { command } = await getGlassCoreWindows(app.browser);
+  commandPage = command;
 });
 
 test.afterAll(async () => {
@@ -96,7 +102,7 @@ test.afterEach(async ({}, testInfo) => {
 });
 
 test.beforeEach(async () => {
-  const { command } = await getGlassWindows(app.browser);
+  const { command } = await getGlassCoreWindows(app.browser);
   await resetE2eSetupState(command);
   await command.evaluate(() => {
     window.glass.send({ type: "stop-everything" });

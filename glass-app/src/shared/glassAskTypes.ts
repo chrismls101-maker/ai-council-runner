@@ -75,6 +75,8 @@ export interface GlassAskRequest {
   memoryContext?: import("./glassMemory.ts").HydratedContext;
   /** SQLite model_calls.source override (default: ask / ask_stream). */
   modelCallSource?: "ask" | "ask_stream" | "terminal_fix" | "other";
+  /** Optional explicit Anthropic model id (operator loop, etc.). */
+  anthropicModel?: string;
 }
 
 export interface GlassAskResponse {

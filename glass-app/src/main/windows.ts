@@ -8,7 +8,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BrowserWindow, app, globalShortcut, Menu, screen, shell, type WebContents } from "electron";
+import { BrowserWindow, app, globalShortcut, Menu, screen, shell, type IpcMainEvent, type WebContents } from "electron";
 import { GLASS_BOOT_SOUND_ENABLED } from "../shared/bootSound.ts";
 import type { GlassConfig } from "../shared/config.ts";
 import {
@@ -93,11 +93,14 @@ type RendererPage =
 
 export interface GlassWindows {
   dock: BrowserWindow;
-  panel: BrowserWindow;
+  /** Created on first open — not loaded at dock-only idle. */
+  panel: BrowserWindow | null;
   overlay: BrowserWindow;
   commandBar: BrowserWindow;
-  notesPad: BrowserWindow;
-  terminal: BrowserWindow;
+  /** Created on first Listen notes use. */
+  notesPad: BrowserWindow | null;
+  /** Created on first terminal open. */
+  terminal: BrowserWindow | null;
 }
 
 let windows: GlassWindows | null = null;
@@ -108,6 +111,8 @@ let overlayVisible = true;
 let overlayNoticePinned = false;
 /** Keep overlay window visible for live-translate captions when overlay chrome is hidden. */
 let overlayPinnedForTranslate = false;
+/** Keep overlay window visible for computer-operator ambient edge glow (safety UX). */
+let overlayPinnedForComputerOperator = false;
 let overlayClickThrough = true;
 let commandBarClickThrough = false;
 let overlayMode: OverlayMode = "passive";
@@ -120,8 +125,11 @@ let commandBarCustomOrigin: ChromeOrigin | null = null;
 let lastCommandBarStackHeightPx: number | undefined;
 let chromeLayoutPersist: ((partial: Partial<GlassUserSettings>) => void) | null = null;
 let chromeMovePersistTimer: ReturnType<typeof setTimeout> | null = null;
+/** Skip per-window loadRenderer during createWindows — staggered vite loads run after. */
+let skipInitialRendererLoad = false;
 /** When true, dock/overlay/command bar stay hidden until {@link finishSplash} completes. */
 let glassBootPending = false;
+let pendingRelayoutAfterBoot: { resetDock?: boolean } | null = null;
 /** When true, onboarding blocks dock and command bar until calibration completes. */
 let onboardingPending = false;
 /** When true, activation fullscreen gate hides all Glass chrome. */
@@ -137,6 +145,55 @@ let onGlassDisplayLayoutChanged: (() => void) | null = null;
 let macVisibleFrameWatchTimer: ReturnType<typeof setInterval> | null = null;
 let lastMacVisibleWorkAreaKey = "";
 let macVisibleFrameRefreshInFlight = false;
+/** False until command bar React mounts — setBounds before mount aborts ES module load on macOS. */
+let commandBarRendererReady = false;
+let deferredCommandBarLayout: { resetPosition: boolean; forceLayout: boolean } | null = null;
+let commandBarMountFallbackTimer: ReturnType<typeof setTimeout> | null = null;
+
+function commandBarRendererBusy(): boolean {
+  if (!windows?.commandBar || windows.commandBar.isDestroyed()) return false;
+  return !commandBarRendererReady;
+}
+
+function clearCommandBarMountFallbackTimer(): void {
+  if (commandBarMountFallbackTimer) {
+    clearTimeout(commandBarMountFallbackTimer);
+    commandBarMountFallbackTimer = null;
+  }
+}
+
+function scheduleCommandBarMountFallback(): void {
+  clearCommandBarMountFallbackTimer();
+  commandBarMountFallbackTimer = setTimeout(() => {
+    commandBarMountFallbackTimer = null;
+    if (commandBarRendererReady) return;
+    console.warn(
+      "[IIVO Glass] command bar React mount timeout — applying layout anyway (check renderer errors)",
+    );
+    markCommandBarRendererReady();
+  }, 15_000);
+}
+
+export function notifyCommandBarRendererMounted(event: IpcMainEvent): void {
+  if (!windows?.commandBar || windows.commandBar.isDestroyed()) return;
+  if (event.sender.id !== windows.commandBar.webContents.id) return;
+  markCommandBarRendererReady();
+}
+
+function markCommandBarRendererReady(): void {
+  if (commandBarRendererReady) return;
+  clearCommandBarMountFallbackTimer();
+  commandBarRendererReady = true;
+  const pending = deferredCommandBarLayout;
+  deferredCommandBarLayout = null;
+  if (pending && windows?.commandBar && !windows.commandBar.isDestroyed()) {
+    applyCommandBarLayout(pending.resetPosition, pending.forceLayout);
+  }
+  if (shouldShowCommandBarWindow()) {
+    ensureCommandBarWindowVisible();
+  }
+  if (windows) stackGlassWindows(windows);
+}
 
 /** Main process hook — recompute overlay chat clearance when the bar moves or relayouts. */
 export function setCommandBarLayoutChangedHandler(handler: (() => void) | null): void {
@@ -156,16 +213,87 @@ function notifyGlassDisplayLayoutChanged(): void {
   onGlassDisplayLayoutChanged?.();
 }
 
+function prepareVitePanelBeforeLoad(win: BrowserWindow, surface: "chrome" | "overlay"): void {
+  if (!isDev || process.platform !== "darwin" || win.isDestroyed()) return;
+  win.showInactive();
+  if (surface === "chrome") {
+    ensureChromeWindowInteractive(win, "vite-preload");
+  }
+}
+
+function waitForWindowLoad(win: BrowserWindow, timeoutMs = 30_000): Promise<void> {
+  return new Promise((resolve) => {
+    if (win.isDestroyed()) {
+      resolve();
+      return;
+    }
+    let settled = false;
+    const finish = (): void => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    if (!win.webContents.isLoading()) {
+      finish();
+      return;
+    }
+    const timer = setTimeout(finish, timeoutMs);
+    const done = (): void => {
+      clearTimeout(timer);
+      finish();
+    };
+    win.webContents.once("did-finish-load", done);
+    win.webContents.once("did-fail-load", done);
+  });
+}
+
+async function waitForViteDevServer(maxMs = 120_000): Promise<void> {
+  const base = process.env.ELECTRON_RENDERER_URL?.replace(/\/$/, "");
+  if (!base) return;
+  const start = Date.now();
+  while (Date.now() - start < maxMs) {
+    try {
+      const res = await fetch(base);
+      if (res.ok) return;
+    } catch {
+      /* server still starting */
+    }
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  }
+  console.warn(`[IIVO Glass] vite dev server not ready after ${maxMs}ms (${base})`);
+}
+
+async function runStaggeredViteRendererLoads(w: GlassWindows): Promise<void> {
+  await waitForViteDevServer();
+  prepareVitePanelBeforeLoad(w.dock, "chrome");
+  loadRenderer(w.dock, "index.html");
+  await waitForWindowLoad(w.dock);
+
+  prepareVitePanelBeforeLoad(w.commandBar, "chrome");
+  loadRenderer(w.commandBar, "command.html");
+  await waitForWindowLoad(w.commandBar);
+
+  prepareVitePanelBeforeLoad(w.overlay, "overlay");
+  loadRenderer(w.overlay, "overlay.html");
+  await waitForWindowLoad(w.overlay);
+}
+
 function loadRenderer(
   win: BrowserWindow,
   htmlFile: RendererPage,
   query?: Record<string, string>,
 ): void {
+  if (skipInitialRendererLoad) return;
+
   const qs =
     query && Object.keys(query).length > 0
       ? `?${new URLSearchParams(query).toString()}`
       : "";
   if (isDev && process.env.ELECTRON_RENDERER_URL) {
+    prepareVitePanelBeforeLoad(
+      win,
+      htmlFile === "overlay.html" ? "overlay" : "chrome",
+    );
     void win.loadURL(`${process.env.ELECTRON_RENDERER_URL}/${htmlFile}${qs}`);
   } else {
     void win.loadFile(join(mainDir, `../renderer/${htmlFile}`), {
@@ -176,15 +304,21 @@ function loadRenderer(
 
 /** Overlay above desktop apps; interactive windows stack above overlay via relativeLevel. */
 const OVERLAY_ALWAYS_ON_TOP_LEVEL = "screen-saver" as const;
+/** Command bar uses a higher macOS window level so it paints above the full-screen overlay panel. */
+const COMMAND_BAR_ALWAYS_ON_TOP_LEVEL =
+  process.platform === "darwin" ? ("pop-up-menu" as const) : OVERLAY_ALWAYS_ON_TOP_LEVEL;
 const OVERLAY_ALWAYS_ON_TOP_RELATIVE = 0;
 const OVERLAY_RAISED_FOR_NOTIFICATIONS_RELATIVE = 3;
 /** Chrome uses panel type on macOS — keep well above overlay relative levels. */
-const DOCK_ALWAYS_ON_TOP_RELATIVE = 8;
-const TERMINAL_ALWAYS_ON_TOP_RELATIVE = 9;
-const COMMAND_BAR_ALWAYS_ON_TOP_RELATIVE = 10;
-const COMMAND_BAR_TOP_RELATIVE = 12;
-const NOTES_PAD_ALWAYS_ON_TOP_RELATIVE = 14;
-const PANEL_ALWAYS_ON_TOP_RELATIVE = 16;
+const DOCK_ALWAYS_ON_TOP_RELATIVE = 16;
+const TERMINAL_ALWAYS_ON_TOP_RELATIVE = 17;
+/** Must stay above OVERLAY_BUILDER_MODAL_RELATIVE so the bar is never covered by the full-screen overlay. */
+const COMMAND_BAR_ALWAYS_ON_TOP_RELATIVE = 20;
+const COMMAND_BAR_TOP_RELATIVE = 22;
+/** Builder strip panels + Aletheia menu — overlay above dock, below command bar. */
+const OVERLAY_BUILDER_MODAL_RELATIVE = 13;
+const NOTES_PAD_ALWAYS_ON_TOP_RELATIVE = 24;
+const PANEL_ALWAYS_ON_TOP_RELATIVE = 26;
 
 let overlayRaisedForNotifications = false;
 let overlayPointerOverNotification = false;
@@ -199,12 +333,15 @@ let overlayPointerOverExitControl = false;
 let overlayResearchExplorerActive = false;
 let overlayCodeAnalystExplorerActive = false;
 let overlayWritingStudioActive = false;
+let overlayGlassStorageProjectsActive = false;
 let overlayGlassDashboardActive = false;
 let overlayAletheiaDashboardActive = false;
 /** Increment when a full-screen workspace opens; focus overlay only on epoch change. */
 let overlayWorkspaceFocusEpoch = 0;
 let overlayWorkspaceFocusAppliedEpoch = -1;
 let builderStripPanelOpen = false;
+let builderStripPanelOccludesDock = false;
+let aletheiaStripMenuOpen = false;
 let commandPaletteOpen = false;
 let powersMenuOpen = false;
 let responsePanelOpen = false;
@@ -257,6 +394,7 @@ function overlayFullscreenWorkspaceActive(): boolean {
   return overlayResearchExplorerActive
     || overlayCodeAnalystExplorerActive
     || overlayWritingStudioActive
+    || overlayGlassStorageProjectsActive
     || overlayGlassDashboardActive
     || overlayAletheiaDashboardActive;
 }
@@ -333,6 +471,7 @@ function applyBuilderStripOverlayInteractivity(): void {
     || overlayPointerOverBuilderStrip
     || overlayPointerOverExitControl
     || builderStripPanelOpen
+    || aletheiaStripMenuOpen
     || overlayPointerOverDebriefPanel;
   if (!interactive) {
     if (!overlayPointerOverNotification) {
@@ -371,6 +510,15 @@ export function setOverlayCodeAnalystExplorerActive(active: boolean): void {
 /** Main: Writing Studio open — full-screen overlay must receive clicks. */
 export function setOverlayWritingStudioActive(active: boolean): void {
   overlayWritingStudioActive = transitionOverlayWorkspaceFlag(overlayWritingStudioActive, active);
+  syncFullscreenWorkspaceOverlay();
+}
+
+/** Main: Glass Storage Projects open — full-screen overlay must receive clicks. */
+export function setOverlayGlassStorageProjectsActive(active: boolean): void {
+  overlayGlassStorageProjectsActive = transitionOverlayWorkspaceFlag(
+    overlayGlassStorageProjectsActive,
+    active,
+  );
   syncFullscreenWorkspaceOverlay();
 }
 
@@ -420,6 +568,11 @@ export function notifyWritingStudioMounted(): void {
   applyFullscreenWorkspaceOverlayMode();
 }
 
+/** Renderer mounted Glass Storage Projects — re-assert focus + click capture. */
+export function notifyGlassStorageProjectsMounted(): void {
+  applyFullscreenWorkspaceOverlayMode();
+}
+
 /** Renderer mounted Glass Dashboard — re-assert focus + click capture. */
 export function notifyGlassDashboardMounted(): void {
   applyFullscreenWorkspaceOverlayMode();
@@ -444,6 +597,7 @@ export function setOverlayPointerOverDebriefPanel(over: boolean): void {
 
 /** Renderer reports pointer over the builder strip (Prompts / Keys tabs). */
 export function setOverlayPointerOverBuilderStrip(over: boolean): void {
+  if (overlayPointerOverBuilderStrip === over) return;
   overlayPointerOverBuilderStrip = over;
   applyBuilderStripOverlayInteractivity();
 }
@@ -455,9 +609,21 @@ export function setOverlayPointerOverExitControl(over: boolean): void {
 }
 
 /** Renderer reports a builder strip panel is open — keep overlay interactive until closed. */
-export function setBuilderStripPanelOpen(open: boolean): void {
+export function setBuilderStripPanelOpen(open: boolean, panel?: string): void {
+  const occludesDock = open && panel !== "agents";
+  if (builderStripPanelOpen === open && builderStripPanelOccludesDock === occludesDock) return;
   builderStripPanelOpen = open;
+  builderStripPanelOccludesDock = occludesDock;
   applyBuilderStripOverlayInteractivity();
+  syncBuilderStripModalStacking();
+}
+
+/** Aletheia strip dropdown — same overlay elevation as builder panels. */
+export function setAletheiaStripMenuOpen(open: boolean): void {
+  if (aletheiaStripMenuOpen === open) return;
+  aletheiaStripMenuOpen = open;
+  applyBuilderStripOverlayInteractivity();
+  syncBuilderStripModalStacking();
 }
 
 function applyOverlayPaletteModalInteractivity(): void {
@@ -475,6 +641,7 @@ function applyOverlayPaletteModalInteractivity(): void {
       !overlayIdeInteractive()
       && !overlayPointerOverBuilderStrip
       && !builderStripPanelOpen
+      && !aletheiaStripMenuOpen
       && !overlayPointerOverNotification
       && !overlayPointerOverDebriefPanel
       && !overlayFullscreenWorkspaceActive()
@@ -501,12 +668,14 @@ function applyOverlayPaletteModalInteractivity(): void {
 export function setCommandPaletteOpen(open: boolean): void {
   commandPaletteOpen = open;
   applyOverlayPaletteModalInteractivity();
+  ensureCommandBarWindowVisible();
 }
 
 /** ⌘⇧P powers menu — same overlay modal capture as command palette. */
 export function setPowersMenuOpen(open: boolean): void {
   powersMenuOpen = open;
   applyOverlayPaletteModalInteractivity();
+  ensureCommandBarWindowVisible();
 }
 
 /** Glass Response Panel — keep overlay OS-interactive for scroll / copy / dismiss. */
@@ -530,8 +699,68 @@ const CHROME_MOUSE_FORWARD = { forward: true } as const;
 function ensureChromeWindowInteractive(win: BrowserWindow, windowName: string): void {
   if (win.isDestroyed()) return;
   debugSetIgnoreMouseEvents(win, windowName, false);
-  if (!glassBootPending && !onboardingPending && !activationPending) {
-    win.moveTop();
+}
+
+function shouldShowCommandBarWindow(): boolean {
+  return (
+    commandBarVisible
+    && !ideChromeSuppressed
+    && !glassBootPending
+    && !onboardingPending
+    && !activationPending
+  );
+}
+
+/** Show the command bar OS window when chrome should be visible (idempotent). */
+function ensureCommandBarWindowVisible(): void {
+  if (!windows?.commandBar || windows.commandBar.isDestroyed()) return;
+  if (!shouldShowCommandBarWindow()) return;
+  if (commandBarRendererBusy()) return;
+  applyCommandBarLayout(false, true);
+  const commandBarRelative = overlayRaisedForNotifications
+    ? COMMAND_BAR_TOP_RELATIVE
+    : COMMAND_BAR_ALWAYS_ON_TOP_RELATIVE;
+  windows.commandBar.setAlwaysOnTop(true, COMMAND_BAR_ALWAYS_ON_TOP_LEVEL, commandBarRelative);
+  windows.commandBar.showInactive();
+  if (!windows.commandBar.isVisible()) {
+    windows.commandBar.show();
+  }
+  ensureChromeWindowInteractive(windows.commandBar, "commandBar");
+  windows.commandBar.moveTop();
+}
+
+function scheduleCommandBarVisibilityRetries(): void {
+  for (const delayMs of [50, 250, 1000]) {
+    setTimeout(() => ensureCommandBarWindowVisible(), delayMs);
+  }
+}
+
+function builderStripModalActive(): boolean {
+  return builderStripPanelOpen || aletheiaStripMenuOpen;
+}
+
+/** Raise overlay above dock/command bar while strip panels or Aletheia menu are open. */
+function syncBuilderStripModalStacking(): void {
+  if (!windows?.overlay || windows.overlay.isDestroyed()) return;
+  const overlay = windows.overlay;
+  if (!builderStripModalActive()) {
+    stackGlassWindows(windows!);
+    return;
+  }
+  if (ideChromeSuppressed && !aletheiaStripMenuOpen) {
+    stackGlassWindows(windows!);
+    return;
+  }
+  const cancelPassthrough = (overlay as BrowserWindow & { _cancelPassthroughDebounced?: () => void })
+    ._cancelPassthroughDebounced;
+  cancelPassthrough?.();
+  debugSetIgnoreMouseEvents(overlay, "overlay", false);
+  overlay.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, OVERLAY_BUILDER_MODAL_RELATIVE);
+  overlay.showInactive();
+  overlay.moveTop();
+  raiseChromeAboveOverlay(windows!);
+  if (builderStripPanelOccludesDock && windows.dock && !windows.dock.isDestroyed()) {
+    windows.dock.hide();
   }
 }
 
@@ -542,27 +771,29 @@ function raiseChromeAboveOverlay(w: GlassWindows): void {
   if (!w.dock.isDestroyed()) {
     w.dock.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, DOCK_ALWAYS_ON_TOP_RELATIVE);
     ensureChromeWindowInteractive(w.dock, "dock");
+    if (!ideChromeSuppressed) w.dock.showInactive();
   }
 
-  if (!w.commandBar.isDestroyed() && commandBarVisible) {
+  if (!w.commandBar.isDestroyed() && commandBarVisible && !ideChromeSuppressed) {
     const commandBarRelative = overlayRaisedForNotifications
       ? COMMAND_BAR_TOP_RELATIVE
       : COMMAND_BAR_ALWAYS_ON_TOP_RELATIVE;
-    w.commandBar.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, commandBarRelative);
-    ensureChromeWindowInteractive(w.commandBar, "commandBar");
+    w.commandBar.setAlwaysOnTop(true, COMMAND_BAR_ALWAYS_ON_TOP_LEVEL, commandBarRelative);
+    ensureCommandBarWindowVisible();
+    w.commandBar.moveTop();
   }
 
-  if (!w.terminal.isDestroyed() && terminalWindowVisible) {
+  if (w.terminal && !w.terminal.isDestroyed() && terminalWindowVisible) {
     w.terminal.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, TERMINAL_ALWAYS_ON_TOP_RELATIVE);
     ensureChromeWindowInteractive(w.terminal, "terminal");
   }
 
-  if (!w.panel.isDestroyed() && w.panel.isVisible()) {
+  if (w.panel && !w.panel.isDestroyed() && w.panel.isVisible()) {
     w.panel.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, PANEL_ALWAYS_ON_TOP_RELATIVE);
     w.panel.moveTop();
   }
 
-  if (!w.notesPad.isDestroyed() && notesPadVisible) {
+  if (w.notesPad && !w.notesPad.isDestroyed() && notesPadVisible) {
     w.notesPad.setAlwaysOnTop(
       true,
       OVERLAY_ALWAYS_ON_TOP_LEVEL,
@@ -612,6 +843,9 @@ function configureOverlayClickThrough(overlay: BrowserWindow): void {
     return;
   }
   debugSetIgnoreMouseEvents(overlay, "overlay", true, true);
+  if (windows && shouldShowCommandBarWindow()) {
+    ensureCommandBarWindowVisible();
+  }
 }
 
 /**
@@ -706,6 +940,7 @@ function attachOverlayCursorClickThrough(overlay: BrowserWindow): void {
         || overlayPointerOverBuilderStrip
         || overlayPointerOverExitControl
         || builderStripPanelOpen
+        || aletheiaStripMenuOpen
         || overlayPointerOverDebriefPanel
       ) {
         if (passthroughTimer !== null) { clearTimeout(passthroughTimer); passthroughTimer = null; }
@@ -760,6 +995,7 @@ function presentOnboardingOverlay(overlay: BrowserWindow): void {
 
 function shouldShowOverlayWindow(): boolean {
   if (overlayNoticePinned) return true;
+  if (overlayPinnedForComputerOperator) return true;
   if (overlayPinnedForTranslate) return overlayMode !== "hidden";
   return overlayVisible && overlayMode !== "hidden";
 }
@@ -781,6 +1017,25 @@ export function setOverlayPinnedForTranslate(pinned: boolean): void {
     windows.overlay.hide();
   }
   stackGlassWindows(windows);
+}
+
+/** Show the overlay window for computer-operator edge glow even when overlay chrome is hidden. */
+export function setOverlayPinnedForComputerOperator(pinned: boolean): void {
+  overlayPinnedForComputerOperator = pinned;
+  logGlassClickDebug("setOverlayPinnedForComputerOperator", { pinned });
+  if (glassBootPending || onboardingPending || activationPending) return;
+  if (!windows?.overlay || windows.overlay.isDestroyed()) return;
+  if (shouldShowOverlayWindow()) {
+    if (layoutManager) {
+      windows.overlay.setBounds(layoutManager.getOverlayLayout());
+    }
+    windows.overlay.showInactive();
+    configureOverlayClickThrough(windows.overlay);
+  } else {
+    windows.overlay.hide();
+  }
+  stackGlassWindows(windows);
+  ensureCommandBarWindowVisible();
 }
 
 /** Called when the builder strip mounts/unmounts — safety reset for OS click-through. */
@@ -852,6 +1107,9 @@ function destroyGlassWindows(): void {
   stopMacVisibleFrameWatch();
   terminalWindowVisible = false;
   terminalPanelSizedByRenderer = false;
+  commandBarRendererReady = false;
+  deferredCommandBarLayout = null;
+  clearCommandBarMountFallbackTimer();
   if (windows) {
     for (const win of [
       windows.dock,
@@ -861,7 +1119,7 @@ function destroyGlassWindows(): void {
       windows.notesPad,
       windows.terminal,
     ]) {
-      if (!win.isDestroyed()) {
+      if (win && !win.isDestroyed()) {
         win.destroy();
       }
     }
@@ -917,7 +1175,7 @@ function destroyTrackedGlassWindows(): void {
 function ensureVisibleOnAllWorkspaces(): void {
   if (!windows) return;
   for (const win of [windows.dock, windows.panel, windows.overlay, windows.commandBar, windows.notesPad]) {
-    if (!win.isDestroyed()) {
+    if (win && !win.isDestroyed()) {
       win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     }
   }
@@ -943,8 +1201,49 @@ function dismissSplashWindow(): void {
 function completeGlassBootSequence(): void {
   glassBootPending = false;
   dismissSplashWindow();
+  if (aletheiaStripMenuOpen) {
+    setAletheiaStripMenuOpen(false);
+  }
   showPrimaryGlassWindows();
+  ensureCommandBarWindowVisible();
+  scheduleCommandBarVisibilityRetries();
+  if (pendingRelayoutAfterBoot !== null) {
+    const opts = pendingRelayoutAfterBoot;
+    pendingRelayoutAfterBoot = null;
+    relayoutAllWindows(opts);
+    showPrimaryGlassWindows();
+    ensureCommandBarWindowVisible();
+  }
+  scheduleChromeVisibilityRecovery();
   onGlassBootSequenceComplete?.();
+  if (process.env.IIVO_GLASS_PROVE_BOOT === "1") {
+    console.log("GLASS_BOOT_OK: splash finished, chrome shown");
+    setTimeout(() => app.quit(), 400);
+  }
+}
+
+/** If overlay/command bar failed to show during boot, retry once surfaces should be up. */
+function scheduleChromeVisibilityRecovery(): void {
+  for (const delayMs of [500, 2000, 5000]) {
+    setTimeout(() => {
+      if (!windows || glassBootPending || activationPending || onboardingPending) return;
+      const barShouldShow =
+        commandBarVisible && !ideChromeSuppressed && !windows.commandBar.isDestroyed();
+      const overlayShouldShow =
+        overlayVisible && overlayMode !== "hidden" && !windows.overlay.isDestroyed();
+      const barHidden = barShouldShow && !windows.commandBar.isVisible();
+      const overlayHidden = overlayShouldShow && !windows.overlay.isVisible();
+      if (!barHidden && !overlayHidden) return;
+      if (barHidden || overlayHidden) {
+        console.warn(
+          `[IIVO Glass] recovering chrome visibility (commandBar=${barHidden} overlay=${overlayHidden})`,
+        );
+      }
+      showPrimaryGlassWindows();
+      ensureCommandBarWindowVisible();
+      stackGlassWindows(windows);
+    }, delayMs);
+  }
 }
 
 /** Keep dock/command bar/overlay hidden while the boot splash is up (renderer load can flash windows). */
@@ -953,7 +1252,7 @@ function suppressChromeDuringBoot(w: GlassWindows): void {
   if (!w.dock.isDestroyed()) w.dock.hide();
   if (!w.commandBar.isDestroyed()) w.commandBar.hide();
   if (!w.overlay.isDestroyed()) w.overlay.hide();
-  if (!w.terminal.isDestroyed()) w.terminal.hide();
+  if (w.terminal && !w.terminal.isDestroyed()) w.terminal.hide();
 }
 
 /** Abort boot splash when the page fails to load — show Glass windows immediately. */
@@ -970,9 +1269,9 @@ function suppressChromeDuringActivation(w: GlassWindows): void {
   if (!w.dock.isDestroyed()) w.dock.hide();
   if (!w.commandBar.isDestroyed()) w.commandBar.hide();
   if (!w.overlay.isDestroyed()) w.overlay.hide();
-  if (!w.panel.isDestroyed()) w.panel.hide();
-  if (!w.notesPad.isDestroyed()) w.notesPad.hide();
-  if (!w.terminal.isDestroyed()) w.terminal.hide();
+  if (w.panel && !w.panel.isDestroyed()) w.panel.hide();
+  if (w.notesPad && !w.notesPad.isDestroyed()) w.notesPad.hide();
+  if (w.terminal && !w.terminal.isDestroyed()) w.terminal.hide();
 }
 
 /** Block dock/overlay/command bar until Anthropic key activation completes. */
@@ -1018,13 +1317,7 @@ function showPrimaryGlassWindows(): void {
     logDiagnostics();
     return;
   }
-  if (commandBarVisible && !windows.commandBar.isDestroyed()) {
-    applyCommandBarLayout();
-    windows.commandBar.showInactive();
-    // Re-apply last known interactive state; Electron resets setIgnoreMouseEvents on show
-    // but cursor-changed won't re-fire if cursor hasn't moved — preserve the state.
-    ensureChromeWindowInteractive(windows.commandBar, "commandBar");
-  }
+  ensureCommandBarWindowVisible();
   if (!windows.dock.isDestroyed()) {
     applyDockLayout();
     windows.dock.showInactive();
@@ -1135,7 +1428,7 @@ export function stackGlassWindows(w: GlassWindows): void {
     w.dock.hide();
   }
 
-  if (!w.terminal.isDestroyed() && terminalWindowVisible) {
+  if (w.terminal && !w.terminal.isDestroyed() && terminalWindowVisible) {
     w.terminal.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, TERMINAL_ALWAYS_ON_TOP_RELATIVE);
     w.terminal.showInactive();
     ensureChromeWindowInteractive(w.terminal, "terminal");
@@ -1153,10 +1446,9 @@ export function stackGlassWindows(w: GlassWindows): void {
     const commandBarRelative = overlayRaisedForNotifications
       ? COMMAND_BAR_TOP_RELATIVE
       : COMMAND_BAR_ALWAYS_ON_TOP_RELATIVE;
-    w.commandBar.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, commandBarRelative);
-    w.commandBar.showInactive();
+    w.commandBar.setAlwaysOnTop(true, COMMAND_BAR_ALWAYS_ON_TOP_LEVEL, commandBarRelative);
+    ensureCommandBarWindowVisible();
     w.commandBar.moveTop();
-    ensureChromeWindowInteractive(w.commandBar, "commandBar");
   } else if (!w.commandBar.isDestroyed()) {
     w.commandBar.hide();
     if (!ideChromeSuppressed && !w.dock.isDestroyed()) {
@@ -1166,12 +1458,14 @@ export function stackGlassWindows(w: GlassWindows): void {
     w.dock.moveTop();
   }
 
-  w.panel.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, PANEL_ALWAYS_ON_TOP_RELATIVE);
-  if (w.panel.isVisible()) {
-    w.panel.moveTop();
+  if (w.panel && !w.panel.isDestroyed()) {
+    w.panel.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, PANEL_ALWAYS_ON_TOP_RELATIVE);
+    if (w.panel.isVisible()) {
+      w.panel.moveTop();
+    }
   }
 
-  if (!w.notesPad.isDestroyed() && notesPadVisible) {
+  if (w.notesPad && !w.notesPad.isDestroyed() && notesPadVisible) {
     w.notesPad.setAlwaysOnTop(
       true,
       OVERLAY_ALWAYS_ON_TOP_LEVEL,
@@ -1180,6 +1474,16 @@ export function stackGlassWindows(w: GlassWindows): void {
     w.notesPad.showInactive();
     w.notesPad.moveTop();
   }
+
+  // Command bar must paint above the full-screen overlay even when isVisible() is true.
+  if (!ideChromeSuppressed && !w.commandBar.isDestroyed() && commandBarVisible) {
+    w.commandBar.moveTop();
+  }
+}
+
+function diagnosticsRect(win: BrowserWindow | null): ReturnType<typeof rectFromWindow> | null {
+  if (!win || win.isDestroyed()) return null;
+  return rectFromWindow(win);
 }
 
 function logDiagnostics(): void {
@@ -1190,11 +1494,12 @@ function logDiagnostics(): void {
     overlayVisible,
     overlayClickThrough,
     dock: rectFromWindow(windows.dock),
-    panel: rectFromWindow(windows.panel),
-    panelVisible: windows.panel.isVisible(),
-    notesPad: rectFromWindow(windows.notesPad),
+    panel: diagnosticsRect(windows.panel),
+    panelVisible: windows.panel?.isVisible() ?? false,
+    notesPad: diagnosticsRect(windows.notesPad),
     notesPadVisible,
     commandBar: commandBarVisible ? rectFromWindow(windows.commandBar) : null,
+    commandBarWindowVisible: windows.commandBar.isVisible(),
   });
   logGlassWindowDiagnostics(line);
 }
@@ -1366,9 +1671,13 @@ function syncDockHorizontalAlignToCommandBar(): void {
   syncGlassTerminalWindowPosition();
 }
 
-function applyCommandBarLayout(resetPosition = false): void {
+function applyCommandBarLayout(resetPosition = false, forceLayout = false): void {
   if (!windows?.commandBar || windows.commandBar.isDestroyed() || !layoutManager) return;
-  if (!chromeLayoutLocked && !resetPosition) return;
+  if (!forceLayout && !chromeLayoutLocked && !resetPosition) return;
+  if (commandBarRendererBusy()) {
+    deferredCommandBarLayout = { resetPosition, forceLayout };
+    return;
+  }
   const current = windows.commandBar.getBounds();
   const workArea = layoutManager.getDisplay().workArea;
   const display = layoutManager.getDisplay();
@@ -1502,6 +1811,11 @@ export function getSettingsLayoutBounds(): PanelLayout | null {
   return layoutManager.getSettingsLayout();
 }
 
+export function getOverlayLayoutBounds(): PanelLayout | null {
+  if (!layoutManager) return null;
+  return layoutManager.getOverlayLayout();
+}
+
 function relayoutGlassSettingsWindow(): void {
   void import("./glassSettingsWindow.ts").then((mod) => mod.syncGlassSettingsLayout());
 }
@@ -1514,12 +1828,15 @@ function relayoutOverlayWindow(): void {
   } else {
     configureOverlayClickThrough(windows.overlay);
   }
+  if (shouldShowCommandBarWindow()) {
+    ensureCommandBarWindowVisible();
+  }
 }
 
 function relayoutChromeWindows(options?: { resetDock?: boolean }): void {
   if (!windows || !layoutManager) return;
 
-  if (!windows.panel.isDestroyed()) {
+  if (windows.panel && !windows.panel.isDestroyed()) {
     const panelLayout = getPanelLayoutBounds();
     if (panelLayout) windows.panel.setBounds(panelLayout);
   }
@@ -1530,7 +1847,7 @@ function relayoutChromeWindows(options?: { resetDock?: boolean }): void {
 
   applyDockLayout(options?.resetDock ?? false);
 
-  if (!windows.notesPad.isDestroyed() && notesPadVisible) {
+  if (windows.notesPad && !windows.notesPad.isDestroyed() && notesPadVisible) {
     windows.notesPad.setBounds(layoutManager.getNotesPadLayout());
   }
 
@@ -1541,6 +1858,10 @@ function relayoutChromeWindows(options?: { resetDock?: boolean }): void {
 
 function relayoutAllWindows(options?: { resetDock?: boolean }): void {
   if (!windows || !layoutManager) return;
+  if (glassBootPending || skipInitialRendererLoad) {
+    pendingRelayoutAfterBoot = options ?? {};
+    return;
+  }
 
   relayoutOverlayWindow();
   relayoutChromeWindows(options);
@@ -1553,15 +1874,20 @@ function relayoutAllWindows(options?: { resetDock?: boolean }): void {
 function wireWindowStacking(w: GlassWindows): void {
   const restack = (): void => {
     stackGlassWindows(w);
+    ensureCommandBarWindowVisible();
     logDiagnostics();
   };
 
   w.dock.webContents.on("did-finish-load", restack);
   w.overlay.webContents.on("did-finish-load", restack);
-  w.panel.webContents.on("did-finish-load", restack);
-  w.commandBar.webContents.on("did-finish-load", restack);
-  w.notesPad.webContents.on("did-finish-load", restack);
-  w.terminal.webContents.on("did-finish-load", restack);
+  w.commandBar.webContents.on("did-finish-load", () => {
+    scheduleCommandBarMountFallback();
+    restack();
+  });
+  w.commandBar.webContents.on("did-start-loading", () => {
+    commandBarRendererReady = false;
+    clearCommandBarMountFallbackTimer();
+  });
 }
 
 function createOverlayWindow(): BrowserWindow {
@@ -1669,6 +1995,7 @@ function createPanelWindow(): BrowserWindow {
     },
   });
   panel.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  ensureChromeWindowInteractive(panel, "panel");
   loadRenderer(panel, "panel.html");
   trackGlassWindow(panel, "panel");
   return panel;
@@ -1702,8 +2029,17 @@ function createCommandBarWindow(): BrowserWindow {
   });
   commandBar.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   ensureChromeWindowInteractive(commandBar, "commandBar");
+  commandBarRendererReady = false;
+  deferredCommandBarLayout = null;
+  commandBar.webContents.on("did-start-loading", () => {
+    commandBarRendererReady = false;
+    clearCommandBarMountFallbackTimer();
+  });
   commandBar.webContents.once("did-finish-load", () => {
-    if (glassBootPending || onboardingPending || activationPending) commandBar.hide();
+    scheduleCommandBarMountFallback();
+  });
+  commandBar.webContents.once("did-fail-load", (_event, code, desc) => {
+    console.error(`[IIVO Glass] command.html failed to load (${code}): ${desc}`);
   });
   loadRenderer(commandBar, "command.html");
   trackGlassWindow(commandBar, "commandBar");
@@ -1799,7 +2135,57 @@ function createTerminalWindow(): BrowserWindow {
   return terminal;
 }
 
+function attachLazyWindowHandlers(win: BrowserWindow): void {
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    void shell.openExternal(url);
+    return { action: "deny" };
+  });
+}
+
+function wireLazyWindowStacking(win: BrowserWindow): void {
+  win.webContents.on("did-finish-load", () => {
+    if (windows) {
+      stackGlassWindows(windows);
+      logDiagnostics();
+    }
+  });
+}
+
+function ensurePanelWindow(): BrowserWindow {
+  if (!windows) throw new Error("Glass windows not initialized");
+  if (windows.panel && !windows.panel.isDestroyed()) return windows.panel;
+  const panel = createPanelWindow();
+  attachLazyWindowHandlers(panel);
+  wireLazyWindowStacking(panel);
+  windows.panel = panel;
+  console.log("[IIVO Glass] panel window created (lazy)");
+  return panel;
+}
+
+function ensureNotesPadWindow(): BrowserWindow {
+  if (!windows) throw new Error("Glass windows not initialized");
+  if (windows.notesPad && !windows.notesPad.isDestroyed()) return windows.notesPad;
+  const notesPad = createNotesPadWindow();
+  attachLazyWindowHandlers(notesPad);
+  wireLazyWindowStacking(notesPad);
+  windows.notesPad = notesPad;
+  console.log("[IIVO Glass] notes pad window created (lazy)");
+  return notesPad;
+}
+
+function ensureTerminalWindow(): BrowserWindow {
+  if (!windows) throw new Error("Glass windows not initialized");
+  if (windows.terminal && !windows.terminal.isDestroyed()) return windows.terminal;
+  const terminal = createTerminalWindow();
+  attachLazyWindowHandlers(terminal);
+  wireLazyWindowStacking(terminal);
+  windows.terminal = terminal;
+  console.log("[IIVO Glass] terminal window created (lazy)");
+  return terminal;
+}
+
 export function createWindows(glassConfig: GlassConfig, displayTarget: GlassDisplayTarget = "primary"): GlassWindows {
+  skipInitialRendererLoad = isDev && process.platform === "darwin";
   destroyGlassWindows();
   layoutManager?.dispose();
   activeDisplayTarget = sanitizeDisplayTarget(displayTarget);
@@ -1826,19 +2212,23 @@ export function createWindows(glassConfig: GlassConfig, displayTarget: GlassDisp
 
   const overlay = createOverlayWindow();
   const dock = createDockWindow();
-  const panel = createPanelWindow();
   const commandBar = createCommandBarWindow();
-  const notesPad = createNotesPadWindow();
-  const terminal = createTerminalWindow();
 
-  for (const win of [dock, panel, overlay, commandBar, notesPad, terminal]) {
+  for (const win of [dock, overlay, commandBar]) {
     win.webContents.setWindowOpenHandler(({ url }) => {
       void shell.openExternal(url);
       return { action: "deny" };
     });
   }
 
-  windows = { dock, panel, overlay, commandBar, notesPad, terminal };
+  windows = {
+    dock,
+    panel: null,
+    overlay,
+    commandBar,
+    notesPad: null,
+    terminal: null,
+  };
 
   refreshTerminalPanelWidthFromDisplay();
 
@@ -1869,6 +2259,19 @@ export function createWindows(glassConfig: GlassConfig, displayTarget: GlassDisp
   startMacVisibleFrameWatch();
   if (layoutManager.getDisplay().workAreaSource === "macos-visible-frame") {
     relayoutAllWindows({ resetDock: true });
+  }
+  if (skipInitialRendererLoad && windows) {
+    void runStaggeredViteRendererLoads(windows).finally(() => {
+      skipInitialRendererLoad = false;
+      if (pendingRelayoutAfterBoot !== null) {
+        const opts = pendingRelayoutAfterBoot;
+        pendingRelayoutAfterBoot = null;
+        relayoutAllWindows(opts);
+      }
+      showPrimaryGlassWindows();
+      ensureCommandBarWindowVisible();
+      scheduleCommandBarVisibilityRetries();
+    });
   }
   logDiagnostics();
   return windows;
@@ -1928,63 +2331,63 @@ export function createSplashWindow(): BrowserWindow {
   return splash;
 }
 
+/** Resolve once dock + command bar have finished their initial load (minimum visible chrome). */
+export function whenPrimaryChromeReady(w: GlassWindows): Promise<void> {
+  return Promise.all([waitForWindowLoad(w.dock), waitForWindowLoad(w.commandBar)]).then(
+    () => undefined,
+  );
+}
+
+function logChromeLoadState(w: GlassWindows, label: string): void {
+  const entries: Array<[string, BrowserWindow | null]> = [
+    ["dock", w.dock],
+    ["panel", w.panel],
+    ["overlay", w.overlay],
+    ["commandBar", w.commandBar],
+  ];
+  const parts = entries.map(([name, win]) => {
+    if (!win || win.isDestroyed()) return `${name}=none`;
+    return `${name}=${win.webContents.isLoading() ? "loading" : "ready"}`;
+  });
+  console.log(`[IIVO Glass] boot chrome state (${label}): ${parts.join(", ")}`);
+}
+
 /** Resolve once all Glass windows have finished their initial load. */
 export function whenGlassWindowsReady(w: GlassWindows): Promise<void> {
-  const ready = (win: BrowserWindow): Promise<void> =>
-    new Promise((resolve) => {
-      if (win.isDestroyed() || !win.webContents.isLoading()) {
-        resolve();
-        return;
-      }
-      const done = (): void => resolve();
-      win.webContents.once("did-finish-load", done);
-      win.webContents.once("did-fail-load", done);
-    });
-  return Promise.all([w.dock, w.panel, w.overlay, w.commandBar].map(ready)).then(() => undefined);
+  return Promise.all([
+    waitForWindowLoad(w.dock),
+    waitForWindowLoad(w.overlay),
+    waitForWindowLoad(w.commandBar),
+  ]).then(() => undefined);
 }
 
-function fadeOutWindow(win: BrowserWindow, durationMs: number): Promise<void> {
-  return new Promise((resolve) => {
-    const steps = 14;
-    const stepMs = Math.max(8, durationMs / steps);
-    let i = 0;
-    const timer = setInterval(() => {
-      i += 1;
-      if (win.isDestroyed()) {
-        clearInterval(timer);
+/** {@link whenGlassWindowsReady} with a timeout so boot cannot hang past the splash animation. */
+export function whenGlassWindowsReadyOrTimeout(
+  w: GlassWindows,
+  timeoutMs = 45_000,
+): Promise<void> {
+  return Promise.race([
+    whenGlassWindowsReady(w),
+    new Promise<void>((resolve) => {
+      setTimeout(() => {
+        logChromeLoadState(w, "timeout");
+        console.warn(
+          `[IIVO Glass] boot: chrome load timeout after ${timeoutMs}ms — continuing`,
+        );
         resolve();
-        return;
-      }
-      win.setOpacity(Math.max(0, 1 - i / steps));
-      if (i >= steps) {
-        clearInterval(timer);
-        resolve();
-      }
-    }, stepMs);
-  });
+      }, timeoutMs);
+    }),
+  ]);
 }
 
-/** Snap the progress bar to 100%, fade the splash out, then close it. */
+/** End boot splash and reveal Glass chrome immediately (no blocking fade). */
 export async function finishSplash(): Promise<void> {
   const splash = splashWindow;
-  splashWindow = null;
-  if (!splash || splash.isDestroyed()) {
-    completeGlassBootSequence();
-    return;
+  if (splash && !splash.isDestroyed()) {
+    void splash.webContents
+      .executeJavaScript(`globalThis.__iivoGlassBootSound?.playComplete?.();`, true)
+      .catch(() => {});
   }
-  try {
-    await splash.webContents.executeJavaScript(
-      `document.body?.classList.add('is-finishing');
-       document.querySelector('.glass-boot')?.classList.add('is-finishing');
-       globalThis.__iivoGlassBootSound?.playComplete?.();`,
-      true,
-    );
-  } catch {
-    // Renderer may not be ready; proceed to fade out regardless.
-  }
-  await new Promise((resolve) => setTimeout(resolve, 420));
-  await fadeOutWindow(splash, 380);
-  if (!splash.isDestroyed()) splash.destroy();
   completeGlassBootSequence();
 }
 
@@ -2011,7 +2414,7 @@ function collectGlassBrowserWindows(excludeWebContents?: WebContents): BrowserWi
       windows.notesPad,
       windows.terminal,
     ]) {
-      if (!win.isDestroyed()) wins.push(win);
+      if (win && !win.isDestroyed()) wins.push(win);
     }
   }
   if (splashWindow && !splashWindow.isDestroyed()) wins.push(splashWindow);
@@ -2038,6 +2441,7 @@ export function restoreGlassWindowsAfterCapture(): void {
     if (!win.isDestroyed() && wasVisible) win.show();
   }
   hiddenForCaptureState = null;
+  reconcilePrimaryChromeVisibility();
 }
 
 /** Grow or shrink the command bar window to fit the measured stack (bottom-anchored). */
@@ -2061,7 +2465,11 @@ export function syncCommandBarWindowToStackHeight(stackHeightPx: number): boolea
     current.width === next.width &&
     current.height === next.height
   ) {
-    if (glassBootPending || onboardingPending || activationPending) bar.hide();
+    if (glassBootPending || onboardingPending || activationPending) {
+      bar.hide();
+    } else {
+      ensureCommandBarWindowVisible();
+    }
     return false;
   }
   logGlassClickDebug("syncCommandBarWindowToStackHeight", {
@@ -2070,8 +2478,11 @@ export function syncCommandBarWindowToStackHeight(stackHeightPx: number): boolea
     stackHeightPx,
   });
   bar.setBounds(next);
-  if (glassBootPending || onboardingPending || activationPending) bar.hide();
-  ensureChromeWindowInteractive(bar, "commandBar");
+  if (glassBootPending || onboardingPending || activationPending) {
+    bar.hide();
+  } else {
+    ensureCommandBarWindowVisible();
+  }
   syncDockHorizontalAlignToCommandBar();
   notifyCommandBarLayoutChanged();
   return true;
@@ -2082,7 +2493,7 @@ export function getLayoutManager(): GlassLayoutManager | null {
 }
 
 export function isPanelVisible(): boolean {
-  return windows?.panel.isVisible() ?? false;
+  return windows?.panel?.isVisible() ?? false;
 }
 
 export function isOverlayVisible(): boolean {
@@ -2091,6 +2502,13 @@ export function isOverlayVisible(): boolean {
 
 export function getOverlayMode(): OverlayMode {
   return overlayMode;
+}
+
+/** Re-show dock + command bar after boot, renderer load, or layout changes. */
+export function reconcilePrimaryChromeVisibility(): void {
+  if (!windows) return;
+  showPrimaryGlassWindows();
+  ensureCommandBarWindowVisible();
 }
 
 export function getGlassWindowState() {
@@ -2103,18 +2521,19 @@ export function getGlassWindowState() {
     overlayVisible: isOverlayVisible(),
     overlayClickThrough,
     dock: rectFromWindow(windows.dock),
-    panel: rectFromWindow(windows.panel),
-    panelVisible: windows.panel.isVisible(),
-    notesPad: rectFromWindow(windows.notesPad),
+    panel: diagnosticsRect(windows.panel),
+    panelVisible: windows.panel?.isVisible() ?? false,
+    notesPad: diagnosticsRect(windows.notesPad),
     notesPadVisible,
     commandBar: commandBarVisible ? rectFromWindow(windows.commandBar) : null,
+    commandBarWindowVisible: windows.commandBar.isVisible(),
   });
   return buildWindowState(
     diagnostics,
     isOverlayVisible(),
     overlayClickThrough,
     overlayMode,
-    windows.panel.isVisible(),
+    windows.panel?.isVisible() ?? false,
     commandBarVisible,
   );
 }
@@ -2166,8 +2585,8 @@ function resolveGlassWindowName(win: BrowserWindow): string {
   if (!windows.overlay.isDestroyed() && win.id === windows.overlay.id) return "overlay";
   if (!windows.dock.isDestroyed() && win.id === windows.dock.id) return "dock";
   if (!windows.commandBar.isDestroyed() && win.id === windows.commandBar.id) return "commandBar";
-  if (!windows.panel.isDestroyed() && win.id === windows.panel.id) return "panel";
-  if (!windows.notesPad.isDestroyed() && win.id === windows.notesPad.id) return "notesPad";
+  if (windows.panel && !windows.panel.isDestroyed() && win.id === windows.panel.id) return "panel";
+  if (windows.notesPad && !windows.notesPad.isDestroyed() && win.id === windows.notesPad.id) return "notesPad";
   return `win:${win.id}`;
 }
 
@@ -2217,9 +2636,11 @@ export function setOverlayMode(mode: OverlayMode): void {
 }
 
 export function ensurePanelLayout(): void {
-  if (!windows?.panel || windows.panel.isDestroyed() || !layoutManager) return;
+  if (!layoutManager) return;
+  const panel = windows?.panel;
+  if (!panel || panel.isDestroyed()) return;
   const layout = getPanelLayoutBounds();
-  if (layout) windows.panel.setBounds(layout);
+  if (layout) panel.setBounds(layout);
 }
 
 function syncPanelToDockAttachment(): void {
@@ -2228,15 +2649,25 @@ function syncPanelToDockAttachment(): void {
 }
 
 export function openPanel(): void {
-  if (!windows?.panel || windows.panel.isDestroyed()) return;
+  const panel = ensurePanelWindow();
   ensurePanelLayout();
-  windows.panel.show();
-  stackGlassWindows(windows);
+  ensureChromeWindowInteractive(panel, "panel");
+  panel.show();
+  panel.focus();
+  stackGlassWindows(windows!);
   logDiagnostics();
 }
 
+export function raisePanelWindow(): void {
+  const panel = windows?.panel;
+  if (!panel || panel.isDestroyed() || !panel.isVisible()) return;
+  ensureChromeWindowInteractive(panel, "panel");
+  panel.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, PANEL_ALWAYS_ON_TOP_RELATIVE);
+  panel.moveTop();
+}
+
 export function closePanel(): void {
-  windows?.panel.hide();
+  windows?.panel?.hide();
   if (windows) stackGlassWindows(windows);
 }
 
@@ -2346,10 +2777,7 @@ function applyTerminalWindowBounds(): void {
 }
 
 export function showGlassTerminalWindow(): void {
-  if (!windows?.terminal || windows.terminal.isDestroyed()) {
-    if (isDev) console.warn("[IIVO Glass] showGlassTerminalWindow: no terminal window");
-    return;
-  }
+  const terminal = ensureTerminalWindow();
   if (terminalDismissTimer) {
     clearTimeout(terminalDismissTimer);
     terminalDismissTimer = null;
@@ -2370,8 +2798,8 @@ export function showGlassTerminalWindow(): void {
       console.info("[IIVO Glass] terminal window shown", windows.terminal.getBounds());
     }
   };
-  if (windows.terminal.webContents.isLoadingMainFrame()) {
-    windows.terminal.webContents.once("did-finish-load", reveal);
+  if (terminal.webContents.isLoadingMainFrame()) {
+    terminal.webContents.once("did-finish-load", reveal);
   } else {
     reveal();
   }
@@ -2412,7 +2840,7 @@ export function resizeGlassTerminalWindow(panelWidth: number, panelHeight: numbe
 
 export function togglePanel(): boolean {
   if (!windows) return false;
-  if (windows.panel.isVisible()) {
+  if (windows.panel?.isVisible()) {
     closePanel();
     return false;
   }
@@ -2430,10 +2858,9 @@ export function focusCommandBar(): void {
   logGlassClickDebug("focusCommandBar");
   if (!commandBarVisible) {
     commandBarVisible = true;
-    if (layoutManager) {
-      windows.commandBar.setBounds(layoutManager.getCommandBarLayout());
-    }
+    applyCommandBarLayout(true, true);
   }
+  ensureCommandBarWindowVisible();
   windows.commandBar.show();
   windows.commandBar.focus();
   windows.commandBar.webContents.send("glass:command-bar-focus");
@@ -2444,7 +2871,6 @@ export function focusCommandBar(): void {
 export function prefillCommandBar(text: string): void {
   if (!windows?.commandBar || windows.commandBar.isDestroyed()) return;
   focusCommandBar();
-  // Brief delay so focus + click-through settle before prefill lands in the input.
   setTimeout(() => {
     if (!windows?.commandBar || windows.commandBar.isDestroyed()) return;
     windows.commandBar.webContents.send("glass:command-bar-prefill", text);
@@ -2461,11 +2887,8 @@ export function toggleCommandBar(): boolean {
   if (glassBootPending || onboardingPending || ideChromeSuppressed) return commandBarVisible;
   commandBarVisible = !commandBarVisible;
   if (commandBarVisible) {
-    if (layoutManager) {
-      windows.commandBar.setBounds(layoutManager.getCommandBarLayout());
-    }
-    windows.commandBar.showInactive();
-    ensureChromeWindowInteractive(windows.commandBar, "commandBar");
+    applyCommandBarLayout(true, true);
+    ensureCommandBarWindowVisible();
   } else {
     windows.commandBar.hide();
   }
@@ -2484,7 +2907,7 @@ export function broadcast(channel: string, payload: unknown): void {
     windows.notesPad,
     windows.terminal,
   ]) {
-    if (!win.isDestroyed()) {
+    if (win && !win.isDestroyed()) {
       win.webContents.send(channel, payload);
     }
   }
@@ -2636,7 +3059,7 @@ export function getDisplayLayoutSummary(): string {
     overlayBounds: overlay,
     commandBarBounds: bar,
     panelBounds: panelLayout,
-    panelVisible: windows.panel.isVisible(),
+    panelVisible: windows.panel?.isVisible() ?? false,
     followMouseActive: isFollowMouseTrackingActive(),
   });
 }
@@ -2739,18 +3162,21 @@ export function refreshGlassDisplayLayout(): void {
 
 export function setListenNotesPadVisible(active: boolean): void {
   notesPadVisible = active;
-  if (!windows?.notesPad || windows.notesPad.isDestroyed() || !layoutManager) return;
+  if (!layoutManager) return;
   if (active) {
-    windows.notesPad.setBounds(layoutManager.getNotesPadLayout());
-    windows.notesPad.showInactive();
-  } else {
+    const notesPad = ensureNotesPadWindow();
+    notesPad.setBounds(layoutManager.getNotesPadLayout());
+    notesPad.showInactive();
+  } else if (windows?.notesPad && !windows.notesPad.isDestroyed()) {
     windows.notesPad.hide();
   }
-  stackGlassWindows(windows);
-  logDiagnostics();
+  if (windows) {
+    stackGlassWindows(windows);
+    logDiagnostics();
+  }
 }
 
-/** Hide dock + command bar while Glass IDE or Coder workspace is active. */
+/** Hide dock + command bar while a full-screen workspace (IDE, dashboards, explorers) is active. */
 export function setIdeChromeSuppressed(suppressed: boolean): void {
   ideChromeSuppressed = suppressed;
   if (!windows) return;
@@ -2762,11 +3188,7 @@ export function setIdeChromeSuppressed(suppressed: boolean): void {
     return;
   }
   if (glassBootPending || onboardingPending || activationPending) return;
-  if (commandBarVisible && !windows.commandBar.isDestroyed()) {
-    applyCommandBarLayout();
-    windows.commandBar.showInactive();
-    ensureChromeWindowInteractive(windows.commandBar, "commandBar");
-  }
+  ensureCommandBarWindowVisible();
   if (!windows.dock.isDestroyed()) {
     applyDockLayout();
     windows.dock.showInactive();

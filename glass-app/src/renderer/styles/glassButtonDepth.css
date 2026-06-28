@@ -22,7 +22,7 @@
 .glass-btn-depth-1:hover,
 .dock--v3 .gbtn.glass-btn-depth-1:hover,
 .dock--v3 .gbtn:not(.dock__cta):not(.glass-terminal-toggle):hover,
-.builder-tab:not(.glass-terminal-toggle):not(.builder-tab--powers):not(.builder-tab--palette):not(.builder-tab--aletheia):not(.builder-tab--agents):not(.builder-tab--dashboard):not(.builder-tab--active):hover {
+.builder-tab:not(.glass-terminal-toggle):not(.builder-tab--powers):not(.builder-tab--palette):not(.builder-tab--exit-glass):not(.builder-tab--aletheia):not(.builder-tab--agents):not(.builder-tab--storage):not(.builder-tab--dashboard):not(.builder-tab--active):hover {
   background: linear-gradient(
     180deg,
     rgba(255, 255, 255, 0.08) 0%,
@@ -43,7 +43,7 @@
 .glass-btn-depth-1:active,
 .dock--v3 .gbtn.glass-btn-depth-1:active,
 .dock--v3 .gbtn:not(.dock__cta):not(.glass-terminal-toggle):active,
-.builder-tab:not(.glass-terminal-toggle):not(.builder-tab--powers):not(.builder-tab--palette):not(.builder-tab--aletheia):not(.builder-tab--agents):not(.builder-tab--dashboard):not(.builder-tab--active):active {
+.builder-tab:not(.glass-terminal-toggle):not(.builder-tab--powers):not(.builder-tab--palette):not(.builder-tab--exit-glass):not(.builder-tab--aletheia):not(.builder-tab--agents):not(.builder-tab--storage):not(.builder-tab--dashboard):not(.builder-tab--active):active {
   transform: translateY(1px);
   box-shadow:
     0 0 2px rgba(0, 0, 0, 0.4),
@@ -135,7 +135,9 @@
 .dock--v3 .gbtn.dock__cta,
 .builder-tab.builder-tab--powers,
 .builder-tab.builder-tab--palette,
-.builder-tab.builder-tab--agents {
+.builder-tab.builder-tab--exit-glass,
+.builder-tab.builder-tab--agents,
+.builder-tab.builder-tab--storage {
   background: linear-gradient(
     180deg,
     rgba(255, 255, 255, 0.09) 0%,
@@ -157,7 +159,9 @@
 .dock--v3 .gbtn.dock__cta:hover,
 .builder-tab.builder-tab--powers:hover,
 .builder-tab.builder-tab--palette:hover,
-.builder-tab.builder-tab--agents:hover {
+.builder-tab.builder-tab--exit-glass:hover,
+.builder-tab.builder-tab--agents:hover,
+.builder-tab.builder-tab--storage:hover {
   background: linear-gradient(
     180deg,
     rgba(255, 255, 255, 0.14) 0%,
@@ -180,7 +184,9 @@
 .dock--v3 .gbtn.dock__cta:active,
 .builder-tab.builder-tab--powers:active,
 .builder-tab.builder-tab--palette:active,
-.builder-tab.builder-tab--agents:active {
+.builder-tab.builder-tab--exit-glass:active,
+.builder-tab.builder-tab--agents:active,
+.builder-tab.builder-tab--storage:active {
   transform: translateY(1px);
   box-shadow:
     0 0 2px rgba(0, 0, 0, 0.45),
@@ -322,6 +328,63 @@
   color: rgba(224, 231, 255, 0.98);
 }
 
+/* Glass Storage — warm amber folder (level 3) */
+.builder-tab.builder-tab--storage {
+  color: rgba(253, 230, 138, 0.94);
+  background: linear-gradient(
+    180deg,
+    rgba(251, 191, 36, 0.2) 0%,
+    rgba(217, 119, 6, 0.09) 50%,
+    rgba(0, 0, 0, 0.1) 100%
+  ) !important;
+  border: 0.5px solid rgba(251, 191, 36, 0.38) !important;
+  border-top-color: rgba(253, 230, 138, 0.52) !important;
+  border-bottom-color: rgba(0, 0, 0, 0.38) !important;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.55),
+    0 2px 6px rgba(0, 0, 0, 0.28),
+    0 0 12px rgba(251, 191, 36, 0.16),
+    inset 0 1px 0 rgba(253, 230, 138, 0.22),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+}
+
+.builder-tab.builder-tab--storage:hover {
+  color: rgba(254, 243, 199, 0.98);
+  background: linear-gradient(
+    180deg,
+    rgba(251, 191, 36, 0.28) 0%,
+    rgba(217, 119, 6, 0.13) 50%,
+    rgba(0, 0, 0, 0.08) 100%
+  ) !important;
+  border-color: rgba(252, 211, 77, 0.5) !important;
+  border-top-color: rgba(254, 243, 199, 0.64) !important;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.55),
+    0 4px 10px rgba(0, 0, 0, 0.32),
+    0 0 20px rgba(251, 191, 36, 0.28),
+    inset 0 1px 0 rgba(254, 243, 199, 0.28),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.14);
+}
+
+.builder-tab.builder-tab--storage.builder-tab--active,
+.builder-tab.builder-tab--storage.builder-tab--storage-open {
+  color: rgba(255, 251, 235, 0.98);
+  background: linear-gradient(
+    180deg,
+    rgba(251, 191, 36, 0.32) 0%,
+    rgba(180, 83, 9, 0.16) 52%,
+    rgba(0, 0, 0, 0.08) 100%
+  ) !important;
+  border-color: rgba(252, 211, 77, 0.56) !important;
+  border-top-color: rgba(254, 243, 199, 0.72) !important;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.55),
+    0 3px 8px rgba(0, 0, 0, 0.3),
+    0 0 16px rgba(251, 191, 36, 0.24),
+    inset 0 1px 0 rgba(254, 243, 199, 0.3),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.14);
+}
+
 /* Command Palette — cool steel silver (level 3, utility tier) */
 .builder-tab.builder-tab--palette {
   color: rgba(176, 186, 200, 0.88);
@@ -358,6 +421,54 @@
     0 0 14px rgba(100, 116, 139, 0.16),
     inset 0 1px 0 rgba(226, 232, 240, 0.22),
     inset 0 -1px 0 rgba(0, 0, 0, 0.14);
+}
+
+/* Exit Glass — black shell, red type + border (level 3) */
+.builder-tab.builder-tab--exit-glass {
+  color: rgba(252, 120, 120, 0.96);
+  background: linear-gradient(
+    180deg,
+    rgba(18, 14, 16, 0.98) 0%,
+    rgba(8, 6, 8, 0.99) 52%,
+    rgba(0, 0, 0, 0.22) 100%
+  ) !important;
+  border: 0.5px solid rgba(239, 68, 68, 0.58) !important;
+  border-top-color: rgba(248, 113, 113, 0.72) !important;
+  border-bottom-color: rgba(127, 29, 29, 0.62) !important;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.62),
+    0 2px 6px rgba(0, 0, 0, 0.32),
+    0 0 10px rgba(239, 68, 68, 0.1),
+    inset 0 1px 0 rgba(248, 113, 113, 0.14),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.24);
+}
+
+.builder-tab.builder-tab--exit-glass:hover {
+  color: rgba(254, 202, 202, 1);
+  background: linear-gradient(
+    180deg,
+    rgba(40, 16, 18, 0.98) 0%,
+    rgba(22, 10, 12, 0.99) 52%,
+    rgba(0, 0, 0, 0.18) 100%
+  ) !important;
+  border-color: rgba(248, 113, 113, 0.82) !important;
+  border-top-color: rgba(252, 165, 165, 0.9) !important;
+  border-bottom-color: rgba(153, 27, 27, 0.55) !important;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.62),
+    0 4px 10px rgba(0, 0, 0, 0.36),
+    0 0 18px rgba(239, 68, 68, 0.22),
+    inset 0 1px 0 rgba(252, 165, 165, 0.2),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.16);
+}
+
+.builder-tab.builder-tab--exit-glass:active {
+  transform: translateY(1px);
+  box-shadow:
+    0 0 2px rgba(0, 0, 0, 0.45),
+    0 0 12px rgba(239, 68, 68, 0.14),
+    inset 0 2px 5px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(248, 113, 113, 0.1) !important;
 }
 
 /* Dashboard — white LED apex (level 3, slightly larger) */

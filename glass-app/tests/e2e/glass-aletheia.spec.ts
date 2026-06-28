@@ -148,19 +148,46 @@ test.describe("IIVO Glass Aletheia", () => {
     await dwell();
   });
 
+  test("Aletheia strip opens menu before dashboard", async () => {
+    const { overlay, command } = await getGlassWindows(app.browser);
+
+    await overlay.evaluate(() => window.glass.openAletheiaDashboard());
+    await waitForAletheiaDashboard(overlay);
+
+    await clickOverlayTestId(overlay, "glass-companion-toggle");
+    await expect(overlay.locator('[data-testid="aletheia-strip-menu"]')).toBeVisible();
+    await expect(overlay.locator('[data-testid="aletheia-dashboard-shell"]')).toHaveClass(/hidden/);
+
+    await expect
+      .poll(async () => (await readGlassState(command)).aletheiaDashboardActive !== true)
+      .toBe(true);
+    await dwell();
+  });
+
   test("Aletheia dashboard opens with trust panels", async () => {
     const { overlay, command } = await getGlassWindows(app.browser);
 
     await openAletheiaDashboardViaMenu(overlay);
 
-    await expect(overlay.locator('[data-testid="aletheia-dashboard-permissions"]')).toBeVisible();
+    await expect(overlay.locator('[data-testid="aletheia-dashboard-nav-overview"]')).toBeVisible();
     await expect(overlay.locator('[data-testid="aletheia-dashboard-observation"]')).toBeVisible();
+
+    await clickOverlayTestId(overlay, "aletheia-dashboard-nav-trust");
+    await expect(overlay.locator('[data-testid="aletheia-dashboard-permissions"]')).toBeVisible();
+
+    await clickOverlayTestId(overlay, "aletheia-dashboard-nav-command");
     await expect(overlay.locator('[data-testid="aletheia-dashboard-pending-advice"]')).toBeVisible();
     await expect(overlay.locator('[data-testid="aletheia-dashboard-action-confirmation"]')).toBeVisible();
     await expect(overlay.locator('[data-testid="aletheia-dashboard-bounded-loop"]')).toBeVisible();
+
+    await clickOverlayTestId(overlay, "aletheia-dashboard-nav-systems");
     await expect(overlay.locator('[data-testid="aletheia-dashboard-services"]')).toBeVisible();
     await expect(overlay.locator('[data-testid="aletheia-dashboard-dependencies"]')).toBeVisible();
+
+    await clickOverlayTestId(overlay, "aletheia-dashboard-nav-presence");
     await expect(overlay.locator('[data-testid="aletheia-dashboard-privacy"]')).toBeVisible();
+
+    await clickOverlayTestId(overlay, "aletheia-dashboard-nav-sessions");
     await expect(overlay.locator('[data-testid="aletheia-dashboard-sessions"]')).toBeVisible();
     await expect(overlay.locator('[data-testid="aletheia-dashboard-memory"]')).toBeVisible();
 
@@ -215,6 +242,7 @@ test.describe("IIVO Glass Aletheia", () => {
     });
     await waitForAletheiaDashboard(overlay);
 
+    await clickOverlayTestId(overlay, "aletheia-dashboard-nav-presence");
     await clickOverlayTestId(overlay, "aletheia-dashboard-privacy-start");
 
     await expect

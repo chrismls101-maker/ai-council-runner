@@ -30,21 +30,29 @@ function sanitizeUnknownArg(arg: unknown): unknown {
 function patchStreamWrite(stream: NodeJS.WriteStream, sanitizer: (chunk: string) => string): void {
   const originalWrite = stream.write.bind(stream);
   stream.write = ((chunk: unknown, encoding?: unknown, callback?: unknown) => {
-    if (typeof chunk === "string") {
-      return originalWrite(sanitizer(chunk), encoding as BufferEncoding, callback as (() => void) | undefined);
-    }
-    if (Buffer.isBuffer(chunk)) {
-      const text = chunk.toString("utf8");
-      const sanitized = sanitizer(text);
-      if (sanitized !== text) {
-        return originalWrite(
-          Buffer.from(sanitized, "utf8"),
-          encoding as BufferEncoding,
-          callback as (() => void) | undefined,
-        );
+    try {
+      if (typeof chunk === "string") {
+        return originalWrite(sanitizer(chunk), encoding as BufferEncoding, callback as (() => void) | undefined);
       }
+      if (Buffer.isBuffer(chunk)) {
+        const text = chunk.toString("utf8");
+        const sanitized = sanitizer(text);
+        if (sanitized !== text) {
+          return originalWrite(
+            Buffer.from(sanitized, "utf8"),
+            encoding as BufferEncoding,
+            callback as (() => void) | undefined,
+          );
+        }
+      }
+      return originalWrite(chunk as never, encoding as never, callback as never);
+    } catch (err) {
+      // EIO / EPIPE: stdout/stderr pipe closed (terminal disconnect in electron-vite dev).
+      // Swallow silently — crashing the main process over a broken log pipe is far worse.
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === "EIO" || code === "EPIPE") return true;
+      throw err;
     }
-    return originalWrite(chunk as never, encoding as never, callback as never);
   }) as typeof stream.write;
 }
 

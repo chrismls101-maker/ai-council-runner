@@ -13,6 +13,7 @@ import { CommandLensIcon } from "./CommandLensIcon.tsx";
 import { CommandDesignIcon } from "./CommandDesignIcon.tsx";
 import { GlassHoverTooltip } from "../components/GlassHoverTooltip.tsx";
 import { GlassAwarenessStrip } from "./GlassAwarenessStrip.tsx";
+import { isComputerOperatorLiveUiSurface, resolveComputerOperatorGlowPhase } from "../../shared/aletheiaComputerOperatorPresence.ts";
 import type { TranscriptionMode } from "../../shared/audioCaptureTypes.ts";
 import { useVoiceMode } from "../useVoiceMode.ts";
 import {
@@ -29,6 +30,7 @@ import { buildTranslateStartPatch, DEFAULT_LIVE_TRANSLATE_CONFIG } from "../../s
 import type { LiveTranslateTargetLanguage } from "../../shared/liveTranslateTypes.ts";
 import type { GlassLensContext } from "../../shared/glassLensContext.ts";
 import { lensContextHostname } from "../../shared/glassLensContext.ts";
+import { ensureAletheiaDispatchRegistered } from "../aletheia/registerAletheiaDispatch.ts";
 
 /**
  * Bottom-centered Glass command bar. Direct ask renders inline on the overlay;
@@ -371,6 +373,22 @@ export function CommandBar(): JSX.Element {
       state.screenContextStatus.label
     ) : null;
 
+  const computerOperator = state.aletheiaComputerOperator;
+  const useComputerForNextTask = state.aletheiaUseComputerForNextTask === true;
+  const computerOperatorConversationLive = isComputerOperatorLiveUiSurface(
+    computerOperator,
+    "conversation",
+  );
+  const computerOperatorGlow = resolveComputerOperatorGlowPhase(computerOperator?.phase);
+  const computerOperatorToggleRunning =
+    computerOperatorConversationLive && computerOperatorGlow === "running";
+  const computerOperatorTogglePaused =
+    computerOperatorConversationLive && computerOperatorGlow === "paused";
+
+  useEffect(() => {
+    ensureAletheiaDispatchRegistered();
+  }, []);
+
   const hasAccessories = Boolean(
     state.workingContext ||
       state.activeApp ||
@@ -612,6 +630,39 @@ export function CommandBar(): JSX.Element {
               className="command-input-stack"
               onPointerDownCapture={prepareGlassTextPointerDown}
             >
+              {state.companionModeActive ? (
+                <GlassHoverTooltip label="Use computer for this task — biases Aletheia toward Mac actions">
+                  <button
+                    type="button"
+                    data-testid="aletheia-use-computer-toggle"
+                    className={`command-computer-toggle${useComputerForNextTask ? " command-computer-toggle--on" : ""}${computerOperatorToggleRunning ? " command-computer-toggle--live-running" : ""}${computerOperatorTogglePaused ? " command-computer-toggle--live-paused" : ""}`}
+                    aria-label={
+                      computerOperatorToggleRunning
+                        ? "Computer operator running"
+                        : computerOperatorTogglePaused
+                          ? "Computer operator paused"
+                          : useComputerForNextTask
+                            ? "Use computer for this task — on"
+                            : "Use computer for this task"
+                    }
+                    aria-pressed={
+                      useComputerForNextTask
+                      || computerOperatorToggleRunning
+                      || computerOperatorTogglePaused
+                    }
+                    onClick={() =>
+                      send({
+                        type: "set-aletheia-use-computer-for-next-task",
+                        enabled: !useComputerForNextTask,
+                      })
+                    }
+                    onPointerDown={ensureCommandBarClickable}
+                    onMouseEnter={ensureCommandBarClickable}
+                  >
+                    Computer
+                  </button>
+                </GlassHoverTooltip>
+              ) : null}
               <input
                 ref={inputRef}
                 data-testid="glass-command-input"

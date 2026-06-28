@@ -99,6 +99,7 @@ function useGlassCompanionSession(): GlassCompanionController {
   const thinkingSpeechSentRef = useRef(false);
   const lastWarmupSpeakNonceRef = useRef(0);
   const lastAdviceSpeakNonceRef = useRef(0);
+  const lastEphemeralSpeakNonceRef = useRef(0);
   const machineAudioDisclosureSpokenRef = useRef(false);
   const pendingMachineAudioDisclosureRef = useRef(false);
   const prevSystemAudioActiveRef = useRef(false);
@@ -450,6 +451,22 @@ function useGlassCompanionSession(): GlassCompanionController {
     lastTtsTextRef.current = payload.text;
     void speakTracked(payload.text).finally(() => setSpeaking(false));
   }, [companionActive, state.active, glass.aletheiaAdviceSpeak, speakTracked]);
+
+  // Design to Code — Aletheia speaks save handoff without companion toggle.
+  useEffect(() => {
+    const payload = glass.aletheiaEphemeralSpeak;
+    if (!payload?.text || !payload.nonce) return;
+    if (payload.nonce === lastEphemeralSpeakNonceRef.current) return;
+    if (isCompanionNarrationPrivacyBlocked(
+      glass.companionPrivacy?.active === true,
+      privacyPendingRef.current,
+    )) {
+      return;
+    }
+    lastEphemeralSpeakNonceRef.current = payload.nonce;
+    lastTtsTextRef.current = payload.text;
+    void tts.speak(payload.text);
+  }, [glass.aletheiaEphemeralSpeak, glass.companionPrivacy?.active, tts]);
 
   useEffect(() => {
     if (!state.active) return;

@@ -1,0 +1,63 @@
+/* Session panel — matches Settings shell (glassPanelChrome + settings gradient) */
+
+html.glass-panel-window body.glass-body--panel #root {
+  padding: 0;
+}
+
+.glass-panel-app.panel {
+  --glass-panel-frost-solid: rgba(6, 7, 11, 0.98);
+  border-radius: 0;
+  border-left: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: linear-gradient(180deg, rgba(8, 9, 14, 0.99) 0%, rgba(4, 5, 9, 0.99) 100%);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 24px 56px rgba(0, 0, 0, 0.52);
+}
+
+.glass-panel-app.panel::before,
+.glass-panel-app.panel::after {
+  display: none;
+}
+
+.glass-panel-app .panel__shell {
+  flex: 1;
+  min-height: 0;
+}
+
+.glass-panel-app__stage {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.glass-panel-app__page-head {
+  flex-shrink: 0;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.04) 0%,
+    transparent 100%
+  );
+}
+
+.glass-panel-app__page-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: rgba(255, 255, 255, 0.96);
+  line-height: 1.2;
+}
+
+.glass-panel-app__page-body {
+  padding-top: 16px !important;
+}
+
+.glass-panel-app .panel__header .dock__pills {
+  -webkit-app-region: no-drag;
+}

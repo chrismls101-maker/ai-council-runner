@@ -89,6 +89,7 @@ export const IPC = {
   overlayPointerOverExitControl: "glass:overlay-pointer-over-exit-control",
   /** Renderer → main: builder strip panel (Prompts/Keys) open — keep overlay interactive. */
   builderStripPanelOpen: "glass:builder-strip-panel-open",
+  aletheiaStripMenuOpen: "glass:aletheia-strip-menu-open",
   /** Renderer → main: Glass Response Panel open — keep overlay interactive. */
   responsePanelOpen: "glass:response-panel-open",
   /** Renderer → main: Session Copilot overlay card (debrief, diagnostic, offer) visible. */
@@ -122,6 +123,8 @@ export const IPC = {
   hideForCapture: "glass:hide-for-capture",
   restoreAfterCapture: "glass:restore-after-capture",
   deepgramAudioChunk: "glass:deepgram-audio-chunk",
+  /** Renderer → main: primary chrome renderer has React mounted and painted (dev primary mode). */
+  rendererMounted: "glass:renderer-mounted",
   /** Main → renderer: companion privacy timer expired — speak resume line. */
   companionPrivacyResumed: "glass:companion-privacy-resumed",
   /** Main → renderer: Deepgram final transcript for companion mic (diarized). */
@@ -292,6 +295,18 @@ export const IPC = {
   closeWritingStudio: "glass:close-writing-studio",
   /** Renderer → main: Writing Studio mounted — force overlay clicks + focus. */
   writingStudioMounted: "glass:writing-studio-mounted",
+  /** Renderer → main: open Glass Storage Projects full-screen workspace. */
+  openGlassStorageProjects: "glass:open-glass-storage-projects",
+  /** Renderer → main: hide Glass Storage Projects workspace. */
+  closeGlassStorageProjects: "glass:close-glass-storage-projects",
+  /** Renderer → main: Glass Storage Projects mounted — force overlay clicks + focus. */
+  glassStorageProjectsMounted: "glass:glass-storage-projects-mounted",
+  /** Renderer → main: thumbnail data URL for a saved Glass Storage project. */
+  getGlassStorageProjectThumb: "glass:get-glass-storage-project-thumb",
+  /** Renderer → main: full detail for a saved Glass Storage project. */
+  getGlassStorageProjectDetail: "glass:get-glass-storage-project-detail",
+  /** Renderer → main: reveal saved project folder in Finder. */
+  revealGlassStorageProject: "glass:reveal-glass-storage-project",
   /** Main → dashboard renderer: agent bus events for live panels. */
   dashboardAgentEvent: "glass:dashboard-agent-event",
   /** Renderer → main: open Glass Dashboard fullscreen in overlay. */
@@ -1044,6 +1059,31 @@ export type GlassCommand =
   | { type: "continue-aletheia-loop" }
   /** B3.3 — cancel an in-progress delegated loop. */
   | { type: "cancel-aletheia-loop" }
+  /** Computer operator — activate Aletheia, permissions, grant card or auto-run. */
+  | {
+      type: "prepare-aletheia-computer-operator";
+      goal?: string;
+      surface?: import("./aletheiaComputerOperatorLoop.ts").ComputerOperatorEntrySurface;
+    }
+  /** Computer operator — start from conversation goal. */
+  | { type: "start-aletheia-computer-operator"; goal?: string }
+  /** Computer operator — grant bounded session and run loop. */
+  | {
+      type: "grant-aletheia-computer-session";
+      loopId: string;
+      goal?: string;
+      alwaysAllow?: boolean;
+    }
+  /** Computer operator — cancel in-progress operator loop. */
+  | { type: "cancel-aletheia-computer-operator" }
+  /** Computer operator — clear terminal complete/failed snapshot from UI. */
+  | { type: "dismiss-aletheia-computer-operator" }
+  /** Computer operator — revoke a saved always-allow grant. */
+  | { type: "revoke-aletheia-computer-persistent-grant"; grantId: string }
+  /** Aletheia — task-scoped “use computer for this task” routing hint. */
+  | { type: "set-aletheia-use-computer-for-next-task"; enabled: boolean }
+  /** Aletheia — shortcut: enable computer hint, activate if needed, focus command bar. */
+  | { type: "aletheia-use-computer-shortcut" }
   /** B3.4 — follow-up action on an active research conversation thread. */
   | { type: "aletheia-research-follow-up"; action: import("./aletheiaResearchConversation.ts").ResearchFollowUpAction }
   | { type: "add-aletheia-note"; body: string; category?: import("./aletheiaNotes.ts").AletheiaNoteCategory }
@@ -1156,12 +1196,18 @@ export type GlassCommand =
   | { type: "design-capture" }
   /** User clicked one of the 4 quick-action buttons on the design capture card. */
   | { type: "design-generate"; feedItemId: string; action: import("./designToCode.ts").DesignToCodeAction; refinementFeedback?: string }
+  /** Re-run screen capture for an existing design card (preserves stack/action prefs). */
+  | { type: "design-recapture"; feedItemId: string }
+  /** Dismiss low-quality capture warning and proceed with actions. */
+  | { type: "design-ack-quality"; feedItemId: string }
   /** Permission prompt → Allow: read editor file then generate. */
   | { type: "design-grant-file-read"; feedItemId: string; action: import("./designToCode.ts").DesignToCodeAction }
   /** Permission prompt → Skip: generate without codebase context. */
   | { type: "design-skip-file-read"; feedItemId: string; action: import("./designToCode.ts").DesignToCodeAction }
   /** User changed the target framework/stack in the design card picker (#163-F). */
   | { type: "set-design-stack"; stack: import("./designToCode.ts").DesignStack }
+  /** Retry saving a completed Design to Code run to Glass Storage. */
+  | { type: "design-retry-save"; feedItemId: string }
   /** Restore latest .glass-backup-*.bak over the original file (undo apply). */
   | { type: "glass-restore-backup"; feedItemId: string; filePath: string }
   /** Run tsc --noEmit or npm run build in the dock terminal to verify a file write compiled. */
@@ -1296,6 +1342,14 @@ export interface GlassState {
   writingStudioActive?: boolean;
   /** Brief prefilled when opening Writing Studio. */
   writingStudioPrompt?: string;
+  /** Glass Storage Projects — full-screen workspace; hides dock + command bar. */
+  glassStorageProjectsActive?: boolean;
+  /** Saved Glass Storage project records (Design to Code, etc.). */
+  glassStorageProjects?: import("./glassStorageProjectTypes.ts").GlassProjectRecord[];
+  /** Selected project in Projects workspace (detail panel). */
+  glassStorageProjectsSelectedId?: string | null;
+  /** Last Design to Code project id for Aletheia recall bridge. */
+  latestDesignToCodeProjectId?: string | null;
   /** Glass Dashboard — full-screen overlay above builder strip; hides dock + command bar. */
   glassDashboardActive?: boolean;
   /** One-shot nav target when opening the dashboard (cleared after mount). */
@@ -1497,6 +1551,8 @@ export interface GlassState {
   aletheiaPendingAdvice?: import("./aletheiaPendingAdvice.ts").AletheiaPendingAdviceSnapshot;
   /** B2.1 — one-shot companion speech after advice approve/dismiss. */
   aletheiaAdviceSpeak?: { text: string; nonce: number };
+  /** Design to Code — one-shot Aletheia voice without companion toggle. */
+  aletheiaEphemeralSpeak?: { text: string; nonce: number };
   /** B2.3 — bounded autonomy loop scope, audit trail, and summary. */
   aletheiaBoundedLoop?: import("./aletheiaBoundedAutonomy.ts").AletheiaBoundedLoopSnapshot;
   /** B3.1 — live agent coordination activity for council / research / writing routes. */
@@ -1505,6 +1561,10 @@ export interface GlassState {
   aletheiaDelegatedPresence?: import("./aletheiaDelegatedPresence.ts").AletheiaDelegatedPresenceSnapshot;
   /** B3.3 — general delegated loop with live narrative and handoff. */
   aletheiaDelegatedLoop?: import("./aletheiaDelegatedLoop.ts").AletheiaDelegatedLoopSnapshot;
+  /** Conversation-driven computer operator loop (capture → act → verify). */
+  aletheiaComputerOperator?: import("./aletheiaComputerOperatorLoop.ts").AletheiaComputerOperatorSnapshot;
+  /** Saved always-allow computer operator session grants. */
+  aletheiaComputerOperatorGrants?: import("./aletheiaComputerSessionAuthority.ts").ComputerOperatorPersistentGrant[];
   /** B3.4 — web research conversation thread with citations. */
   aletheiaResearchConversation?: import("./aletheiaResearchConversation.ts").AletheiaResearchConversationSnapshot;
   /** B4.1 — persona-aware operating mode for Aletheia companion. */
@@ -1525,21 +1585,7 @@ export interface GlassState {
   aletheiaDeployedExecution?: import("./aletheiaFounderCommandTier.ts").AletheiaDeployedExecutionSnapshot;
   // ── Design-to-Code Bridge (#163) ─────────────────────────────────────────
   /** Active design capture cards keyed by feed item id. */
-  designCaptures?: Record<string, {
-    feedItemId: string;
-    /** data: URL thumbnail of the captured screen. */
-    imageDataUrl: string;
-    /** Editor file detected at capture time. Null if no editor was open. */
-    detectedFile?: { fileName: string; filePath: string | null; language: string } | null;
-    /** Current phase for transparency status display. */
-    phase: "ready" | "permission" | "reading" | "generating" | "done";
-    /** Which action is mid-flight. */
-    pendingAction?: import("./designToCode.ts").DesignToCodeAction;
-    /** Refinement feedback pending through a permission dialog. */
-    pendingRefinementFeedback?: string;
-    /** Human-readable status line shown in the card, e.g. "Reading Button.tsx…" */
-    statusLine?: string;
-  }>;
+  designCaptures?: Record<string, Omit<import("./designToCode.ts").DesignToCodeSession, "id">>;
   /** Build verification status keyed by feed item id (#163). */
   buildVerifications?: Record<string, {
     feedItemId: string;
@@ -1573,6 +1619,8 @@ export interface GlassState {
   companionPresence?: import("./companionGuidance.ts").CompanionGuidancePayload | null;
   /** Phase 4a — session memory for multi-turn Companion routing. */
   companionMemory?: import("./companionSessionMemory.ts").CompanionSessionMemory | null;
+  /** Task-scoped hint: interpret the next request as a Mac computer task when possible. */
+  aletheiaUseComputerForNextTask?: boolean;
   /** Companion privacy mode — Aletheia stays silent until resumeAt. */
   companionPrivacy?: {
     active: boolean;

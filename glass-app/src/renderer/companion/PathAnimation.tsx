@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ScreenRect } from "../../shared/companionGuidance.ts";
+import { AletheiaGhostCursor } from "../shared/AletheiaGhostCursor.tsx";
 
 export function PathAnimation({
   from,
@@ -39,11 +40,11 @@ export function PathAnimation({
       >
         <line x1={x1} y1={y1} x2={x2} y2={y2} className="companion-presence__path-line" />
       </svg>
-      <div
-        className="companion-presence__path-dot"
-        style={{ left: `${cx}px`, top: `${cy}px` }}
-        data-testid="companion-path-dot"
-        aria-hidden="true"
+      <AletheiaGhostCursor
+        x={cx}
+        y={cy}
+        phase={progress >= 0.98 ? "click" : "approach"}
+        testId="companion-path-dot"
       />
     </>
   );

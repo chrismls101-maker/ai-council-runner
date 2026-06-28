@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Mic, MicOff, Shield, Sparkles } from "lucide-react";
+import { Mic, MicOff, Eye, History, LayoutGrid, Server, Shield, Sparkles, Zap } from "lucide-react";
 import type { GlassCapabilityRow } from "../../shared/glassCapabilities.ts";
 import type { GlassState, MessageRow, SessionRowWithMeta } from "../../shared/ipc.ts";
 import { formatRelativeTime } from "../../shared/relativeTime.ts";
@@ -35,6 +35,11 @@ import type { SidecarServiceRow } from "../../shared/aletheiaSidecarManager.ts";
 import type { DependencyRow } from "../../shared/aletheiaDependencyManifest.ts";
 import { useGlassState } from "../useGlassState.ts";
 import { dispatchAletheiaCommand } from "../../shared/aletheiaAuthority.ts";
+import {
+  computerOperatorLiveProgressLocation,
+  isComputerOperatorActivePhase,
+  isComputerOperatorLiveUiSurface,
+} from "../../shared/aletheiaComputerOperatorPresence.ts";
 import { ensureAletheiaDispatchRegistered } from "../aletheia/registerAletheiaDispatch.ts";
 import { useGlassCompanion } from "../companion/GlassCompanionProvider.tsx";
 import { GlassHoverTooltip } from "../components/GlassHoverTooltip.tsx";
@@ -46,11 +51,22 @@ type AletheiaDashboardProps = {
   onClose?: () => void;
 };
 
+type AletheiaDashboardNav =
+  | "overview"
+  | "command"
+  | "presence"
+  | "observation"
+  | "trust"
+  | "sessions"
+  | "systems"
+  | "computer";
+
 const PRIVACY_DEFAULT_MS = 10 * 60 * 1000;
 
 export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboardProps): JSX.Element {
   const glassState = useGlassState();
   const companion = useGlassCompanion();
+  const [activeNav, setActiveNav] = useState<AletheiaDashboardNav>("overview");
 
   useEffect(() => {
     ensureAletheiaDispatchRegistered();
@@ -64,6 +80,27 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
       document.body.classList.remove("glass-body--workspace-active");
     };
   }, [visible]);
+
+  useEffect(() => {
+    const onNav = (event: Event): void => {
+      const nav = (event as CustomEvent<string>).detail;
+      const allowed: AletheiaDashboardNav[] = [
+        "overview",
+        "command",
+        "presence",
+        "observation",
+        "trust",
+        "sessions",
+        "systems",
+        "computer",
+      ];
+      if (allowed.includes(nav as AletheiaDashboardNav)) {
+        setActiveNav(nav as AletheiaDashboardNav);
+      }
+    };
+    window.addEventListener("aletheia-dashboard-nav", onNav);
+    return () => window.removeEventListener("aletheia-dashboard-nav", onNav);
+  }, []);
 
   const companionActive = glassState.companionModeActive === true;
   const privacyActive = glassState.companionPrivacy?.active === true;
@@ -158,6 +195,7 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
   const agentActivity = glassState.aletheiaAgentActivity;
   const delegatedPresence = glassState.aletheiaDelegatedPresence;
   const delegatedLoop = glassState.aletheiaDelegatedLoop;
+  const computerOperator = glassState.aletheiaComputerOperator;
   const researchConversation = glassState.aletheiaResearchConversation;
   const aletheiaNotes = glassState.aletheiaNotes;
   const attentionRecovery = glassState.aletheiaAttentionRecovery;
@@ -213,6 +251,28 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
     dispatchAletheiaCommand("cancel-aletheia-loop");
   }, []);
 
+  const handleGrantComputerSession = useCallback((loopId: string, goal?: string): void => {
+    dispatchAletheiaCommand("grant-aletheia-computer-session", {
+      loopId,
+      ...(goal?.trim() ? { goal: goal.trim() } : {}),
+    });
+  }, []);
+
+  const handleCancelComputerOperator = useCallback((): void => {
+    dispatchAletheiaCommand("cancel-aletheia-computer-operator");
+  }, []);
+
+  const handlePrepareComputerOperator = useCallback((goal?: string): void => {
+    dispatchAletheiaCommand("prepare-aletheia-computer-operator", {
+      ...(goal?.trim() ? { goal: goal.trim() } : {}),
+      surface: "dashboard",
+    });
+  }, []);
+
+  const handleRevokeComputerGrant = useCallback((grantId: string): void => {
+    dispatchAletheiaCommand("revoke-aletheia-computer-persistent-grant", { grantId });
+  }, []);
+
   const handleResearchFollowUp = useCallback((action: import("../../shared/aletheiaResearchConversation.ts").ResearchFollowUpAction): void => {
     dispatchAletheiaCommand("aletheia-research-follow-up", { action });
   }, []);
@@ -228,6 +288,454 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
   const handleDeleteNote = useCallback((noteId: string): void => {
     dispatchAletheiaCommand("delete-aletheia-note", { noteId });
   }, []);
+
+  const navItems: Array<{
+    id: AletheiaDashboardNav;
+    label: string;
+    tooltip: string;
+    icon: JSX.Element;
+  }> = [
+    {
+      id: "overview",
+      label: "Overview",
+      tooltip: "Status & command",
+      icon: <LayoutGrid size={20} strokeWidth={2} aria-hidden="true" />,
+    },
+    {
+      id: "command",
+      label: "Command",
+      tooltip: "Actions & pipelines",
+      icon: <Zap size={20} strokeWidth={2} aria-hidden="true" />,
+    },
+    {
+      id: "presence",
+      label: "Presence",
+      tooltip: "Voice & persona",
+      icon: <Sparkles size={20} strokeWidth={2} aria-hidden="true" />,
+    },
+    {
+      id: "observation",
+      label: "Observation",
+      tooltip: "Signals & synthesis",
+      icon: <Eye size={20} strokeWidth={2} aria-hidden="true" />,
+    },
+    {
+      id: "trust",
+      label: "Trust",
+      tooltip: "Permissions & security",
+      icon: <Shield size={20} strokeWidth={2} aria-hidden="true" />,
+    },
+    {
+      id: "sessions",
+      label: "Sessions",
+      tooltip: "History & memory",
+      icon: <History size={20} strokeWidth={2} aria-hidden="true" />,
+    },
+    {
+      id: "systems",
+      label: "Systems",
+      tooltip: "Services & dependencies",
+      icon: <Server size={20} strokeWidth={2} aria-hidden="true" />,
+    },
+  ];
+
+  const activeNavLabel =
+    activeNav === "computer"
+      ? "Computer"
+      : navItems.find((item) => item.id === activeNav)?.label ?? "Overview";
+
+  const renderAlerts = (): JSX.Element => (
+    <>
+      {serverDegraded ? (
+        <div className="aletheia-dashboard__degraded" data-testid="aletheia-dashboard-server-degraded">
+          <p className="aletheia-dashboard__degraded-label">Server offline</p>
+          <p className="aletheia-dashboard__degraded-detail">{serverDegraded}</p>
+        </div>
+      ) : null}
+
+      {permissionAlert ? (
+        <div className="aletheia-dashboard__degraded" data-testid="aletheia-dashboard-permission-alert">
+          <p className="aletheia-dashboard__degraded-label">Permission changed</p>
+          <p className="aletheia-dashboard__degraded-detail">{permissionAlert.message}</p>
+          <button
+            type="button"
+            className="aletheia-dashboard__secondary-btn"
+            data-testid="aletheia-dashboard-permission-alert-dismiss"
+            onClick={handleDismissPermissionAlert}
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
+
+      {permissionPlane?.degraded && !permissionAlert ? (
+        <div
+          className="aletheia-dashboard__degraded aletheia-dashboard__degraded--warn"
+          data-testid="aletheia-dashboard-permission-degraded"
+        >
+          <p className="aletheia-dashboard__degraded-label">
+            Operating mode · {permissionPlane.authorityTier.replace(/_/g, " ")}
+          </p>
+          <p className="aletheia-dashboard__degraded-detail">
+            {permissionPlane.degradedSummary ?? "Some capabilities are limited."}
+          </p>
+        </div>
+      ) : null}
+
+      {dependencyManifest && !dependencyManifest.bootstrapComplete ? (
+        <div
+          className="aletheia-dashboard__degraded aletheia-dashboard__degraded--warn"
+          data-testid="aletheia-dashboard-bootstrap-incomplete"
+        >
+          <p className="aletheia-dashboard__degraded-label">Bootstrap incomplete</p>
+          <p className="aletheia-dashboard__degraded-detail">{dependencyManifest.aletheiaNarration}</p>
+          <button
+            type="button"
+            className="aletheia-dashboard__secondary-btn"
+            data-testid="aletheia-dashboard-run-bootstrap"
+            onClick={handleRunBootstrap}
+          >
+            Re-check dependencies
+          </button>
+        </div>
+      ) : null}
+
+      {sidecarAlert ? (
+        <div className="aletheia-dashboard__degraded" data-testid="aletheia-dashboard-sidecar-alert">
+          <p className="aletheia-dashboard__degraded-label">Service changed</p>
+          <p className="aletheia-dashboard__degraded-detail">{sidecarAlert.message}</p>
+          <button
+            type="button"
+            className="aletheia-dashboard__secondary-btn"
+            data-testid="aletheia-dashboard-sidecar-alert-dismiss"
+            onClick={handleDismissSidecarAlert}
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
+
+      {sidecarPlane?.degraded && !sidecarAlert && sidecarPlane.degradedSummary ? (
+        <div
+          className="aletheia-dashboard__degraded aletheia-dashboard__degraded--warn"
+          data-testid="aletheia-dashboard-sidecar-degraded"
+        >
+          <p className="aletheia-dashboard__degraded-label">Local services</p>
+          <p className="aletheia-dashboard__degraded-detail">{sidecarPlane.degradedSummary}</p>
+        </div>
+      ) : null}
+    </>
+  );
+
+  const renderNavContent = (): JSX.Element => {
+    if (activeNav === "overview") {
+      return (
+        <div className="aletheia-dashboard__overview">
+          <section
+            className="aletheia-dashboard__overview-hero"
+            data-testid="aletheia-dashboard-hero"
+          >
+            <div className="aletheia-dashboard__overview-orb" aria-hidden="true">
+              <span
+                className={`aletheia-dashboard__overview-orb-core${companionActive ? " aletheia-dashboard__overview-orb-core--live" : ""}${companion.speaking ? " aletheia-dashboard__overview-orb-core--speaking" : ""}`}
+              />
+              <span className="aletheia-dashboard__overview-orb-ring" />
+            </div>
+            <div className="aletheia-dashboard__overview-hero-body">
+              <p className="aletheia-dashboard__overview-kicker">Aletheia · truth engine</p>
+              <h2 className="aletheia-dashboard__overview-title">{statusLabel}</h2>
+              <p className="aletheia-dashboard__overview-context">
+                {glassState.activeApp
+                  ? `Watching ${glassState.activeApp}`
+                  : "Presence idle — activate to begin"}
+                {companionActive ? ` · ${operatingModeLabel(personaBehavior.operatingMode)}` : ""}
+              </p>
+            </div>
+            <div className="aletheia-dashboard__overview-hero-actions">
+              {!companionActive ? (
+                <button
+                  type="button"
+                  className="aletheia-dashboard__activate"
+                  data-testid="aletheia-dashboard-activate"
+                  onClick={handleActivate}
+                >
+                  <Mic size={14} strokeWidth={2} aria-hidden="true" />
+                  Activate
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="aletheia-dashboard__deactivate"
+                  data-testid="aletheia-dashboard-deactivate"
+                  onClick={handleDeactivate}
+                >
+                  <MicOff size={14} strokeWidth={2} aria-hidden="true" />
+                  Deactivate
+                </button>
+              )}
+            </div>
+          </section>
+
+          <div className="aletheia-dashboard__bento">
+            <div className="aletheia-dashboard__bento-cell aletheia-dashboard__bento-cell--notes">
+              <AletheiaNotesPanel
+                companionActive={companionActive}
+                notes={aletheiaNotes?.notes ?? []}
+                featured
+                onAdd={handleAddNote}
+                onUpdate={handleUpdateNote}
+                onDelete={handleDeleteNote}
+              />
+            </div>
+            <div className="aletheia-dashboard__bento-cell aletheia-dashboard__bento-cell--presence">
+              <PresencePanel
+                companionActive={companionActive}
+                privacyActive={privacyActive}
+                speaking={companion.speaking}
+                activeApp={glassState.activeApp}
+                hasPresence={Boolean(glassState.companionPresence)}
+                warmupPhase={glassState.companionWarmupPhase ?? "none"}
+              />
+            </div>
+            <div className="aletheia-dashboard__bento-cell aletheia-dashboard__bento-cell--observation">
+              <ObservationPanel
+                observationPlane={observationPlane}
+                activation={activation}
+                ambientSynthesis={ambientSynthesis}
+                companionActive={companionActive}
+              />
+            </div>
+            <div className="aletheia-dashboard__bento-cell aletheia-dashboard__bento-cell--voice">
+              <VoiceSessionPanel
+                visible={visible}
+                companionActive={companionActive}
+                liveTranscript={companion.liveTranscript}
+                lastPrompt={glassState.companionMemory?.lastPrompt}
+                frontApp={glassState.companionMemory?.frontApp ?? glassState.activeApp}
+              />
+            </div>
+            <div className="aletheia-dashboard__bento-cell aletheia-dashboard__bento-cell--advice">
+              <PendingAdvicePanel
+                companionActive={companionActive}
+                pendingAdvice={pendingAdvice}
+                onApprove={handleApproveAdvice}
+                onDismiss={handleDismissAdvice}
+              />
+            </div>
+            <div className="aletheia-dashboard__bento-cell aletheia-dashboard__bento-cell--confirm">
+              <ActionConfirmationPanel
+                companionActive={companionActive}
+                actionPipeline={actionPipeline}
+                onConfirm={handleConfirmAction}
+                onReject={handleRejectAction}
+                onModify={handleModifyAction}
+              />
+            </div>
+            <div className="aletheia-dashboard__bento-cell aletheia-dashboard__bento-cell--permissions">
+              <PermissionsPanel
+                permissionPlane={permissionPlane}
+                capabilities={glassState.setupCapabilities ?? []}
+                consentState={glassState.consentState}
+                systemAudioStatus={glassState.systemAudioStatus}
+                onOpenSetup={handleOpenGlassSetup}
+              />
+            </div>
+            <div className="aletheia-dashboard__bento-cell aletheia-dashboard__bento-cell--services">
+              <ServicesPanel sidecarPlane={sidecarPlane} />
+            </div>
+            <div className="aletheia-dashboard__bento-cell aletheia-dashboard__bento-cell--trust">
+              <TrustActivityPanel
+                companionActive={companionActive}
+                trustActivity={trustActivity}
+              />
+            </div>
+            <div className="aletheia-dashboard__bento-cell aletheia-dashboard__bento-cell--security">
+              <SecurityHivePanel
+                securityHive={securityHive}
+                onDismissContainment={handleDismissSecurityContainment}
+              />
+            </div>
+            <div className="aletheia-dashboard__bento-cell aletheia-dashboard__bento-cell--persona">
+              <PersonaBehaviorPanel
+                companionActive={companionActive}
+                personaBehavior={personaBehavior}
+                persona={glassState.persona}
+              />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (activeNav === "command") {
+      return (
+        <div className="aletheia-dashboard__grid">
+          {founderAccount ? (
+            <FounderCommandTierPanel
+              companionActive={companionActive}
+              deployedExecution={deployedExecution}
+              onInvoke={handleInvokeDeployedExecution}
+              onDeactivate={handleDeactivateDeployedExecution}
+            />
+          ) : null}
+          <PendingAdvicePanel
+            companionActive={companionActive}
+            pendingAdvice={pendingAdvice}
+            onApprove={handleApproveAdvice}
+            onDismiss={handleDismissAdvice}
+          />
+          <ActionConfirmationPanel
+            companionActive={companionActive}
+            actionPipeline={actionPipeline}
+            onConfirm={handleConfirmAction}
+            onReject={handleRejectAction}
+            onModify={handleModifyAction}
+          />
+          <BoundedLoopPanel companionActive={companionActive} boundedLoop={boundedLoop} />
+          <AgentActivityPanel
+            companionActive={companionActive}
+            agentActivity={agentActivity}
+          />
+          <DelegatedPresencePanel
+            companionActive={companionActive}
+            delegatedPresence={delegatedPresence}
+          />
+          <LoopNarrativePanel
+            companionActive={companionActive}
+            delegatedLoop={delegatedLoop}
+            onContinue={handleContinueLoop}
+            onCancel={handleCancelLoop}
+          />
+        </div>
+      );
+    }
+
+    if (activeNav === "presence") {
+      return (
+        <div className="aletheia-dashboard__grid">
+          <PersonaBehaviorPanel
+            companionActive={companionActive}
+            personaBehavior={personaBehavior}
+            persona={glassState.persona}
+          />
+          <DisplayAwarenessPanel
+            companionActive={companionActive}
+            awareness={displayAwareness}
+            connectedDisplays={glassState.connectedDisplays}
+          />
+          <RelationshipThreadPanel
+            companionActive={companionActive}
+            thread={relationshipThread}
+          />
+          <PrivacyPanel
+            companionActive={companionActive}
+            privacy={glassState.companionPrivacy}
+            onStart={handlePrivacyStart}
+            onEnd={handlePrivacyEnd}
+          />
+          <VoiceSessionPanel
+            visible={visible}
+            companionActive={companionActive}
+            liveTranscript={companion.liveTranscript}
+            lastPrompt={glassState.companionMemory?.lastPrompt}
+            frontApp={glassState.companionMemory?.frontApp ?? glassState.activeApp}
+          />
+        </div>
+      );
+    }
+
+    if (activeNav === "observation") {
+      return (
+        <div className="aletheia-dashboard__grid">
+          <ObservationPanel
+            observationPlane={observationPlane}
+            activation={activation}
+            ambientSynthesis={ambientSynthesis}
+            companionActive={companionActive}
+          />
+          <AttentionRecoveryPanel
+            companionActive={companionActive}
+            recovery={attentionRecovery}
+          />
+          <ResearchConversationPanel
+            companionActive={companionActive}
+            researchConversation={researchConversation}
+            onFollowUp={handleResearchFollowUp}
+          />
+        </div>
+      );
+    }
+
+    if (activeNav === "trust") {
+      return (
+        <div className="aletheia-dashboard__grid">
+          <PermissionsPanel
+            permissionPlane={permissionPlane}
+            capabilities={glassState.setupCapabilities ?? []}
+            consentState={glassState.consentState}
+            systemAudioStatus={glassState.systemAudioStatus}
+            onOpenSetup={handleOpenGlassSetup}
+          />
+          <TrustActivityPanel
+            companionActive={companionActive}
+            trustActivity={trustActivity}
+          />
+          <SecurityHivePanel
+            securityHive={securityHive}
+            onDismissContainment={handleDismissSecurityContainment}
+          />
+        </div>
+      );
+    }
+
+    if (activeNav === "sessions") {
+      return (
+        <div className="aletheia-dashboard__grid">
+          <VoiceSessionPanel
+            visible={visible}
+            companionActive={companionActive}
+            liveTranscript={companion.liveTranscript}
+            lastPrompt={glassState.companionMemory?.lastPrompt}
+            frontApp={glassState.companionMemory?.frontApp ?? glassState.activeApp}
+          />
+          <MemoryPanel onOpenGlassMemory={handleOpenGlassMemory} />
+        </div>
+      );
+    }
+
+    if (activeNav === "computer") {
+      return (
+        <ComputerOperatorPanel
+          companionActive={companionActive}
+          computerOperator={computerOperator}
+          persistentGrants={glassState.aletheiaComputerOperatorGrants ?? []}
+          lastPrompt={glassState.companionMemory?.lastPrompt}
+          onGrantSession={handleGrantComputerSession}
+          onCancel={handleCancelComputerOperator}
+          onPrepare={handlePrepareComputerOperator}
+          onRevokeGrant={handleRevokeComputerGrant}
+        />
+      );
+    }
+
+    return (
+      <div className="aletheia-dashboard__grid">
+        <ServicesPanel sidecarPlane={sidecarPlane} />
+        <DependenciesPanel
+          manifest={dependencyManifest}
+          onRunBootstrap={handleRunBootstrap}
+          onOpenSetup={handleOpenGlassSetup}
+        />
+        <AletheiaNotesPanel
+          companionActive={companionActive}
+          notes={aletheiaNotes?.notes ?? []}
+          onAdd={handleAddNote}
+          onUpdate={handleUpdateNote}
+          onDelete={handleDeleteNote}
+        />
+      </div>
+    );
+  };
 
   return (
     <div
@@ -267,231 +775,30 @@ export function AletheiaDashboard({ visible = true, onClose }: AletheiaDashboard
         </header>
 
         <div className="aletheia-dashboard__body">
-          {serverDegraded ? (
-            <div className="aletheia-dashboard__degraded" data-testid="aletheia-dashboard-server-degraded">
-              <p className="aletheia-dashboard__degraded-label">Server offline</p>
-              <p className="aletheia-dashboard__degraded-detail">{serverDegraded}</p>
-            </div>
-          ) : null}
-
-          {permissionAlert ? (
-            <div className="aletheia-dashboard__degraded" data-testid="aletheia-dashboard-permission-alert">
-              <p className="aletheia-dashboard__degraded-label">Permission changed</p>
-              <p className="aletheia-dashboard__degraded-detail">{permissionAlert.message}</p>
-              <button
-                type="button"
-                className="aletheia-dashboard__secondary-btn"
-                data-testid="aletheia-dashboard-permission-alert-dismiss"
-                onClick={handleDismissPermissionAlert}
-              >
-                Dismiss
-              </button>
-            </div>
-          ) : null}
-
-          {permissionPlane?.degraded && !permissionAlert ? (
-            <div className="aletheia-dashboard__degraded aletheia-dashboard__degraded--warn" data-testid="aletheia-dashboard-permission-degraded">
-              <p className="aletheia-dashboard__degraded-label">
-                Operating mode · {permissionPlane.authorityTier.replace(/_/g, " ")}
-              </p>
-              <p className="aletheia-dashboard__degraded-detail">
-                {permissionPlane.degradedSummary ?? "Some capabilities are limited."}
-              </p>
-            </div>
-          ) : null}
-
-          {dependencyManifest && !dependencyManifest.bootstrapComplete ? (
-            <div
-              className="aletheia-dashboard__degraded aletheia-dashboard__degraded--warn"
-              data-testid="aletheia-dashboard-bootstrap-incomplete"
-            >
-              <p className="aletheia-dashboard__degraded-label">Bootstrap incomplete</p>
-              <p className="aletheia-dashboard__degraded-detail">{dependencyManifest.aletheiaNarration}</p>
-              <button
-                type="button"
-                className="aletheia-dashboard__secondary-btn"
-                data-testid="aletheia-dashboard-run-bootstrap"
-                onClick={handleRunBootstrap}
-              >
-                Re-check dependencies
-              </button>
-            </div>
-          ) : null}
-
-          {sidecarAlert ? (
-            <div className="aletheia-dashboard__degraded" data-testid="aletheia-dashboard-sidecar-alert">
-              <p className="aletheia-dashboard__degraded-label">Service changed</p>
-              <p className="aletheia-dashboard__degraded-detail">{sidecarAlert.message}</p>
-              <button
-                type="button"
-                className="aletheia-dashboard__secondary-btn"
-                data-testid="aletheia-dashboard-sidecar-alert-dismiss"
-                onClick={handleDismissSidecarAlert}
-              >
-                Dismiss
-              </button>
-            </div>
-          ) : null}
-
-          {sidecarPlane?.degraded && !sidecarAlert && sidecarPlane.degradedSummary ? (
-            <div
-              className="aletheia-dashboard__degraded aletheia-dashboard__degraded--warn"
-              data-testid="aletheia-dashboard-sidecar-degraded"
-            >
-              <p className="aletheia-dashboard__degraded-label">Local services</p>
-              <p className="aletheia-dashboard__degraded-detail">{sidecarPlane.degradedSummary}</p>
-            </div>
-          ) : null}
-
-          <section className="aletheia-dashboard__hero" data-testid="aletheia-dashboard-hero">
-            <p className="aletheia-dashboard__eyebrow">Aletheia control surface</p>
-            <h2 className="aletheia-dashboard__headline">Presence, voice, and trust</h2>
-            <p className="aletheia-dashboard__lede">
-              Aletheia listens when you activate her and stays silent when you turn her off.
-              Durable memory and system setup live in the Glass System dashboard.
-            </p>
-            <div className="aletheia-dashboard__hero-actions">
-              {!companionActive ? (
+          <nav className="aletheia-dashboard__nav" aria-label="Aletheia dashboard navigation">
+            {navItems.map((item) => (
+              <GlassHoverTooltip key={item.id} label={item.tooltip} placement="right">
                 <button
                   type="button"
-                  className="aletheia-dashboard__activate"
-                  data-testid="aletheia-dashboard-activate"
-                  onClick={handleActivate}
+                  className={`aletheia-dashboard__nav-item${activeNav === item.id ? " aletheia-dashboard__nav-item--active" : ""}`}
+                  aria-label={item.label}
+                  aria-current={activeNav === item.id ? "page" : undefined}
+                  data-testid={`aletheia-dashboard-nav-${item.id}`}
+                  onClick={() => setActiveNav(item.id)}
                 >
-                  <Mic size={14} strokeWidth={2} aria-hidden="true" />
-                  Activate Aletheia
+                  {item.icon}
                 </button>
-              ) : (
-                <button
-                  type="button"
-                  className="aletheia-dashboard__deactivate"
-                  data-testid="aletheia-dashboard-deactivate"
-                  onClick={handleDeactivate}
-                >
-                  <MicOff size={14} strokeWidth={2} aria-hidden="true" />
-                  Deactivate Aletheia
-                </button>
-              )}
-            </div>
-          </section>
+              </GlassHoverTooltip>
+            ))}
+          </nav>
 
-          <div className="aletheia-dashboard__grid">
-            <PresencePanel
-              companionActive={companionActive}
-              privacyActive={privacyActive}
-              speaking={companion.speaking}
-              activeApp={glassState.activeApp}
-              hasPresence={Boolean(glassState.companionPresence)}
-              warmupPhase={glassState.companionWarmupPhase ?? "none"}
-            />
-            <ObservationPanel
-              observationPlane={observationPlane}
-              activation={activation}
-              ambientSynthesis={ambientSynthesis}
-              companionActive={companionActive}
-            />
-            <AttentionRecoveryPanel
-              companionActive={companionActive}
-              recovery={attentionRecovery}
-            />
-            <RelationshipThreadPanel
-              companionActive={companionActive}
-              thread={relationshipThread}
-            />
-            <DisplayAwarenessPanel
-              companionActive={companionActive}
-              awareness={displayAwareness}
-              connectedDisplays={glassState.connectedDisplays}
-            />
-            <PersonaBehaviorPanel
-              companionActive={companionActive}
-              personaBehavior={personaBehavior}
-              persona={glassState.persona}
-            />
-            {founderAccount ? (
-              <FounderCommandTierPanel
-                companionActive={companionActive}
-                deployedExecution={deployedExecution}
-                onInvoke={handleInvokeDeployedExecution}
-                onDeactivate={handleDeactivateDeployedExecution}
-              />
+          <main className="aletheia-dashboard__main">
+            {activeNav !== "overview" ? (
+              <p className="aletheia-dashboard__section-label">{activeNavLabel}</p>
             ) : null}
-            <PendingAdvicePanel
-              companionActive={companionActive}
-              pendingAdvice={pendingAdvice}
-              onApprove={handleApproveAdvice}
-              onDismiss={handleDismissAdvice}
-            />
-            <ActionConfirmationPanel
-              companionActive={companionActive}
-              actionPipeline={actionPipeline}
-              onConfirm={handleConfirmAction}
-              onReject={handleRejectAction}
-              onModify={handleModifyAction}
-            />
-            <BoundedLoopPanel companionActive={companionActive} boundedLoop={boundedLoop} />
-            <AgentActivityPanel
-              companionActive={companionActive}
-              agentActivity={agentActivity}
-            />
-            <TrustActivityPanel
-              companionActive={companionActive}
-              trustActivity={trustActivity}
-            />
-            <SecurityHivePanel
-              securityHive={securityHive}
-              onDismissContainment={handleDismissSecurityContainment}
-            />
-            <DelegatedPresencePanel
-              companionActive={companionActive}
-              delegatedPresence={delegatedPresence}
-            />
-            <LoopNarrativePanel
-              companionActive={companionActive}
-              delegatedLoop={delegatedLoop}
-              onContinue={handleContinueLoop}
-              onCancel={handleCancelLoop}
-            />
-            <ResearchConversationPanel
-              companionActive={companionActive}
-              researchConversation={researchConversation}
-              onFollowUp={handleResearchFollowUp}
-            />
-            <AletheiaNotesPanel
-              companionActive={companionActive}
-              notes={aletheiaNotes?.notes ?? []}
-              onAdd={handleAddNote}
-              onUpdate={handleUpdateNote}
-              onDelete={handleDeleteNote}
-            />
-            <PermissionsPanel
-              permissionPlane={permissionPlane}
-              capabilities={glassState.setupCapabilities ?? []}
-              consentState={glassState.consentState}
-              systemAudioStatus={glassState.systemAudioStatus}
-              onOpenSetup={handleOpenGlassSetup}
-            />
-            <ServicesPanel sidecarPlane={sidecarPlane} />
-            <DependenciesPanel
-              manifest={dependencyManifest}
-              onRunBootstrap={handleRunBootstrap}
-              onOpenSetup={handleOpenGlassSetup}
-            />
-            <PrivacyPanel
-              companionActive={companionActive}
-              privacy={glassState.companionPrivacy}
-              onStart={handlePrivacyStart}
-              onEnd={handlePrivacyEnd}
-            />
-            <VoiceSessionPanel
-              visible={visible}
-              companionActive={companionActive}
-              liveTranscript={companion.liveTranscript}
-              lastPrompt={glassState.companionMemory?.lastPrompt}
-              frontApp={glassState.companionMemory?.frontApp ?? glassState.activeApp}
-            />
-            <MemoryPanel onOpenGlassMemory={handleOpenGlassMemory} />
-          </div>
+            {renderAlerts()}
+            {renderNavContent()}
+          </main>
         </div>
       </div>
     </div>
@@ -1368,6 +1675,245 @@ function AgentActivityPanel({
   );
 }
 
+function ComputerOperatorPanel({
+  companionActive,
+  computerOperator,
+  persistentGrants,
+  lastPrompt,
+  onGrantSession,
+  onCancel,
+  onPrepare,
+  onRevokeGrant,
+}: {
+  companionActive: boolean;
+  computerOperator?: GlassState["aletheiaComputerOperator"];
+  persistentGrants: NonNullable<GlassState["aletheiaComputerOperatorGrants"]>;
+  lastPrompt?: string;
+  onGrantSession: (loopId: string, goal?: string) => void;
+  onCancel: () => void;
+  onPrepare: (goal?: string) => void;
+  onRevokeGrant: (grantId: string) => void;
+}): JSX.Element {
+  const [goalInput, setGoalInput] = useState(lastPrompt?.trim() ?? "");
+
+  const running =
+    computerOperator != null
+    && computerOperator.phase === "running";
+
+  const awaitingGrant =
+    computerOperator?.phase === "awaiting_grant"
+    || computerOperator?.phase === "awaiting_confirm";
+
+  const dashboardOwnsLiveSession = isComputerOperatorLiveUiSurface(
+    computerOperator,
+    "dashboard",
+  );
+
+  const sessionActiveElsewhere =
+    computerOperator != null
+    && isComputerOperatorActivePhase(computerOperator.phase)
+    && !dashboardOwnsLiveSession;
+
+  useEffect(() => {
+    if (lastPrompt?.trim() && !computerOperator) {
+      setGoalInput(lastPrompt.trim());
+    }
+  }, [lastPrompt, computerOperator]);
+
+  return (
+    <section
+      className="aletheia-dashboard__panel aletheia-dashboard__panel--computer"
+      data-testid="aletheia-dashboard-computer"
+    >
+      <p className="aletheia-dashboard__panel-label">Computer operator</p>
+      {!companionActive ? (
+        <p className="aletheia-dashboard__panel-copy">
+          Activate Aletheia — she can capture the live UI, pick grounded actions, verify each step,
+          and repeat until your goal is done.
+        </p>
+      ) : !computerOperator ? (
+        <>
+          <p className="aletheia-dashboard__panel-copy" data-testid="aletheia-dashboard-computer-empty">
+            Describe a task — e.g. open Slack, go to the unread thread, and summarize it.
+          </p>
+          <label className="aletheia-dashboard__panel-copy" htmlFor="aletheia-computer-goal">
+            Goal
+          </label>
+          <textarea
+            id="aletheia-computer-goal"
+            className="aletheia-dashboard__computer-goal-input"
+            data-testid="aletheia-dashboard-computer-goal-input"
+            rows={3}
+            value={goalInput}
+            onChange={(e) => setGoalInput(e.target.value)}
+            placeholder="Open Slack, inspect unread items, summarize latest unread thread…"
+          />
+          <button
+            type="button"
+            className="aletheia-dashboard__confirm-btn"
+            data-testid="aletheia-dashboard-computer-start"
+            disabled={!goalInput.trim()}
+            onClick={() => onPrepare(goalInput.trim())}
+          >
+            Plan task
+          </button>
+        </>
+      ) : sessionActiveElsewhere ? (
+        <>
+          <p className="aletheia-dashboard__panel-copy" data-testid="aletheia-dashboard-computer-goal">
+            {computerOperator.plan.goal}
+          </p>
+          <p
+            className="aletheia-dashboard__panel-footnote"
+            data-testid="aletheia-dashboard-computer-active-elsewhere"
+          >
+            Session active — live progress is in{" "}
+            {computerOperatorLiveProgressLocation(computerOperator.entrySurface)}.
+            Full audit appears here when the run finishes.
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="aletheia-dashboard__panel-copy" data-testid="aletheia-dashboard-computer-goal">
+            {computerOperator.plan.goal}
+          </p>
+          {computerOperator.sessionGrant ? (
+            <p className="aletheia-dashboard__panel-meta" data-testid="aletheia-dashboard-computer-scope">
+              {computerOperator.sessionGrant.declaration}
+            </p>
+          ) : null}
+          <p className="aletheia-dashboard__panel-meta" data-testid="aletheia-dashboard-computer-phase">
+            Phase: {computerOperator.phase.replace(/_/g, " ")}
+            {computerOperator.step > 0
+              ? ` · step ${computerOperator.step}/${computerOperator.plan.stepBudget}`
+              : ""}
+          </p>
+          {computerOperator.currentBelief ? (
+            <p className="aletheia-dashboard__panel-copy" data-testid="aletheia-dashboard-computer-belief">
+              {computerOperator.currentBelief}
+            </p>
+          ) : null}
+          {computerOperator.narrative ? (
+            <p className="aletheia-dashboard__panel-copy" data-testid="aletheia-dashboard-computer-narrative">
+              {computerOperator.narrative}
+            </p>
+          ) : null}
+          {computerOperator.audit.length > 0 ? (
+            <ul className="aletheia-dashboard__bounded-audit" data-testid="aletheia-dashboard-computer-audit">
+              {computerOperator.audit.map((row) => (
+                <li
+                  key={row.id}
+                  className={
+                    row.ok === true
+                      ? "aletheia-dashboard__bounded-audit-row--ok"
+                      : row.ok === false
+                        ? "aletheia-dashboard__bounded-audit-row--error"
+                        : undefined
+                  }
+                >
+                  {row.narration}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {computerOperator.readSummary ? (
+            <div
+              className="aletheia-dashboard__confirm-result aletheia-dashboard__confirm-result--ok"
+              data-testid="aletheia-dashboard-computer-read-summary"
+            >
+              <p className="aletheia-dashboard__confirm-key">Screen read</p>
+              <p className="aletheia-dashboard__panel-copy">{computerOperator.readSummary}</p>
+            </div>
+          ) : null}
+          {computerOperator.summary ? (
+            <div
+              className="aletheia-dashboard__confirm-result aletheia-dashboard__confirm-result--ok"
+              data-testid="aletheia-dashboard-computer-summary"
+            >
+              <p className="aletheia-dashboard__confirm-key">Result</p>
+              <p className="aletheia-dashboard__panel-copy">{computerOperator.summary}</p>
+            </div>
+          ) : null}
+          {computerOperator.pauseReason ? (
+            <div
+              className="aletheia-dashboard__confirm-result aletheia-dashboard__confirm-result--error"
+              data-testid="aletheia-dashboard-computer-pause"
+            >
+              <p className="aletheia-dashboard__confirm-key">Paused</p>
+              <p className="aletheia-dashboard__panel-copy">{computerOperator.pauseReason}</p>
+            </div>
+          ) : null}
+          {awaitingGrant ? (
+            <div className="aletheia-dashboard__confirm-actions" data-testid="aletheia-dashboard-computer-grant-actions">
+              {computerOperator.phase === "awaiting_confirm" ? (
+                <p className="aletheia-dashboard__panel-footnote" data-testid="aletheia-dashboard-computer-confirm-note">
+                  This task may include sensitive actions — review scope before granting.
+                </p>
+              ) : null}
+              <button
+                type="button"
+                className="aletheia-dashboard__confirm-btn"
+                data-testid="aletheia-dashboard-computer-grant"
+                onClick={() =>
+                  onGrantSession(
+                    computerOperator.loopId,
+                    computerOperator.plan.goal.startsWith("Enter a task")
+                      ? undefined
+                      : computerOperator.plan.goal,
+                  )
+                }
+              >
+                Grant session & run
+              </button>
+              <button
+                type="button"
+                className="aletheia-dashboard__confirm-btn aletheia-dashboard__confirm-btn--ghost"
+                data-testid="aletheia-dashboard-computer-cancel"
+                onClick={onCancel}
+              >
+                Cancel
+              </button>
+            </div>
+          ) : null}
+          {running ? (
+            <button
+              type="button"
+              className="aletheia-dashboard__confirm-btn aletheia-dashboard__confirm-btn--ghost"
+              data-testid="aletheia-dashboard-computer-cancel-running"
+              onClick={onCancel}
+            >
+              Stop operator
+            </button>
+          ) : null}
+        </>
+      )}
+      {persistentGrants.length > 0 ? (
+        <div
+          className="aletheia-dashboard__computer-grants"
+          data-testid="aletheia-dashboard-computer-persistent-grants"
+        >
+          <p className="aletheia-dashboard__panel-label">Always-allow grants</p>
+          <ul className="aletheia-dashboard__bounded-audit">
+            {persistentGrants.map((grant) => (
+              <li key={grant.id} data-testid={`aletheia-dashboard-computer-grant-${grant.id}`}>
+                <span>{grant.declaration}</span>
+                <button
+                  type="button"
+                  className="aletheia-dashboard__confirm-btn aletheia-dashboard__confirm-btn--ghost"
+                  data-testid={`aletheia-dashboard-computer-revoke-${grant.id}`}
+                  onClick={() => onRevokeGrant(grant.id)}
+                >
+                  Revoke
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function DelegatedPresencePanel({
   companionActive,
   delegatedPresence,
@@ -2127,12 +2673,14 @@ function SessionMessageDetail({
 function AletheiaNotesPanel({
   companionActive,
   notes,
+  featured = false,
   onAdd,
   onUpdate,
   onDelete,
 }: {
   companionActive: boolean;
   notes: AletheiaNote[];
+  featured?: boolean;
   onAdd: (body: string) => void;
   onUpdate: (noteId: string, body: string) => void;
   onDelete: (noteId: string) => void;
@@ -2140,19 +2688,30 @@ function AletheiaNotesPanel({
   const [draft, setDraft] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
+  const inputRows = featured ? 4 : 2;
+  const listLimit = featured ? 20 : 12;
 
   return (
-    <section className="aletheia-dashboard__panel" data-testid="aletheia-dashboard-notes">
+    <section
+      className={`aletheia-dashboard__panel${featured ? " aletheia-dashboard__panel--notes-featured" : ""}`}
+      data-testid="aletheia-dashboard-notes"
+    >
       <p className="aletheia-dashboard__panel-label">Notes</p>
-      <p className="aletheia-dashboard__panel-copy">
-        What Aletheia remembers across sessions — decisions, rationales, and research you saved.
-        Distinct from the audit trail and from Glass Memory admin.
-      </p>
+      {!featured ? (
+        <p className="aletheia-dashboard__panel-copy">
+          What Aletheia remembers across sessions — decisions, rationales, and research you saved.
+          Distinct from the audit trail and from Glass Memory admin.
+        </p>
+      ) : (
+        <p className="aletheia-dashboard__panel-copy aletheia-dashboard__panel-copy--compact">
+          Living memory — what Aletheia carries across sessions.
+        </p>
+      )}
       {companionActive ? (
         <div className="aletheia-dashboard__notes-add" data-testid="aletheia-dashboard-notes-add">
           <textarea
             className="aletheia-dashboard__notes-input"
-            rows={2}
+            rows={inputRows}
             placeholder="Add a note Aletheia should remember…"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
@@ -2179,13 +2738,13 @@ function AletheiaNotesPanel({
         </p>
       ) : (
         <ul className="aletheia-dashboard__notes-list" data-testid="aletheia-dashboard-notes-list">
-          {notes.slice(0, 12).map((note) => (
+          {notes.slice(0, listLimit).map((note) => (
             <li key={note.id} className="aletheia-dashboard__notes-row">
               {editingId === note.id ? (
                 <>
                   <textarea
                     className="aletheia-dashboard__notes-input"
-                    rows={2}
+                    rows={inputRows}
                     value={editDraft}
                     onChange={(event) => setEditDraft(event.target.value)}
                   />

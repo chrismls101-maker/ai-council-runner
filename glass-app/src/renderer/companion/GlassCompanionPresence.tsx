@@ -14,6 +14,7 @@ import { ArrowLayer } from "./ArrowLayer.tsx";
 import { MagnifierLens } from "./MagnifierLens.tsx";
 import { PathAnimation } from "./PathAnimation.tsx";
 import { SketchLayer } from "./SketchLayer.tsx";
+import { AletheiaGhostCursor } from "../shared/AletheiaGhostCursor.tsx";
 import "./GlassCompanionPresence.css";
 
 interface GlassCompanionPresenceProps {
@@ -26,11 +27,11 @@ function GhostCursor({ rect }: { rect: ScreenRect }): JSX.Element {
   const cx = rect.left + rect.width / 2;
   const cy = rect.top + rect.height / 2;
   return (
-    <div
-      className="companion-presence__ghost-cursor"
-      style={{ left: `${cx}px`, top: `${cy}px` }}
-      data-testid="companion-ghost-cursor"
-      aria-hidden="true"
+    <AletheiaGhostCursor
+      x={cx}
+      y={cy}
+      phase="approach"
+      testId="companion-ghost-cursor"
     />
   );
 }
@@ -84,7 +85,13 @@ function ManifestationLayer({
 }): JSX.Element | null {
   if (manifestation.type === "sketch") {
     if (!manifestation.sketchPaths?.length) return null;
-    return <SketchLayer paths={manifestation.sketchPaths} />;
+    const sketchTarget = resolveMarkRect(presence, manifestation.targetMarkId, viewport);
+    return (
+      <>
+        {sketchTarget ? <GhostCursor rect={sketchTarget} /> : null}
+        <SketchLayer paths={manifestation.sketchPaths} />
+      </>
+    );
   }
 
   if (manifestation.type === "path") {

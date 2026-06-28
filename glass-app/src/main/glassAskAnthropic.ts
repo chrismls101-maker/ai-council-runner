@@ -105,7 +105,8 @@ export async function askGlassAnthropic(
   if (signal?.aborted) throw new Error("Glass ask cancelled");
 
   const client = createAnthropicClient();
-  const model = resolveGlassAnthropicModel(request.modelPurpose ?? "default");
+  const model = request.anthropicModel?.trim()
+    || resolveGlassAnthropicModel(request.modelPurpose ?? "default");
   const maxTokens = request.responseStyle === "full" ? 8192 : 1024;
 
   const response = await client.messages.create({
@@ -154,7 +155,8 @@ export async function askGlassAnthropicStream(
   if (signal?.aborted) throw new Error("Glass ask cancelled");
 
   const client = createAnthropicClient();
-  const model = resolveGlassAnthropicModel(request.modelPurpose ?? "default");
+  const model = request.anthropicModel?.trim()
+    || resolveGlassAnthropicModel(request.modelPurpose ?? "default");
   const maxTokens = request.responseStyle === "full" ? 8192 : 1024;
 
   let accumulated = "";
@@ -207,6 +209,55 @@ export async function askAnthropicHaiku(
       provider: "anthropic",
       model: HAIKU_MODEL,
       agentId: "memory-engine",
+      inputTokens: input,
+      outputTokens: output,
+    });
+  }
+  return response.content
+    .filter((block): block is Anthropic.TextBlock => block.type === "text")
+    .map((block) => block.text)
+    .join("")
+    .trim();
+}
+
+function parseImageDataUrl(dataUrl: string): {
+  type: "image";
+  source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/webp" | "image/gif"; data: string };
+} | null {
+  const match = /^data:(image\/[a-z+]+);base64,(.+)$/i.exec(dataUrl.trim());
+  if (!match?.[1] || !match[2]) return null;
+  const media = match[1] as "image/jpeg" | "image/png" | "image/webp" | "image/gif";
+  return { type: "image", source: { type: "base64", media_type: media, data: match[2] } };
+}
+
+/** Haiku vision call for design-to-code structured extraction / verification. */
+export async function askAnthropicHaikuVision(
+  system: string,
+  userText: string,
+  imageDataUrl: string,
+  opts?: { sessionId?: string; maxTokens?: number },
+): Promise<string> {
+  const client = createAnthropicClient();
+  const imageBlock = parseImageDataUrl(imageDataUrl);
+  const content: Anthropic.MessageParam["content"] = imageBlock
+    ? [imageBlock, { type: "text", text: userText }]
+    : userText;
+
+  const response = await client.messages.create({
+    model: HAIKU_MODEL,
+    max_tokens: opts?.maxTokens ?? 4096,
+    system,
+    messages: [{ role: "user", content }],
+  });
+  const input = response.usage?.input_tokens ?? 0;
+  const output = response.usage?.output_tokens ?? 0;
+  if (input > 0 || output > 0) {
+    recordModelCall({
+      sessionId: opts?.sessionId,
+      source: "design-to-code",
+      provider: "anthropic",
+      model: HAIKU_MODEL,
+      agentId: "design-to-code",
       inputTokens: input,
       outputTokens: output,
     });

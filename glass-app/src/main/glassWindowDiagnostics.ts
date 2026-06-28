@@ -21,6 +21,7 @@ export function formatGlassWindowDiagnostics(opts: {
   panel: LayoutRect | null;
   panelVisible: boolean;
   commandBar?: LayoutRect | null;
+  commandBarWindowVisible?: boolean;
   notesPad?: LayoutRect | null;
   notesPadVisible?: boolean;
 }): string {
@@ -44,7 +45,13 @@ export function formatGlassWindowDiagnostics(opts: {
       opts.notesPadVisible ? opts.notesPad ?? null : null,
       notesPadExtra,
     ),
-    formatRect("commandBar", opts.commandBar ?? null, opts.commandBar ? "clickThrough=false" : ""),
+    formatRect(
+      "commandBar",
+      opts.commandBar ?? null,
+      opts.commandBar
+        ? `clickThrough=false visible=${opts.commandBarWindowVisible === true ? "yes" : "no"}`
+        : "",
+    ),
   ].join(" ");
 }
 

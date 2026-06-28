@@ -3,6 +3,7 @@
  */
 
 import { randomUUID } from "crypto";
+import { app } from "electron";
 import type {
   ExtractedFact,
   HydratedContext,
@@ -309,9 +310,10 @@ export async function flushPendingExtractions(): Promise<void> {
   }
 }
 
-/** Run after embedder init and/or Anthropic key connect. */
+/** Init embedder + flush pending rows — call when a key is connected, not at idle boot. */
 export async function notifyMemoryServicesReady(): Promise<void> {
-  await ensureEmbedderReady(90_000);
+  const timeoutMs = app.isPackaged ? 90_000 : 20_000;
+  await ensureEmbedderReady(timeoutMs);
   await flushPendingMemories();
   await flushPendingExtractions();
 }

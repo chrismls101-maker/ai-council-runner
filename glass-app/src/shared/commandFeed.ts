@@ -81,9 +81,13 @@ export interface GlassCommandFeedItem {
    * not the response id, so the renderer needs this to send the right feedItemId.
    */
   designCaptureId?: string;
+  /** Fidelity / quality warnings from the design-to-code pipeline (#163). */
+  designWarnings?: string[];
   // ── Build-from-audio fields ───────────────────────────────────────────────
   /** Pre-formatted Coder prompt from audio intent extraction (for build-from-audio cards). */
   audioBuildPrompt?: string;
+  /** Inline computer-operator grant card in this response bubble (conversation flow). */
+  computerOperatorLoopId?: string;
 }
 
 export const MAX_COMMAND_FEED_ITEMS = 12;
@@ -130,7 +134,9 @@ export function createCommandFeedItem(
     designAction?: import("./designToCode.ts").DesignToCodeAction;
     designStack?: import("./designToCode.ts").DesignStack;
     designCaptureId?: string;
+    designWarnings?: string[];
     audioBuildPrompt?: string;
+    computerOperatorLoopId?: string;
   } = {},
 ): GlassCommandFeedItem {
   feedSeq += 1;
@@ -158,7 +164,9 @@ export function createCommandFeedItem(
     designAction: opts.designAction,
     designStack: opts.designStack,
     designCaptureId: opts.designCaptureId,
+    designWarnings: opts.designWarnings,
     audioBuildPrompt: opts.audioBuildPrompt,
+    computerOperatorLoopId: opts.computerOperatorLoopId,
   };
 }
 

@@ -187,6 +187,8 @@ import {
   disposeWindows,
   finishSplash,
   whenGlassWindowsReady,
+  whenGlassWindowsReadyOrTimeout,
+  whenPrimaryChromeReady,
   getCommandBarHotkeyStatus,
   applyGlassUserSettings,
   getAvailableDisplayIds,
@@ -215,14 +217,18 @@ import {
   setChromeLayoutPersistHandler,
   syncChromeLayoutFromSettings,
   setOverlayPinnedForTranslate,
+  setOverlayPinnedForComputerOperator,
   setOverlayMode,
   toggleCommandBar,
   focusCommandBar,
   prefillCommandBar,
+  reconcilePrimaryChromeVisibility,
   toggleOverlay,
   togglePanel,
   closePanel,
   ensurePanelLayout,
+  raisePanelWindow,
+  getOverlayLayoutBounds,
   unregisterCommandBarHotkeys,
   setOnboardingPending,
   setGlassBootSequenceCompleteHandler,
@@ -246,14 +252,18 @@ import {
   setOverlayResearchExplorerActive,
   setOverlayCodeAnalystExplorerActive,
   setOverlayWritingStudioActive,
+  setOverlayGlassStorageProjectsActive,
   setOverlayGlassDashboardActive,
   setOverlayAletheiaDashboardActive,
   notifyResearchExplorerMounted,
   notifyCodeAnalystExplorerMounted,
   notifyWritingStudioMounted,
+  notifyGlassStorageProjectsMounted,
   notifyGlassDashboardMounted,
   notifyAletheiaDashboardMounted,
+  notifyCommandBarRendererMounted,
   setBuilderStripPanelOpen,
+  setAletheiaStripMenuOpen,
   setResponsePanelOpen,
   setCopilotOverlayCardOpen,
   setCommandPaletteOpen,
@@ -468,11 +478,16 @@ import {
   type CoordinationIntent,
 } from "../shared/aletheiaAgentCoordinator.ts";
 import {
-  classifyDelegatedPresenceIntent,
   delegatedPresenceIntroSpeech,
   isDelegatedPresenceRunning,
   type DelegatedPresenceIntent,
 } from "../shared/aletheiaDelegatedPresence.ts";
+import { appendDelegatedPresenceEscalationHint } from "../shared/aletheiaComputerUseClassifier.ts";
+import { classifyComputerUseIntent } from "./aletheiaComputerUseRouting.ts";
+import {
+  executeComputerUse,
+  formatComputerUseRouteNarration,
+} from "./aletheiaComputerUseExecutor.ts";
 import {
   runAletheiaDelegatedPresence,
   clearAletheiaDelegatedPresenceState,
@@ -505,6 +520,37 @@ import {
   clearAletheiaResearchConversationState,
   type AletheiaResearchConversationHost,
 } from "./aletheiaResearchConversationRunner.ts";
+import {
+  cancelAletheiaComputerOperator,
+  dismissAletheiaComputerOperator,
+  grantAndRunAletheiaComputerOperator,
+  isAletheiaComputerOperatorRunning,
+  refreshComputerOperatorGoal,
+  requestAletheiaComputerOperatorCancel,
+  resetAletheiaComputerOperatorCancel,
+  startAletheiaComputerOperator,
+  type AletheiaComputerOperatorHost,
+} from "./aletheiaComputerOperatorRunner.ts";
+import {
+  createComputerOperatorGrantsTable,
+  listComputerOperatorPersistentGrants,
+  revokeComputerOperatorPersistentGrant,
+  saveComputerOperatorPersistentGrant,
+} from "./aletheiaComputerGrantStore.ts";
+import { planFromNaturalLanguage } from "../shared/aletheiaConversationPlanner.ts";
+import {
+  buildPersistentGrantFromPlan,
+  findMatchingPersistentGrant,
+} from "../shared/aletheiaComputerSessionAuthority.ts";
+import { COMPUTER_OPERATOR_PLACEHOLDER_GOAL } from "../shared/aletheiaComputerOperatorLoop.ts";
+import type {
+  AletheiaComputerOperatorSnapshot,
+  ComputerOperatorEntrySurface,
+} from "../shared/aletheiaComputerOperatorLoop.ts";
+import {
+  computerOperatorIntroSpeech,
+} from "../shared/aletheiaComputerOperatorIntent.ts";
+import { shouldMountComputerOperatorOverlayGlow } from "../shared/aletheiaComputerOperatorPresence.ts";
 import {
   abortAletheiaCompanionOperation,
   finishAletheiaCompanionOperation,
@@ -926,12 +972,39 @@ import {
   runShellCommand,
 } from "./glassActions.ts";
 import {
-  buildDesignToCodePrompt,
-  isEditorAppName,
   DEFAULT_DESIGN_STACK,
-  type DesignToCodeAction,
-  type DesignStack,
 } from "../shared/designToCode.ts";
+import {
+  startDesignCapture,
+  recaptureDesignSession,
+  type DesignCaptureDeps,
+} from "./design/designCaptureService.ts";
+import {
+  handleDesignGenerateCommand,
+  runDesignGenerationPipeline,
+  type DesignGenerationDeps,
+} from "./design/designGenerationService.ts";
+import { runDesignSilentVisualAsk } from "./design/designVisualAsk.ts";
+import { patchDesignSession, getDesignSession, resolveStack } from "./design/designToCodeSessionStore.ts";
+import { saveDesignToCodeProject } from "./design/designToCodeProjectSaver.ts";
+import {
+  loadGlassStorageProjectsIndex,
+  readGlassStorageThumbDataUrl,
+} from "./storage/glassStorageProjectsStore.ts";
+import { loadGlassStorageProjectDetail } from "./storage/glassStorageProjectDetail.ts";
+import type { DesignStack, DesignToCodeAction } from "../shared/designToCode.ts";
+import {
+  buildDesignToCodeAletheiaNote,
+  formatDesignToCodeAskContext,
+  filterRecentDesignToCodeNotes,
+} from "../shared/design/designToCodeAletheiaContext.ts";
+import { ingestDesignToCodeGlassMemory } from "./design/designToCodeMemoryService.ts";
+import { isExplicitDesignToCodeRememberText } from "../shared/design/designToCodeMemoryBridge.ts";
+import type { DesignToCodeMemoryEvent } from "../shared/design/designToCodeMemoryIngestion.ts";
+import {
+  buildDesignToCodeProjectRecallAskContext,
+  isDesignToCodeRecallPrompt,
+} from "../shared/design/designToCodeProjectRecall.ts";
 import { computeUnifiedDiff, collapseUnchanged } from "../shared/diff.ts";
 import {
   createPtySession,
@@ -1197,6 +1270,8 @@ interface AppState {
   companionPresence: import("../shared/companionGuidance.ts").CompanionGuidancePayload | null;
   /** Phase 4a — multi-turn Companion session memory. */
   companionMemory: CompanionSessionMemory | null;
+  /** Task-scoped hint: interpret the next request as a Mac computer task when possible. */
+  aletheiaUseComputerForNextTask: boolean;
   companionPrivacy?: {
     active: boolean;
     resumeAt: number;
@@ -1219,6 +1294,10 @@ interface AppState {
   codeAnalystExplorerPrompt?: string;
   writingStudioActive?: boolean;
   writingStudioPrompt?: string;
+  glassStorageProjectsActive?: boolean;
+  glassStorageProjects?: import("../shared/glassStorageProjectTypes.ts").GlassProjectRecord[];
+  glassStorageProjectsSelectedId?: string | null;
+  latestDesignToCodeProjectId?: string | null;
   glassDashboardActive?: boolean;
   glassDashboardNav?: import("../shared/glassDashboardNav.ts").GlassDashboardNav | null;
   aletheiaDashboardActive?: boolean;
@@ -1308,6 +1387,8 @@ interface AppState {
   aletheiaPendingAdvice?: AletheiaPendingAdviceSnapshot;
   /** B2.1 — one-shot companion speech after advice approve/dismiss. */
   aletheiaAdviceSpeak?: { text: string; nonce: number };
+  /** Design to Code — one-shot Aletheia voice without companion toggle. */
+  aletheiaEphemeralSpeak?: { text: string; nonce: number };
   /** B2.3 — bounded autonomy loop scope, audit trail, and summary. */
   aletheiaBoundedLoop?: import("../shared/aletheiaBoundedAutonomy.ts").AletheiaBoundedLoopSnapshot;
   /** B3.1 — agent coordination activity (council / research / writing routes). */
@@ -1316,6 +1397,10 @@ interface AppState {
   aletheiaDelegatedPresence?: import("../shared/aletheiaDelegatedPresence.ts").AletheiaDelegatedPresenceSnapshot;
   /** B3.3 — general delegated loop narrative and handoff. */
   aletheiaDelegatedLoop?: import("../shared/aletheiaDelegatedLoop.ts").AletheiaDelegatedLoopSnapshot;
+  /** Computer operator — conversation-driven GUI action loop with verification. */
+  aletheiaComputerOperator?: import("../shared/aletheiaComputerOperatorLoop.ts").AletheiaComputerOperatorSnapshot;
+  /** Saved always-allow computer operator session grants. */
+  aletheiaComputerOperatorGrants?: import("../shared/aletheiaComputerSessionAuthority.ts").ComputerOperatorPersistentGrant[];
   /** B3.4 — web research conversation with citations. */
   aletheiaResearchConversation?: import("../shared/aletheiaResearchConversation.ts").AletheiaResearchConversationSnapshot;
   /** B4.1 — persona-aware operating mode. */
@@ -1596,6 +1681,7 @@ const state: AppState = {
   companionWarmupSpeakNonce: 0,
   companionPresence: null,
   companionMemory: null,
+  aletheiaUseComputerForNextTask: false,
   companionPrivacy: undefined,
   translateSetupRequestId: 0,
   agentRun: null,
@@ -1931,6 +2017,119 @@ let liveTerminalState: import("../shared/ipc.ts").LiveTerminalFeed | null = null
 let liveTerminalWidgetVisible = false;
 let liveTerminalWidgetPos = { x: 20, y: 60 }; // percent from top-left
 let liveTerminalInterval: ReturnType<typeof setInterval> | null = null;
+let perceptionClipboardTimer: ReturnType<typeof setInterval> | null = null;
+let perceptionAppSwitchTimer: ReturnType<typeof setInterval> | null = null;
+let perceptionLoopStarted = false;
+
+const PERCEPTION_CLIPBOARD_MS = 2000;
+const PERCEPTION_CLIPBOARD_IDLE_MS = 5000;
+const PERCEPTION_APP_SWITCH_ACTIVE_MS = 1500;
+const PERCEPTION_APP_SWITCH_IDLE_MS = 3000;
+
+function perceptionAppSwitchNeeded(): boolean {
+  return state.companionModeActive || sessionIsLive();
+}
+
+function perceptionClipboardNeeded(): boolean {
+  return state.companionModeActive || Boolean(state.glassSettings.clipboardIntelligenceEnabled);
+}
+
+function perceptionClipboardIntervalMs(): number {
+  return state.companionModeActive ? PERCEPTION_CLIPBOARD_MS : PERCEPTION_CLIPBOARD_IDLE_MS;
+}
+
+function pollFrontAppSwitch(): void {
+  if (!perceptionAppSwitchNeeded()) return;
+  void (async () => {
+    try {
+      const result = await execFileAsync("osascript", [
+        "-e",
+        "tell application \"System Events\" to get name of first application process whose frontmost is true",
+      ]);
+      const appName = result.stdout.trim();
+      if (!appName) return;
+      let lastApp = perceptionLastFrontApp;
+      if (appName === lastApp) return;
+      const oldApp = state.activeApp;
+      const isGlassItself = oldApp && /(electron|iivo|glass)/i.test(oldApp);
+      if (oldApp && !isGlassItself) {
+        state.previousApp = oldApp;
+      }
+      perceptionLastFrontApp = appName;
+      state.activeApp = appName;
+      if (oldApp && oldApp !== appName) {
+        handleCompanionAppSwitch(oldApp, appName);
+        refreshAletheiaObservationPlaneState();
+      }
+      push();
+    } catch {
+      /* accessibility permissions may not be granted */
+    }
+  })();
+}
+
+let perceptionLastFrontApp = "";
+
+function restartPerceptionAppSwitchPolling(): void {
+  if (!perceptionLoopStarted) return;
+  if (perceptionAppSwitchTimer) {
+    clearInterval(perceptionAppSwitchTimer);
+    perceptionAppSwitchTimer = null;
+  }
+  if (!perceptionAppSwitchNeeded()) return;
+  perceptionAppSwitchTimer = setInterval(
+    pollFrontAppSwitch,
+    state.companionModeActive ? PERCEPTION_APP_SWITCH_ACTIVE_MS : PERCEPTION_APP_SWITCH_IDLE_MS,
+  );
+}
+
+function restartPerceptionClipboardPolling(): void {
+  if (!perceptionLoopStarted) return;
+  if (perceptionClipboardTimer) {
+    clearInterval(perceptionClipboardTimer);
+    perceptionClipboardTimer = null;
+  }
+  if (!perceptionClipboardNeeded()) return;
+
+  const { clipboard } = require("electron") as typeof import("electron");
+  let lastClip = "";
+  perceptionClipboardTimer = setInterval(() => {
+    const clip = clipboard.readText();
+    if (clip === lastClip) return;
+
+    lastClip = clip;
+    const { text, truncated } = normalizeClipboardCapture(clip);
+    const hadText = Boolean(state.clipboardText);
+    state.clipboardText = text;
+    state.clipboardTruncated = truncated;
+
+    if (text !== undefined) {
+      refreshAletheiaObservationPlaneState();
+      if (
+        !truncated
+        && state.glassSettings.clipboardIntelligenceEnabled
+        && clip.length > 0
+      ) {
+        const cls = classifyClipboard(clip);
+        const decision = clipboardIntelGate.decide(clip, cls);
+        if (decision.shouldFire) {
+          void handleClipboardIntelligence(clip, cls);
+        }
+      }
+      return;
+    }
+
+    if (hadText) {
+      state.clipboardTruncated = false;
+      refreshAletheiaObservationPlaneState();
+    }
+  }, perceptionClipboardIntervalMs());
+}
+
+function restartPerceptionPolling(): void {
+  restartPerceptionClipboardPolling();
+  restartPerceptionAppSwitchPolling();
+}
 const LIVE_TERMINAL_MAX_LINES = 20;
 
 // Wingman cross-session memory — in-memory search results (library lives in wingman-sessions.jsonl)
@@ -2092,6 +2291,11 @@ function requestAletheiaLoopCancel(): void {
   }
 }
 
+function requestComputerOperatorCancel(): void {
+  requestAletheiaComputerOperatorCancel();
+  cancelAletheiaComputerOperator(aletheiaComputerOperatorHost);
+}
+
 function resetAletheiaLoopCancel(): void {
   loopCancelRequested = false;
 }
@@ -2136,6 +2340,48 @@ const aletheiaDelegatedLoopHost: AletheiaDelegatedLoopHost = {
   getDisplayAwareness: () => state.aletheiaDisplayAwareness,
   awaitLoopDecision: awaitAletheiaLoopDecision,
   shouldCancelLoop: () => loopCancelRequested,
+};
+
+const aletheiaComputerOperatorHost: AletheiaComputerOperatorHost = {
+  getSnapshot: () => state.aletheiaComputerOperator,
+  setSnapshot: (snapshot) => {
+    state.aletheiaComputerOperator = snapshot;
+  },
+  push,
+  getSessionId: currentAletheiaActionSessionId,
+  getConfig: () => config,
+  resolveCaptureTarget: () => resolveCaptureDisplay(state.glassSettings.displayTarget),
+  getOverlayBounds: () => getOverlayLayoutBounds() ?? undefined,
+  getDisplayAwareness: () => state.aletheiaDisplayAwareness,
+  getLedgerAttribution: () => currentAletheiaLedgerAttribution(),
+  getWindowContext: () => {
+    const ctx = getCachedWindowContext();
+    return {
+      appName: ctx.appName ?? state.activeApp,
+      windowTitle: ctx.windowTitle,
+    };
+  },
+  getScreenDigest: () => (isDigestFresh(latestDigest) ? latestDigest.text : undefined),
+  shouldCancel: () => false,
+  onComplete: (summary, ok) => {
+    clearAletheiaUseComputerForNextTask();
+    if (!summary.trim()) return;
+    speakAletheiaAdviceAck(truncateAletheiaSpokenText(summary));
+    const operator = state.aletheiaComputerOperator;
+    if (ok) {
+      state.lastAskResponse = {
+        prompt: operator?.plan.goal ?? "Computer operator",
+        answer: summary,
+        fullAnswer: summary,
+        at: new Date().toISOString(),
+        routeUsed: "aletheia_computer_operator",
+      };
+    }
+    if (operator?.entrySurface === "conversation") {
+      // Inline audit in the linked feed bubble already shows outcome — speak only.
+    }
+    push();
+  },
 };
 
 const aletheiaResearchConversationHost: AletheiaResearchConversationHost = {
@@ -2978,6 +3224,7 @@ function ensureListenSession(): void {
   sessions.startSession("Listen");
   bindCopilotToSession();
   startCopilotLoop();
+  restartPerceptionPolling();
 }
 
 /** Start the notes refresh loop without clearing in-flight transcript (chunk safety net). */
@@ -3937,76 +4184,14 @@ function stopLiveTerminalPolling(): void {
 /**
  * Start always-on background perception:
  *   - Clipboard polling every 2000 ms (silent — no push, just state update)
- *   - App-switch polling every 1500 ms (push on change so overlay can react)
+ *   - App-switch polling every 1500 ms active / 3000 ms idle (companion off)
  */
 function startPerceptionLoop(): void {
-  // Clipboard polling — silent updates only
-  const { clipboard } = require("electron") as typeof import("electron");
-  let lastClip = "";
-  setInterval(() => {
-    const clip = clipboard.readText();
-    if (clip === lastClip) return;
+  if (perceptionLoopStarted) return;
+  perceptionLoopStarted = true;
 
-    lastClip = clip;
-    const { text, truncated } = normalizeClipboardCapture(clip);
-    const hadText = Boolean(state.clipboardText);
-    state.clipboardText = text;
-    state.clipboardTruncated = truncated;
-
-    if (text !== undefined) {
-      refreshAletheiaObservationPlaneState();
-      if (
-        !truncated
-        && state.glassSettings.clipboardIntelligenceEnabled
-        && clip.length > 0
-      ) {
-        const cls = classifyClipboard(clip);
-        const decision = clipboardIntelGate.decide(clip, cls);
-        if (decision.shouldFire) {
-          void handleClipboardIntelligence(clip, cls);
-        }
-      }
-      return;
-    }
-
-    if (hadText) {
-      state.clipboardTruncated = false;
-      refreshAletheiaObservationPlaneState();
-    }
-  }, 2000);
-
-  // App-switch polling
-  let lastApp = "";
-  setInterval(() => {
-    void (async () => {
-      try {
-        const result = await execFileAsync("osascript", [
-          "-e",
-          "tell application \"System Events\" to get name of first application process whose frontmost is true",
-        ]);
-        const appName = result.stdout.trim();
-        if (appName && appName !== lastApp) {
-          // Save the old app as previousApp, but skip Glass itself
-          const oldApp = state.activeApp;
-          const isGlassItself =
-            oldApp &&
-            /(electron|iivo|glass)/i.test(oldApp);
-          if (oldApp && !isGlassItself) {
-            state.previousApp = oldApp;
-          }
-          lastApp = appName;
-          state.activeApp = appName;
-          if (oldApp && oldApp !== appName) {
-            handleCompanionAppSwitch(oldApp, appName);
-            refreshAletheiaObservationPlaneState();
-          }
-          push(); // push on app switch so overlay can react
-        }
-      } catch {
-        // ignore — accessibility permissions may not be granted
-      }
-    })();
-  }, 1500);
+  perceptionLastFrontApp = state.activeApp ?? "";
+  restartPerceptionPolling();
 }
 
 // ─── Git repo discovery + diff capture ───────────────────────────────────────
@@ -4632,6 +4817,60 @@ function captureAletheiaSessionNote(input: AppendAletheiaNoteInput): void {
   refreshAletheiaNotesState();
 }
 
+function noteDesignToCodeForAletheia(
+  feedItemId: string,
+  event: import("../shared/design/designToCodeAletheiaContext.ts").DesignToCodeAletheiaEvent,
+  error?: string,
+): void {
+  const session = getDesignSession(state, feedItemId);
+  if (!session) return;
+  const note = buildDesignToCodeAletheiaNote({ event, session, error });
+  const projectId = session.glassProjectId ?? session.feedItemId;
+  state.latestDesignToCodeProjectId = projectId;
+  captureAletheiaSessionNote({
+    body: note.body,
+    rationale: note.rationale,
+    category: "observation",
+    source: "assistant",
+    linkedProjectId: note.linkedProjectId,
+  });
+}
+
+function queueDesignToCodeGlassMemoryIngestion(input: {
+  event: DesignToCodeMemoryEvent;
+  feedItemId?: string;
+  stack?: DesignStack;
+  action?: DesignToCodeAction;
+  error?: string;
+  explicitRememberText?: string;
+}): void {
+  const session = input.feedItemId
+    ? getDesignSession(state, input.feedItemId)
+    : undefined;
+  const stack =
+    input.stack
+    ?? session?.selectedStack
+    ?? state.glassSettings.designStack
+    ?? DEFAULT_DESIGN_STACK;
+  const action =
+    input.action
+    ?? session?.selectedAction
+    ?? session?.pendingAction
+    ?? "react";
+
+  void ingestDesignToCodeGlassMemory({
+    event: input.event,
+    session,
+    stack,
+    action,
+    error: input.error,
+    projects: state.glassStorageProjects ?? [],
+    notes: state.aletheiaNotes?.notes,
+    explicitRememberText: input.explicitRememberText,
+    sessionId: sessions.current()?.id,
+  });
+}
+
 function speakAletheiaAdviceAck(text: string): void {
   const surface =
     pendingAletheiaSpeakSurface
@@ -4648,6 +4887,19 @@ function speakAletheiaAdviceAck(text: string): void {
   state.aletheiaAdviceSpeak = {
     text: spoken,
     nonce: (state.aletheiaAdviceSpeak?.nonce ?? 0) + 1,
+  };
+}
+
+/** Design to Code handoff — Matilda speaks without requiring companion toggle. */
+function speakAletheiaDesignToCodeHandoff(text: string): void {
+  const spoken = spokenTextForSurface(text, {
+    surface: "companion",
+    companionModeActive: false,
+    personaBehavior: state.aletheiaPersonaBehavior,
+  });
+  state.aletheiaEphemeralSpeak = {
+    text: spoken,
+    nonce: (state.aletheiaEphemeralSpeak?.nonce ?? 0) + 1,
   };
 }
 
@@ -4700,6 +4952,7 @@ async function handleAletheiaCoordination(intent: CoordinationIntent): Promise<v
   if (
     state.askInFlight
     || state.agentRun?.status === "running"
+    || isAletheiaComputerOperatorRunning()
     || isResearchConversationActive(state.aletheiaResearchConversation)
     || isDelegatedLoopRunning(state.aletheiaDelegatedLoop)
     || isDelegatedPresenceRunning(state.aletheiaDelegatedPresence)
@@ -4752,10 +5005,273 @@ async function handleAletheiaCoordination(intent: CoordinationIntent): Promise<v
   }
 }
 
+async function handleAletheiaSingleComputerAction(
+  targetApp: string,
+  goal: string,
+): Promise<void> {
+  if (
+    state.askInFlight
+    || state.agentRun?.status === "running"
+    || isAletheiaComputerOperatorRunning()
+    || isResearchConversationActive(state.aletheiaResearchConversation)
+    || isDelegatedLoopRunning(state.aletheiaDelegatedLoop)
+    || isDelegatedPresenceRunning(state.aletheiaDelegatedPresence)
+    || state.aletheiaAgentActivity?.phase === "running"
+    || state.aletheiaAgentActivity?.phase === "synthesizing"
+  ) {
+    speakAletheiaAdviceAck("I'm still working on something — give me a moment.");
+    push();
+    return;
+  }
+
+  trackCopilotCommand(goal);
+  pushFeed(createCommandFeedItem("command", goal, { prompt: goal }));
+
+  const result = await executeComputerUse({
+    operation: "activate_app",
+    targetApp,
+    displayAwareness: state.aletheiaDisplayAwareness,
+  });
+  const spoken = formatComputerUseRouteNarration(result);
+  speakAletheiaAdviceAck(spoken);
+  clearAletheiaUseComputerForNextTask();
+  push();
+}
+
+function setAletheiaUseComputerForNextTask(enabled: boolean): void {
+  state.aletheiaUseComputerForNextTask = enabled;
+  push();
+}
+
+function clearAletheiaUseComputerForNextTask(): void {
+  if (!state.aletheiaUseComputerForNextTask) return;
+  state.aletheiaUseComputerForNextTask = false;
+  push();
+}
+
+async function handleAletheiaUseComputerShortcut(): Promise<void> {
+  if (!state.companionModeActive) {
+    const block = await ensureCompanionModeCanActivate();
+    if (block) {
+      state.lastNotice = block;
+      push();
+      return;
+    }
+    applyCompanionModeActivation();
+  }
+  setAletheiaUseComputerForNextTask(true);
+  focusCommandBar();
+}
+
+async function handleAletheiaComputerOperator(goal: string): Promise<void> {
+  if (
+    state.askInFlight
+    || state.agentRun?.status === "running"
+    || isAletheiaComputerOperatorRunning()
+    || isResearchConversationActive(state.aletheiaResearchConversation)
+    || isDelegatedLoopRunning(state.aletheiaDelegatedLoop)
+    || isDelegatedPresenceRunning(state.aletheiaDelegatedPresence)
+    || state.aletheiaAgentActivity?.phase === "running"
+    || state.aletheiaAgentActivity?.phase === "synthesizing"
+  ) {
+    speakAletheiaAdviceAck("I'm still working on something — give me a moment.");
+    push();
+    return;
+  }
+
+  trackCopilotCommand(goal);
+  pushFeed(createCommandFeedItem("command", goal, { prompt: goal }));
+
+  const prepared = await prepareAletheiaComputerOperator(goal, { surface: "conversation" });
+  if (!prepared.ok) {
+    if (prepared.reason) {
+      speakAletheiaAdviceAck(prepared.reason);
+    }
+    push();
+    return;
+  }
+
+  const operator = prepared.operator;
+  const autoRun = operator.phase === "running";
+  const intro = computerOperatorIntroSpeech(goal, autoRun, "conversation");
+  speakAletheiaAdviceAck(intro);
+  pushFeed(
+    createCommandFeedItem("response", intro, {
+      prompt: goal,
+      fullBody: intro,
+      computerOperatorLoopId: operator.loopId,
+    }),
+  );
+  push();
+}
+
+type PrepareComputerOperatorResult =
+  | { ok: true; operator: AletheiaComputerOperatorSnapshot }
+  | { ok: false; reason?: string };
+
+function reconcileExistingComputerOperatorSession(
+  goal: string,
+  surface: ComputerOperatorEntrySurface,
+): AletheiaComputerOperatorSnapshot | null {
+  const existing = state.aletheiaComputerOperator;
+  if (!existing) return null;
+
+  if (existing.phase === "running" || isAletheiaComputerOperatorRunning()) {
+    return existing;
+  }
+
+  if (
+    existing.phase === "complete"
+    || existing.phase === "failed"
+    || existing.phase === "paused"
+  ) {
+    state.aletheiaComputerOperator = undefined;
+    return null;
+  }
+
+  if (existing.phase === "awaiting_grant" || existing.phase === "awaiting_confirm") {
+    if (existing.entrySurface !== surface) {
+      cancelAletheiaComputerOperator(aletheiaComputerOperatorHost);
+      state.aletheiaComputerOperator = undefined;
+      return null;
+    }
+    const trimmedGoal = goal.trim();
+    if (
+      trimmedGoal
+      && trimmedGoal !== existing.plan.goal
+      && trimmedGoal !== COMPUTER_OPERATOR_PLACEHOLDER_GOAL
+    ) {
+      return refreshComputerOperatorGoal(aletheiaComputerOperatorHost, trimmedGoal) ?? existing;
+    }
+    return existing;
+  }
+
+  return null;
+}
+
+function refreshComputerOperatorGrantsState(): void {
+  state.aletheiaComputerOperatorGrants = listComputerOperatorPersistentGrants().map((row) => ({
+    id: row.id,
+    targetApp: row.targetApp,
+    allowedActions: row.allowedActions,
+    scope: row.scope,
+    maxSteps: row.maxSteps,
+    declaration: row.declaration,
+    createdAt: row.createdAt,
+  }));
+}
+
+async function prepareAletheiaComputerOperator(
+  inputGoal?: string,
+  options?: { surface?: ComputerOperatorEntrySurface },
+): Promise<PrepareComputerOperatorResult> {
+  const surface = options?.surface ?? "conversation";
+
+  if (isAletheiaComputerOperatorRunning()) {
+    state.lastNotice = "Computer operator is already running.";
+    push();
+    return { ok: false, reason: state.lastNotice };
+  }
+
+  if (!state.companionModeActive) {
+    const block = await ensureCompanionModeCanActivate();
+    if (block) {
+      console.warn("[glass] prepare-computer-operator blocked —", block);
+      if (!block.toLowerCase().includes("consent")) {
+        state.lastNotice = block;
+      }
+      push();
+      return { ok: false, reason: block.toLowerCase().includes("consent") ? undefined : block };
+    }
+    applyCompanionModeActivation();
+  }
+
+  refreshSetupCapabilities();
+  await runAletheiaBootstrap();
+
+  const screenReady = state.screenCaptureProbe === "ready";
+  const accessibilityReady = probeAletheiaOsPermissions().accessibilityGranted;
+
+  if (!screenReady) {
+    const target = resolveCaptureDisplay(state.glassSettings.displayTarget);
+    const probe = await import("./capture.ts").then((m) =>
+      m.probeScreenCapturePermission(target.id),
+    );
+    if (!probe.ok) {
+      state.screenCaptureProbe = mapCaptureErrorToScreenCaptureStatus(probe.error);
+      state.screenCaptureDetail = probe.error;
+      const opened = await openGlassSystemSettings("screenRecording");
+      state.lastNotice =
+        opened.message ?? "Screen Recording permission needed for Computer operator.";
+      push();
+      return { ok: false, reason: state.lastNotice };
+    }
+    state.screenCaptureProbe = "ready";
+    state.screenCaptureDetail = undefined;
+    refreshSetupCapabilities();
+  }
+
+  if (!accessibilityReady) {
+    const opened = await openGlassSystemSettings("accessibility");
+    state.lastNotice =
+      opened.message ?? "Accessibility permission needed for Computer operator.";
+    push();
+    return { ok: false, reason: state.lastNotice };
+  }
+
+  const goal =
+    (typeof inputGoal === "string" ? inputGoal.trim() : "")
+    || state.companionMemory?.lastPrompt?.trim()
+    || "";
+
+  const reconciled = reconcileExistingComputerOperatorSession(goal, surface);
+  if (reconciled) {
+    if (reconciled.phase === "running") {
+      return { ok: true, operator: reconciled };
+    }
+    if (reconciled.phase === "awaiting_grant" || reconciled.phase === "awaiting_confirm") {
+      push();
+      return { ok: true, operator: reconciled };
+    }
+  }
+
+  refreshComputerOperatorGrantsState();
+  const grants = state.aletheiaComputerOperatorGrants ?? [];
+
+  if (goal) {
+    const plan = planFromNaturalLanguage(goal);
+    const match = findMatchingPersistentGrant(plan, grants);
+    if (match) {
+      const snapshot = startAletheiaComputerOperator(aletheiaComputerOperatorHost, goal, {
+        autoRun: true,
+        grantedBy: "always-allow",
+        entrySurface: surface,
+      });
+      push();
+      if (!snapshot) {
+        return { ok: false, reason: "Could not start computer operator." };
+      }
+      return { ok: true, operator: snapshot };
+    }
+  }
+
+  const planGoal = goal || COMPUTER_OPERATOR_PLACEHOLDER_GOAL;
+  const snapshot = startAletheiaComputerOperator(aletheiaComputerOperatorHost, planGoal, {
+    autoRun: false,
+    entrySurface: surface,
+  });
+  push();
+  if (!snapshot) {
+    return { ok: false, reason: "Could not plan computer operator task." };
+  }
+  return { ok: true, operator: snapshot };
+}
+
 async function handleAletheiaDelegatedPresence(intent: DelegatedPresenceIntent): Promise<void> {
   if (
     state.askInFlight
     || state.agentRun?.status === "running"
+    || isAletheiaComputerOperatorRunning()
     || isResearchConversationActive(state.aletheiaResearchConversation)
     || isDelegatedLoopRunning(state.aletheiaDelegatedLoop)
     || isDelegatedPresenceRunning(state.aletheiaDelegatedPresence)
@@ -4781,18 +5297,19 @@ async function handleAletheiaDelegatedPresence(intent: DelegatedPresenceIntent):
     if (op.signal.aborted) return;
 
       if (result.ok && result.report) {
-      speakAletheiaAdviceAck(result.report);
+      const report = appendDelegatedPresenceEscalationHint(result.report);
+      speakAletheiaAdviceAck(report);
       state.lastAskResponse = {
         prompt: intent.goal,
-        answer: result.report,
-        fullAnswer: result.report,
+        answer: report,
+        fullAnswer: report,
         at: new Date().toISOString(),
         routeUsed: "aletheia_delegated_presence",
       };
       pushFeed(
-        createCommandFeedItem("response", result.report, {
+        createCommandFeedItem("response", report, {
           prompt: intent.goal,
-          fullBody: result.report,
+          fullBody: report,
         }),
       );
     } else if (!result.ok && result.errorMessage) {
@@ -4801,6 +5318,7 @@ async function handleAletheiaDelegatedPresence(intent: DelegatedPresenceIntent):
     }
     push();
   } finally {
+    clearAletheiaUseComputerForNextTask();
     finishAletheiaCompanionOperation(op);
   }
 }
@@ -4809,6 +5327,7 @@ async function handleAletheiaDelegatedLoop(intent: DelegatedLoopIntent): Promise
   if (
     state.askInFlight
     || state.agentRun?.status === "running"
+    || isAletheiaComputerOperatorRunning()
     || isResearchConversationActive(state.aletheiaResearchConversation)
     || isDelegatedLoopRunning(state.aletheiaDelegatedLoop)
     || isDelegatedPresenceRunning(state.aletheiaDelegatedPresence)
@@ -4869,6 +5388,7 @@ async function handleAletheiaResearchConversation(intent: ResearchConversationIn
   if (
     state.askInFlight
     || state.agentRun?.status === "running"
+    || isAletheiaComputerOperatorRunning()
     || isResearchConversationActive(state.aletheiaResearchConversation)
     || isDelegatedLoopRunning(state.aletheiaDelegatedLoop)
     || isDelegatedPresenceRunning(state.aletheiaDelegatedPresence)
@@ -5144,8 +5664,22 @@ function resolveAskUserContextForSubmit(
     || !gate.suppressAmbientSynthesis
     || gate.requireConfirmObservedContext;
   const termCtx = includeTerminal ? getTerminalContextString() : null;
+  const designToCodeCtx = formatDesignToCodeAskContext(state.designCaptures);
+  const designToCodeRecallCtx = buildDesignToCodeProjectRecallAskContext({
+    prompt,
+    latestProjectId: state.latestDesignToCodeProjectId,
+    notes: state.aletheiaNotes?.notes,
+    captures: state.designCaptures,
+    projects: state.glassStorageProjects,
+  });
 
-  const parts = [profileContext, ambientContext, termCtx].filter(Boolean);
+  const parts = [
+    profileContext,
+    ambientContext,
+    designToCodeCtx,
+    designToCodeRecallCtx,
+    termCtx,
+  ].filter(Boolean);
   const surface = resolveAletheiaSurface({
     companionModeActive: state.companionModeActive,
     aletheiaDashboardActive: state.aletheiaDashboardActive,
@@ -5160,9 +5694,10 @@ function resolveAskUserContextForSubmit(
     parts.unshift(personaDirective);
   }
   if (state.companionModeActive && state.aletheiaNotes?.notes.length) {
-    const notesContext = formatAletheiaNotesContext(
-      selectRelevantAletheiaNotes(state.aletheiaNotes.notes, prompt),
-    );
+    const notes = isDesignToCodeRecallPrompt(prompt)
+      ? filterRecentDesignToCodeNotes(state.aletheiaNotes.notes, Date.now(), 5, null)
+      : selectRelevantAletheiaNotes(state.aletheiaNotes.notes, prompt);
+    const notesContext = formatAletheiaNotesContext(notes);
     if (notesContext) parts.unshift(notesContext);
   }
   return parts.length > 0 ? parts.join("\n\n") : undefined;
@@ -5191,6 +5726,11 @@ function refreshSetupCapabilities(): void {
   });
   refreshAletheiaPermissionPlane();
   refreshAletheiaObservationPlaneState();
+}
+
+/** Full setup refresh including sidecar probes — not on every state push. */
+function refreshSetupCapabilitiesWithSidecar(): void {
+  refreshSetupCapabilities();
   void aletheiaSidecarManager.refreshNow();
   void refreshAletheiaDependencyManifest();
 }
@@ -5240,7 +5780,7 @@ async function applyGlassSetupCheckResult(
     markIivoServerDegraded("setup", result.serverHealth.checkError);
   }
   state.iivoServerDegradedReason = getIivoServerDegradedReason();
-  refreshSetupCapabilities();
+  refreshSetupCapabilitiesWithSidecar();
   refreshOmniParserInstall();
   state.setupCheckSummary = formatSetupCheckSummary(state.setupCapabilities);
   if (!options.silent) {
@@ -5427,6 +5967,7 @@ function snapshot(): GlassState {
     companionWarmupSpeakNonce: state.companionWarmupSpeakNonce,
     companionPresence: state.companionPresence,
     companionMemory: state.companionMemory,
+    aletheiaUseComputerForNextTask: state.aletheiaUseComputerForNextTask,
     companionPrivacy: state.companionPrivacy,
     translateSetupRequestId: state.translateSetupRequestId,
     agentRun: state.agentRun,
@@ -5441,6 +5982,10 @@ function snapshot(): GlassState {
     codeAnalystExplorerPrompt: state.codeAnalystExplorerPrompt,
     writingStudioActive: state.writingStudioActive === true,
     writingStudioPrompt: state.writingStudioPrompt,
+    glassStorageProjectsActive: state.glassStorageProjectsActive === true,
+    glassStorageProjects: state.glassStorageProjects ?? [],
+    glassStorageProjectsSelectedId: state.glassStorageProjectsSelectedId ?? null,
+    latestDesignToCodeProjectId: state.latestDesignToCodeProjectId ?? null,
     glassDashboardActive: state.glassDashboardActive === true,
     glassDashboardNav: state.glassDashboardNav ?? null,
     aletheiaDashboardActive: state.aletheiaDashboardActive === true,
@@ -5514,10 +6059,13 @@ function snapshot(): GlassState {
     aletheiaAmbientSynthesis: state.aletheiaAmbientSynthesis,
     aletheiaPendingAdvice: state.aletheiaPendingAdvice,
     aletheiaAdviceSpeak: state.aletheiaAdviceSpeak,
+    aletheiaEphemeralSpeak: state.aletheiaEphemeralSpeak,
     aletheiaBoundedLoop: state.aletheiaBoundedLoop,
     aletheiaAgentActivity: state.aletheiaAgentActivity,
     aletheiaDelegatedPresence: state.aletheiaDelegatedPresence,
     aletheiaDelegatedLoop: state.aletheiaDelegatedLoop,
+    aletheiaComputerOperator: state.aletheiaComputerOperator,
+    aletheiaComputerOperatorGrants: state.aletheiaComputerOperatorGrants,
     aletheiaResearchConversation: state.aletheiaResearchConversation,
     aletheiaPersonaBehavior: state.aletheiaPersonaBehavior,
     aletheiaNotes: state.aletheiaNotes,
@@ -5697,20 +6245,28 @@ function syncIdeChromeFromState(): void {
       || state.coderWorkspaceActive
       || state.researchExplorerActive
       || state.codeAnalystExplorerActive
-      || state.writingStudioActive,
+      || state.writingStudioActive
+      || state.glassStorageProjectsActive
+      || state.glassDashboardActive
+      || state.aletheiaDashboardActive,
     ),
   );
   setOverlayIdeActive(state.glassIdeActive === true);
   setOverlayResearchExplorerActive(state.researchExplorerActive === true);
   setOverlayCodeAnalystExplorerActive(state.codeAnalystExplorerActive === true);
   setOverlayWritingStudioActive(state.writingStudioActive === true);
+  setOverlayGlassStorageProjectsActive(state.glassStorageProjectsActive === true);
   setOverlayGlassDashboardActive(state.glassDashboardActive === true);
   setOverlayAletheiaDashboardActive(state.aletheiaDashboardActive === true);
 }
 
+function syncComputerOperatorOverlayPin(): void {
+  setOverlayPinnedForComputerOperator(
+    shouldMountComputerOperatorOverlayGlow(state.aletheiaComputerOperator?.phase),
+  );
+}
+
 function push(): void {
-  refreshSetupCapabilities();
-  refreshOmniParserInstall();
   const updatePhase = state.appUpdate.phase;
   const appUpdateVisible =
     updatePhase === "available" || updatePhase === "downloading" || updatePhase === "installing";
@@ -5723,6 +6279,7 @@ function push(): void {
     }),
   );
   syncIdeChromeFromState();
+  syncComputerOperatorOverlayPin();
   syncLanguagePickerOverlayInteractivity(
     state.onboardingComplete === false &&
       state.glassBootComplete === true &&
@@ -5736,6 +6293,50 @@ function push(): void {
 
 let glassUpdateCheckTimer: ReturnType<typeof setInterval> | null = null;
 let overlayRendererNotificationActive = false;
+let glassBackgroundWorkStarted = false;
+
+/** Heavy loops + embedder — after splash dismisses or chrome is already visible. */
+function startGlassBackgroundWork(): void {
+  if (glassBackgroundWorkStarted) return;
+  glassBackgroundWorkStarted = true;
+
+  aletheiaPermissionMonitor.start();
+  aletheiaSidecarManager.start();
+
+  void runAletheiaBootstrap();
+
+  startSpendPolling();
+  startLiveTerminalPolling();
+  startPerceptionLoop();
+  startScreenDigestLoop({
+    shouldRun: () => state.companionModeActive && !state.companionPrivacy?.active,
+    resolveCaptureTarget: () => resolveCaptureDisplay(state.glassSettings.displayTarget),
+    getConfig: () => config,
+    onDigest: (result) => {
+      const prev = state.workingContext;
+      latestDigest = result;
+      state.workingContext = result.text;
+      state.workingContextAge = result.capturedAt;
+      if (
+        state.companionModeActive
+        && !state.companionPrivacy?.active
+        && result.text
+        && result.text !== prev
+      ) {
+        recordAletheiaRelationshipEvent({
+          kind: "screen_context_change",
+          summary: "Screen context updated",
+          detail: result.text.slice(0, 240),
+        });
+      }
+      refreshAletheiaObservationPlaneState();
+      push();
+    },
+    onError: () => {
+      /* silent — screen recording permission may not be granted */
+    },
+  });
+}
 
 async function runGlassUpdateCheck(): Promise<void> {
   if (process.env.IIVO_GLASS_E2E === "1") return;
@@ -6478,9 +7079,8 @@ async function submitCommand(
     /** Phase 4a — Companion route from renderer auto-submit. */
     companionRoute?: CompanionRoute;
   },
-): Promise<void> {
+): Promise<{ fullAnswer: string; responseFeedItemId: string } | undefined> {
   // Consume any pending context snapshot (set by glass-context-ask hotkey).
-  // Expires after 30 s so a stale snapshot never pollutes a later unrelated ask.
   let contextPrefix = "";
   // Captures the editor file path from the snapshot for "Apply to file" threading.
   let askFilePath: string | null = null;
@@ -6511,6 +7111,14 @@ async function submitCommand(
 
   const text = (contextPrefix + rawText).trim();
 
+  if (isExplicitDesignToCodeRememberText(rawText.trim())) {
+    queueDesignToCodeGlassMemoryIngestion({
+      event: "explicit_remember",
+      explicitRememberText: rawText.trim(),
+      feedItemId: state.latestDesignToCodeProjectId ?? undefined,
+    });
+  }
+
   if (state.companionPrivacy?.active) {
     return;
   }
@@ -6535,11 +7143,32 @@ async function submitCommand(
       return;
     }
 
-    const delegated = classifyDelegatedPresenceIntent(rawText.trim());
-    if (delegated) {
+    const computerUse = await classifyComputerUseIntent(
+      config,
+      rawText.trim(),
+      state.activeApp,
+      { useComputerHint: state.aletheiaUseComputerForNextTask === true },
+    );
+    if (computerUse.route !== "NONE") {
       incrementAletheiaSessionTurn();
-      void handleAletheiaDelegatedPresence(delegated);
-      return;
+      switch (computerUse.route) {
+        case "SINGLE_ACTION":
+          void handleAletheiaSingleComputerAction(
+            computerUse.targetApp ?? state.activeApp ?? "Finder",
+            computerUse.goal,
+          );
+          return;
+        case "OBSERVE":
+          if (computerUse.delegatedIntent) {
+            void handleAletheiaDelegatedPresence(computerUse.delegatedIntent);
+          } else {
+            void handleAletheiaComputerOperator(computerUse.goal);
+          }
+          return;
+        case "OPERATE":
+          void handleAletheiaComputerOperator(computerUse.goal);
+          return;
+      }
     }
 
     const researchConversation = classifyResearchConversationIntent(
@@ -7202,19 +7831,17 @@ async function submitCommand(
       ...(visualCaptureWarning ? [visualCaptureWarning] : []),
       ...(result.warnings ?? []),
     ];
-    pushFeed(
-      createCommandFeedItem("response", overlayAnswer, {
-        prompt: text,
-        fullBody: fullAnswer,
-        runId: result.runId,
-        contextId: result.contextId,
-        codeFilePath: askFilePath ?? undefined,
-        designAction: opts?.designAction,
-        designStack: opts?.designStack,
-        designCaptureId: opts?.designCaptureId,
-      }),
-    );
-    // Persist Q&A pair to durable cross-session memory (fire-and-forget)
+    const responseFeedItem = createCommandFeedItem("response", overlayAnswer, {
+      prompt: text,
+      fullBody: fullAnswer,
+      runId: result.runId,
+      contextId: result.contextId,
+      codeFilePath: askFilePath ?? undefined,
+      designAction: opts?.designAction,
+      designStack: opts?.designStack,
+      designCaptureId: opts?.designCaptureId,
+    });
+    pushFeed(responseFeedItem);
     void saveMemoryEntry({
       prompt: text,
       answer: fullAnswer,
@@ -7300,6 +7927,7 @@ async function submitCommand(
     } catch (err) {
       console.error("[memory] command-bar persist failed:", err);
     }
+    return { fullAnswer, responseFeedItemId: responseFeedItem.id };
   } catch (err) {
     if (requestGeneration !== askRequestGeneration || signal.aborted || err instanceof GlassAskCancelledError) {
       return;
@@ -7425,7 +8053,7 @@ async function submitCommand(
         state.operationDiagnostics = recordOperation(state.operationDiagnostics, "ask-iivo", "ok");
         await recordGlassContextAfterResponse(text);
         push();
-        return;
+        return retryResult.answer;
       } catch (retryErr) {
         if (requestGeneration !== askRequestGeneration || signal.aborted || retryErr instanceof GlassAskCancelledError) {
           return;
@@ -7678,6 +8306,7 @@ async function handleCommand(
       }
 
       setListenNotesPadVisible(false);
+      restartPerceptionPolling();
       if (state.companionModeActive) {
         deactivateCompanionMode();
       } else {
@@ -7687,6 +8316,7 @@ async function handleCommand(
         clearAletheiaDelegatedPresenceState(aletheiaDelegatedPresenceHost);
         clearAletheiaDelegatedLoopState(aletheiaDelegatedLoopHost);
         clearAletheiaResearchConversationState(aletheiaResearchConversationHost);
+        requestComputerOperatorCancel();
         requestAletheiaLoopCancel();
         pendingLoopDecisionResolver = null;
       }
@@ -8163,6 +8793,7 @@ async function handleCommand(
       };
       glassUserSettings = state.glassSettings;
       await persistGlassUserSettings(glassUserSettings);
+      restartPerceptionPolling();
       push();
       return;
     case "clipboard-intel-debug-inject": {
@@ -8433,6 +9064,7 @@ async function handleCommand(
       state.captureSubTab = nav.captureSubTab;
       if (isPanelVisible()) {
         ensurePanelLayout();
+        raisePanelWindow();
       }
       push();
       return;
@@ -8447,6 +9079,9 @@ async function handleCommand(
       }
       state.panelTab = "capture";
       state.captureSubTab = command.subTab;
+      if (isPanelVisible()) {
+        raisePanelWindow();
+      }
       push();
       return;
     case "clear-last-notice":
@@ -9322,6 +9957,7 @@ async function handleCommand(
         state.researchExplorerActive = false;
         state.codeAnalystExplorerActive = false;
         state.writingStudioActive = false;
+        state.glassStorageProjectsActive = false;
         state.glassDashboardActive = false;
         state.glassDashboardNav = null;
         state.aletheiaDashboardActive = false;
@@ -9561,6 +10197,90 @@ async function handleCommand(
       return;
     }
 
+    case "prepare-aletheia-computer-operator": {
+      const goal =
+        typeof command.goal === "string"
+          ? command.goal
+          : state.companionMemory?.lastPrompt ?? "";
+      const surface =
+        command.surface === "conversation" || command.surface === "dashboard"
+          ? command.surface
+          : "conversation";
+      await prepareAletheiaComputerOperator(goal, { surface });
+      return;
+    }
+
+    case "set-aletheia-use-computer-for-next-task": {
+      setAletheiaUseComputerForNextTask(command.enabled === true);
+      return;
+    }
+
+    case "aletheia-use-computer-shortcut": {
+      await handleAletheiaUseComputerShortcut();
+      return;
+    }
+
+    case "start-aletheia-computer-operator": {
+      const goal =
+        typeof command.goal === "string"
+          ? command.goal
+          : state.companionMemory?.lastPrompt ?? "";
+      if (!goal.trim()) {
+        await prepareAletheiaComputerOperator();
+        return;
+      }
+      if (isAletheiaComputerOperatorRunning()) {
+        state.lastNotice = "Computer operator is already running.";
+        push();
+        return;
+      }
+      await prepareAletheiaComputerOperator(goal);
+      return;
+    }
+
+    case "grant-aletheia-computer-session": {
+      const goal = typeof command.goal === "string" ? command.goal.trim() : undefined;
+      const alwaysAllow = command.alwaysAllow === true;
+      const result = await grantAndRunAletheiaComputerOperator(
+        aletheiaComputerOperatorHost,
+        command.loopId,
+        alwaysAllow ? "always-allow" : "user-tap",
+        { goal },
+      );
+      if (!result.ok) {
+        state.lastNotice = result.reason;
+        push();
+        return;
+      }
+      if (alwaysAllow) {
+        const plan = state.aletheiaComputerOperator?.plan;
+        if (plan && plan.goal !== COMPUTER_OPERATOR_PLACEHOLDER_GOAL) {
+          saveComputerOperatorPersistentGrant(buildPersistentGrantFromPlan(plan));
+          refreshComputerOperatorGrantsState();
+        }
+      }
+      return;
+    }
+
+    case "cancel-aletheia-computer-operator": {
+      requestComputerOperatorCancel();
+      return;
+    }
+
+    case "dismiss-aletheia-computer-operator": {
+      dismissAletheiaComputerOperator(aletheiaComputerOperatorHost);
+      return;
+    }
+
+    case "revoke-aletheia-computer-persistent-grant": {
+      if (revokeComputerOperatorPersistentGrant(command.grantId)) {
+        refreshComputerOperatorGrantsState();
+        state.lastNotice = "Computer operator always-allow grant revoked.";
+      }
+      push();
+      return;
+    }
+
     case "aletheia-research-follow-up": {
       await handleAletheiaResearchFollowUp(command.action);
       return;
@@ -9572,6 +10292,13 @@ async function handleCommand(
         category: command.category ?? "general",
         source: "user",
       });
+      if (isExplicitDesignToCodeRememberText(command.body)) {
+        queueDesignToCodeGlassMemoryIngestion({
+          event: "explicit_remember",
+          explicitRememberText: command.body,
+          feedItemId: state.latestDesignToCodeProjectId ?? undefined,
+        });
+      }
       push();
       return;
     }
@@ -9867,77 +10594,31 @@ async function handleCommand(
     // ── Design-to-Code Bridge (#163) ─────────────────────────────────────────
 
     case "design-capture": {
-      // Capture screen (independent from the existing capture button flow)
-      const imageDataUrl = await handleCapture();
-      if (!imageDataUrl) {
-        // handleCapture already sets state.lastError; nothing more to do
-        return;
-      }
-
-      // Detect editor app and file from current window context
-      const wCtx = state.windowContext;
-      const appName = wCtx.status === "available" ? (wCtx.appName ?? null) : null;
-      const windowTitle = wCtx.status === "available" ? (wCtx.windowTitle ?? null) : null;
-
-      let detectedFile: { fileName: string; filePath: string | null; language: string } | null = null;
-      if (isEditorAppName(appName)) {
-        const fileName = parseFileNameFromTitle(windowTitle);
-        if (fileName) {
-          const language = detectLanguage(fileName);
-          detectedFile = { fileName, filePath: null, language };
-        }
-      }
-
-      const feedItem = createCommandFeedItem("design-capture", "", {
-        designImageDataUrl: imageDataUrl,
-        designDetectedFileName: detectedFile?.fileName,
-      });
-      const captureId = feedItem.id;
-      if (!state.designCaptures) state.designCaptures = {};
-      state.designCaptures[captureId] = {
-        feedItemId: captureId,
-        imageDataUrl,
-        detectedFile,
-        phase: "ready",
-      };
-      pushFeed(feedItem);
-      push();
-
-      // Asynchronously resolve the file path (best-effort) and backfill into state
-      if (detectedFile && appName && windowTitle) {
-        readCodeContext({ appName, windowTitle, hintPaths: [] })
-          .then((ctx) => {
-            if (ctx?.filePath && state.designCaptures?.[captureId]?.detectedFile) {
-              state.designCaptures[captureId].detectedFile = {
-                fileName: ctx.fileName,
-                filePath: ctx.filePath,
-                language: ctx.language,
-              };
-              push();
-            }
-          })
-          .catch(() => { /* best-effort */ });
-      }
+      await startDesignCapture(state, createDesignCaptureDeps());
       return;
     }
 
     case "design-generate": {
-      const { feedItemId, action } = command;
-      const refinementFeedback = command.refinementFeedback;
-      const capture = state.designCaptures?.[feedItemId];
-      if (!capture) return;
+      handleDesignGenerateCommand(
+        state,
+        {
+          feedItemId: command.feedItemId,
+          action: command.action,
+          refinementFeedback: command.refinementFeedback,
+        },
+        createDesignGenerationDeps(),
+      );
+      return;
+    }
 
-      if (action === "match-codebase" && capture.detectedFile?.filePath) {
-        // Need file content — ask permission first; stash feedback so grant/skip can carry it through
-        capture.phase = "permission";
-        capture.pendingAction = action;
-        capture.pendingRefinementFeedback = refinementFeedback;
-        capture.statusLine = `Allow Glass to read ${capture.detectedFile.fileName}?`;
-        push();
-      } else {
-        // No file read needed — generate immediately
-        void runDesignGeneration(feedItemId, action, false, { refinementFeedback });
-      }
+    case "design-recapture": {
+      await recaptureDesignSession(state, command.feedItemId, createDesignCaptureDeps());
+      return;
+    }
+
+    case "design-ack-quality": {
+      patchDesignSession(state, command.feedItemId, { qualityAcknowledged: true });
+      push();
       return;
     }
 
@@ -9945,7 +10626,14 @@ async function handleCommand(
       const { feedItemId, action } = command;
       const grantCapture = state.designCaptures?.[feedItemId];
       const pendingFeedback = grantCapture?.pendingRefinementFeedback;
-      void runDesignGeneration(feedItemId, action, true, pendingFeedback ? { refinementFeedback: pendingFeedback } : undefined);
+      void runDesignGenerationPipeline(
+        state,
+        feedItemId,
+        action,
+        true,
+        createDesignGenerationDeps(),
+        pendingFeedback ? { refinementFeedback: pendingFeedback } : undefined,
+      );
       return;
     }
 
@@ -9953,7 +10641,14 @@ async function handleCommand(
       const { feedItemId, action } = command;
       const skipCapture = state.designCaptures?.[feedItemId];
       const pendingFeedback = skipCapture?.pendingRefinementFeedback;
-      void runDesignGeneration(feedItemId, action, false, pendingFeedback ? { refinementFeedback: pendingFeedback } : undefined);
+      void runDesignGenerationPipeline(
+        state,
+        feedItemId,
+        action,
+        false,
+        createDesignGenerationDeps(),
+        pendingFeedback ? { refinementFeedback: pendingFeedback } : undefined,
+      );
       return;
     }
 
@@ -9962,6 +10657,30 @@ async function handleCommand(
       state.glassSettings.designStack = stack;
       push();
       void persistGlassUserSettings(state.glassSettings);
+      return;
+    }
+
+    case "design-retry-save": {
+      const session = getDesignSession(state, command.feedItemId);
+      if (!session) return;
+      const action = session.selectedAction ?? session.pendingAction ?? "react";
+      const stack = resolveStack(state, session);
+      const feedItem = session.latestResponseFeedItemId
+        ? state.commandFeed.find((item) => item.id === session.latestResponseFeedItemId)
+        : undefined;
+      const fullBody =
+        session.latestResult?.trim()
+        || feedItem?.fullBody?.trim()
+        || feedItem?.body?.trim()
+        || "";
+      if (!fullBody) return;
+      await persistDesignToCodeToGlassStorage({
+        feedItemId: command.feedItemId,
+        action,
+        stack,
+        fullBody,
+        speakOnComplete: false,
+      });
       return;
     }
 
@@ -10933,99 +11652,156 @@ async function checkBuildMonitor(termId: string, bufLines: string[]): Promise<vo
   push();
 }
 
-// ── Design-to-Code helpers (#163) ────────────────────────────────────────────
+function createDesignCaptureDeps(): DesignCaptureDeps {
+  return {
+    handleCapture,
+    getWindowContext: () => state.windowContext,
+    getDesignStack: () => state.glassSettings.designStack ?? DEFAULT_DESIGN_STACK,
+    createFeedItem: createCommandFeedItem,
+    pushFeed,
+    push,
+    updateFeedThumbnail: (feedItemId, imageDataUrl) => {
+      state.commandFeed = state.commandFeed.map((item) =>
+        item.id === feedItemId ? { ...item, designImageDataUrl: imageDataUrl } : item,
+      );
+    },
+  };
+}
 
-/**
- * Core generation helper called after permission is resolved.
- * - If readFile is true and the capture has a resolved filePath, reads the file for codebase context.
- * - Builds the appropriate prompt via buildDesignToCodePrompt.
- * - Fires submitCommand with presetImageDataUrl so the pre-captured design image is sent to the AI instead of a fresh screen capture.
- */
-async function runDesignGeneration(
-  feedItemId: string,
-  action: DesignToCodeAction,
-  readFile: boolean,
-  opts?: { refinementFeedback?: string },
-): Promise<void> {
-  const capture = state.designCaptures?.[feedItemId];
-  if (!capture) return;
+async function refreshGlassStorageProjectsState(): Promise<void> {
+  state.glassStorageProjects = await loadGlassStorageProjectsIndex(app.getPath("userData"));
+}
 
-  // Snapshot the stack immediately — before any async gaps — so that a user
-  // changing the picker while file-read is in progress doesn't corrupt this run (#163-F).
-  const stack: DesignStack = state.glassSettings.designStack ?? DEFAULT_DESIGN_STACK;
+async function persistDesignToCodeToGlassStorage(input: {
+  feedItemId: string;
+  action: DesignToCodeAction;
+  stack: DesignStack;
+  fullBody: string;
+  speakOnComplete?: boolean;
+}): Promise<void> {
+  const session = getDesignSession(state, input.feedItemId);
+  if (!session) return;
 
-  // Phase: reading (if applicable)
-  const filePath = capture.detectedFile?.filePath ?? null;
-  let fileContent: string | null = null;
-  let importedFiles: import("../shared/designToCode.ts").ImportedFileContext[] = [];
-
-  if (readFile && filePath) {
-    capture.phase = "reading";
-    capture.statusLine = `Reading ${capture.detectedFile!.fileName}…`;
-    push();
-    try {
-      const result = await readFileForDiff(filePath);
-      if (result.ok && result.existed) {
-        fileContent = result.content.length > 4_000
-          ? result.content.slice(0, 4_000) + "\n…(truncated)"
-          : result.content;
-
-        // #164 — pull in imported files for richer AI context
-        capture.statusLine = `Reading imports of ${capture.detectedFile!.fileName}…`;
-        push();
-        try {
-          const graph = await readImportGraph(filePath, result.content);
-          importedFiles = graph.map((f) => ({
-            fileName: f.fileName,
-            language: f.language,
-            filePath: f.filePath,
-            content: f.content,
-          }));
-        } catch {
-          // best-effort — proceed without import graph
-        }
-      }
-    } catch {
-      // best-effort — generate without codebase context
-    }
-  }
-
-  // Phase: generating
-  capture.phase = "generating";
-  capture.pendingAction = action;
-  capture.statusLine = "Generating…";
+  patchDesignSession(state, input.feedItemId, { glassProjectSaveStatus: "pending" });
   push();
 
-  const ctx: import("../shared/designToCode.ts").DesignToCodeContext = {
-    fileName: capture.detectedFile?.fileName ?? null,
-    language: capture.detectedFile?.language ?? null,
-    filePath,
-    content: fileContent,
-    importedFiles: importedFiles.length > 0 ? importedFiles : undefined,
-  };
-
-  const prompt = buildDesignToCodePrompt(action, ctx, stack, opts?.refinementFeedback);
-
-  // Inject the captured design image directly — bypasses resolveScreenshotForVisualAsk
-  // so the AI receives the design thumbnail rather than a fresh live capture.
-  // match-codebase includes full import graph + file content — use the strongest model.
-  await submitCommand(prompt, null, {
-    presetImageDataUrl: capture.imageDataUrl,
-    codeFilePath: filePath ?? undefined,
-    designAction: action,
-    designStack: stack,
-    designCaptureId: feedItemId,
-    taskComplexity: action === "match-codebase" ? "deep" : "standard",
+  const fresh = getDesignSession(state, input.feedItemId)!;
+  const result = await saveDesignToCodeProject({
+    userDataPath: app.getPath("userData"),
+    session: fresh,
+    action: input.action,
+    stack: input.stack,
+    fullBody: input.fullBody,
+    existingProjectId: fresh.glassProjectId ?? fresh.feedItemId,
   });
 
-  // Phase: done — mark the card so renderer can show the response link
-  if (state.designCaptures?.[feedItemId]) {
-    state.designCaptures[feedItemId].phase = "done";
-    state.designCaptures[feedItemId].statusLine = undefined;
-    state.designCaptures[feedItemId].pendingRefinementFeedback = undefined;
+  patchDesignSession(state, input.feedItemId, {
+    glassProjectId: result.record?.id ?? fresh.feedItemId,
+    glassProjectSaveStatus: result.ok ? "saved" : "failed",
+    glassProjectSaveError: result.error,
+  });
+  if (result.record?.id) {
+    state.latestDesignToCodeProjectId = result.record.id;
+  }
+  await refreshGlassStorageProjectsState();
+  push();
+
+  if (input.speakOnComplete !== false) {
+    const message = result.ok
+      ? "Done — I saved it to Glass Storage under Projects."
+      : "I finished the result, but saving to Glass Storage failed.";
+    if (result.ok) {
+      noteDesignToCodeForAletheia(input.feedItemId, "save_succeeded");
+    } else {
+      noteDesignToCodeForAletheia(input.feedItemId, "save_failed", result.error);
+    }
+    speakAletheiaDesignToCodeHandoff(message);
+    push();
+  } else if (result.ok) {
+    noteDesignToCodeForAletheia(input.feedItemId, "save_succeeded");
+    push();
+  } else {
+    noteDesignToCodeForAletheia(input.feedItemId, "save_failed", result.error);
     push();
   }
+
+  queueDesignToCodeGlassMemoryIngestion({
+    event: result.ok ? "save_succeeded" : "save_failed",
+    feedItemId: input.feedItemId,
+    stack: input.stack,
+    action: input.action,
+    error: result.error,
+  });
 }
+
+function createDesignGenerationDeps(): DesignGenerationDeps {
+  return {
+    push,
+    submitCommand: (prompt, lensContext, opts) => submitCommand(prompt, lensContext, opts),
+    runSilentVisualAsk: (prompt, imageDataUrl, askOpts) =>
+      runDesignSilentVisualAsk(config, prompt, imageDataUrl, {
+        sessionId: sessions.current()?.id,
+        taskComplexity: askOpts?.taskComplexity,
+      }),
+    updateResponseFeedItem: (responseFeedItemId, overlayBody, fullBody, designWarnings) => {
+      state.commandFeed = state.commandFeed.map((item) =>
+        item.id === responseFeedItemId
+          ? { ...item, body: overlayBody, fullBody, designWarnings }
+          : item,
+      );
+      if (state.lastAskResponse) {
+        state.lastAskResponse = {
+          ...state.lastAskResponse,
+          answer: overlayBody,
+          fullAnswer: fullBody,
+        };
+      }
+      push();
+    },
+    getSessionId: () => sessions.current()?.id,
+    onPipelineComplete: async ({ feedItemId, action, stack, fullBody }) => {
+      try {
+        await persistDesignToCodeToGlassStorage({
+          feedItemId,
+          action,
+          stack,
+          fullBody,
+        });
+      } catch (err) {
+        console.error("[DesignToCode] Glass Storage save error:", err);
+        patchDesignSession(state, feedItemId, {
+          glassProjectSaveStatus: "failed",
+          glassProjectSaveError: err instanceof Error ? err.message : String(err),
+        });
+        push();
+        noteDesignToCodeForAletheia(
+          feedItemId,
+          "save_failed",
+          err instanceof Error ? err.message : String(err),
+        );
+        speakAletheiaDesignToCodeHandoff(
+          "I finished the result, but saving to Glass Storage failed.",
+        );
+        push();
+      }
+    },
+    onPipelineFailed: ({ feedItemId, reason, error }) => {
+      noteDesignToCodeForAletheia(
+        feedItemId,
+        "generation_failed",
+        reason === "exception" ? error : undefined,
+      );
+      push();
+      queueDesignToCodeGlassMemoryIngestion({
+        event: "generation_failed",
+        feedItemId,
+        error: reason === "exception" ? error : undefined,
+      });
+    },
+  };
+}
+
+// ── Design-to-Code helpers (#163) ────────────────────────────────────────────
 
 /**
  * Walk up from the directory containing `filePath` to find the nearest project root
@@ -12129,6 +12905,7 @@ function applyCompanionModeActivation(): void {
   lastRelationshipTerminalErrorKey = "";
   aletheiaPermissionMonitor.setCompanionActive(true);
   aletheiaSidecarManager.setCompanionActive(true);
+  restartPerceptionPolling();
   beginAletheiaSession(state.activeApp);
   beginAletheiaActivationState();
   broadcastTranscriptionControl({ type: "stop" });
@@ -12171,6 +12948,7 @@ function deactivateCompanionMode(sessionSummary?: string): void {
   state.companionModeToggleNonce += 1;
   aletheiaPermissionMonitor.setCompanionActive(false);
   aletheiaSidecarManager.setCompanionActive(false);
+  restartPerceptionPolling();
   finalizeAletheiaSession(resolvedSummary);
   clearAletheiaActivationState();
   state.aletheiaPendingAdvice = undefined;
@@ -12180,6 +12958,9 @@ function deactivateCompanionMode(sessionSummary?: string): void {
   clearAletheiaDelegatedPresenceState(aletheiaDelegatedPresenceHost);
   clearAletheiaDelegatedLoopState(aletheiaDelegatedLoopHost);
   clearAletheiaResearchConversationState(aletheiaResearchConversationHost);
+  requestComputerOperatorCancel();
+  resetAletheiaComputerOperatorCancel();
+  state.aletheiaComputerOperator = undefined;
   state.aletheiaPersonaBehavior = undefined;
   state.aletheiaAttentionRecovery = undefined;
   state.aletheiaRelationshipThread = undefined;
@@ -13347,6 +14128,67 @@ function registerIpc(): void {
     if (!isOverlayIpcSender(event.sender)) return;
     if (state.writingStudioActive !== true) return;
     notifyWritingStudioMounted();
+  });
+
+  // ── Glass Storage Projects full-screen workspace ───────────────────────────
+  ipcMain.on(IPC.openGlassStorageProjects, (event, projectId: unknown) => {
+    if (!isOverlayIpcSender(event.sender)) return;
+    state.glassStorageProjectsActive = true;
+    if (typeof projectId === "string" && projectId.trim()) {
+      state.glassStorageProjectsSelectedId = projectId.trim();
+    }
+    syncIdeChromeFromState();
+    push();
+    setImmediate(() => notifyGlassStorageProjectsMounted());
+  });
+
+  ipcMain.on(IPC.closeGlassStorageProjects, (event) => {
+    if (!isOverlayIpcSender(event.sender)) return;
+    state.glassStorageProjectsActive = false;
+    state.glassStorageProjectsSelectedId = null;
+    syncIdeChromeFromState();
+    push();
+  });
+
+  ipcMain.on(IPC.glassStorageProjectsMounted, (event) => {
+    if (!isOverlayIpcSender(event.sender)) return;
+    if (state.glassStorageProjectsActive !== true) return;
+    notifyGlassStorageProjectsMounted();
+  });
+
+  ipcMain.handle(IPC.getGlassStorageProjectThumb, async (_event, projectId: unknown) => {
+    if (typeof projectId !== "string" || !projectId.trim()) return null;
+    const records = state.glassStorageProjects ?? [];
+    const record = records.find((r) => r.id === projectId);
+    if (!record?.previewThumbPath) return null;
+    return readGlassStorageThumbDataUrl(record.previewThumbPath);
+  });
+
+  ipcMain.handle(IPC.getGlassStorageProjectDetail, async (_event, projectId: unknown) => {
+    if (typeof projectId !== "string" || !projectId.trim()) return null;
+    return loadGlassStorageProjectDetail(app.getPath("userData"), projectId.trim());
+  });
+
+  ipcMain.handle(IPC.revealGlassStorageProject, async (_event, projectId: unknown) => {
+    if (typeof projectId !== "string" || !projectId.trim()) {
+      return { ok: false, error: "Missing project id" };
+    }
+    const records = state.glassStorageProjects ?? [];
+    const record = records.find((r) => r.id === projectId.trim());
+    if (!record?.rootPath) {
+      return { ok: false, error: "Project folder not found" };
+    }
+    const revealPath = record.primaryFilePath ?? record.manifestPath ?? record.rootPath;
+    try {
+      const { shell } = await import("electron");
+      shell.showItemInFolder(revealPath);
+      return { ok: true };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
   });
 
   // ── Glass Dashboard full-screen overlay ────────────────────────────────────
@@ -14755,6 +15597,9 @@ function registerIpc(): void {
     logGlassClickDebug("IPC setIgnoreMouse", { ignore: !!ignore, webContentsId: event.sender.id });
     setIgnoreMouseFromWindow(win, !!ignore);
   });
+  ipcMain.on(IPC.rendererMounted, (event) => {
+    notifyCommandBarRendererMounted(event);
+  });
   ipcMain.on(IPC.overlayNotificationActive, (_event, active: boolean) => {
     overlayRendererNotificationActive = active;
     const updatePhase = state.appUpdate.phase;
@@ -14793,8 +15638,12 @@ function registerIpc(): void {
     setOverlayPointerOverIde(!!over);
   });
 
-  ipcMain.on(IPC.builderStripPanelOpen, (_event, open: boolean) => {
-    setBuilderStripPanelOpen(!!open);
+  ipcMain.on(IPC.builderStripPanelOpen, (_event, open: boolean, panel?: string) => {
+    setBuilderStripPanelOpen(!!open, typeof panel === "string" ? panel : undefined);
+  });
+
+  ipcMain.on(IPC.aletheiaStripMenuOpen, (_event, open: boolean) => {
+    setAletheiaStripMenuOpen(!!open);
   });
 
   ipcMain.on(IPC.responsePanelOpen, (_event, open: boolean) => {
@@ -14949,10 +15798,13 @@ app.whenReady().then(() =>
   registerIivoServerRecoveredReporter(clearIivoServerDegradedSource);
   state.glassSettings = glassUserSettings;
   state.agentHistory = loadAgentHistory();
+  state.glassStorageProjects = await loadGlassStorageProjectsIndex(app.getPath("userData"));
   migrateAnthropicKeyFromEnv();
 
   const dbInit = initDatabase();
   createAletheiaSessionsTable();
+  createComputerOperatorGrantsTable();
+  refreshComputerOperatorGrantsState();
   createAletheiaActionLedgerTable();
   setAletheiaActionLedgerChangedHandler(() => {
     const latestEntry = getRecentActionLedgerEntries(1)[0];
@@ -14983,11 +15835,6 @@ app.whenReady().then(() =>
     state.recoveryToastNonce = Date.now();
   }
   logSessionStart();
-  if (resolveAnthropicApiKey()) {
-    void notifyMemoryServicesReady().catch((err) => {
-      console.error("[memory] startup notifyMemoryServicesReady failed:", err);
-    });
-  }
   try {
     pruneHistory();
   } catch (err) {
@@ -15050,8 +15897,6 @@ app.whenReady().then(() =>
     tosAck: glassOnboardingState.consentTosAck,
   };
   refreshSetupCapabilities();
-  aletheiaPermissionMonitor.start();
-  aletheiaSidecarManager.start();
   state.iivoAccountLink = await loadIivoAccountLink();
   void refreshServerRuntimeFlags();
   setInterval(() => { void refreshServerRuntimeFlags(); }, 5 * 60_000);
@@ -15086,7 +15931,6 @@ app.whenReady().then(() =>
   state.onboardingComplete = state.glassSettings.onboardingComplete ?? false;
   state.persona = state.glassSettings.persona;
   state.ollamaAvailable = await checkOllamaAvailable();
-  void runAletheiaBootstrap();
   const bootWorkspaceRoot = state.glassSettings.agentCodeWorkspaceRoot?.trim();
   if (bootWorkspaceRoot) {
     state.indexState = {
@@ -15113,7 +15957,15 @@ app.whenReady().then(() =>
   if (sessionIsLive() && copilotModeIsActive(copilot.getConfig().mode)) {
     startCopilotLoop();
   }
-  state.windowContext = await getCurrentWindowContext();
+  void getCurrentWindowContext()
+    .then((ctx) => {
+      state.windowContext = ctx;
+      push();
+    })
+    .catch(() => {
+      state.windowContext = getCachedWindowContext();
+      push();
+    });
   setChromeLayoutPersistHandler((partial) => {
     glassUserSettings = { ...glassUserSettings, ...partial };
     state.glassSettings = glassUserSettings;
@@ -15122,54 +15974,6 @@ app.whenReady().then(() =>
   registerIpc();
   initGlassDashboard();
   initGlassSettings();
-
-  // AI Spend Tracker — 15-min background polling (initial fetch delayed 10 s)
-  startSpendPolling();
-
-  // Live terminal widget — always-on polling starts at app launch
-  startLiveTerminalPolling();
-
-  // Perception loop — clipboard + app-switch events
-  startPerceptionLoop();
-
-  // Ambient screen intelligence — passive 60 s digest loop
-  startScreenDigestLoop({
-    resolveCaptureTarget: () => resolveCaptureDisplay(state.glassSettings.displayTarget),
-    getConfig: () => config,
-    onDigest: (result) => {
-      const prev = state.workingContext;
-      latestDigest = result;
-      state.workingContext = result.text;
-      state.workingContextAge = result.capturedAt;
-      if (
-        state.companionModeActive
-        && !state.companionPrivacy?.active
-        && result.text
-        && result.text !== prev
-      ) {
-        recordAletheiaRelationshipEvent({
-          kind: "screen_context_change",
-          summary: "Screen context updated",
-          detail: result.text.slice(0, 240),
-        });
-      }
-      refreshAletheiaObservationPlaneState();
-      push();
-    },
-    onError: () => {
-      /* silent — screen recording permission may not be granted */
-    },
-  });
-
-  // QA HTTP bridge — only when IIVO_GLASS_TEST=1, never in production
-  if (process.env.IIVO_GLASS_TEST === "1") {
-    const { startGlassQaBridge } = await import("./glassQaBridge.ts");
-    startGlassQaBridge({
-      secret: process.env.GLASS_API_SECRET ?? "",
-      getState: snapshot,
-      runCommand: (cmd) => handleCommand(cmd, undefined),
-    });
-  }
 
   setCommandBarLayoutChangedHandler(() => {
     if (refreshCommandBarOverlayClearance()) {
@@ -15197,6 +16001,16 @@ app.whenReady().then(() =>
   }
   refreshSetupCapabilities();
   push();
+
+  if (process.env.IIVO_GLASS_TEST === "1") {
+    const { startGlassQaBridge } = await import("./glassQaBridge.ts");
+    startGlassQaBridge({
+      secret: process.env.GLASS_API_SECRET ?? "",
+      getState: snapshot,
+      runCommand: (cmd) => handleCommand(cmd, undefined),
+    });
+  }
+
   scheduleInitialSetupCheck();
   scheduleServerHealthPolling();
   initGlassAutoUpdater((patch) => {
@@ -15209,11 +16023,28 @@ app.whenReady().then(() =>
   }, config.iivoApiUrl);
   scheduleGlassUpdateChecks();
 
+  const readyWindows = getWindows();
+
   if (showSplash) {
-    const readyWindows = getWindows();
-    const windowsReady = readyWindows ? whenGlassWindowsReady(readyWindows) : Promise.resolve();
-    await Promise.all([windowsReady, splashMinDisplay]);
-    finishSplash();
+    console.log("[IIVO Glass] boot: splash timer (10s) + chrome load…");
+    await Promise.all([
+      splashMinDisplay,
+      readyWindows
+        ? whenGlassWindowsReadyOrTimeout(readyWindows, 20_000)
+        : Promise.resolve(),
+    ]);
+    console.log("[IIVO Glass] boot: dismissing splash");
+    await finishSplash();
+    reconcilePrimaryChromeVisibility();
+    startGlassBackgroundWork();
+  } else {
+    // Vite dev — defer Aletheia loops + embedder until chrome has loaded.
+    if (readyWindows) {
+      console.log("[IIVO Glass] boot: waiting for chrome windows (vite)…");
+      await whenGlassWindowsReadyOrTimeout(readyWindows);
+    }
+    reconcilePrimaryChromeVisibility();
+    startGlassBackgroundWork();
   }
 
   if (!needsSortingHat) {

@@ -60,22 +60,49 @@ export default defineConfig({
     define: {
       "process.env.SENTRY_DSN": JSON.stringify(bakedSentryDsn),
     },
-    plugins: [react()],
+    plugins: [
+      react(),
+      {
+        name: "strip-crossorigin-for-file-protocol",
+        transformIndexHtml(html: string) {
+          let out = html.replace(/\s+crossorigin/g, "");
+          if (process.env.NODE_ENV !== "production") {
+            out = out.replace(
+              "script-src 'self' 'unsafe-eval' blob:",
+              "script-src 'self' 'unsafe-eval' 'unsafe-inline' blob:",
+            );
+          }
+          return out;
+        },
+      },
+    ],
     server: {
       // Use 5174 so root `npm run dev` can keep the IIVO web client on 5173.
       port: 5174,
-      strictPort: false,
-      // Vite's full-screen error overlay blocks Glass click-through windows in dev.
+      strictPort: true,
+      host: "127.0.0.1",
       hmr: { overlay: false },
+      warmup: {
+        clientFiles: [
+          "./index.html",
+          "./overlay.html",
+          "./command.html",
+          "./src/renderer/dock/main.tsx",
+          "./src/renderer/overlay/main.tsx",
+          "./src/renderer/command/main.tsx",
+        ],
+      },
     },
     optimizeDeps: {
-      include: ["lucide-react", "monaco-editor"],
+      entries: ["index.html", "overlay.html", "command.html"],
+      include: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime", "lucide-react"],
     },
     worker: {
       format: "es",
     },
     build: {
       outDir: "out/renderer",
+      modulePreload: false,
       rollupOptions: {
         // Only listed HTML entry points ship in the packaged app. Dev-only splash
         // prototypes (soundPrototypeMain.ts, backgroundPreviewMain.tsx) are never

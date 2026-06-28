@@ -8,6 +8,8 @@ import { join } from "node:path";
 
 let embedder: FlagEmbedding | null = null;
 let embedderInitFailed = false;
+/** Corrupt cache / parse errors — do not retry until user clears models or calls resetEmbedderInitForRetry. */
+let embedderInitFailedPermanently = false;
 let embedderInitPromise: Promise<boolean> | null = null;
 
 const EMBEDDER_INIT_TIMEOUT_MS = 120_000;
@@ -16,29 +18,58 @@ export function isEmbedderReady(): boolean {
   return embedder !== null;
 }
 
+export function isEmbedderInitBlocked(): boolean {
+  return embedderInitFailed || embedderInitFailedPermanently;
+}
+
+function modelCacheDir(): string {
+  return join(app.getPath("userData"), "models");
+}
+
+function isCorruptModelError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /EOF|unexpected end|zlib|invalid argument|parsing a string/i.test(msg);
+}
+
 export function resetEmbedderInitForRetry(): void {
   if (embedder) return;
   embedderInitFailed = false;
+  embedderInitFailedPermanently = false;
   embedderInitPromise = null;
 }
 
 export async function initEmbedder(): Promise<boolean> {
   if (embedder) return true;
-  if (embedderInitFailed) return false;
+  if (embedderInitFailedPermanently || embedderInitFailed) return false;
+
+  if (process.env.IIVO_GLASS_SKIP_EMBEDDER === "1") {
+    console.warn("[glassEmbedder] skipped (IIVO_GLASS_SKIP_EMBEDDER=1)");
+    embedderInitFailed = true;
+    return false;
+  }
 
   if (!embedderInitPromise) {
     embedderInitPromise = (async () => {
       try {
         embedder = await FlagEmbedding.init({
           model: EmbeddingModel.AllMiniLML6V2,
-          cacheDir: join(app.getPath("userData"), "models"),
+          cacheDir: modelCacheDir(),
           showDownloadProgress: false,
         });
         console.log("[glassEmbedder] all-MiniLM-L6-v2 ready");
         return true;
       } catch (err) {
         embedderInitFailed = true;
-        console.error("[glassEmbedder] init failed — vector memory disabled:", err);
+        if (isCorruptModelError(err)) {
+          embedderInitFailedPermanently = true;
+          console.error(
+            "[glassEmbedder] corrupt model cache — vector memory disabled. Delete and relaunch:",
+            modelCacheDir(),
+            err,
+          );
+        } else {
+          console.error("[glassEmbedder] init failed — vector memory disabled:", err);
+        }
         return false;
       } finally {
         embedderInitPromise = null;
@@ -52,9 +83,10 @@ export async function initEmbedder(): Promise<boolean> {
 /** Await embedder init (e.g. first-run model download). Returns false on timeout or failure. */
 export async function ensureEmbedderReady(timeoutMs = EMBEDDER_INIT_TIMEOUT_MS): Promise<boolean> {
   if (embedder) return true;
-  if (embedderInitFailed) {
-    resetEmbedderInitForRetry();
-  }
+  if (embedderInitFailedPermanently) return false;
+  if (embedderInitFailed) return false;
+
+  if (process.env.IIVO_GLASS_SKIP_EMBEDDER === "1") return false;
 
   try {
     const result = await Promise.race([
@@ -64,10 +96,14 @@ export async function ensureEmbedderReady(timeoutMs = EMBEDDER_INIT_TIMEOUT_MS):
       }),
     ]);
     if (result === false) {
-      console.warn("[glassEmbedder] ensureEmbedderReady timed out");
+      embedderInitFailed = true;
+      console.warn(
+        `[glassEmbedder] ensureEmbedderReady timed out after ${timeoutMs}ms — vector memory deferred`,
+      );
       return false;
     }
   } catch {
+    embedderInitFailed = true;
     return false;
   }
 

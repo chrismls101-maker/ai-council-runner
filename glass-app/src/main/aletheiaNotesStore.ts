@@ -22,6 +22,7 @@ function rowToNote(row: {
   category: string;
   source: string;
   session_id: string | null;
+  linked_project_id: string | null;
   created_at: number;
   updated_at: number;
 }): AletheiaNote {
@@ -32,6 +33,7 @@ function rowToNote(row: {
     category: row.category as AletheiaNote["category"],
     source: row.source as AletheiaNote["source"],
     sessionId: row.session_id ?? undefined,
+    linkedProjectId: row.linked_project_id ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -57,6 +59,19 @@ export function createAletheiaNotesTable(): void {
       CREATE INDEX IF NOT EXISTS idx_aletheia_notes_session
         ON aletheia_notes (session_id, updated_at DESC);
     `);
+    try {
+      db.exec(`ALTER TABLE aletheia_notes ADD COLUMN linked_project_id TEXT`);
+    } catch {
+      /* column exists */
+    }
+    try {
+      db.exec(
+        `CREATE INDEX IF NOT EXISTS idx_aletheia_notes_linked_project
+         ON aletheia_notes (linked_project_id, updated_at DESC)`,
+      );
+    } catch {
+      /* ignore */
+    }
   } catch (err) {
     console.error("[aletheiaNotesStore] createAletheiaNotesTable error:", err);
   }
@@ -69,7 +84,7 @@ export function listAletheiaNotes(limit = 50): AletheiaNotesSnapshot {
   try {
     const rows = db
       .prepare(
-        `SELECT id, body, rationale, category, source, session_id, created_at, updated_at
+        `SELECT id, body, rationale, category, source, session_id, linked_project_id, created_at, updated_at
          FROM aletheia_notes
          ORDER BY updated_at DESC
          LIMIT ?`,
@@ -81,6 +96,7 @@ export function listAletheiaNotes(limit = 50): AletheiaNotesSnapshot {
         category: string;
         source: string;
         session_id: string | null;
+        linked_project_id: string | null;
         created_at: number;
         updated_at: number;
       }>;
@@ -102,8 +118,8 @@ export function appendAletheiaNote(input: AppendAletheiaNoteInput): AletheiaNote
   try {
     db.prepare(
       `INSERT INTO aletheia_notes
-        (id, body, rationale, category, source, session_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        (id, body, rationale, category, source, session_id, linked_project_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       note.id,
       note.body,
@@ -111,6 +127,7 @@ export function appendAletheiaNote(input: AppendAletheiaNoteInput): AletheiaNote
       note.category,
       note.source,
       note.sessionId ?? null,
+      note.linkedProjectId ?? null,
       note.createdAt,
       note.updatedAt,
     );
@@ -127,7 +144,7 @@ export function updateAletheiaNote(noteId: string, body: string): AletheiaNote |
   try {
     const existing = db
       .prepare(
-        `SELECT id, body, rationale, category, source, session_id, created_at, updated_at
+        `SELECT id, body, rationale, category, source, session_id, linked_project_id, created_at, updated_at
          FROM aletheia_notes WHERE id = ?`,
       )
       .get(noteId) as {
@@ -137,6 +154,7 @@ export function updateAletheiaNote(noteId: string, body: string): AletheiaNote |
         category: string;
         source: string;
         session_id: string | null;
+        linked_project_id: string | null;
         created_at: number;
         updated_at: number;
       } | undefined;

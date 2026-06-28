@@ -1,75 +1,204 @@
+/* Matches agents panel / builder-panel shell (rgba(10, 12, 18, 0.97)) */
+
 .aletheia-strip-menu {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 8px);
-  z-index: 140;
-  min-width: 196px;
-  padding: 6px;
+  position: relative;
+  z-index: 99999;
+  min-width: 240px;
+  padding: 0;
   border-radius: 12px;
-  background: linear-gradient(165deg, rgba(12, 10, 20, 0.98), rgba(8, 6, 14, 0.96));
-  border: 1px solid rgba(167, 139, 250, 0.28);
+  background: rgba(10, 12, 18, 0.97);
+  backdrop-filter: blur(32px) saturate(175%);
+  -webkit-backdrop-filter: blur(32px) saturate(175%);
+  border: 1px solid rgba(255, 255, 255, 0.09);
   box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.32),
-    0 12px 32px rgba(0, 0, 0, 0.42),
-    0 0 24px rgba(124, 58, 237, 0.12);
+    0 24px 80px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(65, 224, 163, 0.04) inset;
   pointer-events: auto;
-  animation: aletheia-strip-menu-in 140ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  overflow: hidden;
+  animation: aletheia-strip-menu-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.aletheia-strip-menu::before {
+  display: none;
 }
 
 @keyframes aletheia-strip-menu-in {
   from {
     opacity: 0;
-    transform: translateY(6px) scale(0.98);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateY(0);
   }
+}
+
+.aletheia-strip-menu__header {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 13px 14px 11px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent);
+}
+
+.aletheia-strip-menu__header-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  color: rgba(255, 255, 255, 0.96);
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0 18px rgba(255, 255, 255, 0.06);
+}
+
+.aletheia-strip-menu__header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.aletheia-strip-menu__header-title {
+  font-family: "Sora", "Inter", system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.98);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.aletheia-strip-menu__header-sub {
+  font-family: "Sora", system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  color: rgba(148, 163, 184, 0.72);
+}
+
+.aletheia-strip-menu__section {
+  padding: 6px;
+}
+
+.aletheia-strip-menu__divider {
+  height: 1px;
+  margin: 0 10px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.08),
+    transparent
+  );
 }
 
 .aletheia-strip-menu__item {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
+  align-items: center;
+  gap: 10px;
   width: 100%;
-  padding: 10px 12px;
+  padding: 9px 10px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 9px;
   background: transparent;
-  color: rgba(248, 250, 252, 0.92);
+  color: rgba(255, 255, 255, 0.96);
   text-align: left;
   cursor: pointer;
+  transition:
+    background 0.14s ease,
+    transform 0.14s ease;
 }
 
 .aletheia-strip-menu__item:hover,
 .aletheia-strip-menu__item:focus-visible {
-  background: rgba(167, 139, 250, 0.12);
+  background: rgba(255, 255, 255, 0.06);
   outline: none;
 }
 
+.aletheia-strip-menu__item:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
 .aletheia-strip-menu__item--active {
-  background: rgba(124, 58, 237, 0.16);
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.aletheia-strip-menu__item--dashboard:hover,
+.aletheia-strip-menu__item--dashboard:focus-visible {
+  background: rgba(255, 255, 255, 0.07);
 }
 
 .aletheia-strip-menu__item:disabled {
-  opacity: 0.42;
+  opacity: 1;
   cursor: default;
 }
 
 .aletheia-strip-menu__item:disabled:hover {
   background: transparent;
+  transform: none;
+}
+
+.aletheia-strip-menu__item--activate-on:disabled {
+  opacity: 1;
 }
 
 .aletheia-strip-menu__item--deactivate:not(:disabled):hover {
-  background: rgba(248, 113, 113, 0.12);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.aletheia-strip-menu__item-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.94);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.aletheia-strip-menu__item--activate-on .aletheia-strip-menu__item-icon {
+  color: rgba(74, 222, 128, 1);
+  background: rgba(34, 197, 94, 0.14);
+  border-color: rgba(74, 222, 128, 0.35);
+  box-shadow: 0 0 14px rgba(74, 222, 128, 0.28);
+}
+
+.aletheia-strip-menu__item--deactivate:not(:disabled) .aletheia-strip-menu__item-icon {
+  color: rgba(248, 113, 113, 1);
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(248, 113, 113, 0.32);
+}
+
+.aletheia-strip-menu__item--deactivate:disabled .aletheia-strip-menu__item-icon {
+  color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
+.aletheia-strip-menu__item-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
 }
 
 .aletheia-strip-menu__label {
-  font-family: "Sora", system-ui, sans-serif;
-  font-size: 12px;
+  font-family: "Inter", "Sora", system-ui, sans-serif;
+  font-size: 12.5px;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.015em;
+  color: rgba(255, 255, 255, 0.97);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 .aletheia-strip-menu__hint {
@@ -77,5 +206,10 @@
   font-size: 10px;
   font-weight: 500;
   letter-spacing: 0.02em;
-  color: rgba(226, 232, 240, 0.48);
+  color: rgba(148, 163, 184, 0.72);
+  line-height: 1.35;
+}
+
+.aletheia-strip-menu__item:disabled .aletheia-strip-menu__label {
+  color: rgba(255, 255, 255, 0.72);
 }

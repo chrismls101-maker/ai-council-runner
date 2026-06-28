@@ -8,11 +8,14 @@ import {
   searchPrompts,
   updatePrompt,
 } from "./promptStorage.ts";
+import { PowerPromptPanel } from "./PowerPromptPanel.tsx";
 import "./PromptLibraryPanel.css";
 
 interface PromptLibraryPanelProps {
   onClose: () => void;
 }
+
+type PromptLibrarySection = "library" | "generator";
 
 type EditingState =
   | { mode: "none" }
@@ -20,6 +23,7 @@ type EditingState =
   | { mode: "edit"; promptId: string };
 
 export function PromptLibraryPanel({ onClose }: PromptLibraryPanelProps): JSX.Element {
+  const [section, setSection] = useState<PromptLibrarySection>("library");
   const [prompts, setPrompts] = useState<Prompt[]>(() => loadPrompts());
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<EditingState>({ mode: "none" });
@@ -101,9 +105,27 @@ export function PromptLibraryPanel({ onClose }: PromptLibraryPanelProps): JSX.El
 
   return (
     <div className="prompt-library" style={{ position: "relative" }}>
-      {/* Header */}
       <div className="prompt-library__header">
-        <span className="prompt-library__title">Prompt Library</span>
+        <div className="prompt-library__tabs" role="tablist" aria-label="Prompt tools">
+          <button
+            type="button"
+            role="tab"
+            className={`prompt-library__tab${section === "library" ? " prompt-library__tab--active" : ""}`}
+            aria-selected={section === "library"}
+            onClick={() => setSection("library")}
+          >
+            Library
+          </button>
+          <button
+            type="button"
+            role="tab"
+            className={`prompt-library__tab${section === "generator" ? " prompt-library__tab--active" : ""}`}
+            aria-selected={section === "generator"}
+            onClick={() => setSection("generator")}
+          >
+            Generator
+          </button>
+        </div>
         <button
           type="button"
           className="prompt-library__close"
@@ -114,6 +136,10 @@ export function PromptLibraryPanel({ onClose }: PromptLibraryPanelProps): JSX.El
         </button>
       </div>
 
+      {section === "generator" ? (
+        <PowerPromptPanel onClose={onClose} embedded />
+      ) : (
+        <>
       {/* Search + New */}
       <div className="prompt-library__search-row">
         <input
@@ -169,6 +195,8 @@ export function PromptLibraryPanel({ onClose }: PromptLibraryPanelProps): JSX.El
           onSave={handleSave}
           onCancel={handleCancelEdit}
         />
+      )}
+        </>
       )}
     </div>
   );

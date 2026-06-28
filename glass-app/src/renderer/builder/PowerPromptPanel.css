@@ -7,6 +7,11 @@
   overflow: hidden;
 }
 
+.pgen-panel--embedded {
+  flex: 1;
+  min-height: 0;
+}
+
 /* ── Header ─────────────────────────────────────────────────────────────── */
 .pgen-header {
   display: flex;

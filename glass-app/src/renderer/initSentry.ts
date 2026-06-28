@@ -71,4 +71,6 @@ export async function bootstrapSentryRenderer(): Promise<void> {
   });
 }
 
-void bootstrapSentryRenderer();
+if (!import.meta.env.DEV) {
+  void bootstrapSentryRenderer();
+}

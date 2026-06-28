@@ -121,6 +121,10 @@ const glassApi = {
     ipcRenderer.on(IPC.commandBarPrefill, handler);
     return () => ipcRenderer.removeListener(IPC.commandBarPrefill, handler);
   },
+  /** Renderer → main: React has mounted and painted in this window (dev primary chrome only). */
+  notifyRendererMounted(): void {
+    ipcRenderer.send(IPC.rendererMounted);
+  },
   setIgnoreMouse(ignore: boolean): void {
     ipcRenderer.send(IPC.setIgnoreMouse, ignore);
   },
@@ -145,8 +149,11 @@ const glassApi = {
   setOverlayPointerOverIde(over: boolean): void {
     ipcRenderer.send(IPC.overlayPointerOverIde, over);
   },
-  setBuilderStripPanelOpen(open: boolean): void {
-    ipcRenderer.send(IPC.builderStripPanelOpen, open);
+  setBuilderStripPanelOpen(open: boolean, panel?: string): void {
+    ipcRenderer.send(IPC.builderStripPanelOpen, open, panel);
+  },
+  setAletheiaStripMenuOpen(open: boolean): void {
+    ipcRenderer.send(IPC.aletheiaStripMenuOpen, open);
   },
   setResponsePanelOpen(open: boolean): void {
     ipcRenderer.send(IPC.responsePanelOpen, open);
@@ -579,6 +586,32 @@ const glassApi = {
   },
   notifyWritingStudioMounted(): void {
     ipcRenderer.send(IPC.writingStudioMounted);
+  },
+  openGlassStorageProjects(projectId?: string): void {
+    ipcRenderer.send(IPC.openGlassStorageProjects, projectId ?? "");
+  },
+  closeGlassStorageProjects(): void {
+    ipcRenderer.send(IPC.closeGlassStorageProjects);
+  },
+  notifyGlassStorageProjectsMounted(): void {
+    ipcRenderer.send(IPC.glassStorageProjectsMounted);
+  },
+  getGlassStorageProjectThumb(projectId: string): Promise<string | null> {
+    return ipcRenderer.invoke(IPC.getGlassStorageProjectThumb, projectId) as Promise<string | null>;
+  },
+  getGlassStorageProjectDetail(
+    projectId: string,
+  ): Promise<import("../shared/glassStorageProjectTypes.ts").GlassProjectDetail | null> {
+    return ipcRenderer.invoke(
+      IPC.getGlassStorageProjectDetail,
+      projectId,
+    ) as Promise<import("../shared/glassStorageProjectTypes.ts").GlassProjectDetail | null>;
+  },
+  revealGlassStorageProject(projectId: string): Promise<{ ok: boolean; error?: string }> {
+    return ipcRenderer.invoke(
+      IPC.revealGlassStorageProject,
+      projectId,
+    ) as Promise<{ ok: boolean; error?: string }>;
   },
   glassIdeOpen(): void {
     ipcRenderer.send(IPC.glassIdeOpen);

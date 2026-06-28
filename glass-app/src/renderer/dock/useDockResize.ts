@@ -1,13 +1,19 @@
 import { useLayoutEffect, type RefObject } from "react";
 
-/** Small bleed so shadows never clip; keeps the Electron window >= content (no outer scrollbar). */
-const DOCK_SIZE_PADDING = 12;
-/** Reserve space above the dock pill so top-placed tooltips are not clipped. */
-export const DOCK_TOOLTIP_TOP_RESERVE = 44;
-/** Reserve space beside the rail for side tooltips (right of left rail). */
-export const DOCK_TOOLTIP_SIDE_RESERVE = 200;
-/** Small vertical bleed inside the rail window. */
-export const DOCK_RAIL_VERTICAL_PADDING = 12;
+import {
+  DOCK_RAIL_TOOLTIP_SIDE_RESERVE,
+  DOCK_RAIL_VERTICAL_PADDING,
+  DOCK_SIZE_PADDING,
+  DOCK_TOOLTIP_SIDE_RESERVE,
+  DOCK_TOOLTIP_TOP_RESERVE,
+} from "../../shared/glassLayoutMath.ts";
+
+// Re-export for tests / glass.css cross-refs
+export {
+  DOCK_RAIL_VERTICAL_PADDING,
+  DOCK_TOOLTIP_SIDE_RESERVE,
+  DOCK_TOOLTIP_TOP_RESERVE,
+} from "../../shared/glassLayoutMath.ts";
 
 function measureDock(stack: HTMLElement | null): { width: number; height: number } {
   if (!stack) return { width: 0, height: 0 };

@@ -18,6 +18,9 @@ import { askIivoGlass } from "./glassAskClient.ts";
 /** How often to run the digest (ms). 60 s is fast enough to be fresh. */
 const DIGEST_INTERVAL_MS = 60_000;
 
+/** Delay before the first digest after the loop starts (ms). */
+const DIGEST_INITIAL_DELAY_MS = 60_000;
+
 /** How long a digest result stays "fresh" before being discarded (ms). */
 const DIGEST_MAX_AGE_MS = 3 * 60_000;
 
@@ -42,6 +45,8 @@ export interface ScreenDigestCallbacks {
   resolveCaptureTarget: () => { id: number; label: string };
   /** Returns the current GlassConfig for the API call. */
   getConfig: () => GlassConfig;
+  /** When false, skip capture/API work (idle CPU savings). */
+  shouldRun?: () => boolean;
 }
 
 /**
@@ -54,6 +59,7 @@ export function startScreenDigestLoop(callbacks: ScreenDigestCallbacks): () => v
 
   async function runDigest(): Promise<void> {
     if (running || stopped) return;
+    if (callbacks.shouldRun && !callbacks.shouldRun()) return;
     if (!resolveAnthropicApiKey()) return;
     running = true;
     try {
@@ -97,7 +103,7 @@ export function startScreenDigestLoop(callbacks: ScreenDigestCallbacks): () => v
   // then on interval.
   const initialTimer = setTimeout(() => {
     if (!stopped) void runDigest();
-  }, 8_000);
+  }, DIGEST_INITIAL_DELAY_MS);
 
   const intervalTimer = setInterval(() => {
     if (!stopped) void runDigest();
@@ -116,4 +122,4 @@ export function isDigestFresh(result: ScreenDigestResult | undefined): result is
   return Date.now() - result.capturedAt < DIGEST_MAX_AGE_MS;
 }
 
-export { DIGEST_MAX_AGE_MS };
+export { DIGEST_MAX_AGE_MS, DIGEST_INITIAL_DELAY_MS, DIGEST_INTERVAL_MS };

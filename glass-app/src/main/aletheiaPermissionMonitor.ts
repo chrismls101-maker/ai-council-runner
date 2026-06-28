@@ -22,7 +22,7 @@ export class AletheiaPermissionMonitor {
   private readonly host: PermissionMonitorHost;
 
   private static readonly ACTIVE_POLL_MS = 5_000;
-  private static readonly IDLE_POLL_MS = 15_000;
+  private static readonly IDLE_POLL_MS = 60_000;
 
   constructor(host: PermissionMonitorHost) {
     this.host = host;

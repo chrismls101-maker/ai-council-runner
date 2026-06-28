@@ -227,6 +227,13 @@ export function waitForActivationWindow(): Promise<"connected" | "quit"> {
 export async function ensureAnthropicKeyActivated(): Promise<boolean> {
   if (resolveAnthropicApiKey()) return true;
   if (process.env.IIVO_GLASS_E2E === "1") return true;
+  // Dev shows dock/command bar immediately; connect key via Setup when ready.
+  if (
+    process.env.IIVO_GLASS_DEV_PRIMARY === "1" &&
+    process.env.IIVO_GLASS_FORCE_ACTIVATION !== "1"
+  ) {
+    return true;
+  }
   const result = await waitForActivationWindow();
   if (result === "quit") {
     app.quit();

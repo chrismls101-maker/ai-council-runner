@@ -22,6 +22,7 @@ import {
   stackHint,
   buildDesignToCodePrompt,
   getActionLabel,
+  SHARED_VISION_PREAMBLE_FIRST_LINE,
   type DesignToCodeContext,
   type DesignStack,
 } from "../shared/designToCode.ts";
@@ -169,10 +170,10 @@ const ctxWithContent: DesignToCodeContext = {
 describe("buildDesignToCodePrompt - react", () => {
   const prompt = buildDesignToCodePrompt("react", emptyCtx);
 
-  test("starts with 'You are given a visual reference screenshot'", () => {
+  test("starts with shared vision preamble", () => {
     assert(
-      prompt.startsWith("You are given a visual reference screenshot"),
-      `prompt should start with preamble, got: ${prompt.slice(0, 50)}`
+      prompt.startsWith(SHARED_VISION_PREAMBLE_FIRST_LINE),
+      `prompt should start with preamble, got: ${prompt.slice(0, 80)}`
     );
   });
 
@@ -188,8 +189,8 @@ describe("buildDesignToCodePrompt - react", () => {
 describe("buildDesignToCodePrompt - html", () => {
   const prompt = buildDesignToCodePrompt("html", emptyCtx);
 
-  test("starts with 'You are given a visual reference screenshot'", () => {
-    assert(prompt.startsWith("You are given a visual reference screenshot"));
+  test("starts with shared vision preamble", () => {
+    assert(prompt.startsWith(SHARED_VISION_PREAMBLE_FIRST_LINE));
   });
 
   test("contains 'HTML'", () => {
@@ -208,8 +209,8 @@ describe("buildDesignToCodePrompt - html", () => {
 describe("buildDesignToCodePrompt - describe", () => {
   const prompt = buildDesignToCodePrompt("describe", emptyCtx);
 
-  test("starts with 'You are given a visual reference screenshot'", () => {
-    assert(prompt.startsWith("You are given a visual reference screenshot"));
+  test("starts with shared vision preamble", () => {
+    assert(prompt.startsWith(SHARED_VISION_PREAMBLE_FIRST_LINE));
   });
 
   test("contains instruction not to write code (case insensitive)", () => {
@@ -230,8 +231,8 @@ describe("buildDesignToCodePrompt - describe", () => {
 describe("buildDesignToCodePrompt - match-codebase with content", () => {
   const prompt = buildDesignToCodePrompt("match-codebase", ctxWithContent);
 
-  test("starts with 'You are given a visual reference screenshot'", () => {
-    assert(prompt.startsWith("You are given a visual reference screenshot"));
+  test("starts with shared vision preamble", () => {
+    assert(prompt.startsWith(SHARED_VISION_PREAMBLE_FIRST_LINE));
   });
 
   test("contains the fileName", () => {
@@ -245,16 +246,16 @@ describe("buildDesignToCodePrompt - match-codebase with content", () => {
     );
   });
 
-  test("contains 'Match the conventions'", () => {
-    assert(prompt.includes("Match the conventions"), "should include match conventions instruction");
+  test("contains match conventions instruction", () => {
+    assert(prompt.includes("Match import style"), "should include match conventions instruction");
   });
 });
 
 describe("buildDesignToCodePrompt - match-codebase with null content", () => {
   const prompt = buildDesignToCodePrompt("match-codebase", emptyCtx);
 
-  test("starts with 'You are given a visual reference screenshot'", () => {
-    assert(prompt.startsWith("You are given a visual reference screenshot"));
+  test("starts with shared vision preamble", () => {
+    assert(prompt.startsWith(SHARED_VISION_PREAMBLE_FIRST_LINE));
   });
 
   test("does not contain an empty code fence", () => {
@@ -280,10 +281,10 @@ describe("buildDesignToCodePrompt - all actions start with preamble", () => {
   const actions = ["react", "html", "describe", "match-codebase"] as const;
 
   for (const action of actions) {
-    test(`${action} starts with 'You are given a visual reference screenshot.'`, () => {
+    test(`${action} starts with shared vision preamble`, () => {
       const prompt = buildDesignToCodePrompt(action, emptyCtx);
       assert(
-        prompt.startsWith("You are given a visual reference screenshot."),
+        prompt.startsWith(SHARED_VISION_PREAMBLE_FIRST_LINE),
         `${action} prompt does not start with expected preamble`
       );
     });
@@ -321,8 +322,8 @@ describe("buildDesignToCodePrompt - match-codebase with importedFiles (#164)", (
 
   test("includes the imported files header", () => {
     assert(
-      prompt.includes("Here are 2 file(s) that the above file imports"),
-      "should include imported files header with count",
+      prompt.includes("Imported files for context"),
+      "should include imported files header",
     );
   });
 
@@ -335,7 +336,7 @@ describe("buildDesignToCodePrompt - match-codebase with importedFiles (#164)", (
 
   test("imported files section appears after target file section", () => {
     const targetIdx = prompt.indexOf("export function Dashboard");
-    const importsIdx = prompt.indexOf("Here are 2 file(s)");
+    const importsIdx = prompt.indexOf("Imported files for context");
     assert(importsIdx > targetIdx, "imports section should appear after target file content");
   });
 
@@ -463,9 +464,9 @@ describe("buildDesignToCodePrompt - react with Tailwind stacks", () => {
     assert(p.includes("Tailwind"), "next-tailwind should inject Tailwind hint");
   });
 
-  test("react-tsx → prompt uses infer styling hint", () => {
+  test("react-tsx → prompt uses CSS modules hint", () => {
     const p = buildDesignToCodePrompt("react", emptyCtx, "react-tsx");
-    assert(p.includes("Infer"), "react-tsx should use the infer styling hint");
+    assert(p.includes("CSS modules"), "react-tsx should use CSS modules hint");
     assert(!p.includes("utility classes"), "react-tsx should not include Tailwind utility-classes instruction");
   });
 });
