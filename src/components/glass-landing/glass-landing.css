@@ -28,17 +28,219 @@
   min-height: 100vh;
   min-height: 100dvh;
   color: var(--gl-text);
-  background: var(--gl-bg);
+  background: #0b1020;
   font-family: var(--gl-font-body);
   font-size: 17px;
   line-height: 1.65;
   overflow-x: hidden;
+  isolation: isolate;
+  --glass-chrome-lift: 3px;
+  --mac-dock-zone: 76px;
+  --glass-site-dock-zone: 58px;
+  padding-bottom: var(--glass-site-dock-zone);
+}
+
+@property --mac-dock-zone {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 58px;
+}
+
+html {
+  --mac-dock-zone: 58px;
+  --overlay-glass-frame-inset-left: 7px;
+  --overlay-glass-frame-inset-right: 7px;
+  transition: --mac-dock-zone 0.95s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+html.glass-intro-glass-on {
+  --mac-dock-zone: 58px;
+}
+
+html.glass-chrome-settling {
+  --mac-dock-zone: 8px;
+}
+
+html.glass-intro-finished {
+  --mac-dock-zone: var(--glass-site-dock-zone, 76px);
+}
+
+/* ── Persistent macOS desktop environment (fixed behind scroll) ── */
+.glass-landing__desktop-scene {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.glass-landing__content {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Safari window — the landing page lives inside this frame ── */
+.glass-landing__safari {
+  position: relative;
+  z-index: 1;
+  width: min(1140px, calc(100vw - 48px));
+  margin: 36px auto 72px;
+  border-radius: 12px;
+  background: #0a0c12;
+  border: 0.5px solid rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.5),
+    0 24px 80px rgba(0, 0, 0, 0.55),
+    0 48px 120px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.glass-landing__safari-chrome {
+  position: sticky;
+  top: 25px;
+  z-index: 5;
+  background: rgba(40, 40, 42, 0.92);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.1);
+}
+
+html.glass-browse-active .glass-landing__safari-chrome {
+  top: 25px;
+}
+
+.glass-landing__safari-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 14px;
+}
+
+.glass-landing__safari-lights {
+  display: flex;
+  gap: 7px;
+  flex-shrink: 0;
+}
+
+.glass-landing__safari-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.15);
+}
+
+.glass-landing__safari-dot--red { background: #ff5f57; }
+.glass-landing__safari-dot--amber { background: #febc2e; }
+.glass-landing__safari-dot--green { background: #28c840; }
+
+.glass-landing__safari-nav {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.glass-landing__safari-nav-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  position: relative;
+}
+
+.glass-landing__safari-nav-btn--back::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 6px;
+  height: 6px;
+  border-left: 1.5px solid rgba(255, 255, 255, 0.55);
+  border-bottom: 1.5px solid rgba(255, 255, 255, 0.55);
+  transform: rotate(45deg) translate(1px, -1px);
+}
+
+.glass-landing__safari-nav-btn--fwd {
+  opacity: 0.35;
+}
+
+.glass-landing__safari-nav-btn--fwd::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid rgba(255, 255, 255, 0.55);
+  border-top: 1.5px solid rgba(255, 255, 255, 0.55);
+  transform: rotate(45deg) translate(-1px, 1px);
+}
+
+.glass-landing__safari-url {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 0.5px solid rgba(255, 255, 255, 0.08);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  font-size: 12px;
+}
+
+.glass-landing__safari-lock {
+  width: 8px;
+  height: 10px;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.5);
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3E%3Cpath d='M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z'/%3E%3C/svg%3E");
+  mask-size: contain;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3E%3Cpath d='M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z'/%3E%3C/svg%3E");
+  -webkit-mask-size: contain;
+}
+
+.glass-landing__safari-domain {
+  color: rgba(255, 255, 255, 0.88);
+  font-weight: 500;
+}
+
+.glass-landing__safari-path {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.glass-landing__safari-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.glass-landing__safari-action {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 0.5px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-landing--browse-active .glass-landing__desktop-scene {
+  opacity: 1;
+  transition: opacity 0.45s var(--gl-ease);
+}
+
+.glass-landing--browse-active .glass-landing__safari {
+  box-shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.45),
+    0 32px 100px rgba(0, 0, 0, 0.6);
 }
 
 html.glass-landing-route,
 html.glass-landing-route body {
   min-height: 100%;
-  background: var(--gl-bg);
+  background: #0b1020;
   color: var(--gl-text);
   scroll-behavior: smooth;
 }
@@ -50,22 +252,94 @@ html.glass-landing-route body::after {
 
 /* ── Glass surface system ── */
 .gl-surface {
-  background: var(--gl-surface);
-  border: 1px solid var(--gl-border);
+  background: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.07) 0%,
+    rgba(255, 255, 255, 0.025) 48%,
+    rgba(0, 0, 0, 0.04) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 16px;
-  backdrop-filter: blur(20px) saturate(140%);
-  -webkit-backdrop-filter: blur(20px) saturate(140%);
-  box-shadow: var(--gl-glass-shadow);
+  backdrop-filter: blur(24px) saturate(155%);
+  -webkit-backdrop-filter: blur(24px) saturate(155%);
+  box-shadow:
+    var(--gl-glass-shadow),
+    0 16px 40px rgba(0, 0, 0, 0.28);
   transition:
     background 0.25s var(--gl-ease),
     border-color 0.25s var(--gl-ease),
-    box-shadow 0.25s var(--gl-ease);
+    box-shadow 0.25s var(--gl-ease),
+    transform 0.25s var(--gl-ease);
 }
 
 .gl-surface:hover {
-  background: var(--gl-surface-2);
-  border-color: rgba(255, 255, 255, 0.14);
-  box-shadow: var(--gl-glass-shadow-hover);
+  background: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.09) 0%,
+    rgba(255, 255, 255, 0.035) 48%,
+    rgba(0, 0, 0, 0.05) 100%
+  );
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow: var(--gl-glass-shadow-hover), 0 20px 48px rgba(0, 0, 0, 0.32);
+}
+
+/* ── Floating section panels ── */
+.glass-landing__panel {
+  position: relative;
+  padding: clamp(24px, 4vw, 36px);
+  border-radius: clamp(16px, 2.5vw, 22px);
+  background: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.08) 0%,
+    rgba(255, 255, 255, 0.03) 45%,
+    rgba(0, 0, 0, 0.06) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  backdrop-filter: blur(28px) saturate(160%);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 20px 48px rgba(0, 0, 0, 0.32);
+}
+
+.glass-landing__panel::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.06) 0%,
+    transparent 42%,
+    transparent 100%
+  );
+}
+
+.glass-landing__panel--subtle {
+  background: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.05) 0%,
+    rgba(255, 255, 255, 0.02) 100%
+  );
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 12px 32px rgba(0, 0, 0, 0.24);
+}
+
+.glass-landing__panel--emphasis {
+  border-color: rgba(125, 212, 216, 0.18);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 28px 64px rgba(0, 0, 0, 0.4),
+    0 0 80px rgba(125, 212, 216, 0.08);
+}
+
+.glass-landing__section--panel {
+  padding-block: clamp(48px, 7vw, 80px);
 }
 
 .gl-surface-pill {
@@ -376,6 +650,13 @@ html.glass-landing-route body::after {
   width: 100%;
 }
 
+/* ── Nav — hidden on desktop; macOS menubar is the chrome ── */
+@media (min-width: 900px) {
+  .glass-landing .gl-nav {
+    display: none;
+  }
+}
+
 /* ── Hero ── */
 .glass-landing__hero-glow {
   position: absolute;
@@ -383,6 +664,7 @@ html.glass-landing-route body::after {
   left: 0;
   right: 0;
   height: 70vh;
+  z-index: 0;
   pointer-events: none;
   background: radial-gradient(
     ellipse 80% 50% at 50% 0%,
@@ -394,31 +676,21 @@ html.glass-landing-route body::after {
 .glass-landing__section {
   position: relative;
   z-index: 1;
-  width: min(1180px, calc(100% - 40px));
+  width: min(100%, calc(100% - 48px));
   margin-inline: auto;
-  padding-block: clamp(64px, 9vw, 100px);
+  padding-block: clamp(48px, 7vw, 80px);
 }
 
 .glass-landing__section--hero {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: clamp(40px, 6vw, 64px);
-  align-items: center;
-  min-height: 100vh;
-  min-height: 100dvh;
-  padding-top: clamp(48px, 8vw, 80px);
-  padding-bottom: clamp(48px, 8vw, 80px);
-}
-
-@media (min-width: 960px) {
-  .glass-landing__section--hero {
-    grid-template-columns: 0.88fr 1.12fr;
-    gap: clamp(32px, 4vw, 56px);
-  }
+  padding: 0;
+  width: 100%;
+  margin: 0;
 }
 
 .glass-landing__hero-copy {
   text-align: left;
+  position: relative;
+  z-index: 1;
 }
 
 .glass-landing__eyebrow {
@@ -429,15 +701,14 @@ html.glass-landing-route body::after {
   margin: 0 0 20px;
   font-family: var(--gl-font-display);
   font-weight: 800;
-  font-size: clamp(2.5rem, 8vw, 4rem);
+  font-size: clamp(2rem, 6vw, 3rem);
   letter-spacing: -0.04em;
   line-height: 0.95;
-  white-space: nowrap;
 }
 
-@media (min-width: 960px) {
+@media (min-width: 800px) {
   .glass-landing__hero-title {
-    font-size: clamp(3rem, 6vw, 7rem);
+    font-size: clamp(2.25rem, 4.5vw, 3.5rem);
   }
 }
 
@@ -450,21 +721,11 @@ html.glass-landing-route body::after {
 }
 
 .glass-landing__hero-tagline {
-  margin: 0 0 20px;
+  margin: 0 0 24px;
   max-width: 52ch;
   font-size: 17px;
   line-height: 1.65;
   color: var(--gl-muted);
-}
-
-.glass-landing__hero-mock {
-  transition: opacity 0.35s ease, filter 0.35s ease;
-}
-
-.glass-landing__hero-mock--dimmed {
-  opacity: 0.15;
-  filter: blur(2px);
-  pointer-events: none;
 }
 
 .glass-landing__your {
@@ -549,19 +810,34 @@ html.glass-landing-route body::after {
   padding-bottom: clamp(40px, 7vw, 72px);
 }
 
+.glass-landing__features-shell {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(24px, 4vw, 32px);
+}
+
+.glass-landing__trust-shell {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(24px, 3vw, 32px);
+}
+
+.glass-landing__trust-panel {
+  padding: clamp(20px, 3vw, 28px);
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
 .glass-landing__final-band {
   position: relative;
   overflow: hidden;
   padding: clamp(52px, 9vw, 96px) clamp(24px, 5vw, 56px);
   border-radius: clamp(20px, 3vw, 28px);
   text-align: center;
-  background: linear-gradient(165deg, rgba(10, 12, 18, 0.94), rgba(6, 8, 14, 0.9));
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.32),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 24px 64px rgba(0, 0, 0, 0.45),
-    0 0 80px rgba(125, 212, 216, 0.06);
+  background: transparent;
+  border: none;
+  box-shadow: none;
   isolation: isolate;
 }
 
@@ -1033,7 +1309,7 @@ html.glass-landing-route body::after {
 .glass-landing__quote {
   margin: 0;
   padding: clamp(28px, 4vw, 40px);
-  text-align: left;
+  text-align: center;
 }
 
 .glass-landing__quote p {

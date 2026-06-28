@@ -1,0 +1,260 @@
+/* Site interior — premium OS-layer product page inside Safari */
+
+.glass-site-hero {
+  position: relative;
+  padding: clamp(36px, 5vw, 56px) clamp(28px, 4vw, 48px) clamp(40px, 5vw, 56px);
+  overflow: hidden;
+}
+
+.glass-site-hero__atmosphere {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.glass-site-hero__orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+}
+
+.glass-site-hero__orb--tl {
+  width: 420px;
+  height: 420px;
+  top: -120px;
+  left: -80px;
+  background: radial-gradient(circle, rgba(56, 225, 255, 0.22) 0%, transparent 68%);
+}
+
+.glass-site-hero__orb--br {
+  width: 360px;
+  height: 360px;
+  bottom: -80px;
+  right: -60px;
+  background: radial-gradient(circle, rgba(125, 212, 216, 0.16) 0%, transparent 70%);
+}
+
+.glass-site-hero__grid {
+  position: absolute;
+  inset: 0;
+  opacity: 0.04;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.5) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.5) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: radial-gradient(ellipse 90% 80% at 50% 30%, black 10%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse 90% 80% at 50% 30%, black 10%, transparent 75%);
+}
+
+.glass-site-hero__head {
+  position: relative;
+  z-index: 1;
+  max-width: 640px;
+}
+
+.glass-site-hero__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 18px;
+  padding: 5px 12px 5px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: rgba(200, 230, 235, 0.88);
+  background: rgba(8, 14, 22, 0.72);
+  border: 1px solid rgba(125, 212, 216, 0.22);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.glass-site-hero__status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #72d7df;
+  box-shadow: 0 0 10px rgba(114, 215, 223, 0.8);
+  animation: glass-site-status-pulse 2s ease-out infinite;
+}
+
+@keyframes glass-site-status-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+.glass-site-hero__eyebrow {
+  margin: 0 0 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--gl-accent);
+}
+
+.glass-site-hero__title {
+  margin: 0 0 16px;
+  font-family: var(--gl-font-display);
+  font-weight: 800;
+  font-size: clamp(2.5rem, 6.5vw, 4.25rem);
+  letter-spacing: -0.045em;
+  line-height: 0.92;
+  background: linear-gradient(165deg, #f8fbff 0%, #e8f4f6 45%, #9ed8de 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.glass-site-hero__lead {
+  margin: 0;
+  max-width: 52ch;
+  font-size: clamp(1rem, 2vw, 1.2rem);
+  line-height: 1.6;
+  color: rgba(200, 206, 214, 0.88);
+}
+
+.glass-site-hero__body {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: clamp(28px, 4vw, 40px);
+  margin-top: clamp(28px, 4vw, 40px);
+}
+
+@media (min-width: 900px) {
+  .glass-site-hero__body {
+    grid-template-columns: minmax(0, 340px) minmax(0, 1fr);
+    align-items: start;
+    gap: clamp(24px, 3vw, 36px);
+  }
+}
+
+.glass-site-hero__primary {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.glass-site-hero__capabilities {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+@media (min-width: 560px) {
+  .glass-site-hero__capabilities {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.glass-site-hero__cap {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: linear-gradient(
+    155deg,
+    rgba(255, 255, 255, 0.06) 0%,
+    rgba(255, 255, 255, 0.02) 50%,
+    rgba(0, 0, 0, 0.08) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 8px 24px rgba(0, 0, 0, 0.2);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.glass-site-hero__cap:hover {
+  border-color: rgba(125, 212, 216, 0.22);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 12px 32px rgba(0, 0, 0, 0.28),
+    0 0 24px rgba(125, 212, 216, 0.06);
+  transform: translateY(-1px);
+}
+
+.glass-site-hero__cap-icon {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--gl-accent);
+  background: rgba(125, 212, 216, 0.1);
+  border: 1px solid rgba(125, 212, 216, 0.2);
+  box-shadow: 0 0 12px rgba(125, 212, 216, 0.1);
+}
+
+.glass-site-hero__cap-label {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--gl-text);
+}
+
+.glass-site-hero__cap-detail {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--gl-muted);
+}
+
+.glass-site-hero__foot {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: clamp(32px, 4vw, 44px);
+  padding-top: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.glass-site-hero__foot-pill {
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: rgba(190, 198, 210, 0.82);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-site-hero__foot-pill--accent {
+  color: rgba(180, 240, 245, 0.95);
+  border-color: rgba(125, 212, 216, 0.28);
+  background: rgba(125, 212, 216, 0.08);
+}
+
+/* Safari interior — refined dark product surface */
+.glass-landing__safari-content {
+  position: relative;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(56, 140, 180, 0.12) 0%, transparent 55%),
+    linear-gradient(180deg, #080c14 0%, #060810 100%);
+}
+
+.glass-landing__safari-content .glass-landing__section--hero {
+  min-height: auto;
+  padding-block: 0;
+  width: 100%;
+}
+
+.glass-landing__safari-content .glass-landing__section:not(.glass-landing__section--hero) {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glass-site-hero__status-dot {
+    animation: none;
+  }
+}

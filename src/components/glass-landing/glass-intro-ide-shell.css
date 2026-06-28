@@ -1,0 +1,321 @@
+/* Intro IDE — imports real Glass Coder shell styles; scoped to .glass-intro-ide */
+
+@import "../../../glass-app/src/renderer/overlay/GlassIdeShell.css";
+@import "../../../glass-app/src/renderer/overlay/GlassIdePremium.css";
+@import "../../../glass-app/src/renderer/overlay/GlassIdeStream.css";
+@import "../../../glass-app/src/renderer/overlay/GlassIdeEditor.css";
+@import "../../../glass-app/src/renderer/overlay/GlassIdePreview.css";
+@import "../../../glass-app/src/renderer/overlay/GlassIdeFileTree.css";
+@import "../../../glass-app/src/renderer/workspace/workspaceChrome.css";
+
+.glass-intro-ide {
+  --glass-accent-rgb: 114, 215, 223;
+  --presence-glow-purple: rgba(167, 128, 255, 0.35);
+  --presence-glow-amber-soft: rgba(255, 196, 100, 0.25);
+  --glass-ide-cost-footer-h: 28px;
+  --gide-terminal-chrome-h: 158px;
+  --builder-strip-top-from-bottom: calc(var(--builder-strip-bottom, 7px) + var(--builder-strip-height, 40px) + 1px);
+}
+
+.glass-intro-ide.gide-shell {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: var(--builder-strip-top-from-bottom);
+  z-index: 63;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(10px);
+  transition:
+    opacity 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-intro-ide.gide-shell.glass-intro-ide--open {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.glass-intro-ide .gide-pane--tree {
+  width: 220px;
+  flex-shrink: 0;
+}
+
+.glass-intro-ide .gide-pane--stream {
+  width: 380px;
+  flex-shrink: 0;
+}
+
+.glass-intro-ide .gide-split {
+  pointer-events: none;
+}
+
+.glass-intro-ide__stream-line {
+  animation: glass-intro-ide-stream-in 0.38s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes glass-intro-ide-stream-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Collapsed terminal strip in center stack */
+.glass-intro-ide__terminal-strip {
+  flex-shrink: 0;
+  height: var(--gide-terminal-chrome-h);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(4, 6, 10, 0.92);
+  display: flex;
+  align-items: flex-end;
+  padding: 0 10px 8px;
+}
+
+.glass-intro-ide__terminal-strip-inner {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 10px;
+  color: rgba(150, 170, 200, 0.65);
+}
+
+/* Mini site inside preview frame */
+.glass-intro-ide__preview-site {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  text-align: center;
+  background: linear-gradient(180deg, #0b1020 0%, #060910 100%);
+}
+
+.glass-intro-ide__preview-kicker {
+  margin: 0 0 8px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(114, 215, 223, 0.82);
+}
+
+.glass-intro-ide__preview-site h2 {
+  margin: 0 0 8px;
+  font-size: clamp(20px, 3vw, 28px);
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.glass-intro-ide__preview-site p {
+  margin: 0 0 14px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(190, 205, 230, 0.78);
+}
+
+.glass-intro-ide__preview-cta {
+  display: inline-block;
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(8, 12, 18, 0.95);
+  background: linear-gradient(135deg, rgba(114, 215, 223, 0.95), rgba(106, 255, 212, 0.9));
+}
+
+.glass-intro-ide__preview-empty {
+  width: 100%;
+  height: 100%;
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+  color: rgba(140, 165, 200, 0.55);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.glass-intro-ide__preview-empty-icon {
+  font-size: 18px;
+  opacity: 0.45;
+}
+
+.glass-intro-ide__user-prompt {
+  padding: 8px 10px;
+  margin: 0 4px 6px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(210, 225, 245, 0.92);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* Cinematic preview zoom — camera push-in */
+.glass-intro-ide--zoom.gide-shell {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.glass-intro-ide--zoom .gide-header,
+.glass-intro-ide--zoom .gide-pane--tree,
+.glass-intro-ide--zoom .gide-pane--stream,
+.glass-intro-ide--zoom .gide-cost-footer,
+.glass-intro-ide--zoom .gide-split {
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+
+.glass-intro-ide--zoom .gide-pane--center {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+}
+
+.glass-intro-ide--zoom .gide-center-stack {
+  height: 100%;
+}
+
+.glass-intro-ide--zoom .gide-center-editor {
+  flex: 1 1 0 !important;
+}
+
+.glass-intro-ide--zoom .glass-intro-ide__terminal-strip {
+  display: none;
+}
+
+.glass-intro-ide--zoom .gide-preview {
+  animation: glass-intro-ide-cinematic-push 3.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  transform-origin: 50% 42%;
+}
+
+@keyframes glass-intro-ide-cinematic-push {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+    border-radius: 0;
+  }
+  42% {
+    opacity: 1;
+    transform: scale(1.85);
+    border-radius: 4px;
+  }
+  72% {
+    opacity: 0.92;
+    transform: scale(3.2);
+    border-radius: 0;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(4.2);
+    border-radius: 0;
+  }
+}
+
+.glass-intro-ide__zoom-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 71;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.18), transparent 58%);
+  animation: glass-intro-scene-flash 0.85s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Site handoff beneath glass */
+.glass-landing__safari--ide-handoff {
+  transform-origin: 50% 42%;
+}
+
+.glass-landing--intro-ide-zoom .glass-landing__safari--ide-handoff {
+  animation: glass-intro-site-pull-out 3.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.glass-landing--intro-ide-zoom .glass-landing__safari-page {
+  opacity: 0;
+}
+
+.glass-landing--intro-site-reveal .glass-landing__safari-page--visible,
+.glass-landing--intro-glass-site .glass-landing__safari-page--visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.glass-landing--intro-site-reveal .glass-landing__safari--ide-handoff {
+  animation: glass-intro-site-settle 1.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes glass-intro-site-pull-out {
+  0% {
+    opacity: 0;
+    transform: scale(1.08);
+  }
+  55% {
+    opacity: 0.35;
+    transform: scale(1.04);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes glass-intro-site-settle {
+  from {
+    transform: scale(1.03);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+.glass-landing--intro-site-reveal .glass-intro-ide,
+.glass-landing--intro-glass-site .glass-intro-ide {
+  opacity: 0 !important;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.glass-landing__safari--ide-handoff .glass-landing__safari-chrome {
+  opacity: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.glass-landing--intro-open-ide .glass-landing__desktop-menubar-app::before,
+.glass-landing--intro-ide-compose .glass-landing__desktop-menubar-app::before,
+.glass-landing--intro-ide-stream .glass-landing__desktop-menubar-app::before,
+.glass-landing--intro-ide-preview .glass-landing__desktop-menubar-app::before,
+.glass-landing--intro-ide-zoom .glass-landing__desktop-menubar-app::before {
+  content: "Glass Coder";
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.glass-landing--intro-site-reveal .glass-landing__desktop-menubar-app::before,
+.glass-landing--intro-glass-site .glass-landing__desktop-menubar-app::before {
+  content: "Safari";
+  font-size: 13px;
+  font-weight: 600;
+}
+
+@media (max-width: 900px) {
+  .glass-intro-ide .gide-pane--stream {
+    display: none;
+  }
+  .glass-intro-ide .gide-pane--tree {
+    width: 148px;
+  }
+}

@@ -18,12 +18,20 @@ test.describe("Glass public landing", () => {
         body: JSON.stringify({ enabled: false }),
       });
     });
+    await page.route("**/api/landing/glass-browse/social-proof", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true, entered: 11, demoEnabled: true }),
+      });
+    });
 
-    await page.goto("/");
+    await page.goto("/?skipIntro=1");
     await expect(page.getByTestId("glass-public-landing")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("glass-safari-window")).toBeVisible();
     await expect(page.getByRole("heading", { name: "IIVO Glass" })).toBeVisible();
     await expect(page.getByTestId("glass-landing-download").first()).toBeVisible();
-    await expect(page.getByTestId("glass-browse-enter")).toBeVisible();
+    await expect(page.getByTestId("glass-browse-overlay")).toBeVisible({ timeout: 5000 });
   });
 
   test("shows password gate with reveal toggle when enabled", async ({ page }) => {

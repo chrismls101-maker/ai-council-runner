@@ -65,7 +65,7 @@ export default function GlassTerminalWelcomeMock(): JSX.Element {
               </div>
               <div className="gtw-brand-text landing-terminal-mock__brand-text">
                 <span className="gtw-logo-text landing-terminal-mock__logo-text">IIVO Glass</span>
-                <p className="gtw-tagline landing-terminal-mock__tagline">AI-powered terminal</p>
+                <p className="gtw-tagline landing-terminal-mock__tagline">Voice → shell from the intelligence layer</p>
               </div>
             </div>
 

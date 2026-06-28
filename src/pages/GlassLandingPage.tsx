@@ -3,56 +3,69 @@ import { useEffect } from "react";
 import AmbientOsStack from "../components/glass-landing/AmbientOsStack";
 import GlassBrowseEnterCta from "../components/glass-landing/GlassBrowseEnterCta";
 import GlassBrowseOverlay from "../components/glass-landing/GlassBrowseOverlay";
-import { GlassBrowseProvider, useGlassBrowseOptional } from "../components/glass-landing/glassBrowseMode";
-import GlassDesktopFrameMock from "../components/glass-landing/GlassDesktopFrameMock";
+import { GlassBrowseProvider, useGlassBrowse, useGlassBrowseOptional } from "../components/glass-landing/glassBrowseMode";
+import GlassCinematicIntro, {
+  GlassCinematicIntroProvider,
+  useGlassCinematicIntro,
+} from "../components/glass-landing/glassCinematicIntro";
+import GlassIntroSceneWindows from "../components/glass-landing/GlassIntroSceneWindows";
+import GlassLandingDesktopBackdrop from "../components/glass-landing/GlassLandingDesktopBackdrop";
+import GlassSafariWindow from "../components/glass-landing/GlassSafariWindow";
+import GlassSiteHero from "../components/glass-landing/GlassSiteHero";
 import GlassLandingFooter from "../components/glass-landing/GlassLandingFooter";
+import GlassLandingSiteDock from "../components/glass-landing/GlassLandingSiteDock";
 import GlassLandingNav from "../components/glass-landing/GlassLandingNav";
 import GlassTerminalWelcomeMock from "../components/glass-landing/GlassTerminalWelcomeMock";
 import { RevealSection } from "../components/glass-landing/RevealSection";
 import "../components/glass-landing/glass-landing.css";
+import "../components/glass-landing/glass-landing-desktop.css";
+import "../components/glass-landing/glass-landing-site.css";
 import "../components/glass-landing/glass-landing-mocks.css";
 import "../components/glass-landing/glass-browse-mode.css";
+import "../components/glass-landing/glass-cinematic-intro.css";
+import "../components/glass-landing/glass-landing-site-dock.css";
 import { GLASS_DMG_ARM64_DOWNLOAD_URL, GLASS_DMG_X64_DOWNLOAD_URL } from "../utils/glassRelease";
 import { trackGlassBrowsePageViewOnce } from "../utils/glassBrowseAnalytics";
 
 const PILLARS = [
   {
     label: "Ambient",
-    title: "Present without interrupting",
+    title: "Intelligence without interruption",
     copy: (
       <>
-        Glass floats above <span className="glass-landing__your">YOUR</span> desktop — listening, watching,
-        and translating only when <span className="glass-landing__your">YOU</span> allow it.
+        Glass doesn&apos;t replace your apps — it reads them. Every window, every tab, from one transparent
+        layer that listens and acts only when <span className="glass-landing__your">YOU</span> allow it.
       </>
     ),
   },
   {
     label: "Builder",
-    title: "Ship from the overlay",
+    title: "Ship without switching",
     copy: (
       <>
-        Agents, terminal, and powers menu turn context into code, plans, and automation — without leaving
-        the app <span className="glass-landing__your">YOU</span> are in.
+        Terminal, agents, and powers menu turn live context into code, deploys, and diffs — without the
+        alt-tab tax that kills every other AI tool.
       </>
     ),
   },
   {
     label: "AI-native",
-    title: "Orchestration, not a chatbox",
+    title: "Born OS-level. Not browser-bolted.",
     copy: (
       <>
-        Multi-agent council, memory, and tool routing are built into the OS layer — not bolted onto a
-        browser tab.
+        Council routing, Lens fusion, and session memory are architecture — not a sidebar glued onto Chrome.
+        This is what AI-native actually means.
       </>
     ),
   },
   {
     label: "Operating system",
-    title: "A layer above your Mac",
+    title: "The layer your competitors don't have",
     copy: (
       <>
-        Command bar, dock, builder strip, and panels work as one system — always on top, always under{" "}
-        <span className="glass-landing__your">YOUR</span> control.
+        Command bar, builder strip, and glass frame work as one system — persistent above macOS, invisible
+        until <span className="glass-landing__your">YOU</span> need it. Always on top. Always{" "}
+        <span className="glass-landing__your">YOURS</span>.
       </>
     ),
   },
@@ -168,14 +181,40 @@ function DownloadCta({
 export default function GlassLandingPage() {
   return (
     <GlassBrowseProvider>
-      <GlassLandingPageContent />
+      <GlassLandingPageWithIntro />
     </GlassBrowseProvider>
   );
 }
 
+function GlassLandingPageWithIntro(): JSX.Element {
+  const { enter } = useGlassBrowse();
+
+  return (
+    <GlassCinematicIntroProvider
+      onGlassActivate={() => enter()}
+      onComplete={() => {
+        document.documentElement.classList.add("glass-chrome-settling");
+        window.setTimeout(() => {
+          document.documentElement.classList.remove("glass-chrome-settling");
+          document.documentElement.classList.add("glass-intro-finished");
+        }, 950);
+      }}
+    >
+      <GlassLandingPageContent />
+    </GlassCinematicIntroProvider>
+  );
+}
+
+function introPhaseClass(phase: string, enabled: boolean, complete: boolean): string {
+  if (!enabled || complete) return "glass-landing--intro-complete";
+  if (phase === "boot") return "glass-landing--intro-boot";
+  return `glass-landing--intro-${phase}`;
+}
+
 function GlassLandingPageContent(): JSX.Element {
   const browse = useGlassBrowseOptional();
-  const browseActive = browse?.active ?? false;
+  const browsePresent = (browse?.active || browse?.exiting) ?? false;
+  const intro = useGlassCinematicIntro();
 
   useEffect(() => {
     trackGlassBrowsePageViewOnce();
@@ -183,13 +222,24 @@ function GlassLandingPageContent(): JSX.Element {
 
   return (
     <div
-      className={`glass-landing${browseActive ? " glass-landing--browse-active" : ""}`}
+      className={[
+        "glass-landing",
+        browsePresent ? "glass-landing--browse-active" : "",
+        introPhaseClass(intro.phase, intro.enabled, intro.complete),
+      ]
+        .filter(Boolean)
+        .join(" ")}
       data-testid="glass-public-landing"
     >
-      <div className="glass-landing__hero-glow" aria-hidden="true" />
+      <GlassLandingDesktopBackdrop />
+      <GlassIntroSceneWindows phase={intro.phase} />
       <GlassLandingNav />
       <GlassBrowseOverlay />
+      <GlassCinematicIntro />
+      <GlassLandingSiteDock />
 
+      <GlassSafariWindow>
+      <main className="glass-landing__content">
       <RevealSection
         id="hero"
         data-glass-section="hero"
@@ -197,55 +247,49 @@ function GlassLandingPageContent(): JSX.Element {
         className="glass-landing__section glass-landing__section--hero"
         immediate
       >
-        <div className="glass-landing__hero-copy">
-          <p className="glass-landing__eyebrow gl-surface-pill">macOS · Ambient intelligence</p>
-          <h1 className="glass-landing__hero-title">IIVO Glass</h1>
-          <p className="glass-landing__hero-sub">
-            The AI-native ambient builder operating system.
-          </p>
-          <p className="glass-landing__hero-tagline">
-            A glass layer above your desktop — orchestrating agents, terminal, memory, and council while{" "}
-            <span className="glass-landing__your">YOU</span> stay in flow. No tab switching. No context lost.
-          </p>
-          <GlassBrowseEnterCta />
-          <DownloadCta
-            hero
-            installTestId="glass-landing-install-link"
-            downloadTestId="glass-landing-download"
-          />
-        </div>
-        <div className={browseActive ? "glass-landing__hero-mock glass-landing__hero-mock--dimmed" : "glass-landing__hero-mock"}>
-          <GlassDesktopFrameMock />
-        </div>
+        <GlassSiteHero
+          cta={
+            <>
+              <GlassBrowseEnterCta />
+              <DownloadCta
+                hero
+                installTestId="glass-landing-install-link"
+                downloadTestId="glass-landing-download"
+              />
+            </>
+          }
+        />
       </RevealSection>
 
       <RevealSection
         id="ambient-os"
         data-glass-section="ambient-os"
         data-glass-scroll-zone
-        className="glass-landing__section glass-landing__section--split"
+        className="glass-landing__section glass-landing__section--split glass-landing__section--panel"
       >
-        <div className="glass-landing__split-copy gl-reveal-child">
-          <p className="glass-landing__section-kicker">Not another chat tab</p>
+        <div className="glass-landing__split-copy glass-landing__panel gl-reveal-child">
+          <p className="glass-landing__section-kicker">The category shift</p>
           <h2 className="glass-landing__section-title">
-            Most AI lives inside a browser. Glass is an operating layer.
+            Every app gets intelligence. Glass is the layer that delivers it.
           </h2>
           <p className="glass-landing__section-body">
-            Chat tools wait for you to paste context. IIVO Glass rides on top of macOS — sensing meetings,
-            reading screens you capture, and dispatching agents from a single command surface.
+            Copilots ship inside one app at a time. Chat tools wait for you to paste. IIVO Glass is the
+            ambient operating layer — one command surface, cross-window Lens, multi-agent council, and
+            memory that follows you from Safari to Terminal to Figma. Not inside your apps. Above all of
+            them.
           </p>
           <ul className="glass-landing__compare">
             <li className="glass-landing__compare-item gl-surface glass-landing__compare-item--muted">
               <span className="glass-landing__compare-label">Tab AI</span>
-              Context switching · copy-paste · lost state
+              One window · paste context · amnesia between sessions
             </li>
             <li className="glass-landing__compare-item gl-surface glass-landing__compare-item--accent">
-              <span className="glass-landing__compare-label">Ambient OS</span>
-              Overlay · persistent memory · builder orchestration
+              <span className="glass-landing__compare-label">Intelligent Glass</span>
+              Every app · fused context · always above, never inside
             </li>
           </ul>
         </div>
-        <div className="glass-landing__split-visual gl-reveal-child">
+        <div className="glass-landing__split-visual glass-landing__panel glass-landing__panel--subtle gl-reveal-child">
           <AmbientOsStack />
         </div>
       </RevealSection>
@@ -253,12 +297,13 @@ function GlassLandingPageContent(): JSX.Element {
       <RevealSection
         id="builder-stack"
         data-glass-section="builder-stack"
-        className="glass-landing__section glass-landing__section--features"
+        className="glass-landing__section glass-landing__section--features glass-landing__section--panel"
       >
+        <div className="glass-landing__features-shell glass-landing__panel">
         <div className="glass-landing__features-header gl-reveal-child">
-          <p className="glass-landing__section-kicker">Four pillars</p>
+          <p className="glass-landing__section-kicker">Why Glass wins</p>
           <h2 className="glass-landing__section-title glass-landing__section-title--wide">
-            Built for builders who think in systems, not prompts.
+            Four pillars. One intelligence layer above everything.
           </h2>
         </div>
         <div className="glass-landing__features-grid">
@@ -279,25 +324,27 @@ function GlassLandingPageContent(): JSX.Element {
             ))}
           </div>
         </div>
+        </div>
       </RevealSection>
 
-      <RevealSection className="glass-landing__section glass-landing__section--quote">
-        <blockquote className="glass-landing__quote gl-surface gl-reveal-child">
+      <RevealSection className="glass-landing__section glass-landing__section--quote glass-landing__section--panel">
+        <blockquote className="glass-landing__quote glass-landing__panel gl-reveal-child">
           <p>
-            “<span className="glass-landing__your">YOU</span> cannot be swallowed by a platform.{" "}
-            <span className="glass-landing__your">YOU</span> sit above them all.”
+            “Platforms want you inside their tab. Glass puts{" "}
+            <span className="glass-landing__your">YOU</span> above all of them.”
           </p>
         </blockquote>
       </RevealSection>
 
-      <RevealSection id="trust" className="glass-landing__section">
-        <div className="gl-reveal-child">
+      <RevealSection id="trust" className="glass-landing__section glass-landing__section--panel">
+        <div className="glass-landing__trust-shell glass-landing__panel gl-reveal-child">
+        <div>
           <p className="glass-landing__section-kicker">Privacy by design</p>
           <h2 className="glass-landing__section-title">
             Built to earn <span className="glass-landing__your">YOUR</span> trust. Not assume it.
           </h2>
         </div>
-        <div className="glass-landing__trust-panel gl-surface gl-reveal-child">
+        <div className="glass-landing__trust-panel gl-reveal-child">
           <div className="glass-landing__trust-lines">
             {TRUST_LINES.map((line, index) => (
               <p key={index} className="glass-landing__trust-line">
@@ -306,22 +353,24 @@ function GlassLandingPageContent(): JSX.Element {
             ))}
           </div>
           <p className="glass-landing__trust-close">
-            IIVO Glass is a tool that works for <span className="glass-landing__your">YOU</span>. Not a platform
-            that works on <span className="glass-landing__your">YOU</span>.
+            IIVO Glass works for <span className="glass-landing__your">YOU</span> — above every app. Not a
+            platform that traps <span className="glass-landing__your">YOU</span> inside theirs.
           </p>
+        </div>
         </div>
       </RevealSection>
 
-      <RevealSection className="glass-landing__section glass-landing__final">
-        <div className="glass-landing__final-band gl-reveal-child">
-          <p className="glass-landing__final-kicker gl-surface-pill">Free beta for macOS</p>
+      <RevealSection className="glass-landing__section glass-landing__final glass-landing__section--panel">
+        <div className="glass-landing__final-band glass-landing__panel glass-landing__panel--emphasis gl-reveal-child">
+          <p className="glass-landing__final-kicker gl-surface-pill">The next layer is live</p>
           <h2 className="glass-landing__final-title">
-            Install the ambient
+            Install intelligent
             <br />
-            builder OS.
+            Glass.
           </h2>
           <p className="glass-landing__final-lead">
-            Apple Silicon and Intel. Download, drag to Applications, and Glass locks above every app.
+            One download. One overlay. Every window on your Mac — finally connected under the same
+            intelligence layer.
           </p>
           <DownloadCta footer downloadTestId="glass-landing-download-final" installTestId="glass-landing-install-link" />
           <span className="glass-landing__final-led" aria-hidden="true" />
@@ -329,6 +378,8 @@ function GlassLandingPageContent(): JSX.Element {
       </RevealSection>
 
       <GlassLandingFooter />
+      </main>
+      </GlassSafariWindow>
     </div>
   );
 }

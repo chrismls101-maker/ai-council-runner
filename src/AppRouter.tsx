@@ -35,7 +35,7 @@ type AppRouteView =
   | "not-found";
 
 const ROUTE_TITLES: Record<AppRouteView, string> = {
-  landing: "IIVO Glass",
+  landing: "IIVO Glass — Intelligent Glass Across Every App",
   install: "Installation Guide — IIVO Glass",
   privacy: "Privacy Policy — IIVO Glass",
   terms: "Terms of Service — IIVO Glass",

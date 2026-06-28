@@ -52,9 +52,12 @@ const BUILDER_RIGHT_TABS = [
 const GLASS_RAIL_ICONS = ["G", "◫", "▷", ">_"] as const;
 
 /** MacBook desktop with macOS chrome + IIVO Glass overlay (frame, rail dock, strip, command bar). */
-export default function GlassDesktopFrameMock(): JSX.Element {
+export default function GlassDesktopFrameMock({ heroStage = false }: { heroStage?: boolean }): JSX.Element {
   return (
-    <div className="gl-macbook-mock" data-testid="glass-desktop-frame-mock">
+    <div
+      className={`gl-macbook-mock${heroStage ? " gl-macbook-mock--hero-stage" : ""}`}
+      data-testid="glass-desktop-frame-mock"
+    >
       <div className="gl-macbook-mock__device">
         <div className="gl-macbook-mock__bezel">
           <span className="gl-macbook-mock__camera" aria-hidden="true" />

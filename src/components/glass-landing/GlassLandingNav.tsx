@@ -2,8 +2,8 @@ import { useState, type JSX } from "react";
 import { GLASS_DMG_ARM64_DOWNLOAD_URL } from "../../utils/glassRelease";
 
 const NAV_LINKS = [
-  { href: "#ambient-os", label: "Ambient OS" },
-  { href: "#builder-stack", label: "Builder stack" },
+  { href: "#ambient-os", label: "The layer" },
+  { href: "#builder-stack", label: "Capabilities" },
   { href: "#trust", label: "Trust" },
 ] as const;
 

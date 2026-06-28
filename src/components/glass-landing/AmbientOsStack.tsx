@@ -4,22 +4,22 @@ const LAYERS = [
   {
     id: "council",
     label: "Council & memory",
-    detail: "Multi-agent reasoning, session memory, and decisions that persist across your work.",
+    detail: "Multi-agent reasoning and memory that compounds across every app you work in — not one chat thread.",
   },
   {
     id: "builder",
     label: "Builder strip",
-    detail: "Agents, terminal, powers menu, and command palette — one orchestration surface.",
+    detail: "Terminal, Aletheia, agents, and powers menu — one strip orchestrating your entire desktop.",
   },
   {
     id: "ambient",
-    label: "Ambient overlay",
-    detail: "Always-on-top glass layer that listens, sees, and translates without stealing focus.",
+    label: "Intelligent glass",
+    detail: "Transparent layer above macOS — sees, hears, and acts across all apps without trapping you in a tab.",
   },
   {
     id: "desktop",
-    label: "Your desktop",
-    detail: "Every app, browser tab, and workflow you already use — untouched underneath.",
+    label: "Your apps",
+    detail: "Figma, Xcode, Safari, Slack — untouched underneath. Intelligence on top. That's the whole point.",
   },
 ] as const;
 
