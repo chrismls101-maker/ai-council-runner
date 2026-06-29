@@ -74,13 +74,11 @@ export function pickGlassNotification(input: {
 
 export function shouldRaiseOverlayForNotifications(input: {
   lastError?: string;
-  lastNotice?: string;
   rendererNotificationActive?: boolean;
   appUpdateVisible?: boolean;
 }): boolean {
   return (
     Boolean(input.lastError?.trim()) ||
-    Boolean(input.lastNotice?.trim()) ||
     Boolean(input.rendererNotificationActive) ||
     Boolean(input.appUpdateVisible)
   );

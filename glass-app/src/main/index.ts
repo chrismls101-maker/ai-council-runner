@@ -82,6 +82,7 @@ import {
 import { createScreenshotContext, createContextItem } from "../shared/iivoClient.ts";
 import {
   IPC,
+  resolveOpenCoderBroadcastAutoRun,
   type GlassCommand,
   type GlassState,
   type SaveGlassMemoryRequest,
@@ -110,6 +111,12 @@ import {
   type ExtractDetectResponse,
   type ExtractGenerateRequest,
   type ExtractGenerateResponse,
+  type GlassPathwaysGenerateRequest,
+  type GlassPathwaysGenerateResponse,
+  type GlassPathwaysStageGuidanceRequest,
+  type GlassPathwaysStageGuidanceResponse,
+  type GlassPathwaysEscortLaunchRequest,
+  type GlassPathwaysEscortLaunchResponse,
   type ExtractBuildHandoffRequest,
   type ExtractBuildHandoffResponse,
   type TerminalFixRequest,
@@ -253,12 +260,14 @@ import {
   setOverlayCodeAnalystExplorerActive,
   setOverlayWritingStudioActive,
   setOverlayGlassStorageProjectsActive,
+  setOverlayGlassSpacesActive,
   setOverlayGlassDashboardActive,
   setOverlayAletheiaDashboardActive,
   notifyResearchExplorerMounted,
   notifyCodeAnalystExplorerMounted,
   notifyWritingStudioMounted,
   notifyGlassStorageProjectsMounted,
+  notifyGlassSpacesMounted,
   notifyGlassDashboardMounted,
   notifyAletheiaDashboardMounted,
   notifyCommandBarRendererMounted,
@@ -355,6 +364,7 @@ import {
   displayAwarenessSnapshotsEqual,
   formatAletheiaDisplayContext,
 } from "../shared/aletheiaDisplayAwareness.ts";
+import { formatAletheiaRuntimeSetupContext } from "../shared/aletheiaRuntimeSetupContext.ts";
 import {
   buildAletheiaTrustActivity,
   trustActivitySnapshotsEqual,
@@ -567,6 +577,8 @@ import {
   logBuildLoopStarted,
   logBuildLoopCompleted,
   logRetentionEvent,
+  logAudioCoderAutoLaunch,
+  logCoderLaunchDedupeSuppressed,
 } from "./glassRetentionEvents.ts";
 import { randomUUID } from "crypto";
 import { pruneHistory, seedUserContextFromProfile, persistChatExchange } from "./sessionHistoryStore.ts";
@@ -609,6 +621,13 @@ import { buildMetaPrompt } from "./powerPromptEngine.ts";
 import { buildDetectionPrompt, buildGenerationPrompt } from "./extractMode.ts";
 import { parseExtractDetectLabel } from "../shared/extractModeLogic.ts";
 import { runExtractBuildHandoff } from "./extractBuildHandoffRunner.ts";
+import {
+  BUILD_HANDOFF_MISSING_PROMPT_SPEECH,
+  buildHandoffSuccessSpeech,
+  classifyBuildHandoffIntent,
+  resolveBuildHandoffPrompt,
+  type BuildHandoffIntent,
+} from "../shared/buildHandoffIntent.ts";
 import { fetchServerRuntimeFlags } from "./serverRuntimeConfig.ts";
 import { buildTerminalFixPrompt, parseTerminalFixResponse } from "./terminalFixEngine.ts";
 import { EXTRACT_BUILD_MACOS_PERMISSION_EXPLAIN } from "../shared/extractBuildHandoff.ts";
@@ -858,6 +877,7 @@ import {
   type GlassCommandFeedItem,
 } from "../shared/commandFeed.ts";
 import { askIivoGlass, askIivoGlassStream, GlassAskCancelledError, isGlassAskPayloadTooLargeError } from "./glassAskClient.ts";
+import { generateGlassPathway, generateStageGuidance, launchPathwayEscortTarget } from "./glassPathwaysService.ts";
 import {
   formatGlassAskErrorForUser,
   isGlassAskMissingKeyError,
@@ -891,7 +911,7 @@ import {
 import { createLatestScreenshotState } from "../shared/glassLatestScreenshotAsk.ts";
 import type { GlassAskSessionPayload, GlassAskStatus, GlassLastAskResponse } from "../shared/glassAskTypes.ts";
 import { isSubstantialResponse } from "../shared/glassAskTypes.ts";
-import { companionPrefersResponsePanel } from "../shared/glassCompanion.ts";
+import { companionPrefersResponsePanel, shouldAutoStartCompanionSystemAudio } from "../shared/glassCompanion.ts";
 import {
   buildGlassScreenContextStatus,
   promptRequestsGlassScreenVisual,
@@ -1092,6 +1112,11 @@ import {
 import { parseGlassCoderComposerMode } from "../shared/glassComposerMode.ts";
 import { applyCoderWorkspaceRoot } from "./coderWorkspaceRoot.ts";
 import {
+  recordForcedCoderLaunch,
+  shouldSkipDuplicateForcedCoderLaunch,
+} from "./openCoderLaunchDedupe.ts";
+import { emitOrchestrationNotice, setOrchestrationNoticeSink } from "./orchestrationNotice.ts";
+import {
   clearGlassIdeEditorContext,
   enrichAgentPromptForIde,
   getGlassIdeEditorContext,
@@ -1288,6 +1313,7 @@ interface AppState {
   writingStudioActive?: boolean;
   writingStudioPrompt?: string;
   glassStorageProjectsActive?: boolean;
+  glassSpacesActive?: boolean;
   glassStorageProjects?: import("../shared/glassStorageProjectTypes.ts").GlassProjectRecord[];
   glassStorageProjectsSelectedId?: string | null;
   latestDesignToCodeProjectId?: string | null;
@@ -4882,6 +4908,44 @@ function queueDesignToCodeGlassMemoryIngestion(input: {
   });
 }
 
+async function handleBuildHandoffVoiceCommand(intent: BuildHandoffIntent): Promise<void> {
+  const prompt = resolveBuildHandoffPrompt({
+    lastAskResponse: state.lastAskResponse,
+    systemTranscript:
+      extractRollingTranscript.trim() || state.transcript.trim() || undefined,
+    preferTranscript: intent.preferTranscript,
+  });
+
+  if (!prompt) {
+    if (state.companionModeActive) {
+      speakAletheiaAdviceAck(BUILD_HANDOFF_MISSING_PROMPT_SPEECH);
+    } else {
+      state.lastNotice = BUILD_HANDOFF_MISSING_PROMPT_SPEECH;
+    }
+    push();
+    return;
+  }
+
+  trackCopilotCommand(intent.sourceText);
+  pushFeed(
+    createCommandFeedItem("command", intent.sourceText, { prompt: intent.sourceText }),
+  );
+
+  const result = await runExtractBuildHandoff(intent.target, prompt);
+  const speech =
+    result.notice ?? buildHandoffSuccessSpeech(intent.target, result.pasted);
+  const message = result.error && !result.pasted ? `${speech} ${result.error}` : speech;
+
+  if (state.companionModeActive) {
+    speakAletheiaAdviceAck(message);
+  } else {
+    state.lastNotice = result.needsAccessibilitySettings
+      ? EXTRACT_BUILD_MACOS_PERMISSION_EXPLAIN
+      : message;
+  }
+  push();
+}
+
 function speakAletheiaAdviceAck(text: string): void {
   const surface =
     pendingAletheiaSpeakSurface
@@ -5703,6 +5767,44 @@ function resolveAskUserContextForSubmit(
   if (personaDirective && state.companionModeActive) {
     parts.unshift(personaDirective);
   }
+  if (state.companionModeActive) {
+    parts.unshift(
+      formatAletheiaRuntimeSetupContext({
+        setupCapabilities: state.setupCapabilities,
+        dependencyManifest: state.aletheiaDependencyManifest,
+        workspaceRoot: state.glassSettings.agentCodeWorkspaceRoot,
+        ollamaAvailable: state.ollamaAvailable,
+        omniParserInstall: state.omniParserInstall,
+        indexStatus: state.indexState?.status,
+        indexFileCount: state.indexState?.fileCount,
+        companionModeActive: state.companionModeActive,
+        companionPrivacyActive: state.companionPrivacy?.active,
+        hearingMachineAudio:
+          state.systemAudioStatus === "available"
+          && shouldAutoStartCompanionSystemAudio({
+            systemAudioStatus: state.systemAudioStatus,
+            selectedVirtualAudioDeviceId: state.selectedVirtualAudioDeviceId,
+            virtualAudioDevices: state.virtualAudioDevices,
+          }),
+        glassIdeActive: state.glassIdeActive,
+        coderWorkspaceActive: state.coderWorkspaceActive,
+        researchExplorerActive: state.researchExplorerActive,
+        writingStudioActive: state.writingStudioActive,
+        codeAnalystExplorerActive: state.codeAnalystExplorerActive,
+        glassStorageProjectsActive: state.glassStorageProjectsActive,
+        glassSpacesActive: state.glassSpacesActive,
+        glassDashboardActive: state.glassDashboardActive,
+        aletheiaDashboardActive: state.aletheiaDashboardActive,
+        computerOperatorActive: (() => {
+          const phase = state.aletheiaComputerOperator?.phase;
+          return Boolean(phase && phase !== "complete" && phase !== "failed");
+        })(),
+        hotkeyPreset: state.glassSettings.hotkeyPreset,
+        onboardingComplete: state.onboardingComplete,
+        persona: state.persona ?? state.glassSettings.persona,
+      }),
+    );
+  }
   return parts.length > 0 ? parts.join("\n\n") : undefined;
 }
 
@@ -5986,6 +6088,7 @@ function snapshot(): GlassState {
     writingStudioActive: state.writingStudioActive === true,
     writingStudioPrompt: state.writingStudioPrompt,
     glassStorageProjectsActive: state.glassStorageProjectsActive === true,
+    glassSpacesActive: state.glassSpacesActive === true,
     glassStorageProjects: state.glassStorageProjects ?? [],
     glassStorageProjectsSelectedId: state.glassStorageProjectsSelectedId ?? null,
     latestDesignToCodeProjectId: state.latestDesignToCodeProjectId ?? null,
@@ -6250,6 +6353,7 @@ function syncIdeChromeFromState(): void {
       || state.codeAnalystExplorerActive
       || state.writingStudioActive
       || state.glassStorageProjectsActive
+      || state.glassSpacesActive
       || state.glassDashboardActive
       || state.aletheiaDashboardActive,
     ),
@@ -6259,6 +6363,7 @@ function syncIdeChromeFromState(): void {
   setOverlayCodeAnalystExplorerActive(state.codeAnalystExplorerActive === true);
   setOverlayWritingStudioActive(state.writingStudioActive === true);
   setOverlayGlassStorageProjectsActive(state.glassStorageProjectsActive === true);
+  setOverlayGlassSpacesActive(state.glassSpacesActive === true);
   setOverlayGlassDashboardActive(state.glassDashboardActive === true);
   setOverlayAletheiaDashboardActive(state.aletheiaDashboardActive === true);
 }
@@ -6276,7 +6381,6 @@ function push(): void {
   syncOverlayPresentationRaised(
     shouldRaiseOverlayForNotifications({
       lastError: state.lastError,
-      lastNotice: state.lastNotice,
       rendererNotificationActive: overlayRendererNotificationActive,
       appUpdateVisible,
     }),
@@ -7134,6 +7238,15 @@ async function submitCommand(
   }
 
   if (tryHandleVoiceAdviceResponse(rawText.trim())) {
+    return;
+  }
+
+  const buildHandoffIntent = classifyBuildHandoffIntent(rawText.trim());
+  if (buildHandoffIntent) {
+    if (state.companionModeActive) {
+      incrementAletheiaSessionTurn();
+    }
+    void handleBuildHandoffVoiceCommand(buildHandoffIntent);
     return;
   }
 
@@ -9960,6 +10073,7 @@ async function handleCommand(
         state.codeAnalystExplorerActive = false;
         state.writingStudioActive = false;
         state.glassStorageProjectsActive = false;
+        state.glassSpacesActive = false;
         state.glassDashboardActive = false;
         state.glassDashboardNav = null;
         state.aletheiaDashboardActive = false;
@@ -10793,8 +10907,21 @@ async function handleCommand(
     }
 
     case "open-coder-with-prompt": {
-      const { prompt, autoRun, screenContext } = command;
+      const { prompt, autoRun, screenContext, forceAutoRun } = command;
+      const dedupeKey = prompt.trim();
+      const workspaceAtLaunch = state.glassSettings.agentCodeWorkspaceRoot?.trim();
       const enrichedPrompt = enrichAgentPromptForIde(prompt, state.glassIdeActive === true);
+      if (shouldSkipDuplicateForcedCoderLaunch(
+        dedupeKey,
+        forceAutoRun,
+        Boolean(workspaceAtLaunch),
+      )) {
+        console.log("[open-coder-with-prompt] Skipping duplicate forced Coder launch (within 30s)");
+        if (forceAutoRun === true) {
+          logCoderLaunchDedupeSuppressed();
+        }
+        return;
+      }
       void (async () => {
         let ctx = screenContext;
         const workspaceRoot = state.glassSettings.agentCodeWorkspaceRoot?.trim();
@@ -10816,13 +10943,26 @@ async function handleCommand(
           state.lastError = message;
           state.glassDockTerminalOpen = false;
         }
+        const broadcastAutoRun = resolveOpenCoderBroadcastAutoRun(
+          autoRun,
+          forceAutoRun,
+          ctx?.confidence,
+        );
+        if (forceAutoRun === true) {
+          logAudioCoderAutoLaunch({ hadWorkspace: Boolean(workspaceRoot) });
+          if (workspaceRoot) {
+            emitOrchestrationNotice("Glass Coder: auto-starting from audio build plan.");
+          }
+        }
         push();
         broadcast(IPC.openCoderWithPrompt, {
           prompt: enrichedPrompt,
-          autoRun: autoRun !== false && ctx?.confidence === "high",
+          autoRun: broadcastAutoRun,
+          forceAutoRun: forceAutoRun === true ? true : undefined,
           screenContext: ctx,
           launchNonce: ++coderLaunchNonce,
         });
+        recordForcedCoderLaunch(dedupeKey, forceAutoRun, Boolean(workspaceRoot));
       })();
       return;
     }
@@ -11084,7 +11224,12 @@ async function handleCommand(
     case "glass-build-from-audio": {
       const { prompt: audioPrompt } = command;
       if (audioPrompt?.trim()) {
-        await handleCommand({ type: "open-coder-with-prompt", prompt: audioPrompt, autoRun: false });
+        await handleCommand({
+          type: "open-coder-with-prompt",
+          prompt: audioPrompt,
+          autoRun: true,
+          forceAutoRun: true,
+        });
       }
       return;
     }
@@ -14164,6 +14309,28 @@ function registerIpc(): void {
     notifyGlassStorageProjectsMounted(focusKeyboard === true);
   });
 
+  // ── Spaces full-screen workspace ─────────────────────────────────────────────
+  ipcMain.on(IPC.openGlassSpaces, (event) => {
+    if (!isOverlayIpcSender(event.sender)) return;
+    state.glassSpacesActive = true;
+    syncIdeChromeFromState();
+    push();
+    setImmediate(() => notifyGlassSpacesMounted());
+  });
+
+  ipcMain.on(IPC.closeGlassSpaces, (event) => {
+    if (!isOverlayIpcSender(event.sender)) return;
+    state.glassSpacesActive = false;
+    syncIdeChromeFromState();
+    push();
+  });
+
+  ipcMain.on(IPC.glassSpacesMounted, (event) => {
+    if (!isOverlayIpcSender(event.sender)) return;
+    if (state.glassSpacesActive !== true) return;
+    notifyGlassSpacesMounted();
+  });
+
   ipcMain.handle(IPC.getGlassStorageProjectThumb, async (_event, projectId: unknown) => {
     if (typeof projectId !== "string" || !projectId.trim()) return null;
     const records = state.glassStorageProjects ?? [];
@@ -15429,6 +15596,46 @@ function registerIpc(): void {
   });
 
   ipcMain.handle(
+    IPC.glassPathwaysGenerate,
+    async (event, payload: GlassPathwaysGenerateRequest): Promise<GlassPathwaysGenerateResponse> => {
+      if (!isOverlayIpcSender(event.sender)) return { error: "Unauthorized" };
+      const goal = typeof payload?.goal === "string" ? payload.goal.trim() : "";
+      return generateGlassPathway(config, goal);
+    },
+  );
+
+  ipcMain.handle(
+    IPC.glassPathwaysStageGuidance,
+    async (
+      event,
+      payload: GlassPathwaysStageGuidanceRequest,
+    ): Promise<GlassPathwaysStageGuidanceResponse> => {
+      if (!isOverlayIpcSender(event.sender)) return { error: "Unauthorized" };
+      const pathway = payload?.pathway;
+      const stageId = typeof payload?.stageId === "string" ? payload.stageId : "";
+      const mode = payload?.mode === "stuck" ? "stuck" : payload?.mode === "explain" ? "explain" : null;
+      if (!pathway || !stageId || !mode) return { error: "Invalid guidance request" };
+      const stage = pathway.stages?.find((s) => s.id === stageId);
+      if (!stage) return { error: "Stage not found" };
+      return generateStageGuidance(config, pathway, stage, mode);
+    },
+  );
+
+  ipcMain.handle(
+    IPC.glassPathwaysEscortLaunch,
+    async (
+      event,
+      payload: GlassPathwaysEscortLaunchRequest,
+    ): Promise<GlassPathwaysEscortLaunchResponse> => {
+      if (!isOverlayIpcSender(event.sender)) return { ok: false, error: "Unauthorized" };
+      const kind = payload?.kind === "settings" ? "settings" : payload?.kind === "url" ? "url" : null;
+      const destination = typeof payload?.destination === "string" ? payload.destination.trim() : "";
+      if (!kind || !destination) return { ok: false, error: "Invalid escort target" };
+      return launchPathwayEscortTarget(kind, destination);
+    },
+  );
+
+  ipcMain.handle(
     IPC.extractBuildHandoff,
     async (event, payload: ExtractBuildHandoffRequest): Promise<ExtractBuildHandoffResponse> => {
       if (!isOverlayIpcSender(event.sender)) {
@@ -15616,7 +15823,6 @@ function registerIpc(): void {
     syncOverlayPresentationRaised(
       shouldRaiseOverlayForNotifications({
         lastError: state.lastError,
-        lastNotice: state.lastNotice,
         rendererNotificationActive: overlayRendererNotificationActive,
         appUpdateVisible,
       }),
@@ -15844,6 +16050,10 @@ app.whenReady().then(() =>
     state.recoveryToastNonce = Date.now();
   }
   logSessionStart();
+  setOrchestrationNoticeSink((message) => {
+    state.lastNotice = message;
+    push();
+  });
   try {
     pruneHistory();
   } catch (err) {
@@ -15878,7 +16088,13 @@ app.whenReady().then(() =>
         }),
       );
       push();
-      console.log("[audio-build-plan] Feed card surfaced — user can click to open Coder");
+      console.log("[audio-build-plan] Feed card surfaced — auto-launching Coder");
+      void handleCommand({
+        type: "open-coder-with-prompt",
+        prompt: coderPrompt,
+        autoRun: true,
+        forceAutoRun: true,
+      });
     },
   );
 

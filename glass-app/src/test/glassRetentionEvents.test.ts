@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { rollupOrchestrationMetrics } from "../shared/orchestrationMetrics.ts";
 
 /** Mirrors getRetentionSummary() rollup formulas (pure — no SQLite). */
 function rollupRetentionMetrics(input: {
@@ -77,4 +78,33 @@ test("retention rollup — success meta parsing counts only success=true", () =>
     }
   }).length;
   assert.equal(buildLoopSucceeded, 2);
+});
+
+test("orchestration rollup — repair success rate avoids divide-by-zero", () => {
+  const r = rollupOrchestrationMetrics({
+    memoryFtsFallback: 0,
+    designRepairTriggered: 0,
+    designRepairSucceeded: 0,
+    audioCoderAutoLaunch: 0,
+    audioCoderAutoLaunchWithoutWorkspace: 0,
+    coderLaunchDedupeSuppressed: 0,
+  });
+  assert.equal(r.designRepairSuccessRateLast7Days, 0);
+  assert.equal(r.memoryFtsFallbackLast7Days, 0);
+});
+
+test("orchestration rollup — counts and repair success rate", () => {
+  const r = rollupOrchestrationMetrics({
+    memoryFtsFallback: 3,
+    designRepairTriggered: 4,
+    designRepairSucceeded: 3,
+    audioCoderAutoLaunch: 5,
+    audioCoderAutoLaunchWithoutWorkspace: 2,
+    coderLaunchDedupeSuppressed: 1,
+  });
+  assert.equal(r.memoryFtsFallbackLast7Days, 3);
+  assert.equal(r.designRepairSuccessRateLast7Days, 0.75);
+  assert.equal(r.audioCoderAutoLaunchLast7Days, 5);
+  assert.equal(r.audioCoderAutoLaunchWithoutWorkspaceLast7Days, 2);
+  assert.equal(r.coderLaunchDedupeSuppressedLast7Days, 1);
 });

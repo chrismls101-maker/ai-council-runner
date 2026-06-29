@@ -5,6 +5,7 @@ import { PromptLibraryPanel } from "./PromptLibraryPanel.tsx";
 import { ApiKeyManagerPanel } from "./ApiKeyManagerPanel.tsx";
 import { ExtractModePanel } from "./ExtractModePanel.tsx";
 import { GlassAgentPanel } from "./GlassAgentPanel.tsx";
+import { SpacesPanel } from "./SpacesPanel.tsx";
 import { GlassStoragePanel } from "./GlassStoragePanel.tsx";
 import {
   armBuilderStripInteractive,
@@ -24,7 +25,7 @@ import { AletheiaStripMenu } from "./AletheiaStripMenu.tsx";
 import { BuilderStripExitButton } from "./BuilderStripExitButton.tsx";
 import "./BuilderStrip.css";
 
-type BuilderTab = "prompts" | "keys" | "extract" | "agents" | "storage";
+type BuilderTab = "prompts" | "keys" | "extract" | "agents" | "storage" | "spaces";
 
 interface BuilderStripProps {
   onEnterInteractive: () => void;
@@ -53,7 +54,9 @@ export function BuilderStrip({
   const aletheiaSweepGenRef = useRef(0);
   const aletheiaButtonRef = useRef<HTMLButtonElement>(null);
   const storageTabRef = useRef<HTMLButtonElement>(null);
+  const spacesTabRef = useRef<HTMLButtonElement>(null);
   const [storagePanelAnchorRight, setStoragePanelAnchorRight] = useState<number | null>(null);
+  const [spacesPanelAnchorRight, setSpacesPanelAnchorRight] = useState<number | null>(null);
 
   useLayoutEffect(() => {
     if (activeTab !== "storage") {
@@ -65,6 +68,23 @@ export function BuilderStrip({
       if (!el) return;
       const rect = el.getBoundingClientRect();
       setStoragePanelAnchorRight(Math.max(0, window.innerWidth - rect.right));
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [activeTab]);
+
+  useLayoutEffect(() => {
+    if (activeTab !== "spaces") {
+      setSpacesPanelAnchorRight(null);
+      return;
+    }
+    const measure = (): void => {
+      const el = spacesTabRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const tabCenterX = rect.left + rect.width / 2;
+      setSpacesPanelAnchorRight(Math.max(12, window.innerWidth - tabCenterX));
     };
     measure();
     window.addEventListener("resize", measure);
@@ -363,6 +383,16 @@ export function BuilderStrip({
   useEffect(() => {
     const onPaletteOpenTab = (event: Event): void => {
       const tab = (event as CustomEvent<string>).detail;
+      if (tab === "spaces") {
+        armBuilderStripInteractive();
+        if (glassState.glassSpacesActive) {
+          window.glass.closeGlassSpaces();
+        } else {
+          syncBuilderStripPanelOpen(true, "spaces");
+          setActiveTab((prev) => (prev === "spaces" ? null : "spaces"));
+        }
+        return;
+      }
       if (tab === "prompts" || tab === "keys" || tab === "extract" || tab === "agents" || tab === "storage") {
         armBuilderStripInteractive();
         syncBuilderStripPanelOpen(true, tab);
@@ -371,7 +401,25 @@ export function BuilderStrip({
     };
     window.addEventListener("glass-palette-open-builder-tab", onPaletteOpenTab);
     return () => window.removeEventListener("glass-palette-open-builder-tab", onPaletteOpenTab);
-  }, []);
+  }, [glassState.glassSpacesActive]);
+
+  const handleSpacesTabClick = useCallback((): void => {
+    armBuilderStripInteractive();
+    if (glassState.glassSpacesActive) {
+      window.glass.closeGlassSpaces();
+      return;
+    }
+    handleTabClick("spaces");
+  }, [glassState.glassSpacesActive, handleTabClick]);
+
+  const handleSpacesPointerDown = useCallback((): void => {
+    armBuilderStripInteractive();
+    if (!glassState.glassSpacesActive) {
+      syncBuilderStripPanelOpen(true, "spaces");
+    }
+  }, [glassState.glassSpacesActive]);
+
+  const spacesTabActive = activeTab === "spaces" || glassState.glassSpacesActive === true;
 
   return (
     <>
@@ -381,12 +429,15 @@ export function BuilderStrip({
           className={[
             "builder-panel-host",
             activeTab === "agents" && "builder-panel-host--agents",
+            activeTab === "spaces" && "builder-panel-host--spaces",
             activeTab === "storage" && "builder-panel-host--storage",
           ].filter(Boolean).join(" ")}
           style={
             activeTab === "storage" && storagePanelAnchorRight != null
               ? { right: `${storagePanelAnchorRight}px` }
-              : undefined
+              : activeTab === "spaces" && spacesPanelAnchorRight != null
+                ? { right: `${spacesPanelAnchorRight}px` }
+                : undefined
           }
           onPointerEnter={handlePointerEnter}
           onPointerLeave={handlePointerLeave}
@@ -404,6 +455,9 @@ export function BuilderStrip({
             )}
             {activeTab === "agents" && (
               <GlassAgentPanel onClose={handleClosePanel} />
+            )}
+            {activeTab === "spaces" && (
+              <SpacesPanel variant="strip-launcher" onClose={handleClosePanel} />
             )}
             {activeTab === "storage" && (
               <GlassStoragePanel
@@ -535,6 +589,25 @@ export function BuilderStrip({
         <div className="builder-strip__divider" aria-hidden="true" />
 
         {renderAletheiaGroup()}
+
+        <GlassHoverTooltip
+          label="Spaces — guided pathways for launches and complex goals"
+          placement="auto"
+        >
+          <button
+            ref={spacesTabRef}
+            type="button"
+            className={`builder-tab builder-tab--spaces${spacesTabActive ? " builder-tab--active" : ""}`}
+            onPointerDown={handleSpacesPointerDown}
+            onClick={handleSpacesTabClick}
+            aria-label="Spaces"
+            aria-pressed={spacesTabActive}
+            data-testid="glass-builder-strip-spaces"
+          >
+            <span className="builder-tab__icon">◇</span>
+            Spaces
+          </button>
+        </GlassHoverTooltip>
 
         <GlassHoverTooltip
           label={agentsTabTooltip}

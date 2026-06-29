@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import { armAletheiaDashboardOverlayPointer, armCodeAnalystOverlayPointer, armDashboardOverlayPointer, armGlassStorageProjectsOverlayPointer, armResearchOverlayPointer, armWritingStudioOverlayPointer, ensureOverlayInteractive } from "../glassTextInteraction.ts";
+import { armAletheiaDashboardOverlayPointer, armCodeAnalystOverlayPointer, armDashboardOverlayPointer, armGlassSpacesOverlayPointer, armGlassStorageProjectsOverlayPointer, armResearchOverlayPointer, armWritingStudioOverlayPointer, ensureOverlayInteractive } from "../glassTextInteraction.ts";
 import { BuilderStrip } from "../builder/BuilderStrip.tsx";
 import { armBuilderStripInteractive } from "../builder/useBuilderStripClickThrough.ts";
 import { shouldShowBuilderStrip } from "../../shared/builderStripVisibility.ts";
@@ -42,6 +42,7 @@ import { CodeAnalystExplorer } from "../code-analyst/CodeAnalystExplorer.tsx";
 import { WritingStudio } from "../writing/WritingStudio.tsx";
 import { GlassDashboard } from "../dashboard/GlassDashboard.tsx";
 import { GlassStorageProjects } from "../storage/GlassStorageProjects.tsx";
+import { GlassSpacesWorkspace } from "../builder/GlassSpacesWorkspace.tsx";
 import { AletheiaDashboard } from "../dashboard/AletheiaDashboard.tsx";
 import { resolveOverlayPanelNavigation } from "../../shared/panelTabRouting.ts";
 import "../dashboard/GlassDashboard.css";
@@ -251,6 +252,30 @@ function GlassStorageProjectsLayer({ state }: { state: GlassState }): JSX.Elemen
   );
 }
 
+function GlassSpacesLayer({ state }: { state: GlassState }): JSX.Element | null {
+  const everOpenedRef = useRef(false);
+  if (state.glassSpacesActive) {
+    everOpenedRef.current = true;
+  }
+
+  useEffect(() => {
+    if (!state.glassSpacesActive) return;
+    armGlassSpacesOverlayPointer(true);
+    return () => {
+      armBuilderStripInteractive();
+    };
+  }, [state.glassSpacesActive]);
+
+  if (!everOpenedRef.current && !state.glassSpacesActive) return null;
+
+  return (
+    <GlassSpacesWorkspace
+      visible={state.glassSpacesActive === true}
+      onClose={() => window.glass.closeGlassSpaces()}
+    />
+  );
+}
+
 function AletheiaDashboardLayer({ state }: { state: GlassState }): JSX.Element | null {
   const everOpenedRef = useRef(false);
   if (state.aletheiaDashboardActive) {
@@ -307,6 +332,7 @@ function OverlayWorkspaceLayers({ state }: { state: GlassState }): JSX.Element {
       <CodeAnalystExplorerLayer state={state} />
       <WritingStudioLayer state={state} />
       <GlassStorageProjectsLayer state={state} />
+      <GlassSpacesLayer state={state} />
       <GlassDashboardLayer state={state} />
       <AletheiaDashboardLayer state={state} />
     </>
@@ -318,6 +344,7 @@ function fullscreenWorkspaceActive(state: GlassState): boolean {
     || state.codeAnalystExplorerActive === true
     || state.writingStudioActive === true
     || state.glassStorageProjectsActive === true
+    || state.glassSpacesActive === true
     || state.glassDashboardActive === true
     || state.aletheiaDashboardActive === true;
 }

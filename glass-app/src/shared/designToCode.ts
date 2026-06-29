@@ -50,4 +50,5 @@ export {
   normalizeDesignPhase,
   isDesignPhaseWorking,
   isCodeGeneratingAction,
+  shouldTriggerDesignRepair,
 } from "./design/designToCodeTypes.ts";

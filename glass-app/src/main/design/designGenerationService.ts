@@ -3,6 +3,7 @@ import {
   buildRepairPrompt,
   isCodeGeneratingAction,
   normalizeDesignPhase,
+  shouldTriggerDesignRepair,
   type DesignStack,
   type DesignToCodeAction,
   type DesignToCodeContext,
@@ -23,6 +24,8 @@ import {
   type DesignGenerateCommand,
 } from "./designToCodeSessionStore.ts";
 import { verificationWarnings, verifyGeneratedCode } from "./designVerificationService.ts";
+import { logDesignRepairTriggered } from "../glassRetentionEvents.ts";
+import { emitOrchestrationNotice } from "../orchestrationNotice.ts";
 
 export type DesignSubmitResult = {
   fullAnswer: string;
@@ -390,26 +393,61 @@ export async function runPostGenerationVerification(
   let warnings = verificationWarnings(result);
   let finalBody = generatedBody;
 
-  if (!result.ok && result.severity === "severe" && session.latestPrompt) {
+  const shouldRepair = shouldTriggerDesignRepair(result, Boolean(session.latestPrompt));
+
+  if (shouldRepair) {
+    const latestPrompt = session.latestPrompt!;
     const repairPrompt = buildRepairPrompt(
-      session.latestPrompt,
+      latestPrompt,
       result.repairHint ?? "Fix layout and structure mismatches.",
       result.issues,
     );
-    logDesignPhase(feedItemId, "repair", "single pass");
+    const isMinor = result.severity === "minor";
+    logDesignPhase(feedItemId, "repair", isMinor ? "minor pass" : "single pass");
     patchDesignSession(state, feedItemId, {
       phase: "generating",
-      statusLine: "Repairing output…",
+      statusLine: isMinor ? "Refining output…" : "Repairing output…",
     });
     deps.push();
     const repaired = await deps.runSilentVisualAsk(
       repairPrompt,
       session.imageDataUrl,
-      { taskComplexity: "deep" },
+      { taskComplexity: isMinor ? "standard" : "deep" },
     );
+    logDesignRepairTriggered({
+      severity: isMinor ? "minor" : "severe",
+      success: Boolean(repaired),
+    });
     if (repaired) {
       finalBody = repaired;
-      warnings = [...warnings, "Auto-repair pass applied"];
+      const repairedCode = extractFirstCodeBlock(repaired) ?? code;
+      patchDesignSession(state, feedItemId, {
+        phase: "verifying",
+        statusLine: "Re-checking fidelity…",
+      });
+      deps.push();
+      const reVerify = await verifyGeneratedCode({
+        spec: session.screenSpec,
+        action,
+        generatedCode: repairedCode,
+        imageDataUrl: session.imageDataUrl,
+        sessionId: deps.getSessionId?.(),
+      });
+      if (reVerify.ok) {
+        warnings = [isMinor ? "Auto-refinement pass applied" : "Auto-repair pass applied"];
+        emitOrchestrationNotice(
+          isMinor ? "Design: auto-refinement verified." : "Design: auto-repair verified.",
+        );
+      } else {
+        warnings = [
+          ...warnings,
+          isMinor ? "Auto-refinement pass applied" : "Auto-repair pass applied",
+          ...verificationWarnings(reVerify),
+        ];
+        emitOrchestrationNotice(
+          isMinor ? "Design: refinement applied — minor issues may remain." : "Design: repair applied — issues may remain.",
+        );
+      }
     }
   } else if (!result.ok) {
     warnings = [...warnings, ...(result.repairHint ? [result.repairHint] : [])];

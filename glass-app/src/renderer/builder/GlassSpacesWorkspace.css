@@ -1,0 +1,140 @@
+.glass-spaces-workspace {
+  display: flex;
+  flex-direction: column;
+  --spaces-panel-border: rgba(255, 255, 255, 0.20);
+  --spaces-panel-frost-start: rgba(255, 255, 255, 0.12);
+  --spaces-panel-frost-end: rgba(255, 255, 255, 0.05);
+  --spaces-panel-base: rgb(12, 14, 20);
+  --spaces-panel-solid:
+    linear-gradient(
+      160deg,
+      var(--spaces-panel-frost-start) 0%,
+      var(--spaces-panel-frost-end) 100%
+    ),
+    var(--spaces-panel-base);
+}
+
+.glass-spaces-workspace--light {
+  --spaces-panel-border: rgba(0, 0, 0, 0.08);
+  --spaces-panel-frost-start: rgba(255, 255, 255, 0.92);
+  --spaces-panel-frost-end: rgba(245, 247, 252, 0.98);
+  --spaces-panel-base: rgb(248, 249, 252);
+  color: rgba(20, 24, 36, 0.92);
+}
+
+.glass-spaces-workspace__glass {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: var(--spaces-panel-solid);
+  border-top: 1px solid var(--spaces-panel-border);
+}
+
+.glass-spaces-chrome {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  min-height: 48px;
+}
+
+.glass-spaces-chrome__left {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 0;
+}
+
+.glass-spaces-chrome__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.94);
+  white-space: nowrap;
+}
+
+.glass-spaces-workspace--light .glass-spaces-chrome__title {
+  color: rgba(20, 24, 36, 0.92);
+}
+
+.glass-spaces-chrome__right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.glass-spaces-chrome__saved-toggle {
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.82);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  padding: 7px 12px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.glass-spaces-chrome__saved-toggle:hover,
+.glass-spaces-chrome__saved-toggle--open {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.28);
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.glass-spaces-workspace--light .glass-spaces-chrome__saved-toggle {
+  color: rgba(20, 24, 36, 0.82);
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+.glass-spaces-workspace--light .glass-spaces-chrome__saved-toggle:hover,
+.glass-spaces-workspace--light .glass-spaces-chrome__saved-toggle--open {
+  background: rgba(0, 0, 0, 0.06);
+  border-color: rgba(0, 0, 0, 0.16);
+  color: rgba(20, 24, 36, 0.95);
+}
+
+.glass-spaces-workspace__main {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.glass-spaces-workspace .spaces-panel {
+  flex: 1;
+  min-height: 0;
+  background: transparent;
+}
+
+.glass-spaces-workspace .gpw-shell--workspace {
+  width: min(100%, 760px);
+  margin: 0 auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.glass-spaces-workspace .gpw-shell--workspace .gpw-main {
+  align-items: center;
+}
+
+.glass-spaces-workspace .gpw-shell--workspace .gpw-pathway,
+.glass-spaces-workspace .gpw-shell--workspace .gpw-empty,
+.glass-spaces-workspace .gpw-shell--workspace .gpw-detail {
+  width: 100%;
+  max-width: 680px;
+}

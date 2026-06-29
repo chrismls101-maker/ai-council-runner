@@ -7,6 +7,7 @@ export function shouldShowBuilderStripExitGlass(state: GlassState): boolean {
     && !state.codeAnalystExplorerActive
     && !state.writingStudioActive
     && !state.glassStorageProjectsActive
+    && !state.glassSpacesActive
     && !state.glassDashboardActive
     && !state.aletheiaDashboardActive
     && !state.glassIdeActive

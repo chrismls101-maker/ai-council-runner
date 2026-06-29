@@ -56,7 +56,7 @@ export interface GlassAskRequest {
   visualIntent?: boolean;
   /** overlay = cap length for HUD; full = no cap (structured JSON, long answers). */
   responseStyle?: "overlay" | "full";
-  modelPurpose?: "default" | "semantic" | "diagnostic";
+  modelPurpose?: "default" | "semantic" | "diagnostic" | "pathway";
   /** Derived passive context summary (local Glass context engine). */
   userContext?: string;
   /** Glass Companion session — structured uiMap + guidancePlan on visual asks. */

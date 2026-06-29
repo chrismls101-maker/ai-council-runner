@@ -241,6 +241,10 @@ export const IPC = {
    * Returns the structured build prompt string.
    */
   extractGenerate: "glass:extract-generate",
+  /** Renderer → main: generate a Glass Pathway from a user goal. */
+  glassPathwaysGenerate: "glass:glass-pathways-generate",
+  glassPathwaysStageGuidance: "glass:glass-pathways-stage-guidance",
+  glassPathwaysEscortLaunch: "glass:glass-pathways-escort-launch",
   extractBuildHandoff: "glass:extract-build-handoff",
   /** Main → overlay: full extract-mode transcript snapshot (system audio STT). */
   extractModeTranscript: "glass:extract-mode-transcript",
@@ -303,6 +307,12 @@ export const IPC = {
   closeGlassStorageProjects: "glass:close-glass-storage-projects",
   /** Renderer → main: Glass Storage Projects mounted — force overlay clicks + focus. */
   glassStorageProjectsMounted: "glass:glass-storage-projects-mounted",
+  /** Renderer → main: open Spaces full-screen workspace (Glass Pathways). */
+  openGlassSpaces: "glass:open-glass-spaces",
+  /** Renderer → main: hide Spaces workspace. */
+  closeGlassSpaces: "glass:close-glass-spaces",
+  /** Renderer → main: Spaces workspace mounted — force overlay clicks + focus. */
+  glassSpacesMounted: "glass:glass-spaces-mounted",
   /** Renderer → main: thumbnail data URL for a saved Glass Storage project. */
   getGlassStorageProjectThumb: "glass:get-glass-storage-project-thumb",
   /** Renderer → main: full detail for a saved Glass Storage project. */
@@ -1222,6 +1232,8 @@ export type GlassCommand =
       type: "open-coder-with-prompt";
       prompt: string;
       autoRun?: boolean;
+      /** Bypass screen-context confidence gate for trusted automation (e.g. audio build plans). */
+      forceAutoRun?: boolean;
       screenContext?: AgentScreenContext;
     }
   /** Open a file in Glass IDE (voice or automation). */
@@ -1346,6 +1358,8 @@ export interface GlassState {
   writingStudioPrompt?: string;
   /** Glass Storage Projects — full-screen workspace; hides dock + command bar. */
   glassStorageProjectsActive?: boolean;
+  /** Spaces — full-screen workspace (Glass Pathways); hides dock + command bar. */
+  glassSpacesActive?: boolean;
   /** Saved Glass Storage project records (Design to Code, etc.). */
   glassStorageProjects?: import("./glassStorageProjectTypes.ts").GlassProjectRecord[];
   /** Selected project in Projects workspace (detail panel). */
@@ -1718,6 +1732,15 @@ export interface ExtractGenerateResponse {
   error?: string;
 }
 
+export type {
+  GlassPathwaysGenerateRequest,
+  GlassPathwaysGenerateResponse,
+  GlassPathwaysStageGuidanceRequest,
+  GlassPathwaysStageGuidanceResponse,
+  GlassPathwaysEscortLaunchRequest,
+  GlassPathwaysEscortLaunchResponse,
+} from "./glassPathwaysTypes.ts";
+
 export interface ExtractBuildHandoffRequest {
   target: import("./extractBuildHandoff.ts").ExtractBuildTarget;
   prompt: string;
@@ -1789,10 +1812,22 @@ export interface AgentScreenContext {
 export interface OpenCoderWithPromptPayload {
   prompt: string;
   autoRun?: boolean;
+  /** Bypass screen-context confidence gate (e.g. audio build plans). */
+  forceAutoRun?: boolean;
   screenContext?: AgentScreenContext | null;
   loopAutoTrigger?: boolean;
   /** Unique per broadcast — avoids launch de-dupe blocking loop fix runs. */
   launchNonce?: number;
+}
+
+/** Resolve whether Glass Coder should auto-run after open-coder-with-prompt. */
+export function resolveOpenCoderBroadcastAutoRun(
+  autoRun: boolean | undefined,
+  forceAutoRun: boolean | undefined,
+  screenContextConfidence: string | undefined,
+): boolean {
+  if (forceAutoRun === true) return autoRun !== false;
+  return autoRun !== false && screenContextConfidence === "high";
 }
 
 export interface GlassIndexState {
@@ -2064,6 +2099,9 @@ export interface RetentionSummary {
   autofixAcceptanceRate: number;
   buildLoopSuccessRate: number;
 }
+
+/** 7-day orchestration hardening path metrics (local-only). */
+export type { OrchestrationMetrics } from "./orchestrationMetrics.ts";
 
 export interface AgentBusSubscriberHealth {
   subscriberId: string;

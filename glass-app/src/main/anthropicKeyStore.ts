@@ -75,7 +75,7 @@ export function clearAnthropicApiKey(): void {
 }
 
 export function resolveGlassAnthropicModel(
-  purpose: "default" | "semantic" | "diagnostic" = "default",
+  purpose: "default" | "semantic" | "diagnostic" | "pathway" = "default",
 ): string {
   if (purpose === "diagnostic") {
     return process.env.IIVO_GLASS_ANTHROPIC_DIAGNOSTIC_MODEL?.trim()

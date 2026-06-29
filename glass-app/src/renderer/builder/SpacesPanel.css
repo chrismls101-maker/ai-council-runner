@@ -1,0 +1,189 @@
+/* ── Spaces panel shell ───────────────────────────────────────────────────── */
+
+.spaces-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: rgba(10, 12, 18, 0.97);
+  color: rgba(220, 230, 255, 0.9);
+  font-family: "Sora", system-ui, sans-serif;
+}
+
+.spaces-panel--light {
+  background: rgba(248, 249, 252, 0.98);
+  color: rgba(20, 24, 36, 0.9);
+}
+
+.spaces-panel__header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.spaces-panel--light .spaces-panel__header {
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+
+.spaces-panel__brand {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.spaces-panel--light .spaces-panel__brand {
+  color: rgba(20, 24, 36, 0.88);
+}
+
+.spaces-panel__tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.spaces-panel__tab {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: rgba(140, 165, 210, 0.55);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+
+.spaces-panel--light .spaces-panel__tab {
+  color: rgba(60, 70, 90, 0.55);
+}
+
+.spaces-panel__tab:hover {
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.spaces-panel--light .spaces-panel__tab:hover {
+  color: rgba(20, 24, 36, 0.9);
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.spaces-panel__tab--active {
+  color: rgba(255, 255, 255, 0.95);
+  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.spaces-panel--light .spaces-panel__tab--active {
+  color: rgba(20, 24, 36, 0.95);
+  border-color: rgba(0, 0, 0, 0.12);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.spaces-panel__close {
+  background: none;
+  border: none;
+  color: rgba(140, 165, 210, 0.4);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0 2px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.spaces-panel__close:hover {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.spaces-panel--light .spaces-panel__close:hover {
+  color: rgba(20, 24, 36, 0.85);
+}
+
+.spaces-panel__body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.spaces-panel--workspace .spaces-panel__body {
+  align-items: center;
+}
+
+/* Strip popover — compact launcher only (no full pathways UI) */
+.spaces-panel--strip-launcher {
+  height: auto;
+  max-height: none;
+}
+
+.spaces-panel__header--launcher {
+  grid-template-columns: 1fr auto;
+}
+
+.spaces-panel__launcher {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 14px;
+}
+
+.spaces-panel__mode-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.15s;
+}
+
+.spaces-panel--light .spaces-panel__mode-card {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.spaces-panel__mode-card:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.22);
+  transform: translateY(-1px);
+}
+
+.spaces-panel--light .spaces-panel__mode-card:hover {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.14);
+}
+
+.spaces-panel__mode-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.94);
+}
+
+.spaces-panel--light .spaces-panel__mode-label {
+  color: rgba(20, 24, 36, 0.94);
+}
+
+.spaces-panel__mode-hint {
+  font-size: 10px;
+  color: rgba(140, 165, 210, 0.65);
+}
+
+.spaces-panel--light .spaces-panel__mode-hint {
+  color: rgba(60, 70, 90, 0.6);
+}

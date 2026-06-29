@@ -97,6 +97,7 @@ export function GlassIdeShell({
   const [hasDirtyFiles, setHasDirtyFiles] = useState(false);
   const [treeRefreshKey, setTreeRefreshKey] = useState(0);
   const [showProjectPicker, setShowProjectPicker] = useState(false);
+  const [autoPickingWorkspace, setAutoPickingWorkspace] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const screenDetectCacheRef = useRef<{ ctx: AgentScreenContext | null; at: number } | null>(null);
   const screenDetectGenerationRef = useRef(0);
@@ -169,7 +170,7 @@ export function GlassIdeShell({
           : workspaceLabel
             ? "Index · not built"
             : null;
-  const inProjectGate = !workspaceLabel || showProjectPicker;
+  const inProjectGate = (!workspaceLabel || showProjectPicker) && !autoPickingWorkspace;
 
   const handleTreeSplit = useSplitWithValue(treeWidth, {
     axis: "horizontal",
@@ -377,15 +378,29 @@ export function GlassIdeShell({
       };
       setScreenContext(launchPrompt.screenContext);
     }
-    if (launchPrompt.autoRun && workspaceLabel) {
-      window.setTimeout(() => {
-        void handleRun(
-          launchPrompt.prompt,
-          launchPrompt.screenContext ?? undefined,
-          launchPrompt.loopAutoTrigger,
-        );
+    if (launchPrompt.autoRun) {
+      const runLaunch = (): void => {
+        window.setTimeout(() => {
+          void handleRun(
+            launchPrompt.prompt,
+            launchPrompt.screenContext ?? undefined,
+            launchPrompt.loopAutoTrigger,
+          );
+          onLaunchConsumed?.();
+        }, 50);
+      };
+      if (workspaceLabel) {
+        runLaunch();
+      } else if (launchPrompt.forceAutoRun) {
+        setAutoPickingWorkspace(true);
+        void window.glass.agentPickWorkspaceRoot().then((res) => {
+          setAutoPickingWorkspace(false);
+          if (res.ok && res.folder) runLaunch();
+          else onLaunchConsumed?.();
+        });
+      } else {
         onLaunchConsumed?.();
-      }, 50);
+      }
     } else {
       onLaunchConsumed?.();
     }

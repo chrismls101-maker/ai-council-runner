@@ -5,6 +5,10 @@
 import type { GlassAskRequest } from "../shared/glassAskTypes.ts";
 import { formatOverlayAnswerText } from "../shared/glassAskTypes.ts";
 import type { HydratedContext } from "../shared/glassMemory.ts";
+import {
+  appendCompanionSessionPrompt,
+  GLASS_COMPANION_BARGE_IN_APPEND,
+} from "../shared/aletheiaCompanionSession.ts";
 import { buildSystemPrompt } from "./glassSystemPrompt.ts";
 
 const OVERLAY_SYSTEM = `You are IIVO Glass, a macOS AI overlay assistant embedded in the user's workflow.
@@ -25,9 +29,6 @@ Rules:
 
 const VISION_ADDENDUM = `
 The user attached a screenshot. Describe what you see when relevant and anchor your answer in visible UI/text.`;
-
-const COMPANION_ADDENDUM = `
-Companion mode: the user is navigating software with your help. Be step-oriented and refer to on-screen elements when the uiMap is present.`;
 
 const ONBOARDING_SEED_PREFIX = "User context (Glass calibration — seed, local only):";
 
@@ -62,13 +63,21 @@ export function buildGlassAskSystemPrompt(request: GlassAskRequest): string {
   if (request.visualIntent || request.latestScreenshot) {
     parts.push(VISION_ADDENDUM);
   }
-  if (request.companionMode) {
-    parts.push(COMPANION_ADDENDUM);
-  }
   if (request.modelPurpose === "diagnostic") {
     parts.push("Diagnostic mode: identify root cause, evidence, and concrete next steps.");
   }
-  const base = parts.join("\n");
+  if (request.modelPurpose === "pathway") {
+    parts.push(
+      "Pathway mode: you are Aletheia's pathway coach inside Glass. Return only valid JSON. Be specific to the user's goal. Surface non-obvious steps they would miss. Write like a calm, grounded guide—not a checklist or corporate deck.",
+    );
+  }
+  let base = parts.join("\n");
+  if (request.companionMode) {
+    base = appendCompanionSessionPrompt(base);
+    if (request.companionRoute === "barge_in") {
+      base += GLASS_COMPANION_BARGE_IN_APPEND;
+    }
+  }
   if (request.memoryContext && !request.suppressUserProfile) {
     return buildSystemPrompt(base, request.memoryContext);
   }

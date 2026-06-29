@@ -176,6 +176,17 @@ export type DesignVerificationResult = {
   repairHint?: string;
 };
 
+export function shouldTriggerDesignRepair(
+  result: DesignVerificationResult,
+  hasLatestPrompt: boolean,
+): boolean {
+  return (
+    !result.ok
+    && (result.severity === "severe" || result.severity === "minor")
+    && hasLatestPrompt
+  );
+}
+
 export function normalizeDesignPhase(phase: DesignToCodePhase): DesignToCodePhase {
   if (phase === "permission") return "awaiting_permission";
   return phase;

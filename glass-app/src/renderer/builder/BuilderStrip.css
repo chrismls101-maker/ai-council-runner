@@ -567,6 +567,25 @@
   animation: builder-panel-open-right 0.28s cubic-bezier(0.22, 0.8, 0.22, 1) both;
 }
 
+/* Spaces — compact popover centered above the Spaces tab */
+.builder-panel-host--spaces {
+  left: auto;
+  width: min(300px, calc(100vw - 24px));
+  justify-content: flex-end;
+  align-items: flex-end;
+  z-index: 9200;
+  transform: translateX(50%);
+}
+
+.builder-panel-host--spaces .builder-panel {
+  width: 100%;
+  max-height: none;
+  height: auto;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: var(--builder-panel-radius, 12px);
+  animation: builder-panel-open 0.24s cubic-bezier(0.22, 0.8, 0.22, 1) both;
+}
+
 /* Glass Storage — popover anchored above the Storage tab */
 .builder-panel-host--storage {
   left: auto;

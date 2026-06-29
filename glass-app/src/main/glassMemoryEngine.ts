@@ -15,10 +15,12 @@ import { embed, embedPassage, ensureEmbedderReady, isEmbedderReady, vectorToBlob
 import { askAnthropicHaiku, GlassAskNoAnthropicKeyError } from "./glassAskAnthropic.ts";
 import { resolveAnthropicApiKey } from "./anthropicKeyStore.ts";
 import { buildLocalSessionSummary } from "./glassMemoryLocal.ts";
-import { extractionDedupeKey } from "./glassMemoryPure.ts";
+import { extractionDedupeKey, selectMemoryHitsWithinBudget } from "./glassMemoryPure.ts";
 import { getSessionMessages, getSessionMeta } from "./sessionHistoryStore.ts";
 import { getLatestCorrelationAgentRuns } from "./agentRunStore.ts";
-import { logMemoryEnrichmentUsed } from "./glassRetentionEvents.ts";
+import { logMemoryEnrichmentUsed, logMemoryFtsFallbackUsed } from "./glassRetentionEvents.ts";
+import { emitOrchestrationNotice } from "./orchestrationNotice.ts";
+import { memoryRetrievalStatusLine } from "../shared/glassMemory.ts";
 
 const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -481,6 +483,62 @@ function touchMemories(ids: string[]): void {
   }
 }
 
+function buildHydratedFromHits(
+  userProfile: string,
+  profileTokens: number,
+  hits: MemoryHit[],
+  budget: number,
+  opts?: { ftsFallback?: boolean },
+): HydratedContext {
+  const { selected, summaries } = selectMemoryHitsWithinBudget(hits, budget);
+
+  if (selected.length) {
+    touchMemories(selected.map((h) => h.id));
+    logMemoryEnrichmentUsed(undefined, { memoryCount: selected.length });
+    if (opts?.ftsFallback) {
+      logMemoryFtsFallbackUsed(undefined, { memoryCount: selected.length });
+      const notice = memoryRetrievalStatusLine("fts_fallback");
+      if (notice) emitOrchestrationNotice(notice);
+    }
+  }
+
+  const relevantMemories = summaries.join("\n\n");
+  const retrievalMode: HydratedContext["retrievalMode"] = opts?.ftsFallback
+    ? (selected.length ? "fts_fallback" : "profile_only")
+    : (selected.length ? "hybrid" : "profile_only");
+
+  return {
+    userProfile,
+    relevantMemories,
+    tokenCount: profileTokens + approxTokens(relevantMemories),
+    retrievalMode,
+  };
+}
+
+async function hydrateContextFtsFallback(
+  query: string,
+  userProfile: string,
+  profileTokens: number,
+  budget: number,
+  empty: HydratedContext,
+  reason: "embedder_unavailable" | "embed_failed",
+): Promise<HydratedContext> {
+  const logLabel = reason === "embedder_unavailable"
+    ? "embedder unavailable"
+    : "embed failed";
+  console.warn(`[memory] ${logLabel} — using FTS keyword fallback`);
+  try {
+    const ftsHits = await ftsSearch(query, 8);
+    if (!ftsHits.length) return { ...empty, retrievalMode: "profile_only" };
+    return buildHydratedFromHits(userProfile, profileTokens, ftsHits, budget, {
+      ftsFallback: true,
+    });
+  } catch (err) {
+    console.error("[memory] hydrateContext fts fallback:", err);
+    return { ...empty, retrievalMode: "profile_only" };
+  }
+}
+
 export async function hydrateContext(
   query: string,
   _agentType: string,
@@ -494,6 +552,7 @@ export async function hydrateContext(
     userProfile,
     relevantMemories: "",
     tokenCount: profileTokens,
+    retrievalMode: "profile_only",
   };
 
   if (!query.trim()) {
@@ -504,7 +563,14 @@ export async function hydrateContext(
     await ensureEmbedderReady(15_000);
   }
   if (!isEmbedderReady()) {
-    return empty;
+    return hydrateContextFtsFallback(
+      query,
+      userProfile,
+      profileTokens,
+      budget,
+      empty,
+      "embedder_unavailable",
+    );
   }
 
   try {
@@ -522,35 +588,17 @@ export async function hydrateContext(
       }
     }
 
-    const sorted = [...byId.values()].sort((a, b) => a.score - b.score);
-    const selected: MemoryHit[] = [];
-    const selectedSummaries: string[] = [];
-
-    for (const hit of sorted) {
-      const line = hit.summary.trim();
-      if (!line) continue;
-      const lineTokens = approxTokens(line);
-      if (lineTokens > budget) continue;
-      selected.push(hit);
-      selectedSummaries.push(line);
-      budget -= lineTokens;
-      if (budget <= 0) break;
-    }
-
-    if (selected.length) {
-      touchMemories(selected.map((h) => h.id));
-      logMemoryEnrichmentUsed(undefined, { memoryCount: selected.length });
-    }
-
-    const relevantMemories = selectedSummaries.join("\n\n");
-    return {
-      userProfile,
-      relevantMemories,
-      tokenCount: profileTokens + approxTokens(relevantMemories),
-    };
+    return buildHydratedFromHits(userProfile, profileTokens, [...byId.values()], budget);
   } catch (err) {
     console.error("[memory] hydrateContext:", err);
-    return empty;
+    return hydrateContextFtsFallback(
+      query,
+      userProfile,
+      profileTokens,
+      budget,
+      empty,
+      "embed_failed",
+    );
   }
 }
 

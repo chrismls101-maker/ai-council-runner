@@ -211,7 +211,9 @@ function AgentCard({
 
   useEffect(() => {
     if (!launchPrompt || def.id !== "coder") return;
-    const key = `${launchPrompt.prompt}:${launchPrompt.autoRun ? "1" : "0"}`;
+    const key = launchPrompt.launchNonce != null
+      ? `nonce:${launchPrompt.launchNonce}`
+      : `${launchPrompt.prompt}:${launchPrompt.autoRun ? "1" : "0"}`;
     if (launchHandledRef.current === key) return;
     launchHandledRef.current = key;
 
@@ -226,16 +228,26 @@ function AgentCard({
       };
       onScreenContextChange?.(launchPrompt.screenContext);
     }
-    if (launchPrompt.autoRun && workspaceLabel) {
-      const ctx = launchPrompt.screenContext;
-      window.setTimeout(() => {
-        onRun(def.id, launchPrompt.prompt, ctx ?? undefined, launchPrompt.loopAutoTrigger);
-        setPrompt("");
-        setExpanded(false);
+    if (launchPrompt.autoRun) {
+      const runLaunch = (): void => {
+        window.setTimeout(() => {
+          const ctx = launchPrompt.screenContext;
+          onRun(def.id, launchPrompt.prompt, ctx ?? undefined, launchPrompt.loopAutoTrigger);
+          setPrompt("");
+          setExpanded(false);
+          onLaunchConsumed?.();
+        }, 50);
+      };
+      if (workspaceLabel) {
+        runLaunch();
+      } else if (launchPrompt.forceAutoRun) {
+        void window.glass.agentPickWorkspaceRoot().then((res) => {
+          if (res.ok && res.folder) runLaunch();
+          else onLaunchConsumed?.();
+        });
+      } else {
         onLaunchConsumed?.();
-      }, 50);
-    } else if (launchPrompt.autoRun && !workspaceLabel) {
-      onLaunchConsumed?.();
+      }
     } else {
       onLaunchConsumed?.();
     }

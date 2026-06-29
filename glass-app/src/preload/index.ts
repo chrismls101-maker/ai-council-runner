@@ -45,6 +45,12 @@ import {
   type ExtractDetectResponse,
   type ExtractGenerateRequest,
   type ExtractGenerateResponse,
+  type GlassPathwaysGenerateRequest,
+  type GlassPathwaysGenerateResponse,
+  type GlassPathwaysStageGuidanceRequest,
+  type GlassPathwaysStageGuidanceResponse,
+  type GlassPathwaysEscortLaunchRequest,
+  type GlassPathwaysEscortLaunchResponse,
   type ExtractBuildHandoffRequest,
   type ExtractBuildHandoffResponse,
   type TerminalFixRequest,
@@ -499,6 +505,25 @@ const glassApi = {
   extractGenerate(payload: ExtractGenerateRequest): Promise<ExtractGenerateResponse> {
     return ipcRenderer.invoke(IPC.extractGenerate, payload) as Promise<ExtractGenerateResponse>;
   },
+  glassPathwaysGenerate(payload: GlassPathwaysGenerateRequest): Promise<GlassPathwaysGenerateResponse> {
+    return ipcRenderer.invoke(IPC.glassPathwaysGenerate, payload) as Promise<GlassPathwaysGenerateResponse>;
+  },
+  glassPathwaysStageGuidance(
+    payload: GlassPathwaysStageGuidanceRequest,
+  ): Promise<GlassPathwaysStageGuidanceResponse> {
+    return ipcRenderer.invoke(
+      IPC.glassPathwaysStageGuidance,
+      payload,
+    ) as Promise<GlassPathwaysStageGuidanceResponse>;
+  },
+  glassPathwaysEscortLaunch(
+    payload: GlassPathwaysEscortLaunchRequest,
+  ): Promise<GlassPathwaysEscortLaunchResponse> {
+    return ipcRenderer.invoke(
+      IPC.glassPathwaysEscortLaunch,
+      payload,
+    ) as Promise<GlassPathwaysEscortLaunchResponse>;
+  },
   extractBuildHandoff(payload: ExtractBuildHandoffRequest): Promise<ExtractBuildHandoffResponse> {
     return ipcRenderer.invoke(IPC.extractBuildHandoff, payload) as Promise<ExtractBuildHandoffResponse>;
   },
@@ -598,6 +623,15 @@ const glassApi = {
   },
   notifyGlassStorageProjectsMounted(focusKeyboard = false): void {
     ipcRenderer.send(IPC.glassStorageProjectsMounted, focusKeyboard);
+  },
+  openGlassSpaces(): void {
+    ipcRenderer.send(IPC.openGlassSpaces);
+  },
+  closeGlassSpaces(): void {
+    ipcRenderer.send(IPC.closeGlassSpaces);
+  },
+  notifyGlassSpacesMounted(): void {
+    ipcRenderer.send(IPC.glassSpacesMounted);
   },
   getGlassStorageProjectThumb(projectId: string): Promise<string | null> {
     return ipcRenderer.invoke(IPC.getGlassStorageProjectThumb, projectId) as Promise<string | null>;

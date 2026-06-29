@@ -1,9 +1,19 @@
 /** Shared memory types (main + renderer). */
 
+export type MemoryRetrievalMode = "hybrid" | "fts_fallback" | "profile_only";
+
+export function memoryRetrievalStatusLine(mode: MemoryRetrievalMode | undefined): string | undefined {
+  if (mode === "fts_fallback") {
+    return "Memory: using keyword fallback (semantic search unavailable).";
+  }
+  return undefined;
+}
+
 export interface HydratedContext {
   userProfile: string;
   relevantMemories: string;
   tokenCount: number;
+  retrievalMode?: MemoryRetrievalMode;
 }
 
 export interface MemoryInput {

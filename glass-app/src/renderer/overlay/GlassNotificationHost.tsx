@@ -54,6 +54,7 @@ export function GlassNotificationHost({
     leaveInteractive();
     onChatHoverEnd();
     window.glass.setOverlayPointerOverNotification(false);
+    window.glass?.setOverlayPointerOverBuilderStrip?.(false);
   };
 
   const handlePointerDownCapture = (): void => {

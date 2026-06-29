@@ -6,10 +6,9 @@ let reroutingContextMenu = false;
 /** Overlay uses fixed OS click-through; command bar/dock are always interactive. */
 export function syncGlassClickThrough(_enabled: boolean): void {}
 
-/** Interactive overlay surfaces use CSS pointer-events; keep OS overlay interactive. */
+/** Renderer-side: disable local click-through tracking for context-menu rerouting. */
 export function ensureOverlayInteractive(): void {
   clickThroughEnabled = false;
-  window.glass?.setOverlayPointerOverBuilderStrip?.(true);
 }
 
 /** Research Explorer — full-screen overlay must capture clicks and keyboard. */
@@ -54,9 +53,17 @@ export function armGlassStorageProjectsOverlayPointer(focusKeyboard = false): vo
   window.glass?.notifyGlassStorageProjectsMounted?.(focusKeyboard);
 }
 
+/** Spaces — full-screen workspace; capture clicks + keyboard for goal input. */
+export function armGlassSpacesOverlayPointer(focusKeyboard = false): void {
+  clickThroughEnabled = false;
+  window.glass?.setOverlayPointerOverBuilderStrip?.(true);
+  void focusKeyboard;
+  window.glass?.notifyGlassSpacesMounted?.();
+}
+
 /** Glass IDE + embedded terminal — keep the full-screen overlay OS-interactive. */
 export function armIdeOverlayPointer(): void {
-  ensureOverlayInteractive();
+  clickThroughEnabled = false;
   window.glass?.setOverlayPointerOverIde?.(true);
 }
 

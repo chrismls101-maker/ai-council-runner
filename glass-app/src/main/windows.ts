@@ -334,6 +334,7 @@ let overlayResearchExplorerActive = false;
 let overlayCodeAnalystExplorerActive = false;
 let overlayWritingStudioActive = false;
 let overlayGlassStorageProjectsActive = false;
+let overlayGlassSpacesActive = false;
 let overlayGlassDashboardActive = false;
 let overlayAletheiaDashboardActive = false;
 /** Increment when a full-screen workspace opens; focus overlay only on epoch change. */
@@ -341,6 +342,8 @@ let overlayWorkspaceFocusEpoch = 0;
 let overlayWorkspaceFocusAppliedEpoch = -1;
 let builderStripPanelOpen = false;
 let builderStripPanelOccludesDock = false;
+let builderStripPanelOccludesCommandBar = false;
+let builderStripActivePanel: string | undefined;
 let aletheiaStripMenuOpen = false;
 let commandPaletteOpen = false;
 let powersMenuOpen = false;
@@ -395,6 +398,7 @@ function overlayFullscreenWorkspaceActive(): boolean {
     || overlayCodeAnalystExplorerActive
     || overlayWritingStudioActive
     || overlayGlassStorageProjectsActive
+    || overlayGlassSpacesActive
     || overlayGlassDashboardActive
     || overlayAletheiaDashboardActive;
 }
@@ -441,6 +445,7 @@ function overlayWorkspaceWantsKeyboardCapture(): boolean {
     overlayResearchExplorerActive
     || overlayCodeAnalystExplorerActive
     || overlayWritingStudioActive
+    || overlayGlassSpacesActive
     || overlayGlassDashboardActive
     || overlayAletheiaDashboardActive
   );
@@ -537,7 +542,12 @@ function applyBuilderStripOverlayInteractivity(): void {
 /** Main: Glass IDE opened/closed — session-wide overlay interactivity. */
 export function setOverlayIdeActive(active: boolean): void {
   overlayIdeActive = active;
-  if (!active) overlayPointerOverIde = false;
+  if (!active) {
+    overlayPointerOverIde = false;
+    if (!builderStripPanelOpen && !aletheiaStripMenuOpen) {
+      overlayPointerOverBuilderStrip = false;
+    }
+  }
   applyBuilderStripOverlayInteractivity();
 }
 
@@ -568,6 +578,12 @@ export function setOverlayGlassStorageProjectsActive(active: boolean): void {
     overlayGlassStorageProjectsActive,
     active,
   );
+  syncFullscreenWorkspaceOverlay();
+}
+
+/** Main: Spaces workspace open — full-screen overlay must receive clicks. */
+export function setOverlayGlassSpacesActive(active: boolean): void {
+  overlayGlassSpacesActive = transitionOverlayWorkspaceFlag(overlayGlassSpacesActive, active);
   syncFullscreenWorkspaceOverlay();
 }
 
@@ -626,6 +642,11 @@ export function notifyGlassStorageProjectsMounted(focusKeyboard = false): void {
   applyGlassStorageProjectsPassiveOverlayMode();
 }
 
+/** Renderer mounted Spaces workspace — re-assert focus + click capture. */
+export function notifyGlassSpacesMounted(): void {
+  applyFullscreenWorkspaceOverlayMode();
+}
+
 /** Renderer mounted Glass Dashboard — re-assert focus + click capture. */
 export function notifyGlassDashboardMounted(): void {
   applyFullscreenWorkspaceOverlayMode();
@@ -664,9 +685,20 @@ export function setOverlayPointerOverExitControl(over: boolean): void {
 /** Renderer reports a builder strip panel is open — keep overlay interactive until closed. */
 export function setBuilderStripPanelOpen(open: boolean, panel?: string): void {
   const occludesDock = open && panel !== "agents";
-  if (builderStripPanelOpen === open && builderStripPanelOccludesDock === occludesDock) return;
+  const occludesCommandBar = open && panel === "spaces";
+  const activePanel = open ? panel : undefined;
+  if (
+    builderStripPanelOpen === open
+    && builderStripPanelOccludesDock === occludesDock
+    && builderStripPanelOccludesCommandBar === occludesCommandBar
+    && builderStripActivePanel === activePanel
+  ) {
+    return;
+  }
   builderStripPanelOpen = open;
   builderStripPanelOccludesDock = occludesDock;
+  builderStripPanelOccludesCommandBar = occludesCommandBar;
+  builderStripActivePanel = activePanel;
   applyBuilderStripOverlayInteractivity();
   syncBuilderStripModalStacking();
 }
@@ -811,7 +843,11 @@ function syncBuilderStripModalStacking(): void {
   overlay.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, OVERLAY_BUILDER_MODAL_RELATIVE);
   overlay.showInactive();
   overlay.moveTop();
-  raiseChromeAboveOverlay(windows!);
+  if (builderStripPanelOccludesCommandBar && windows.commandBar && !windows.commandBar.isDestroyed()) {
+    windows.commandBar.hide();
+  } else {
+    raiseChromeAboveOverlay(windows!);
+  }
   if (builderStripPanelOccludesDock && windows.dock && !windows.dock.isDestroyed()) {
     windows.dock.hide();
   }
@@ -1097,6 +1133,9 @@ export function setBuilderStripVisible(visible: boolean): void {
   if (!visible) {
     overlayPointerOverBuilderStrip = false;
     builderStripPanelOpen = false;
+    builderStripPanelOccludesDock = false;
+    builderStripPanelOccludesCommandBar = false;
+    builderStripActivePanel = undefined;
     if (!overlayPointerOverNotification) {
       resetOverlayClickThroughState(windows.overlay);
     }
@@ -1116,6 +1155,7 @@ export function setBuilderStripLayoutReserve(px: number): void {
 
 /** Show/hide the overlay window and raise it above the dock when notifications are active. */
 export function syncOverlayPresentationRaised(raised: boolean): void {
+  const wasRaised = overlayRaisedForNotifications;
   overlayNoticePinned = raised;
   overlayRaisedForNotifications = raised;
   if (glassBootPending) {
@@ -1142,13 +1182,18 @@ export function syncOverlayPresentationRaised(raised: boolean): void {
     if (layoutManager) {
       windows.overlay.setBounds(layoutManager.getOverlayLayout());
     }
-    windows.overlay.showInactive();
+    const overlayWasVisible = windows.overlay.isVisible();
+    if (!overlayWasVisible || raised !== wasRaised) {
+      windows.overlay.showInactive();
+    }
     // Guard: Electron resets setIgnoreMouseEvents on show — re-apply immediately.
     configureOverlayClickThrough(windows.overlay);
   } else {
     windows.overlay.hide();
   }
-  stackGlassWindows(windows);
+  if (raised !== wasRaised) {
+    stackGlassWindows(windows);
+  }
 }
 
 /** @deprecated Use syncOverlayPresentationRaised */
@@ -1467,7 +1512,10 @@ export function stackGlassWindows(w: GlassWindows): void {
       ? OVERLAY_RAISED_FOR_NOTIFICATIONS_RELATIVE
       : OVERLAY_ALWAYS_ON_TOP_RELATIVE;
     w.overlay.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, overlayRelative);
-    w.overlay.showInactive();
+    const overlayWasVisible = w.overlay.isVisible();
+    if (!overlayWasVisible) {
+      w.overlay.showInactive();
+    }
     // Guard: Electron resets setIgnoreMouseEvents on show — re-apply immediately.
     configureOverlayClickThrough(w.overlay);
   }
