@@ -7,6 +7,13 @@ COPY public ./public
 COPY prototypes ./prototypes
 COPY src ./src
 COPY glass-app/glass-update-manifest.json ./glass-app/glass-update-manifest.json
+COPY glass-app/src/renderer/overlay/GlassIdeEditor.css ./glass-app/src/renderer/overlay/
+COPY glass-app/src/renderer/overlay/GlassIdeFileTree.css ./glass-app/src/renderer/overlay/
+COPY glass-app/src/renderer/overlay/GlassIdePremium.css ./glass-app/src/renderer/overlay/
+COPY glass-app/src/renderer/overlay/GlassIdePreview.css ./glass-app/src/renderer/overlay/
+COPY glass-app/src/renderer/overlay/GlassIdeShell.css ./glass-app/src/renderer/overlay/
+COPY glass-app/src/renderer/overlay/GlassIdeStream.css ./glass-app/src/renderer/overlay/
+COPY glass-app/src/renderer/workspace/workspaceChrome.css ./glass-app/src/renderer/workspace/
 RUN npm run build
 
 FROM node:22-alpine
