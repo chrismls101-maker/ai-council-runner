@@ -2,17 +2,17 @@
 /** Kill stale Glass / electron-vite dev processes (orphan dock windows, hung preview). */
 import { spawnSync } from "node:child_process";
 
+// Do not match "glass-run-built" — that kills the launcher script itself.
+// Do not match "Electron Helper" — that kills unrelated Electron apps.
 const patterns = [
   "out/main/index.js",
   "electron-vite dev",
   "electron-vite preview",
-  "glass-run-built",
   "prove-glass-run-built",
 ];
 
 if (process.platform === "darwin") {
   patterns.push("IIVO Glass");
-  patterns.push("Electron Helper");
 }
 
 for (const pattern of patterns) {

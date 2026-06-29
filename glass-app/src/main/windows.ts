@@ -79,6 +79,17 @@ import { IPC } from "../shared/ipc.ts";
 
 const isDev = !!process.env.ELECTRON_RENDERER_URL;
 const mainDir = dirname(fileURLToPath(import.meta.url));
+
+/** Built `glass:dev` sets IIVO_GLASS_DEV_PRIMARY=1 — always show dock/strip/command bar in dev. */
+function devPrimarySkipsChromeGates(): boolean {
+  return process.env.IIVO_GLASS_DEV_PRIMARY === "1" && !app.isPackaged;
+}
+
+function logChromeSuppressionState(label: string): void {
+  console.log(
+    `[IIVO Glass] chrome state (${label}): bootPending=${glassBootPending} activationPending=${activationPending} onboardingPending=${onboardingPending} ideChromeSuppressed=${ideChromeSuppressed} commandBarVisible=${commandBarVisible} overlayVisible=${overlayVisible} overlayMode=${overlayMode}`,
+  );
+}
 const preloadPath = join(mainDir, "../preload/index.mjs");
 
 type RendererPage =
@@ -164,14 +175,15 @@ function clearCommandBarMountFallbackTimer(): void {
 
 function scheduleCommandBarMountFallback(): void {
   clearCommandBarMountFallbackTimer();
+  const timeoutMs = devPrimarySkipsChromeGates() ? 4_000 : 15_000;
   commandBarMountFallbackTimer = setTimeout(() => {
     commandBarMountFallbackTimer = null;
     if (commandBarRendererReady) return;
     console.warn(
-      "[IIVO Glass] command bar React mount timeout — applying layout anyway (check renderer errors)",
+      `[IIVO Glass] command bar React mount timeout (${timeoutMs}ms) — applying layout anyway (check renderer errors)`,
     );
     markCommandBarRendererReady();
-  }, 15_000);
+  }, timeoutMs);
 }
 
 export function notifyCommandBarRendererMounted(event: IpcMainEvent): void {
@@ -755,12 +767,12 @@ function ensureChromeWindowInteractive(win: BrowserWindow, windowName: string): 
 }
 
 function shouldShowCommandBarWindow(): boolean {
+  const skipGates = devPrimarySkipsChromeGates();
   return (
     commandBarVisible
     && !ideChromeSuppressed
     && !glassBootPending
-    && !onboardingPending
-    && !activationPending
+    && (skipGates || (!onboardingPending && !activationPending))
   );
 }
 
@@ -768,7 +780,13 @@ function shouldShowCommandBarWindow(): boolean {
 function ensureCommandBarWindowVisible(): void {
   if (!windows?.commandBar || windows.commandBar.isDestroyed()) return;
   if (!shouldShowCommandBarWindow()) return;
-  if (commandBarRendererBusy()) return;
+  if (commandBarRendererBusy()) {
+    // Dev: still show the OS window so a late-mounting renderer can paint.
+    if (devPrimarySkipsChromeGates()) {
+      windows.commandBar.showInactive();
+    }
+    return;
+  }
   applyCommandBarLayout(false, true);
   const commandBarRelative = overlayRaisedForNotifications
     ? COMMAND_BAR_TOP_RELATIVE
@@ -1251,12 +1269,36 @@ function dismissSplashWindow(): void {
   }
 }
 
+function scheduleDevChromeVisibilityWatchdog(): void {
+  if (!devPrimarySkipsChromeGates()) return;
+  for (const delayMs of [250, 1000, 3000, 8000, 15000, 30000]) {
+    setTimeout(() => {
+      if (!windows || glassBootPending) return;
+      const dockHidden = !windows.dock.isDestroyed() && !windows.dock.isVisible();
+      const barHidden =
+        !windows.commandBar.isDestroyed() && !windows.commandBar.isVisible();
+      const overlayHidden =
+        !windows.overlay.isDestroyed()
+        && overlayVisible
+        && overlayMode !== "hidden"
+        && !windows.overlay.isVisible();
+      if (!dockHidden && !barHidden && !overlayHidden) return;
+      console.warn(
+        `[IIVO Glass] dev chrome watchdog: forcing show (dock=${dockHidden} commandBar=${barHidden} overlay=${overlayHidden})`,
+      );
+      logChromeSuppressionState("dev-watchdog");
+      reconcilePrimaryChromeVisibility();
+    }, delayMs);
+  }
+}
+
 function completeGlassBootSequence(): void {
   glassBootPending = false;
   dismissSplashWindow();
   if (aletheiaStripMenuOpen) {
     setAletheiaStripMenuOpen(false);
   }
+  logChromeSuppressionState("boot-complete-before-show");
   showPrimaryGlassWindows();
   ensureCommandBarWindowVisible();
   scheduleCommandBarVisibilityRetries();
@@ -1268,6 +1310,8 @@ function completeGlassBootSequence(): void {
     ensureCommandBarWindowVisible();
   }
   scheduleChromeVisibilityRecovery();
+  scheduleDevChromeVisibilityWatchdog();
+  logChromeSuppressionState("boot-complete-after-show");
   onGlassBootSequenceComplete?.();
   if (process.env.IIVO_GLASS_PROVE_BOOT === "1") {
     console.log("GLASS_BOOT_OK: splash finished, chrome shown");
@@ -1279,7 +1323,13 @@ function completeGlassBootSequence(): void {
 function scheduleChromeVisibilityRecovery(): void {
   for (const delayMs of [500, 2000, 5000]) {
     setTimeout(() => {
-      if (!windows || glassBootPending || activationPending || onboardingPending) return;
+      if (!windows || glassBootPending) return;
+      if (
+        !devPrimarySkipsChromeGates()
+        && (activationPending || onboardingPending)
+      ) {
+        return;
+      }
       const barShouldShow =
         commandBarVisible && !ideChromeSuppressed && !windows.commandBar.isDestroyed();
       const overlayShouldShow =
@@ -1342,11 +1392,12 @@ export function setActivationPending(pending: boolean): void {
 /** Show dock, overlay, and command bar after the boot splash has finished. */
 function showPrimaryGlassWindows(): void {
   if (!windows || !layoutManager) return;
-  if (activationPending) {
+  const skipGates = devPrimarySkipsChromeGates();
+  if (activationPending && !skipGates) {
     suppressChromeDuringActivation(windows);
     return;
   }
-  if (onboardingPending) {
+  if (onboardingPending && !skipGates) {
     if (overlayVisible && overlayMode !== "hidden" && !windows.overlay.isDestroyed()) {
       presentOnboardingOverlay(windows.overlay);
     }
@@ -1446,15 +1497,16 @@ export function setOnboardingPending(pending: boolean): void {
 
 /** Overlay above desktop apps; dock/panel stack above overlay via relativeLevel. */
 export function stackGlassWindows(w: GlassWindows): void {
+  const skipGates = devPrimarySkipsChromeGates();
   if (glassBootPending) {
     suppressChromeDuringBoot(w);
     return;
   }
-  if (activationPending) {
+  if (activationPending && !skipGates) {
     suppressChromeDuringActivation(w);
     return;
   }
-  if (onboardingPending) {
+  if (onboardingPending && !skipGates) {
     if (!w.overlay.isDestroyed() && shouldShowOverlayWindow()) {
       presentOnboardingOverlay(w.overlay);
       w.overlay.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, OVERLAY_ALWAYS_ON_TOP_RELATIVE);

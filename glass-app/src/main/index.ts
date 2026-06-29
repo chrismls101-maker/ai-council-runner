@@ -1118,6 +1118,7 @@ import {
 
 loadGlassEnv();
 loadGlassEnvUserData(app.getPath("userData"));
+console.log("[IIVO Glass] main bundle loaded — waiting for app.whenReady…");
 
 const mainDir = dirname(fileURLToPath(import.meta.url));
 
@@ -15993,6 +15994,7 @@ app.whenReady().then(() =>
     refreshAletheiaDisplayAwarenessAndPush();
   });
   createWindows(config, glassUserSettings.displayTarget);
+  console.log("[IIVO Glass] boot: Glass windows created");
   applyGlassUserSettings(glassUserSettings);
   if (process.env.IIVO_GLASS_E2E === "1") {
     resetChromeLayoutOrigins();

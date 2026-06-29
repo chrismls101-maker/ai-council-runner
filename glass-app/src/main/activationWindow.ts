@@ -23,6 +23,10 @@ import {
 
 const isDev = !!process.env.ELECTRON_RENDERER_URL;
 const mainDir = dirname(fileURLToPath(import.meta.url));
+
+function devPrimarySkipsActivationGate(): boolean {
+  return process.env.IIVO_GLASS_DEV_PRIMARY === "1" && !app.isPackaged;
+}
 const preloadPath = join(mainDir, "../preload/index.mjs");
 
 const KEY_WAIT_WIDTH = 392;
@@ -161,7 +165,9 @@ function applyActivationBounds(win: BrowserWindow): void {
 
 export function createActivationWindow(): BrowserWindow {
   registerActivationIpc();
-  setActivationPending(true);
+  if (!devPrimarySkipsActivationGate()) {
+    setActivationPending(true);
+  }
   activationPresentation = "form";
 
   if (activationWindow && !activationWindow.isDestroyed()) {

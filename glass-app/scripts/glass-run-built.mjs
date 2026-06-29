@@ -71,6 +71,14 @@ if (needsBuild()) {
   if (build.status !== 0) process.exit(build.status ?? 1);
 }
 
+const mainBytes = existsSync(mainJs) ? statSync(mainJs).size : 0;
+if (mainBytes < 10_000) {
+  console.error(
+    `[glass-run-built] out/main/index.js is empty or too small (${mainBytes} bytes). Run: npm run build --prefix glass-app`,
+  );
+  process.exit(1);
+}
+
 const env = { ...process.env };
 delete env.ELECTRON_RUN_AS_NODE;
 delete env.ELECTRON_RENDERER_URL;
