@@ -27,6 +27,7 @@ import {
   MODE_PRIVACY_NOTES,
   MODE_STATUS_LABELS,
   getModePreset,
+  deriveActiveMode,
   modePrimaryActionLabel,
   planModeActivation,
   resolveModeStatus,
@@ -45,7 +46,6 @@ import {
   MeetingsTranslateToggle,
 } from "./TranslateModeSetup.tsx";
 import { MeetingIntelPanel } from "./MeetingIntelPanel.tsx";
-import { WingmanPanel } from "./WingmanPanel.tsx";
 
 const COPILOT_MODES: GlassCopilotMode[] = ["off", "passive", "coaching", "diagnostic"];
 
@@ -57,8 +57,8 @@ function applyModePreset(preset: GlassModePreset): void {
 }
 
 /**
- * Simplified one-click mode panel: Listen / Meetings / Work / Fix cards plus a
- * separate Voice action. Advanced configuration is hidden behind "Advanced".
+ * Simplified one-click mode panel: Intelligent Listening / Meeting Intelligence cards
+ * plus Quick Tools (Voice, Translate). Advanced configuration is hidden behind "Advanced".
  *
  * No mode click ever starts mic/system audio/screen capture implicitly — audio
  * starts only when a source is ready and the user confirms.
@@ -84,13 +84,10 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
   const hasError = Boolean((state.lastError || tx.lastError) && listening);
 
   // Derive which simple mode is active from copilot mode + focus.
-  const activeMode = useMemo<GlassModeId | null>(() => {
-    if (!copilot.active || copilot.mode === "off") return null;
-    if (copilot.mode === "diagnostic") return "wingman";
-    if (config.sessionType === "meeting_call") return "meetings";
-    if (config.sessionType === "video_learning") return "listen";
-    return "wingman";
-  }, [copilot.active, copilot.mode, config.sessionType]);
+  const activeMode = useMemo<GlassModeId | null>(
+    () => deriveActiveMode(copilot.active, copilot.mode, config.sessionType),
+    [copilot.active, copilot.mode, config.sessionType],
+  );
 
   const activeSourceLabel = activeMode === "listen"
     ? "Computer Audio"
@@ -136,7 +133,7 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
       setPendingMeetingChoice(true);
       return;
     }
-    // Work / Fix activate immediately, no audio.
+    // Meeting Intelligence may prompt for audio source before listening.
   };
 
   const chooseMeetingSource = (source: "microphone" | "system_audio") => {
@@ -199,7 +196,7 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
             >
               <span className="mode-card__icon" aria-hidden="true">{GLASS_MODE_ICONS[id]}</span>
               <div className="mode-card__top">
-                <strong className="mode-card__label">[ {preset.label} Mode ]</strong>
+                <strong className="mode-card__label">{preset.label}</strong>
                 <span className={`mode-card__status mode-card__status--${status}`}>
                   {MODE_STATUS_LABELS[status]}
                 </span>
@@ -352,21 +349,6 @@ export function CopilotPanel({ sessionLive }: { sessionLive: boolean }): JSX.Ele
 
       {activeMode === "meetings" && sessionLive && state.meetingIntelligence ? (
         <MeetingIntelPanel intel={state.meetingIntelligence} />
-      ) : null}
-
-      {activeMode === "wingman" ? (
-        <WingmanPanel
-          wingman={state.wingman}
-          wingmanMemory={state.wingmanMemory}
-          agentProxy={state.agentProxy}
-          githubPATConfigured={state.githubPATConfigured}
-          githubTokenInvalid={state.githubTokenInvalid}
-          terminalWidgetVisible={state.terminalWidgetVisible}
-          detectedApp={
-            state.wingman.session?.appSnapshots.at(-1)?.app ??
-            state.windowContext.status === "available" ? (state.windowContext as { status: "available"; app: string }).app : undefined
-          }
-        />
       ) : null}
 
       <TranslateActiveStatus state={state} />

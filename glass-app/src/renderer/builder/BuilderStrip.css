@@ -55,6 +55,31 @@
 
 .builder-strip::-webkit-scrollbar { display: none; }
 
+/* Aletheia core — Agents + Storage left, Aletheia center, Quit right */
+.builder-strip--aletheia-core {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0;
+  padding: 0 16px;
+  overflow-x: visible;
+}
+
+.builder-strip--aletheia-core .builder-strip__slot--start {
+  justify-self: start;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.builder-strip--aletheia-core .builder-strip__slot--center {
+  justify-self: center;
+}
+
+.builder-strip--aletheia-core .builder-strip__slot--end {
+  justify-self: end;
+}
+
 .builder-strip::before {
   content: "";
   position: absolute;

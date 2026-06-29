@@ -16,3 +16,7 @@ export function designToCodeProjectDir(userDataPath: string, projectId: string):
   const safe = projectId.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 120);
   return join(designToCodeProjectsRoot(userDataPath), safe);
 }
+
+export function glassStorageFilesDir(userDataPath: string): string {
+  return join(glassStorageRoot(userDataPath), "files");
+}

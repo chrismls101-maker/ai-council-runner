@@ -5976,68 +5976,67 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
   text-align: left;
   padding: 14px 14px 12px;
   border-radius: 14px;
-  color: var(--glass-text);
+  color: rgba(220, 230, 245, 0.88);
   cursor: pointer;
   position: relative;
 
-  /* 3-D raised surface */
+  /* Match Panel → Preferences choice cards */
+  border: 1px solid rgba(255, 255, 255, 0.1);
   background: linear-gradient(
-    160deg,
-    rgba(38, 52, 78, 0.92) 0%,
-    rgba(20, 30, 50, 0.97) 100%
+    165deg,
+    rgba(255, 255, 255, 0.06) 0%,
+    rgba(255, 255, 255, 0.02) 48%,
+    rgba(0, 0, 0, 0.12) 100%
   );
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-top-color: rgba(255, 255, 255, 0.24);
   box-shadow:
-    0 1px 0   rgba(0, 0, 0, 0.55),
-    0 4px 8px  rgba(0, 0, 0, 0.40),
-    0 12px 28px rgba(0, 0, 0, 0.38),
-    0 24px 56px rgba(0, 0, 0, 0.22),
-    inset 0 1px 0 rgba(255, 255, 255, 0.10);
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 8px 24px rgba(0, 0, 0, 0.18);
 
   transition:
     transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1),
-    box-shadow 0.18s cubic-bezier(0.2, 0.8, 0.2, 1),
-    border-color 0.12s ease;
+    box-shadow 0.18s ease,
+    border-color 0.12s ease,
+    background 0.12s ease;
 
   will-change: transform;
 }
 
 /* Scale on hover instead of translateY — avoids pointer-leave jitter */
 .mode-card:hover {
-  transform: scale(1.025);
-  border-top-color: rgba(255, 255, 255, 0.32);
-  box-shadow:
-    0 2px 0   rgba(0, 0, 0, 0.55),
-    0 8px 18px  rgba(0, 0, 0, 0.45),
-    0 20px 48px rgba(0, 0, 0, 0.42),
-    0 36px 72px rgba(0, 0, 0, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  transform: scale(1.02);
+  border-color: rgba(255, 255, 255, 0.18);
+  background: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.09) 0%,
+    rgba(255, 255, 255, 0.03) 100%
+  );
 }
 
 .mode-card:active {
   transform: scale(0.985);
-  box-shadow:
-    0 1px 0   rgba(0, 0, 0, 0.55),
-    0 3px 8px  rgba(0, 0, 0, 0.38),
-    0 8px 20px rgba(0, 0, 0, 0.30),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
-.mode-card--active {
-  border-color: #41e0a3;
-  border-top-color: rgba(65, 224, 163, 0.6);
+.mode-card--listen.mode-card--active,
+.mode-card--meetings.mode-card--active {
+  border-color: rgba(65, 224, 163, 0.45);
   background: linear-gradient(
-    160deg,
-    rgba(40, 70, 62, 0.92) 0%,
-    rgba(20, 38, 38, 0.97) 100%
+    165deg,
+    rgba(65, 224, 163, 0.14) 0%,
+    rgba(255, 255, 255, 0.04) 100%
   );
   box-shadow:
-    0 1px 0   rgba(0, 0, 0, 0.55),
-    0 4px 8px  rgba(0, 0, 0, 0.40),
-    0 12px 28px rgba(0, 0, 0, 0.38),
-    0 0 28px rgba(65, 224, 163, 0.22),
-    inset 0 1px 0 rgba(65, 224, 163, 0.15);
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 8px 24px rgba(0, 0, 0, 0.22),
+    0 0 28px rgba(65, 224, 163, 0.18);
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.mode-card--listen.mode-card--active .mode-card__status--active,
+.mode-card--listen.mode-card--active .mode-card__status--listening,
+.mode-card--meetings.mode-card--active .mode-card__status--active,
+.mode-card--meetings.mode-card--active .mode-card__status--listening {
+  background: rgba(65, 224, 163, 0.18);
+  color: #41e0a3;
 }
 
 .mode-card__top {
@@ -6048,10 +6047,10 @@ html.glass-terminal-window .dock-terminal-reveal--open .dock-terminal-reveal__in
 }
 
 .mode-card__label {
-  font-size: 21px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  line-height: 1.1;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.25;
   flex: 1;
   text-align: center;
   text-transform: uppercase;

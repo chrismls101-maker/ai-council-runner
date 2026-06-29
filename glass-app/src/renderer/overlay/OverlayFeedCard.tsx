@@ -20,7 +20,7 @@ import {
 import { ensureAletheiaDispatchRegistered } from "../aletheia/registerAletheiaDispatch.ts";
 import "../builder/AletheiaComputerGrantCard.css";
 import "../builder/AletheiaComputerLiveAudit.css";
-import { DesignCaptureCard } from "./DesignCaptureCard.tsx";
+// import { DesignCaptureCard } from "./DesignCaptureCard.tsx";
 import {
   DESIGN_TO_CODE_ACTION_LABELS,
   DESIGN_STACK_EXTENSIONS,
@@ -248,9 +248,12 @@ export function FeedCard({
     );
   }
 
-  // ── Design-to-Code capture card (#163) ───────────────────────────────────
+  // Aletheia core strip — design-capture card disconnected
+  // if (item.kind === "design-capture") {
+  //   return <DesignCaptureCard item={item} />;
+  // }
   if (item.kind === "design-capture") {
-    return <DesignCaptureCard item={item} />;
+    return null;
   }
 
   // ── Build-from-audio card ─────────────────────────────────────────────────

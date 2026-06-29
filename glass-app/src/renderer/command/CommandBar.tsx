@@ -10,7 +10,7 @@ import { CommandMicIcon } from "./CommandMicIcon.tsx";
 import { CommandSendIcon, CommandStopIcon } from "./CommandSendIcon.tsx";
 import { CommandTranslateIcon } from "./CommandTranslateIcon.tsx";
 import { CommandLensIcon } from "./CommandLensIcon.tsx";
-import { CommandDesignIcon } from "./CommandDesignIcon.tsx";
+// import { CommandDesignIcon } from "./CommandDesignIcon.tsx";
 import { GlassHoverTooltip } from "../components/GlassHoverTooltip.tsx";
 import { GlassAwarenessStrip } from "./GlassAwarenessStrip.tsx";
 import { isComputerOperatorLiveUiSurface, resolveComputerOperatorGlowPhase } from "../../shared/aletheiaComputerOperatorPresence.ts";
@@ -720,6 +720,7 @@ export function CommandBar(): JSX.Element {
                 </button>
               </GlassHoverTooltip>
 
+              {/* Aletheia core — design-to-code wand disconnected
               <GlassHoverTooltip label="Design to Code — capture screen, generate component">
                 <button
                   type="button"
@@ -733,6 +734,7 @@ export function CommandBar(): JSX.Element {
                   <CommandDesignIcon />
                 </button>
               </GlassHoverTooltip>
+              */}
 
               <GlassHoverTooltip label={lensOpen ? "Close Lens" : "Capture page with Lens"}>
                 <button

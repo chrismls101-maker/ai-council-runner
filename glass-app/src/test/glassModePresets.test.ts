@@ -8,6 +8,7 @@ import {
   GLASS_MODE_PRESETS,
   GLASS_QUICK_TOOLS,
   MODE_PRIVACY_NOTES,
+  deriveActiveMode,
   getModePreset,
   modePrimaryActionLabel,
   planModeActivation,
@@ -17,8 +18,9 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
 
-test("presets exist for listen, meetings, wingman plus translate quick tool", () => {
-  assert.deepEqual(GLASS_MODE_ORDER, ["listen", "meetings", "wingman"]);
+test("presets exist for listen and meetings in UI order; wingman retained internally", () => {
+  assert.deepEqual(GLASS_MODE_ORDER, ["listen", "meetings"]);
+  assert.ok(GLASS_MODE_PRESETS.wingman, "wingman preset retained for IPC/back-compat");
   assert.ok(GLASS_MODE_PRESETS.translate, "translate preset retained for setup flow");
   assert.deepEqual(GLASS_QUICK_TOOLS, ["voice", "translate"]);
   for (const id of GLASS_MODE_ORDER) {
@@ -26,9 +28,9 @@ test("presets exist for listen, meetings, wingman plus translate quick tool", ()
   }
 });
 
-test("mode labels are simple single words", () => {
-  assert.equal(GLASS_MODE_PRESETS.listen.label, "Listen");
-  assert.equal(GLASS_MODE_PRESETS.meetings.label, "Meetings");
+test("mode labels use Aletheia core naming", () => {
+  assert.equal(GLASS_MODE_PRESETS.listen.label, "Intelligent Listening");
+  assert.equal(GLASS_MODE_PRESETS.meetings.label, "Meeting Intelligence");
   assert.equal(GLASS_MODE_PRESETS.wingman.label, "Wingman");
   for (const id of GLASS_MODE_ORDER) {
     assert.ok(!/\b(Copilot|Session|Diagnostic|Passive|Coaching)\b/.test(GLASS_MODE_PRESETS[id].label));
@@ -114,8 +116,17 @@ test("resolveModeStatus reflects active/listening/needs-setup", () => {
 
 test("primary action label switches to Configure Audio when setup needed", () => {
   assert.equal(modePrimaryActionLabel(getModePreset("listen"), "needs_setup"), "Configure Audio");
+  assert.equal(modePrimaryActionLabel(getModePreset("listen"), "ready"), "Start Intelligent Listening");
+  assert.equal(modePrimaryActionLabel(getModePreset("meetings"), "ready"), "Start Meeting Intelligence");
   assert.equal(modePrimaryActionLabel(getModePreset("wingman"), "ready"), "Start Wingman");
   assert.equal(modePrimaryActionLabel(getModePreset("listen"), "active"), "Active");
+});
+
+test("deriveActiveMode maps copilot state to listen/meetings only", () => {
+  assert.equal(deriveActiveMode(true, "coaching", "video_learning"), "listen");
+  assert.equal(deriveActiveMode(true, "coaching", "meeting_call"), "meetings");
+  assert.equal(deriveActiveMode(true, "diagnostic", "auto"), null);
+  assert.equal(deriveActiveMode(false, "coaching", "video_learning"), null);
 });
 
 test("privacy notes cover audio/storage/screen/stop guarantees", () => {
@@ -138,6 +149,7 @@ test("panel renders mode cards, Quick Tools, hidden Advanced by default", () => 
   assert.ok(panel.includes("voice-mode-start"), "Voice triggers separate loop");
   assert.ok(panel.includes("glass-advanced-toggle"), "advanced is behind a toggle");
   assert.ok(panel.includes("MeetingsTranslateToggle"), "Meetings translate toggle wired");
+  assert.ok(!panel.includes("WingmanPanel"), "Wingman panel not rendered in Session tab");
   const translateSetup = readFileSync(join(ROOT, "renderer", "panel", "TranslateModeSetup.tsx"), "utf8");
   assert.ok(translateSetup.includes("Show translated captions"), "Listen translate toggle wording");
   assert.ok(!panel.includes("Session Focus<"), "no top-level Session Focus label");

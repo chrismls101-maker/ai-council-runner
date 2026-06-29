@@ -16,18 +16,13 @@ test("resolvePanelNavigation maps legacy tabs to new IA", () => {
     captureSubTab: "summary",
   });
   assert.deepEqual(resolvePanelNavigation("setup"), {
-    panelTab: "session",
-    openDashboardNav: "setup",
+    panelTab: "setup",
   });
   assert.deepEqual(resolvePanelNavigation("installations"), {
-    panelTab: "session",
-    openSettings: true,
-    settingsSection: "components",
+    panelTab: "preferences",
   });
   assert.deepEqual(resolvePanelNavigation("account"), {
-    panelTab: "session",
-    openSettings: true,
-    settingsSection: "account",
+    panelTab: "setup",
   });
 });
 

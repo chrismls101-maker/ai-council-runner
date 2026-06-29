@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentEvent, AgentHistoryEntry, AgentScreenContext, GlassAgentId } from "../../shared/ipc.ts";
-import { GLASS_AGENT_CATALOG, agentCatalogName, agentOpensDedicatedWorkspace, agentRequiresCodeWorkspace } from "../../shared/agentCatalog.ts";
+import { GLASS_AGENT_CATALOG, agentCatalogName, agentOpensDedicatedWorkspace, agentRequiresCodeWorkspace, builderStripAgentCatalog } from "../../shared/agentCatalog.ts";
 import { agentCardStatusForEvent } from "../../shared/agentNarration.ts";
 import { displayAgentOutputFolder } from "../../shared/agentOutputFolder.ts";
 import {
@@ -666,7 +666,7 @@ export function GlassAgentPanel({ onClose }: GlassAgentPanelProps): JSX.Element 
             void handleRun(agentId, prompt);
           }}
         />
-        {GLASS_AGENT_CATALOG.map((def) => (
+        {builderStripAgentCatalog().map((def) => (
           <AgentCard
             key={def.id}
             def={def}

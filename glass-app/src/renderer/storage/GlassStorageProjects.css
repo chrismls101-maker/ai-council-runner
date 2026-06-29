@@ -110,6 +110,28 @@
   color: rgba(251, 191, 36, 0.72);
 }
 
+.glass-storage-chrome--tabbed {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: end;
+  gap: 16px;
+}
+
+.glass-storage-chrome--tabbed .glass-storage-chrome__left {
+  align-self: center;
+  padding-bottom: 10px;
+}
+
+.glass-storage-chrome__tabs {
+  justify-content: center;
+  align-self: flex-end;
+}
+
+.glass-storage-projects__main--files {
+  padding: 0;
+  overflow: hidden;
+}
+
 .glass-storage-projects__main {
   position: absolute;
   inset: 52px 0 0;

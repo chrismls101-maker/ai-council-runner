@@ -1,12 +1,10 @@
 /**
- * Glass Storage — Projects full-screen workspace (matches agent explorer glass shell).
+ * Glass Storage — full-screen workspace (Files tab).
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Sun } from "lucide-react";
 import { useGlassState } from "../useGlassState.ts";
-import { GlassStorageProjectsBrowser } from "./GlassStorageProjectsBrowser.tsx";
-import { DesignToCodeProjectDetail } from "./DesignToCodeProjectDetail.tsx";
-import { GlassStorageProjectsEmptyHero } from "./GlassStorageProjectsEmptyHero.tsx";
+import { GlassStorageFilesTab } from "./GlassStorageFilesTab.tsx";
 import {
   armGlassStorageProjectsOverlayPointer,
   prepareGlassTextPointerDown,
@@ -16,6 +14,8 @@ import "../workspace/workspaceChrome.css";
 import "./GlassStorageProjects.css";
 
 type Theme = "light" | "dark";
+type StorageTab = "files";
+
 const THEME_KEY = "glass-storage-projects-theme";
 
 function readTheme(): Theme {
@@ -33,22 +33,22 @@ interface Props {
 
 export function GlassStorageProjects({ visible = true, onClose }: Props): JSX.Element {
   const state = useGlassState();
-  const projects = state.glassStorageProjects ?? [];
-  const designProjects = useMemo(
-    () => projects.filter((p) => p.kind === "design-to-code"),
-    [projects],
-  );
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const files = state.glassStorageFiles ?? [];
+  const [tab] = useState<StorageTab>("files");
   const [theme, setTheme] = useState<Theme>(() => readTheme());
+
+  const refreshFiles = useCallback((): void => {
+    window.glass.refreshGlassStorageFiles();
+  }, []);
 
   useEffect(() => {
     if (!visible) return;
-    window.glass.refreshGlassStorageProjects();
+    refreshFiles();
     document.body.classList.add("glass-body--workspace-active");
     return () => {
       document.body.classList.remove("glass-body--workspace-active");
     };
-  }, [visible]);
+  }, [visible, refreshFiles]);
 
   useEffect(() => {
     try {
@@ -57,35 +57,6 @@ export function GlassStorageProjects({ visible = true, onClose }: Props): JSX.El
       /* ignore */
     }
   }, [theme]);
-
-  useEffect(() => {
-    if (!visible) return;
-    const fromState = state.glassStorageProjectsSelectedId;
-    if (typeof fromState === "string" && designProjects.some((p) => p.id === fromState)) {
-      setSelectedId(fromState);
-    }
-  }, [visible, state.glassStorageProjectsSelectedId, designProjects]);
-
-  useEffect(() => {
-    if (!visible || designProjects.length === 0) return;
-    setSelectedId((current) => {
-      if (current && designProjects.some((p) => p.id === current)) return current;
-      const fromState = state.glassStorageProjectsSelectedId;
-      if (typeof fromState === "string" && designProjects.some((p) => p.id === fromState)) {
-        return fromState;
-      }
-      return designProjects[0]?.id ?? null;
-    });
-  }, [visible, designProjects, state.glassStorageProjectsSelectedId]);
-
-  const handleHide = useCallback((): void => {
-    onClose();
-  }, [onClose]);
-
-  const handleSelectProject = useCallback((projectId: string): void => {
-    armGlassStorageProjectsOverlayPointer(true);
-    setSelectedId(projectId);
-  }, []);
 
   return (
     <div
@@ -99,13 +70,28 @@ export function GlassStorageProjects({ visible = true, onClose }: Props): JSX.El
       <div className="glass-storage-projects__glass" aria-hidden="true" />
 
       <header
-        className="glass-storage-chrome"
+        className="glass-storage-chrome glass-storage-chrome--tabbed"
         onPointerDownCapture={() => armGlassStorageProjectsOverlayPointer(true)}
       >
         <div className="glass-storage-chrome__left">
-          <span className="glass-storage-chrome__title">Projects</span>
-          <span className="glass-storage-chrome__subtitle">Glass Storage</span>
+          <span className="glass-storage-chrome__title">Glass Storage</span>
         </div>
+
+        <nav className="ws-tabs glass-storage-chrome__tabs" aria-label="Glass Storage sections">
+          <div className="ws-tab-item">
+            <button
+              type="button"
+              className={`ws-tab ws-tab--active`}
+              aria-current="page"
+              data-testid="glass-storage-tab-files"
+            >
+              <span className="ws-tab__main">
+                <span className="ws-tab__label">Files</span>
+              </span>
+            </button>
+          </div>
+        </nav>
+
         <div className="glass-storage-chrome__right">
           <button
             type="button"
@@ -122,40 +108,22 @@ export function GlassStorageProjects({ visible = true, onClose }: Props): JSX.El
           <button
             type="button"
             className="ws-chrome-exit"
-            onClick={handleHide}
+            onClick={onClose}
             onPointerDown={prepareGlassTextPointerDown}
-            aria-label="Exit Projects"
+            aria-label="Exit Glass Storage"
           >
-            Exit Projects
+            Exit Storage
           </button>
         </div>
       </header>
 
       <div
-        className="glass-storage-projects__main"
+        className="glass-storage-projects__main glass-storage-projects__main--files"
         onPointerDownCapture={() => armGlassStorageProjectsOverlayPointer(true)}
       >
-        <div className="glass-storage-projects__split">
-          <aside className="glass-storage-projects__list-pane">
-            <GlassStorageProjectsBrowser
-              projects={projects}
-              selectedId={selectedId}
-              onSelect={handleSelectProject}
-            />
-          </aside>
-
-          <section className="glass-storage-projects__detail-pane" aria-label="Project detail">
-            {selectedId ? (
-              <DesignToCodeProjectDetail key={selectedId} projectId={selectedId} />
-            ) : designProjects.length === 0 ? (
-              <GlassStorageProjectsEmptyHero onCapture={handleHide} />
-            ) : (
-              <div className="glass-storage-projects__detail-empty">
-                <p>Select a saved Design to Code project to view its output, files, and refinements.</p>
-              </div>
-            )}
-          </section>
-        </div>
+        {tab === "files" ? (
+          <GlassStorageFilesTab files={files} onRefresh={refreshFiles} />
+        ) : null}
       </div>
     </div>
   );

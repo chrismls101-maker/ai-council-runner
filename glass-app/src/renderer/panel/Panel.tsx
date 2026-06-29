@@ -16,11 +16,15 @@ import { ServerDegradedIndicator } from "./ServerDegradedIndicator.tsx";
 import { CaptureTab } from "./CaptureTab.tsx";
 import { SessionControlTab } from "./SessionControlTab.tsx";
 import { InputSourcesTab } from "./InputSourcesTab.tsx";
+import { PanelSetupTab } from "./PanelSetupTab.tsx";
+import { PanelPreferencesTab } from "./PanelPreferencesTab.tsx";
 import "./GlassPanel.css";
 
 const IS_DEV = process.env.NODE_ENV !== "production";
 
 const ALL_TABS: { id: PanelTab; label: string; devOnly?: boolean }[] = [
+  { id: "setup", label: "Setup" },
+  { id: "preferences", label: "Preferences" },
   { id: "session", label: "Session" },
   { id: "capture", label: "Capture" },
   { id: "audio", label: "Input & Sources" },
@@ -29,6 +33,8 @@ const ALL_TABS: { id: PanelTab; label: string; devOnly?: boolean }[] = [
 ];
 
 const TAB_PAGE_TITLE: Partial<Record<PanelTab, string>> = {
+  setup: "Setup",
+  preferences: "Preferences",
   session: "Session",
   capture: "Capture",
   audio: "Input & Sources",
@@ -152,6 +158,12 @@ function PanelTabBody({
   captureSubTab: CaptureSubTab;
   onCaptureSubTabChange: (subTab: CaptureSubTab) => void;
 }): JSX.Element | null {
+  if (tab === "setup") {
+    return <PanelSetupTab />;
+  }
+  if (tab === "preferences") {
+    return <PanelPreferencesTab />;
+  }
   if (tab === "session") {
     return <SessionControlTab state={state} sessionLive={sessionLive} />;
   }

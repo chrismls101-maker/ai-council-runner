@@ -45,11 +45,11 @@ export function resolvePanelNavigation(tab: PanelTab): PanelNavigationTarget {
     case "power-stack":
       return { panelTab: "session" };
     case "setup":
-      return { panelTab: "session", openDashboardNav: "setup" };
+      return { panelTab: "setup" };
     case "installations":
-      return { panelTab: "session", openSettings: true, settingsSection: "components" };
+      return { panelTab: "preferences" };
     case "account":
-      return { panelTab: "session", openSettings: true, settingsSection: "account" };
+      return { panelTab: "setup" };
     case "context":
     case "hypotheses":
     case "actions":
