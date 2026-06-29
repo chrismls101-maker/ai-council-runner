@@ -8,15 +8,12 @@ import GlassCinematicIntro, {
   GlassCinematicIntroProvider,
   useGlassCinematicIntro,
 } from "../components/glass-landing/glassCinematicIntro";
-import GlassIntroSceneWindows from "../components/glass-landing/GlassIntroSceneWindows";
-import GlassLandingDesktopBackdrop from "../components/glass-landing/GlassLandingDesktopBackdrop";
-import GlassSafariWindow from "../components/glass-landing/GlassSafariWindow";
-import GlassSiteHero from "../components/glass-landing/GlassSiteHero";
-import GlassLandingFooter from "../components/glass-landing/GlassLandingFooter";
+import GlassMonumentFooter from "../components/glass-landing/GlassMonumentFooter";
 import GlassLandingSiteDock from "../components/glass-landing/GlassLandingSiteDock";
 import GlassLandingNav from "../components/glass-landing/GlassLandingNav";
-import GlassTerminalWelcomeMock from "../components/glass-landing/GlassTerminalWelcomeMock";
 import { RevealSection } from "../components/glass-landing/RevealSection";
+import GlassSiteHero from "../components/glass-landing/GlassSiteHero";
+import { useSmoothScroll } from "../components/glass-landing/useSmoothScroll";
 import "../components/glass-landing/glass-landing.css";
 import "../components/glass-landing/glass-landing-desktop.css";
 import "../components/glass-landing/glass-landing-site.css";
@@ -24,6 +21,7 @@ import "../components/glass-landing/glass-landing-mocks.css";
 import "../components/glass-landing/glass-browse-mode.css";
 import "../components/glass-landing/glass-cinematic-intro.css";
 import "../components/glass-landing/glass-landing-site-dock.css";
+import "../components/glass-landing/glass-landing-elite.css";
 import { GLASS_DMG_ARM64_DOWNLOAD_URL, GLASS_DMG_X64_DOWNLOAD_URL } from "../utils/glassRelease";
 import { trackGlassBrowsePageViewOnce } from "../utils/glassBrowseAnalytics";
 
@@ -43,7 +41,7 @@ const PILLARS = [
     title: "Ship without switching",
     copy: (
       <>
-        Terminal, agents, and powers menu turn live context into code, deploys, and diffs — without the
+        Agents, Aletheia, and the builder strip turn live context into code, deploys, and diffs — without the
         alt-tab tax that kills every other AI tool.
       </>
     ),
@@ -63,7 +61,7 @@ const PILLARS = [
     title: "The layer your competitors don't have",
     copy: (
       <>
-        Command bar, builder strip, and glass frame work as one system — persistent above macOS, invisible
+        Command bar, Aletheia, and glass frame work as one system — persistent above macOS, invisible
         until <span className="glass-landing__your">YOU</span> need it. Always on top. Always{" "}
         <span className="glass-landing__your">YOURS</span>.
       </>
@@ -111,24 +109,24 @@ function DownloadCta({
         <div className="glass-landing__final-actions">
           <a
             href={GLASS_DMG_ARM64_DOWNLOAD_URL}
-            className="gl-btn gl-btn--primary glass-landing__final-btn"
+            className="glass-cup-btn glass-cup-btn--primary glass-landing__final-btn"
             data-testid={downloadTestId}
           >
-            Download · Apple Silicon
+            <span className="glass-cup-btn__label">Download · Apple Silicon</span>
           </a>
           <a
             href={GLASS_DMG_X64_DOWNLOAD_URL}
-            className="gl-btn gl-btn--ghost glass-landing__final-btn"
+            className="glass-cup-btn glass-cup-btn--ghost glass-landing__final-btn"
             data-testid={downloadTestId ? `${downloadTestId}-x64` : undefined}
           >
-            Download · Intel
+            <span className="glass-cup-btn__label">Download · Intel</span>
           </a>
           <a
             href="/install"
-            className="gl-btn gl-btn--ghost glass-landing__final-btn glass-landing__final-btn--guide"
+            className="glass-cup-btn glass-cup-btn--ghost glass-landing__final-btn glass-landing__final-btn--guide"
             data-testid={installTestId}
           >
-            Installation guide
+            <span className="glass-cup-btn__label">Installation guide</span>
           </a>
         </div>
         <div className="glass-landing__chips glass-landing__chips--final">
@@ -153,17 +151,17 @@ function DownloadCta({
       <div className="glass-landing__download-actions">
         <a
           href={GLASS_DMG_ARM64_DOWNLOAD_URL}
-          className="gl-btn gl-btn--primary"
+          className="glass-cup-btn glass-cup-btn--primary"
           data-testid={downloadTestId}
         >
-          Apple Silicon (2020 and later)
+          <span className="glass-cup-btn__label">Apple Silicon (2020 and later)</span>
         </a>
         <a
           href={GLASS_DMG_X64_DOWNLOAD_URL}
-          className="gl-btn gl-btn--ghost"
+          className="glass-cup-btn glass-cup-btn--ghost"
           data-testid={downloadTestId ? `${downloadTestId}-x64` : undefined}
         >
-          Intel (2019 and earlier)
+          <span className="glass-cup-btn__label">Intel (2019 and earlier)</span>
         </a>
       </div>
       <a href="/install" className="glass-landing__install-link" data-testid={installTestId}>
@@ -208,6 +206,7 @@ function GlassLandingPageWithIntro(): JSX.Element {
 function introPhaseClass(phase: string, enabled: boolean, complete: boolean): string {
   if (!enabled || complete) return "glass-landing--intro-complete";
   if (phase === "boot") return "glass-landing--intro-boot";
+  if (phase === "word-cinema") return "glass-landing--intro-word-cinema";
   return `glass-landing--intro-${phase}`;
 }
 
@@ -215,6 +214,8 @@ function GlassLandingPageContent(): JSX.Element {
   const browse = useGlassBrowseOptional();
   const browsePresent = (browse?.active || browse?.exiting) ?? false;
   const intro = useGlassCinematicIntro();
+
+  useSmoothScroll(intro.complete && !browsePresent);
 
   useEffect(() => {
     trackGlassBrowsePageViewOnce();
@@ -231,155 +232,137 @@ function GlassLandingPageContent(): JSX.Element {
         .join(" ")}
       data-testid="glass-public-landing"
     >
-      <GlassLandingDesktopBackdrop />
-      <GlassIntroSceneWindows phase={intro.phase} />
       <GlassLandingNav />
       <GlassBrowseOverlay />
       <GlassCinematicIntro />
       <GlassLandingSiteDock />
 
-      <GlassSafariWindow>
-      <main className="glass-landing__content">
-      <RevealSection
-        id="hero"
-        data-glass-section="hero"
-        data-glass-scroll-zone
-        className="glass-landing__section glass-landing__section--hero"
-        immediate
-      >
-        <GlassSiteHero
-          cta={
-            <>
-              <GlassBrowseEnterCta />
-              <DownloadCta
-                hero
-                installTestId="glass-landing-install-link"
-                downloadTestId="glass-landing-download"
-              />
-            </>
-          }
-        />
-      </RevealSection>
+      <div className="glass-landing__shell" data-testid="glass-landing-shell">
+        <main className="glass-landing__content">
+          <RevealSection
+            id="hero"
+            data-glass-section="hero"
+            data-glass-scroll-zone
+            className="glass-landing__section glass-landing__section--hero"
+            immediate
+          >
+            <GlassSiteHero
+              cta={
+                <>
+                  <GlassBrowseEnterCta />
+                  <DownloadCta
+                    hero
+                    installTestId="glass-landing-install-link"
+                    downloadTestId="glass-landing-download"
+                  />
+                </>
+              }
+            />
+          </RevealSection>
 
-      <RevealSection
-        id="ambient-os"
-        data-glass-section="ambient-os"
-        data-glass-scroll-zone
-        className="glass-landing__section glass-landing__section--split glass-landing__section--panel"
-      >
-        <div className="glass-landing__split-copy glass-landing__panel gl-reveal-child">
-          <p className="glass-landing__section-kicker">The category shift</p>
-          <h2 className="glass-landing__section-title">
-            Every app gets intelligence. Glass is the layer that delivers it.
-          </h2>
-          <p className="glass-landing__section-body">
-            Copilots ship inside one app at a time. Chat tools wait for you to paste. IIVO Glass is the
-            ambient operating layer — one command surface, cross-window Lens, multi-agent council, and
-            memory that follows you from Safari to Terminal to Figma. Not inside your apps. Above all of
-            them.
-          </p>
-          <ul className="glass-landing__compare">
-            <li className="glass-landing__compare-item gl-surface glass-landing__compare-item--muted">
-              <span className="glass-landing__compare-label">Tab AI</span>
-              One window · paste context · amnesia between sessions
-            </li>
-            <li className="glass-landing__compare-item gl-surface glass-landing__compare-item--accent">
-              <span className="glass-landing__compare-label">Intelligent Glass</span>
-              Every app · fused context · always above, never inside
-            </li>
-          </ul>
-        </div>
-        <div className="glass-landing__split-visual glass-landing__panel glass-landing__panel--subtle gl-reveal-child">
-          <AmbientOsStack />
-        </div>
-      </RevealSection>
-
-      <RevealSection
-        id="builder-stack"
-        data-glass-section="builder-stack"
-        className="glass-landing__section glass-landing__section--features glass-landing__section--panel"
-      >
-        <div className="glass-landing__features-shell glass-landing__panel">
-        <div className="glass-landing__features-header gl-reveal-child">
-          <p className="glass-landing__section-kicker">Why Glass wins</p>
-          <h2 className="glass-landing__section-title glass-landing__section-title--wide">
-            Four pillars. One intelligence layer above everything.
-          </h2>
-        </div>
-        <div className="glass-landing__features-grid">
-          <div className="glass-landing__features-demo gl-reveal-child">
-            <GlassTerminalWelcomeMock />
-          </div>
-          <div className="glass-landing__features-stack">
-            {PILLARS.map(({ label, title, copy }, index) => (
-              <article
-                key={label}
-                className="glass-landing__feature-card gl-surface gl-reveal-child"
-                style={{ "--stagger": index } as CSSProperties}
-              >
-                <span className="glass-landing__card-label">{label}</span>
-                <p className="glass-landing__card-title">{title}</p>
-                <p className="glass-landing__card-text">{copy}</p>
-              </article>
-            ))}
-          </div>
-        </div>
-        </div>
-      </RevealSection>
-
-      <RevealSection className="glass-landing__section glass-landing__section--quote glass-landing__section--panel">
-        <blockquote className="glass-landing__quote glass-landing__panel gl-reveal-child">
-          <p>
-            “Platforms want you inside their tab. Glass puts{" "}
-            <span className="glass-landing__your">YOU</span> above all of them.”
-          </p>
-        </blockquote>
-      </RevealSection>
-
-      <RevealSection id="trust" className="glass-landing__section glass-landing__section--panel">
-        <div className="glass-landing__trust-shell glass-landing__panel gl-reveal-child">
-        <div>
-          <p className="glass-landing__section-kicker">Privacy by design</p>
-          <h2 className="glass-landing__section-title">
-            Built to earn <span className="glass-landing__your">YOUR</span> trust. Not assume it.
-          </h2>
-        </div>
-        <div className="glass-landing__trust-panel gl-reveal-child">
-          <div className="glass-landing__trust-lines">
-            {TRUST_LINES.map((line, index) => (
-              <p key={index} className="glass-landing__trust-line">
-                {line}
+          <RevealSection
+            id="ambient-os"
+            data-glass-section="ambient-os"
+            data-glass-scroll-zone
+            className="glass-landing__section glass-landing__section--split glass-landing__section--panel"
+          >
+            <div className="glass-landing__split-copy glass-landing__panel gl-reveal-child">
+              <p className="glass-landing__section-kicker">The computing layer</p>
+              <h2 className="glass-landing__section-title">
+                Every app gets intelligence. Glass is the layer that delivers it.
+              </h2>
+              <p className="glass-landing__section-body">
+                Copilots ship inside one app at a time. Chat tools wait for you to paste. IIVO Glass is the
+                ambient operating layer — one command surface, cross-window Lens, multi-agent council, and
+                memory that follows you from Safari to Terminal to Figma. Not inside your apps. Above all of
+                them.
               </p>
-            ))}
-          </div>
-          <p className="glass-landing__trust-close">
-            IIVO Glass works for <span className="glass-landing__your">YOU</span> — above every app. Not a
-            platform that traps <span className="glass-landing__your">YOU</span> inside theirs.
-          </p>
-        </div>
-        </div>
-      </RevealSection>
+              <ul className="glass-landing__compare">
+                <li className="glass-landing__compare-item gl-surface glass-landing__compare-item--muted">
+                  <span className="glass-landing__compare-label">Tab AI</span>
+                  One window · paste context · amnesia between sessions
+                </li>
+                <li className="glass-landing__compare-item gl-surface glass-landing__compare-item--accent">
+                  <span className="glass-landing__compare-label">Intelligent Glass</span>
+                  Every app · fused context · always above, never inside
+                </li>
+              </ul>
+            </div>
+            <div className="glass-landing__split-visual glass-landing__panel glass-landing__panel--subtle gl-reveal-child">
+              <AmbientOsStack />
+            </div>
+          </RevealSection>
 
-      <RevealSection className="glass-landing__section glass-landing__final glass-landing__section--panel">
-        <div className="glass-landing__final-band glass-landing__panel glass-landing__panel--emphasis gl-reveal-child">
-          <p className="glass-landing__final-kicker gl-surface-pill">The next layer is live</p>
-          <h2 className="glass-landing__final-title">
-            Install intelligent
-            <br />
-            Glass.
-          </h2>
-          <p className="glass-landing__final-lead">
-            One download. One overlay. Every window on your Mac — finally connected under the same
-            intelligence layer.
-          </p>
-          <DownloadCta footer downloadTestId="glass-landing-download-final" installTestId="glass-landing-install-link" />
-          <span className="glass-landing__final-led" aria-hidden="true" />
-        </div>
-      </RevealSection>
+          <RevealSection
+            id="builder-stack"
+            data-glass-section="builder-stack"
+            className="glass-landing__section glass-landing__section--features glass-landing__section--panel"
+          >
+            <div className="glass-landing__features-shell glass-landing__panel">
+              <div className="glass-landing__features-header gl-reveal-child">
+                <p className="glass-landing__section-kicker">Why Glass wins</p>
+                <h2 className="glass-landing__section-title glass-landing__section-title--wide">
+                  Four pillars. One intelligence layer above everything.
+                </h2>
+              </div>
+              <div className="glass-landing__features-grid glass-landing__features-grid--pillars">
+                <div className="glass-landing__features-stack glass-landing__features-stack--full">
+                  {PILLARS.map(({ label, title, copy }, index) => (
+                    <article
+                      key={label}
+                      className="glass-landing__feature-card gl-surface gl-reveal-child"
+                      style={{ "--stagger": index } as CSSProperties}
+                    >
+                      <span className="glass-landing__card-label">{label}</span>
+                      <p className="glass-landing__card-title">{title}</p>
+                      <p className="glass-landing__card-text">{copy}</p>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </RevealSection>
 
-      <GlassLandingFooter />
-      </main>
-      </GlassSafariWindow>
+          <RevealSection className="glass-landing__section glass-landing__section--quote glass-landing__section--panel">
+            <blockquote className="glass-landing__quote glass-landing__panel gl-reveal-child">
+              <p>
+                “Platforms want you inside their tab. Glass puts{" "}
+                <span className="glass-landing__your">YOU</span> above all of them.”
+              </p>
+            </blockquote>
+          </RevealSection>
+
+          <RevealSection id="trust" className="glass-landing__section glass-landing__section--panel">
+            <div className="glass-landing__trust-shell glass-landing__panel gl-reveal-child">
+              <div>
+                <p className="glass-landing__section-kicker">Privacy by design</p>
+                <h2 className="glass-landing__section-title">
+                  Built to earn <span className="glass-landing__your">YOUR</span> trust. Not assume it.
+                </h2>
+              </div>
+              <div className="glass-landing__trust-panel gl-reveal-child">
+                <div className="glass-landing__trust-lines">
+                  {TRUST_LINES.map((line, index) => (
+                    <p key={index} className="glass-landing__trust-line">
+                      {line}
+                    </p>
+                  ))}
+                </div>
+                <p className="glass-landing__trust-close">
+                  IIVO Glass works for <span className="glass-landing__your">YOU</span> — above every app. Not a
+                  platform that traps <span className="glass-landing__your">YOU</span> inside theirs.
+                </p>
+              </div>
+            </div>
+          </RevealSection>
+
+          <GlassMonumentFooter
+            downloadCta={
+              <DownloadCta footer downloadTestId="glass-landing-download-final" installTestId="glass-landing-install-link" />
+            }
+          />
+        </main>
+      </div>
     </div>
   );
 }

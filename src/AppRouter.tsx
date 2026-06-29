@@ -4,6 +4,7 @@ import LoginPage from "./pages/LoginPage";
 import Glass404Page from "./pages/Glass404Page";
 import GlassInstallPage from "./pages/GlassInstallPage";
 import GlassLandingPage from "./pages/GlassLandingPage";
+import LandingGate from "./components/glass-landing/LandingGate";
 import GlassPrivacyPage from "./pages/GlassPrivacyPage";
 import GlassTermsPage from "./pages/GlassTermsPage";
 import { isGlassPublicPath, resolveAppRoute, type AppRoute } from "./utils/appRoute";
@@ -64,7 +65,11 @@ function AppPage({ route }: { route: AppRouteView }): JSX.Element {
     case "login":      return <LoginPage />;
     case "account":    return <AccountPage />;
     case "not-found":  return <Glass404Page />;
-    default:           return <GlassLandingPage />;
+    default:           return (
+      <LandingGate>
+        <GlassLandingPage />
+      </LandingGate>
+    );
   }
 }
 

@@ -1,10 +1,12 @@
 import type { JSX, ReactNode } from "react";
+import GlassCinematicWords from "./GlassCinematicWords";
+import GlassIntelligentCard from "./GlassIntelligentCard";
 
 const CAPABILITIES = [
   {
     icon: "◉",
     label: "Lens",
-    detail: "Fuses context across every window — PDFs, browsers, terminals, notes — in one intelligent session.",
+    detail: "Fuses context across every window — PDFs, browsers, notes, decks — in one intelligent session.",
   },
   {
     icon: "◈",
@@ -22,9 +24,9 @@ const CAPABILITIES = [
     detail: "Meetings and system audio become live notes, translation, and action items — while you stay in the room.",
   },
   {
-    icon: ">_",
-    label: "Voice terminal",
-    detail: "Aletheia hears you. Glass converts voice to shell, runs it, and ships — without a chat tab in sight.",
+    icon: "◎",
+    label: "Aletheia",
+    detail: "Voice-native command surface — ask across your entire desktop without opening another chat tab.",
   },
   {
     icon: "⬡",
@@ -36,29 +38,30 @@ const CAPABILITIES = [
 export default function GlassSiteHero({ cta }: { cta: ReactNode }): JSX.Element {
   return (
     <div className="glass-site-hero">
-      <div className="glass-site-hero__atmosphere" aria-hidden="true">
-        <span className="glass-site-hero__orb glass-site-hero__orb--tl" />
-        <span className="glass-site-hero__orb glass-site-hero__orb--br" />
-        <span className="glass-site-hero__grid" />
-      </div>
-
-      <header className="glass-site-hero__head">
-        <div className="glass-site-hero__status">
-          <span className="glass-site-hero__status-dot" />
-          <span>Intelligence layer · macOS 14+ · Every app, one surface</span>
+      <section className="glass-hero-cinema" aria-label="IIVO Glass cinematic hero">
+        <GlassCinematicWords phraseMs={2400} loop />
+        <div className="glass-hero-cinema__scroll" aria-hidden="true">
+          <span className="glass-hero-cinema__scroll-line" />
+          <span className="glass-hero-cinema__scroll-label">Scroll</span>
         </div>
-        <p className="glass-site-hero__eyebrow">Introducing the next layer of AI-native computing</p>
-        <h1 className="glass-site-hero__title">IIVO Glass</h1>
-        <p className="glass-site-hero__lead">
-          Copilots bolt onto apps one at a time. Browser AI lives in a tab.{" "}
-          <strong>IIVO Glass is intelligent glass across your entire Mac</strong> — seeing every window,
-          hearing every meeting you allow, and building across all of it while{" "}
-          <span className="glass-landing__your">YOU</span> never leave flow.
-        </p>
-      </header>
+      </section>
 
-      <div className="glass-site-hero__body">
-        <div className="glass-site-hero__primary">{cta}</div>
+      <div className="glass-site-hero__rest">
+        <header className="glass-site-hero__head">
+          <p className="glass-site-hero__eyebrow">AI-native computing layer</p>
+          <h1 className="glass-site-hero__title">IIVO Glass</h1>
+          <p className="glass-site-hero__lead">
+            Not another tab. Not another copilot bolted onto one app.{" "}
+            <strong>IIVO Glass is the intelligence layer above your entire Mac</strong> — reading every
+            window, hearing every meeting you allow, and building across all of it while{" "}
+            <span className="glass-landing__your">YOU</span> never leave flow.
+          </p>
+        </header>
+
+        <div className="glass-site-hero__body">
+          <div className="glass-site-hero__primary">{cta}</div>
+          <GlassIntelligentCard />
+        </div>
 
         <div className="glass-site-hero__capabilities" aria-label="Glass OS capabilities">
           {CAPABILITIES.map((cap) => (
@@ -73,16 +76,16 @@ export default function GlassSiteHero({ cta }: { cta: ReactNode }): JSX.Element 
             </article>
           ))}
         </div>
-      </div>
 
-      <footer className="glass-site-hero__foot">
-        <span className="glass-site-hero__foot-pill">Cross-window Lens</span>
-        <span className="glass-site-hero__foot-pill">Always-on-top glass</span>
-        <span className="glass-site-hero__foot-pill">Builder strip + command bar</span>
-        <span className="glass-site-hero__foot-pill glass-site-hero__foot-pill--accent">
-          Free beta
-        </span>
-      </footer>
+        <footer className="glass-site-hero__foot">
+          <span className="glass-site-hero__foot-pill">Cross-window Lens</span>
+          <span className="glass-site-hero__foot-pill">Always-on-top glass</span>
+          <span className="glass-site-hero__foot-pill">Aletheia command bar</span>
+          <span className="glass-site-hero__foot-pill glass-site-hero__foot-pill--accent">
+            Free beta
+          </span>
+        </footer>
+      </div>
     </div>
   );
 }

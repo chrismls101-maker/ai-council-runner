@@ -6,6 +6,10 @@ let fadeRaf: number | null = null;
 let audioUnlocked = false;
 let introMusicPermanentlyEnded = false;
 
+export function isIntroMusicEnded(): boolean {
+  return introMusicPermanentlyEnded;
+}
+
 function prefersReducedMotion(): boolean {
   return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
@@ -54,7 +58,7 @@ function ensureAudioElement(): HTMLAudioElement {
 
 /** Call on user gesture — unlocks music bed for autoplay policies. */
 export function unlockIntroAudio(): void {
-  if (typeof window === "undefined" || prefersReducedMotion()) return;
+  if (typeof window === "undefined" || prefersReducedMotion() || introMusicPermanentlyEnded) return;
 
   const el = ensureAudioElement();
   audioUnlocked = true;
@@ -76,7 +80,7 @@ export function isIntroAudioUnlocked(): boolean {
 
 /** Loop intro bed — survives mute/restore cycles until explicit stop. */
 export function startIntroMusic(): void {
-  if (typeof window === "undefined" || prefersReducedMotion()) return;
+  if (typeof window === "undefined" || prefersReducedMotion() || introMusicPermanentlyEnded) return;
   ensureAudioElement();
   if (audioUnlocked) {
     unlockIntroAudio();
@@ -92,6 +96,7 @@ export function startIntroMusic(): void {
 
 /** Retry after user gesture if autoplay was blocked. */
 export function ensureIntroMusicPlaying(): void {
+  if (introMusicPermanentlyEnded) return;
   if (typeof window === "undefined" || prefersReducedMotion()) return;
   unlockIntroAudio();
 }

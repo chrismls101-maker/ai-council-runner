@@ -43,6 +43,7 @@ import {
 /** Ordered acts — Glass stays on; user changes windows, Glass does not leave. */
 export type GlassIntroPhase =
   | "boot"
+  | "word-cinema"
   | "desktop-reveal"
   | "desktop-linger"
   | "cursor-glass"
@@ -97,6 +98,7 @@ export const INTRO_COMMAND_RESPONSE =
 
 const PHASE_MS: Record<Exclude<GlassIntroPhase, "complete">, number> = {
   boot: 5800,
+  "word-cinema": 10200,
   "desktop-reveal": 3800,
   "desktop-linger": 2400,
   "cursor-glass": 2800,
@@ -227,6 +229,7 @@ export function GlassCinematicIntroProvider({
 
   const finish = useCallback((): void => {
     clearTimers();
+    endIntroMusicPermanently(600);
     if (!glassOnRef.current) {
       glassOnRef.current = true;
       onGlassActivate?.();
@@ -288,8 +291,8 @@ export function GlassCinematicIntroProvider({
       restoreIntroMusic(1200);
     } else if (phase === "ide-zoom") {
       duckIntroMusic(0.14, 550);
-    } else if (phase === "site-reveal") {
-      endIntroMusicPermanently(900);
+    } else if (phase === "word-cinema" || phase === "site-reveal") {
+      endIntroMusicPermanently(phase === "word-cinema" ? 1200 : 900);
     } else if (phase === "open-terminal") {
       duckIntroMusic(0.3, 650);
     }
@@ -317,7 +320,7 @@ export function GlassCinematicIntroProvider({
   }, [enabled, complete, phase]);
 
   useEffect(() => {
-    if (complete) fadeOutIntroMusic(2200);
+    if (complete) endIntroMusicPermanently(500);
   }, [complete]);
 
   useEffect(() => {
@@ -335,7 +338,8 @@ export function GlassCinematicIntroProvider({
     }
 
     const nextMap: Partial<Record<GlassIntroPhase, GlassIntroPhase>> = {
-      boot: "desktop-reveal",
+      boot: "complete",
+      "word-cinema": "complete",
       "desktop-reveal": "desktop-linger",
       "desktop-linger": "cursor-glass",
       "cursor-glass": "glass-click",
@@ -748,9 +752,9 @@ export default function GlassCinematicIntro(): JSX.Element | null {
   if (!enabled || complete) return null;
 
   const showBoot = phase === "boot";
-  const showWhiteout = phase === "boot" || phase === "desktop-reveal";
+  const showWhiteout = phase === "boot";
   const narration = NARRATION[phase];
-  const showSkip = phase !== "boot" && phase !== "glass-site";
+  const showSkip = phase !== "boot";
 
   return (
     <div
@@ -799,7 +803,9 @@ export default function GlassCinematicIntro(): JSX.Element | null {
         </p>
       ) : null}
 
-      <GhostCursor phase={phase} position={cursorPos} clicking={clicking} />
+      {phase !== "boot" && phase !== "word-cinema" ? (
+        <GhostCursor phase={phase} position={cursorPos} clicking={clicking} />
+      ) : null}
 
       {showSkip ? (
         <button type="button" className="glass-intro__skip" onClick={skip}>

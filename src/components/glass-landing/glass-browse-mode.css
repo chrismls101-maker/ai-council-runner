@@ -1208,6 +1208,59 @@ html.glass-browse-active.glass-browse-active--tablet [data-glass-scroll-zone] {
   flex-shrink: 0;
 }
 
+.glass-browse__strip--aletheia-core {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0;
+  padding: 0 16px;
+  overflow-x: visible;
+}
+
+.glass-browse__strip--aletheia-core .glass-browse__strip-group--left {
+  justify-self: start;
+}
+
+.glass-browse__strip--aletheia-core .glass-browse__strip-group--center {
+  justify-self: center;
+}
+
+.glass-browse__strip--aletheia-core .glass-browse__strip-group--right {
+  justify-self: end;
+}
+
+.glass-browse__strip-tab--storage {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.glass-browse__strip-tab--quit {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+.glass-browse__strip-tab--quit:hover {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.glass-browse__strip-aletheia-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(120, 255, 190, 0.9);
+  box-shadow: 0 0 10px rgba(120, 255, 190, 0.55);
+}
+
+.glass-browse__strip-tab--aletheia {
+  min-width: 108px;
+  justify-content: center;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.95);
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+}
+
 .glass-browse__strip-divider {
   flex: 1;
   min-width: 12px;

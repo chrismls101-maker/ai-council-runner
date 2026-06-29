@@ -28,7 +28,7 @@ test.describe("Glass public landing", () => {
 
     await page.goto("/?skipIntro=1");
     await expect(page.getByTestId("glass-public-landing")).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId("glass-safari-window")).toBeVisible();
+    await expect(page.getByTestId("glass-landing-shell")).toBeVisible();
     await expect(page.getByRole("heading", { name: "IIVO Glass" })).toBeVisible();
     await expect(page.getByTestId("glass-landing-download").first()).toBeVisible();
     await expect(page.getByTestId("glass-browse-overlay")).toBeVisible({ timeout: 5000 });
