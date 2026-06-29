@@ -26,6 +26,7 @@ import { MEETING_SUB_TYPE_LABELS } from "../../shared/meetingIntelligenceTypes.t
 import type { PanelTab } from "../../shared/types.ts";
 import { DOCK_LABELS, resolveChromeLockLabel, resolvePanelLabel } from "./dockLabels.ts";
 import { GlassHoverTooltip } from "../components/GlassHoverTooltip.tsx";
+import { ALETHEIA_CORE_STRIP } from "../../shared/builderStripVisibility.ts";
 import { useGlassTerminalToggle } from "../useGlassTerminalToggle.ts";
 
 // ─── Mode colour tokens ───────────────────────────────────────────────────────
@@ -300,6 +301,7 @@ export function Dock(): JSX.Element {
             </button>
           </DockTip>
 
+          {!ALETHEIA_CORE_STRIP ? (
           <DockTip label={terminalLabel} rail={rail}>
             <button
               type="button"
@@ -315,6 +317,7 @@ export function Dock(): JSX.Element {
               {rail ? <Terminal className="dock__rail-icon" aria-hidden="true" /> : ">_"}
             </button>
           </DockTip>
+          ) : null}
 
           {anythingActive && (
             <DockTip label={DOCK_LABELS["stop-everything"]} rail={rail}>

@@ -88,10 +88,10 @@ export function deriveActiveListeningMode(
   copilotActive: boolean,
 ): ActiveListeningMode {
   if (!copilotActive || config.mode === "off") return "off";
-  if (config.mode === "diagnostic") return "wingman";
+  if (config.mode === "diagnostic") return "off";
   if (config.sessionType === "meeting_call") return "meetings";
   if (config.sessionType === "video_learning") return "listen";
-  return "wingman";
+  return "off";
 }
 
 export function activeListeningEnabledForMode(mode: ActiveListeningMode): boolean {

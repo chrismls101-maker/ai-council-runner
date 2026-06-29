@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { LayoutGrid, Folder } from "lucide-react";
 import type React from "react";
 import { PromptLibraryPanel } from "./PromptLibraryPanel.tsx";
 import { ApiKeyManagerPanel } from "./ApiKeyManagerPanel.tsx";
 import { ExtractModePanel } from "./ExtractModePanel.tsx";
 import { GlassAgentPanel } from "./GlassAgentPanel.tsx";
-import { GlassStoragePanel } from "./GlassStoragePanel.tsx";
 import {
   armBuilderStripInteractive,
   syncAletheiaStripMenuOpen,
@@ -17,6 +16,7 @@ import { pendingAletheiaAdviceCards } from "../../shared/aletheiaPendingAdvice.t
 import { ensureAletheiaDispatchRegistered } from "../aletheia/registerAletheiaDispatch.ts";
 import { send, useGlassState } from "../useGlassState.ts";
 import { showPowerUserTabs } from "../../shared/minimalPublicFlag.ts";
+import { ALETHEIA_CORE_STRIP } from "../../shared/builderStripVisibility.ts";
 import { useGlassTerminalToggle } from "../useGlassTerminalToggle.ts";
 import { useGlassCompanion } from "../companion/GlassCompanionProvider.tsx";
 import { GlassHoverTooltip } from "../components/GlassHoverTooltip.tsx";
@@ -52,24 +52,6 @@ export function BuilderStrip({
   const [aletheiaMenuOpen, setAletheiaMenuOpen] = useState(false);
   const aletheiaSweepGenRef = useRef(0);
   const aletheiaButtonRef = useRef<HTMLButtonElement>(null);
-  const storageTabRef = useRef<HTMLButtonElement>(null);
-  const [storagePanelAnchorRight, setStoragePanelAnchorRight] = useState<number | null>(null);
-
-  useLayoutEffect(() => {
-    if (activeTab !== "storage") {
-      setStoragePanelAnchorRight(null);
-      return;
-    }
-    const measure = (): void => {
-      const el = storageTabRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      setStoragePanelAnchorRight(Math.max(0, window.innerWidth - rect.right));
-    };
-    measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
-  }, [activeTab]);
 
   const replayAletheiaTruthSweep = useCallback((): void => {
     aletheiaSweepGenRef.current += 1;
@@ -219,7 +201,54 @@ export function BuilderStrip({
 
   const agentsTabTooltip = agentRunning
     ? "Agent running — tap to stop"
-    : "AI Agents — research, write files, and automate tasks with Claude";
+    : ALETHEIA_CORE_STRIP
+      ? "Agents — Research and Writing"
+      : "AI Agents — research, write files, and automate tasks with Claude";
+
+  const handleStorageClick = useCallback((): void => {
+    armBuilderStripInteractive();
+    dismissOverlayMenus();
+    setActiveTab(null);
+    window.glass.openGlassStorageProjects();
+  }, [dismissOverlayMenus]);
+
+  const storageTabButton = (
+    <GlassHoverTooltip label="Glass Storage — upload and browse local files" placement="auto">
+      <button
+        type="button"
+        className={`builder-tab builder-tab--storage glass-btn-depth-3${glassState.glassStorageProjectsActive ? " builder-tab--storage-open" : ""}`}
+        data-testid="glass-builder-strip-storage"
+        onPointerDown={() => armBuilderStripInteractive()}
+        onClick={handleStorageClick}
+        aria-label="Glass Storage"
+        aria-pressed={glassState.glassStorageProjectsActive === true}
+      >
+        <Folder className="builder-tab__icon builder-tab__icon--lucide" size={14} strokeWidth={2} aria-hidden="true" />
+        Storage
+      </button>
+    </GlassHoverTooltip>
+  );
+
+  const agentsTabButton = (
+    <GlassHoverTooltip label={agentsTabTooltip} placement="auto">
+      <button
+        type="button"
+        className={`builder-tab builder-tab--agents${activeTab === "agents" ? " builder-tab--active" : ""}${agentRunning ? " builder-tab--agents-running" : ""}`}
+        onPointerDown={handleAgentsPointerDown}
+        onClick={handleAgentsTabClick}
+        aria-label={agentRunning ? "Stop running agent" : "Glass Agents"}
+      >
+        {agentRunning ? (
+          <span
+            className="builder-agents-toggle__dot builder-agents-toggle__dot--live"
+            aria-hidden="true"
+          />
+        ) : null}
+        <span className="builder-tab__icon">◈</span>
+        Agents
+      </button>
+    </GlassHoverTooltip>
+  );
 
   const handleAletheiaClick = useCallback((): void => {
     armBuilderStripInteractive();
@@ -376,18 +405,12 @@ export function BuilderStrip({
   return (
     <>
       {/* Panel — floats above the strip, inside the overlay */}
-      {activeTab !== null && (
+      {(ALETHEIA_CORE_STRIP ? activeTab === "agents" : activeTab !== null) && (
         <div
           className={[
             "builder-panel-host",
             activeTab === "agents" && "builder-panel-host--agents",
-            activeTab === "storage" && "builder-panel-host--storage",
           ].filter(Boolean).join(" ")}
-          style={
-            activeTab === "storage" && storagePanelAnchorRight != null
-              ? { right: `${storagePanelAnchorRight}px` }
-              : undefined
-          }
           onPointerEnter={handlePointerEnter}
           onPointerLeave={handlePointerLeave}
           onPointerDownCapture={handlePointerDownCapture}
@@ -405,24 +428,35 @@ export function BuilderStrip({
             {activeTab === "agents" && (
               <GlassAgentPanel onClose={handleClosePanel} />
             )}
-            {activeTab === "storage" && (
-              <GlassStoragePanel
-                onClose={handleClosePanel}
-                onOpenProjects={() => window.glass.openGlassStorageProjects()}
-              />
-            )}
           </div>
         </div>
       )}
 
       {/* Tab strip bar */}
       <div
-        className={`builder-strip${aletheiaMenuOpen ? " builder-strip--aletheia-menu-open" : ""}`}
+        className={`builder-strip${aletheiaMenuOpen ? " builder-strip--aletheia-menu-open" : ""}${ALETHEIA_CORE_STRIP ? " builder-strip--aletheia-core" : ""}`}
         data-testid="glass-builder-strip"
         onPointerEnter={handlePointerEnter}
         onPointerLeave={handlePointerLeave}
         onPointerDownCapture={handlePointerDownCapture}
       >
+        {ALETHEIA_CORE_STRIP ? (
+          <>
+            <div className="builder-strip__slot builder-strip__slot--start">
+              {agentsTabButton}
+              {storageTabButton}
+            </div>
+            <div className="builder-strip__slot builder-strip__slot--center">
+              {renderAletheiaGroup()}
+            </div>
+            <div className="builder-strip__slot builder-strip__slot--end">
+              <GlassHoverTooltip label="Quit Glass entirely" placement="auto">
+                <BuilderStripExitButton />
+              </GlassHoverTooltip>
+            </div>
+          </>
+        ) : (
+          <>
         <GlassHoverTooltip label="Glass System — setup, providers, sessions, and council" placement="auto">
           <button
             type="button"
@@ -513,24 +547,7 @@ export function BuilderStrip({
           </button>
         </GlassHoverTooltip>
 
-        <GlassHoverTooltip
-          label="Glass Storage — projects and saved workspace assets"
-          placement="auto"
-        >
-          <button
-            ref={storageTabRef}
-            type="button"
-            className={`builder-tab builder-tab--storage glass-btn-depth-3${activeTab === "storage" ? " builder-tab--active" : ""}${glassState.glassStorageProjectsActive ? " builder-tab--storage-open" : ""}`}
-            data-testid="glass-builder-strip-storage"
-            onPointerDown={() => handleBuilderTabPointerDown("storage")}
-            onClick={() => handleTabClick("storage")}
-            aria-label="Glass Storage"
-            aria-pressed={activeTab === "storage"}
-          >
-            <Folder className="builder-tab__icon builder-tab__icon--lucide" size={14} strokeWidth={2} aria-hidden="true" />
-            Glass Storage
-          </button>
-        </GlassHoverTooltip>
+        {storageTabButton}
 
         <div className="builder-strip__divider" aria-hidden="true" />
 
@@ -595,6 +612,8 @@ export function BuilderStrip({
         <GlassHoverTooltip label="Quit Glass entirely" placement="auto">
           <BuilderStripExitButton />
         </GlassHoverTooltip>
+          </>
+        )}
       </div>
     </>
   );

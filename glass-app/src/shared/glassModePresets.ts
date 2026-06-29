@@ -54,7 +54,7 @@ export interface GlassModePreset {
 export const GLASS_MODE_PRESETS: Record<GlassModeId, GlassModePreset> = {
   listen: {
     id: "listen",
-    label: "Listen",
+    label: "Intelligent Listening",
     forItems: ["Videos", "Podcasts", "Courses", "Webinars"],
     description: "IIVO listens through system audio, builds Live Notes, captures Insights, and creates a final Report.",
     examples: "Videos, podcasts, courses, webinars, browser audio, sales videos, AI tutorials, product demos.",
@@ -71,7 +71,7 @@ export const GLASS_MODE_PRESETS: Record<GlassModeId, GlassModePreset> = {
   },
   meetings: {
     id: "meetings",
-    label: "Meetings",
+    label: "Meeting Intelligence",
     forItems: ["Zoom", "Google Meet", "WhatsApp", "Sales Calls", "Standups"],
     description: "No bot joins your call. No one knows it's there. IIVO sits invisibly over any platform, knows what kind of meeting you're in, and captures what actually matters — decisions, owners, risks, and next steps — not just what was said.",
     examples: "Zoom, Meet, sales calls, customer calls, standups, investor calls, team calls.",
@@ -125,9 +125,29 @@ export const GLASS_MODE_PRESETS: Record<GlassModeId, GlassModePreset> = {
 /** Voice is a separate primary action, not a Copilot card. */
 export const VOICE_MODE_COPY = "Talk to IIVO hands-free.";
 
-export const GLASS_MODE_ORDER: GlassModeId[] = ["listen", "meetings", "wingman"];
+/** Modes shown on the Session panel grid (Wingman removed — Aletheia core). */
+export const GLASS_MODE_ORDER: GlassModeId[] = ["listen", "meetings"];
 
 /** Icon shown on the mode card for each mode. */
+/** Accent tokens for mode cards + dock ring (match Preferences choice-card palette). */
+export const GLASS_MODE_ACCENTS: Record<
+  "listen" | "meetings",
+  { border: string; glow: string; fill: string; text: string }
+> = {
+  listen: {
+    border: "rgba(65, 224, 163, 0.45)",
+    glow: "rgba(65, 224, 163, 0.18)",
+    fill: "rgba(65, 224, 163, 0.14)",
+    text: "#41e0a3",
+  },
+  meetings: {
+    border: "rgba(65, 224, 163, 0.45)",
+    glow: "rgba(65, 224, 163, 0.18)",
+    fill: "rgba(65, 224, 163, 0.14)",
+    text: "#41e0a3",
+  },
+};
+
 export const GLASS_MODE_ICONS: Record<GlassModeId, string> = {
   listen: "🎧",
   meetings: "💬",
@@ -205,8 +225,8 @@ export function modePrimaryActionLabel(
 ): string {
   if (status === "active" || status === "listening") return "Active";
   if (status === "needs_setup") return "Configure Audio";
-  if (preset.id === "listen") return "Start Listening";
-  if (preset.id === "meetings") return "Start Meeting";
+  if (preset.id === "listen") return "Start Intelligent Listening";
+  if (preset.id === "meetings") return "Start Meeting Intelligence";
   if (preset.id === "translate") return "Start Translate";
   if (preset.id === "wingman") return "Start Wingman";
   return `Start ${preset.label}`;
@@ -263,8 +283,8 @@ export function deriveActiveMode(
   sessionType: GlassCopilotSessionTypeSetting,
 ): GlassModeId | null {
   if (!copilotActive || copilotMode === "off") return null;
-  if (copilotMode === "diagnostic") return "wingman";
+  if (copilotMode === "diagnostic") return null;
   if (sessionType === "meeting_call") return "meetings";
   if (sessionType === "video_learning") return "listen";
-  return "wingman";
+  return null;
 }

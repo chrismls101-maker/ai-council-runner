@@ -394,6 +394,10 @@ import {
   type AletheiaSurface,
 } from "../shared/aletheiaSurfaceDoctrine.ts";
 import {
+  buildAletheiaGlassProductContext,
+  shouldInjectGlassProductKnowledge,
+} from "../shared/glassAletheiaProductKnowledge.ts";
+import {
   AletheiaActionOrchestrator,
   createActionLedgerPort,
   currentAletheiaActionSessionId,
@@ -989,6 +993,12 @@ import {
   readGlassStorageThumbDataUrl,
 } from "./storage/glassStorageProjectsStore.ts";
 import { loadGlassStorageProjectDetail } from "./storage/glassStorageProjectDetail.ts";
+import {
+  deleteGlassStorageFile,
+  glassStorageFileAbsolutePath,
+  importGlassStorageFiles,
+  listGlassStorageFiles,
+} from "./storage/glassStorageFilesStore.ts";
 import type { DesignStack, DesignToCodeAction } from "../shared/designToCode.ts";
 import {
   buildDesignToCodeAletheiaNote,
@@ -1290,6 +1300,7 @@ interface AppState {
   glassStorageProjectsActive?: boolean;
   glassStorageProjects?: import("../shared/glassStorageProjectTypes.ts").GlassProjectRecord[];
   glassStorageProjectsSelectedId?: string | null;
+  glassStorageFiles?: import("../shared/glassStorageFileTypes.ts").GlassStorageFileRecord[];
   latestDesignToCodeProjectId?: string | null;
   glassDashboardActive?: boolean;
   glassDashboardNav?: import("../shared/glassDashboardNav.ts").GlassDashboardNav | null;
@@ -5684,11 +5695,19 @@ function resolveAskUserContextForSubmit(
     latestProjectId: state.latestDesignToCodeProjectId,
   });
 
+  const productContext = shouldInjectGlassProductKnowledge({
+    prompt,
+    companionModeActive: state.companionModeActive,
+  })
+    ? buildAletheiaGlassProductContext()
+    : undefined;
+
   const parts = [
     profileContext,
     ambientContext,
     designDiagnosticCtx,
     termCtx,
+    productContext,
   ].filter(Boolean);
   const surface = resolveAletheiaSurface({
     companionModeActive: state.companionModeActive,
@@ -5988,6 +6007,7 @@ function snapshot(): GlassState {
     glassStorageProjectsActive: state.glassStorageProjectsActive === true,
     glassStorageProjects: state.glassStorageProjects ?? [],
     glassStorageProjectsSelectedId: state.glassStorageProjectsSelectedId ?? null,
+    glassStorageFiles: state.glassStorageFiles ?? [],
     latestDesignToCodeProjectId: state.latestDesignToCodeProjectId ?? null,
     glassDashboardActive: state.glassDashboardActive === true,
     glassDashboardNav: state.glassDashboardNav ?? null,
@@ -6249,7 +6269,7 @@ function syncIdeChromeFromState(): void {
       || state.researchExplorerActive
       || state.codeAnalystExplorerActive
       || state.writingStudioActive
-      || state.glassStorageProjectsActive
+      // Storage opens from the strip — keep dock + command bar visible (passive overlay mode).
       || state.glassDashboardActive
       || state.aletheiaDashboardActive,
     ),
@@ -8159,6 +8179,48 @@ async function fetchGlassTtsTimedBuffer(text: string): Promise<TimedTtsPayload |
   return { id: Date.now().toString(), data: fallback.toString("base64") };
 }
 
+/** IPC routes disconnected for Aletheia core refocus — case bodies preserved below. */
+const ALETHEIA_STRIPPED_IPC = new Set<string>([
+  "design-capture",
+  "design-generate",
+  "design-recapture",
+  "design-ack-quality",
+  "design-grant-file-read",
+  "design-skip-file-read",
+  "set-design-stack",
+  "design-retry-save",
+  "terminal-widget-toggle",
+  "terminal-widget-move",
+  "glass-terminal-open",
+  "glass-terminal-close",
+  "glass-terminal-new-tab",
+  "glass-terminal-switch-tab",
+  "glass-terminal-close-tab",
+  "glass-terminal-action",
+  "glass-terminal-kill",
+  "glass-terminal-pending-action-ack",
+  "glass-ide-open-file",
+  "glass-ide-voice-command",
+  "glass-ide-terminal-set-expanded",
+  "glass-ide-terminal-interaction",
+  "glass-terminal-fix-accept",
+  "glass-terminal-run",
+  "open-coder-with-prompt",
+  "glass-preview-diff",
+  "glass-dismiss-diff",
+  "glass-build-fix-glass",
+  "glass-apply-fix-to-file",
+  "glass-verify-build",
+  "glass-restore-backup",
+  "toggle-powers-menu",
+  "dismiss-powers-menu",
+  "toggle-command-palette",
+  "dismiss-command-palette",
+  "extract-mode-start",
+  "extract-mode-stop",
+  "custom-command-run",
+]);
+
 async function handleCommand(
   command: GlassCommand,
   sender?: WebContents,
@@ -8170,6 +8232,9 @@ async function handleCommand(
     message: `command: ${(command as { type?: string }).type ?? "unknown"}`,
     level: "info",
   });
+  if (ALETHEIA_STRIPPED_IPC.has(command.type)) {
+    return;
+  }
   switch (command.type) {
     case "capture-screen":
     case "capture-screen-only":
@@ -8989,9 +9054,21 @@ async function handleCommand(
       refreshAletheiaObservationPlaneState({ forcePush: true, forcePersist: true });
       return;
     }
-    case "open-glass-setup":
+    case "open-glass-setup": {
+      state.glassDashboardActive = false;
+      state.glassDashboardNav = null;
+      state.panelTab = "setup";
+      if (!isPanelVisible()) {
+        togglePanel();
+      } else {
+        ensurePanelLayout();
+        raisePanelWindow();
+      }
+      push();
+      return;
+    }
     case "open-glass-memory": {
-      const nav = command.type === "open-glass-setup" ? "setup" : "memory";
+      const nav = "memory";
       const flags = glassPublicArchitectureFlags();
       if (oppositeDashboardToClose("glass", flags) === "aletheiaDashboardActive") {
         state.aletheiaDashboardActive = false;
@@ -11671,6 +11748,19 @@ function createDesignCaptureDeps(): DesignCaptureDeps {
 
 async function refreshGlassStorageProjectsState(): Promise<void> {
   state.glassStorageProjects = await loadGlassStorageProjectsIndex(app.getPath("userData"));
+  state.glassStorageFiles = await listGlassStorageFiles(app.getPath("userData"));
+}
+
+async function refreshGlassStorageFilesState(): Promise<void> {
+  try {
+    state.glassStorageFiles = await listGlassStorageFiles(app.getPath("userData"));
+  } catch (err) {
+    console.warn(
+      "[IIVO Glass] glass storage files refresh failed:",
+      err instanceof Error ? err.message : String(err),
+    );
+    state.glassStorageFiles = [];
+  }
 }
 
 async function persistDesignToCodeToGlassStorage(input: {
@@ -14139,7 +14229,10 @@ function registerIpc(): void {
 
   ipcMain.on(IPC.openGlassStorageProjects, (event, projectId: unknown) => {
     if (!isOverlayIpcSender(event.sender)) return;
-    void refreshGlassStorageProjectsState().then(() => {
+    void Promise.all([
+      refreshGlassStorageProjectsState(),
+      refreshGlassStorageFilesState(),
+    ]).then(() => {
       state.glassStorageProjectsActive = true;
       if (typeof projectId === "string" && projectId.trim()) {
         state.glassStorageProjectsSelectedId = projectId.trim();
@@ -14190,6 +14283,90 @@ function registerIpc(): void {
     try {
       const { shell } = await import("electron");
       shell.showItemInFolder(revealPath);
+      return { ok: true };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  });
+
+  ipcMain.on(IPC.refreshGlassStorageFiles, (event) => {
+    if (!isOverlayIpcSender(event.sender)) return;
+    void refreshGlassStorageFilesState().then(() => push());
+  });
+
+  ipcMain.handle(IPC.importGlassStorageFiles, async (_event, paths: unknown) => {
+    if (!Array.isArray(paths)) {
+      return { ok: false, imported: 0, error: "Invalid file list" };
+    }
+    const sourcePaths = paths.filter((p): p is string => typeof p === "string" && p.trim().length > 0);
+    if (!sourcePaths.length) {
+      return { ok: false, imported: 0, error: "No files to import" };
+    }
+    try {
+      const imported = await importGlassStorageFiles(app.getPath("userData"), sourcePaths);
+      await refreshGlassStorageFilesState();
+      push();
+      return { ok: true, imported: imported.length };
+    } catch (err) {
+      return {
+        ok: false,
+        imported: 0,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  });
+
+  ipcMain.handle(IPC.pickAndImportGlassStorageFiles, async () => {
+    try {
+      const { dialog } = await import("electron");
+      const result = await dialog.showOpenDialog({
+        properties: ["openFile", "multiSelections"],
+      });
+      if (result.canceled || !result.filePaths.length) {
+        return { ok: true, imported: 0 };
+      }
+      const imported = await importGlassStorageFiles(app.getPath("userData"), result.filePaths);
+      await refreshGlassStorageFilesState();
+      push();
+      return { ok: true, imported: imported.length };
+    } catch (err) {
+      return {
+        ok: false,
+        imported: 0,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  });
+
+  ipcMain.handle(IPC.deleteGlassStorageFile, async (_event, fileId: unknown) => {
+    if (typeof fileId !== "string" || !fileId.trim()) {
+      return { ok: false, error: "Missing file id" };
+    }
+    try {
+      const deleted = await deleteGlassStorageFile(app.getPath("userData"), fileId.trim());
+      if (!deleted) return { ok: false, error: "File not found" };
+      await refreshGlassStorageFilesState();
+      push();
+      return { ok: true };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  });
+
+  ipcMain.handle(IPC.revealGlassStorageFile, async (_event, fileId: unknown) => {
+    if (typeof fileId !== "string" || !fileId.trim()) {
+      return { ok: false, error: "Missing file id" };
+    }
+    try {
+      const { shell } = await import("electron");
+      const fullPath = glassStorageFileAbsolutePath(app.getPath("userData"), fileId.trim());
+      shell.showItemInFolder(fullPath);
       return { ok: true };
     } catch (err) {
       return {
@@ -15808,6 +15985,15 @@ app.whenReady().then(() =>
   state.latestDesignToCodeProjectId = glassUserSettings.latestDesignToCodeProjectId ?? null;
   state.agentHistory = loadAgentHistory();
   state.glassStorageProjects = await loadGlassStorageProjectsIndex(app.getPath("userData"));
+  try {
+    state.glassStorageFiles = await listGlassStorageFiles(app.getPath("userData"));
+  } catch (err) {
+    console.warn(
+      "[IIVO Glass] glass storage files index failed at boot:",
+      err instanceof Error ? err.message : String(err),
+    );
+    state.glassStorageFiles = [];
+  }
   migrateAnthropicKeyFromEnv();
 
   const dbInit = initDatabase();
@@ -16042,6 +16228,10 @@ app.whenReady().then(() =>
         ? whenGlassWindowsReadyOrTimeout(readyWindows, 20_000)
         : Promise.resolve(),
     ]);
+    // Resolve activation while splash still covers the screen — never flash chrome then hide it.
+    if (!needsSortingHat) {
+      if (!(await gateActivationForReturningUser(needsSortingHat))) return;
+    }
     console.log("[IIVO Glass] boot: dismissing splash");
     await finishSplash();
     reconcilePrimaryChromeVisibility();
@@ -16052,12 +16242,11 @@ app.whenReady().then(() =>
       console.log("[IIVO Glass] boot: waiting for chrome windows (vite)…");
       await whenGlassWindowsReadyOrTimeout(readyWindows);
     }
+    if (!needsSortingHat) {
+      if (!(await gateActivationForReturningUser(needsSortingHat))) return;
+    }
     reconcilePrimaryChromeVisibility();
     startGlassBackgroundWork();
-  }
-
-  if (!needsSortingHat) {
-    if (!(await gateActivationForReturningUser(needsSortingHat))) return;
   }
 
   app.on("activate", () => {

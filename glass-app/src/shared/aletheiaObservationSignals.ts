@@ -154,7 +154,7 @@ function buildMicrophoneSignal(input: ObservationPlaneInput): ObservationSignalR
       ? "Companion voice session"
       : input.micCapturing
         ? "Capture in progress"
-        : "Listen mode";
+        : "Intelligent Listening";
     return {
       id: "microphone",
       label: "Microphone",

@@ -1,0 +1,224 @@
+.glass-storage-files {
+  position: absolute;
+  inset: 52px 0 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  pointer-events: auto;
+  overflow: auto;
+}
+
+.glass-storage-files__center {
+  width: min(520px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 20px;
+}
+
+.glass-storage-files__dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 280px;
+  padding: 36px 28px;
+  border-radius: 20px;
+  border: 1.5px dashed rgba(251, 191, 36, 0.35);
+  background: linear-gradient(
+    165deg,
+    rgba(251, 191, 36, 0.08) 0%,
+    rgba(255, 255, 255, 0.03) 48%,
+    rgba(0, 0, 0, 0.12) 100%
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 24px 64px rgba(0, 0, 0, 0.28);
+  text-align: center;
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    transform 0.18s ease;
+}
+
+.glass-storage-files__dropzone--over {
+  border-color: rgba(251, 191, 36, 0.72);
+  background: linear-gradient(
+    165deg,
+    rgba(251, 191, 36, 0.16) 0%,
+    rgba(255, 255, 255, 0.05) 100%
+  );
+  transform: scale(1.01);
+}
+
+.glass-storage-files__dropzone--busy {
+  opacity: 0.72;
+  pointer-events: none;
+}
+
+.glass-storage-files__drop-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  background: rgba(251, 191, 36, 0.12);
+  color: rgba(251, 191, 36, 0.92);
+}
+
+.glass-storage-files__drop-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: rgba(255, 255, 255, 0.94);
+}
+
+.glass-storage-files__drop-desc {
+  margin: 0;
+  max-width: 34ch;
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.52);
+}
+
+.glass-storage-files__choose {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 10px 18px;
+  border-radius: 10px;
+  border: 1px solid rgba(251, 191, 36, 0.42);
+  background: rgba(251, 191, 36, 0.14);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.glass-storage-files__choose:hover:not(:disabled) {
+  background: rgba(251, 191, 36, 0.22);
+  border-color: rgba(251, 191, 36, 0.58);
+}
+
+.glass-storage-files__choose:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.glass-storage-files__input {
+  display: none;
+}
+
+.glass-storage-files__error {
+  margin: 0;
+  text-align: center;
+  font-size: 12px;
+  color: #f87171;
+}
+
+.glass-storage-files__list {
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.glass-storage-files__list-label {
+  margin: 0 0 10px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.glass-storage-files__list ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.glass-storage-files__row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.glass-storage-files__row-name {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.88);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.glass-storage-files__row-meta {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  white-space: nowrap;
+}
+
+.glass-storage-files__row-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.glass-storage-files__row-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.65);
+  cursor: pointer;
+}
+
+.glass-storage-files__row-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.glass-storage-files__row-btn--danger:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.16);
+  color: #fca5a5;
+}
+
+.glass-storage-files__row-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.glass-storage-projects--light .glass-storage-files__drop-title {
+  color: rgba(15, 23, 42, 0.92);
+}
+
+.glass-storage-projects--light .glass-storage-files__drop-desc {
+  color: rgba(15, 23, 42, 0.55);
+}
+
+.glass-storage-projects--light .glass-storage-files__row {
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.glass-storage-projects--light .glass-storage-files__row-name {
+  color: rgba(15, 23, 42, 0.88);
+}

@@ -26,17 +26,18 @@ import { SortingHatScreen } from "../onboarding/SortingHatScreen.tsx";
 import { LanguagePickerScreen } from "../onboarding/LanguagePickerScreen.tsx";
 import { ConsentStep, allConsentGiven } from "../onboarding/ConsentStep.tsx";
 import { isUiLocaleChosen, parseUiLocaleSetting } from "../../shared/glassLocale.ts";
+// Aletheia core — live translate captions (design/IDE/terminal still disconnected)
 import { LiveTranslateCaptionsOverlay } from "./LiveTranslateCaptionsOverlay.tsx";
 import { useGlassNotification } from "./useGlassNotification.ts";
-import { TerminalFeedWidget } from "./TerminalFeedWidget.tsx";
-import { useExtractModeTranscript, useExtractBuildDetection, useExtractModeMainSync } from "./useExtractModeBridge.ts";
-import { ExtractBuildCard } from "./ExtractBuildCard.tsx";
-import { GlassCommandPalette } from "./GlassCommandPalette.tsx";
+// import { TerminalFeedWidget } from "./TerminalFeedWidget.tsx";
+// import { useExtractModeTranscript, useExtractBuildDetection, useExtractModeMainSync } from "./useExtractModeBridge.ts";
+// import { ExtractBuildCard } from "./ExtractBuildCard.tsx";
+// import { GlassCommandPalette } from "./GlassCommandPalette.tsx";
 import { isSubstantialLastAskResponse, type GlassLastAskResponse } from "../../shared/glassAskTypes.ts";
 import type { AgentEvent, GlassAgentId, GlassAgentRunStatus } from "../../shared/ipc.ts";
 import { agentCatalogName } from "../../shared/agentCatalog.ts";
 import { GlassResponsePanel } from "./GlassResponsePanel.tsx";
-import { GlassIdeShell } from "./GlassIdeShell.tsx";
+// import { GlassIdeShell } from "./GlassIdeShell.tsx";
 import { ResearchExplorer } from "../research/ResearchExplorer.tsx";
 import { CodeAnalystExplorer } from "../code-analyst/CodeAnalystExplorer.tsx";
 import { WritingStudio } from "../writing/WritingStudio.tsx";
@@ -52,7 +53,7 @@ import {
   type CoderTranscriptItem,
 } from "../../shared/glassIdeCoderTranscript.ts";
 import { builderStripLayoutReservePx, builderStripTopFromBottomPx, glassIdeBottomReservePx, GLASS_IDE_COST_FOOTER_PX } from "../../shared/glassLayoutMath.ts";
-import { GlassPowersMenu } from "../command/GlassPowersMenu.tsx";
+// import { GlassPowersMenu } from "../command/GlassPowersMenu.tsx";
 import { GlassDebriefPanel } from "./GlassDebriefPanel.tsx";
 import type { PaletteLastTerminalBlock } from "../../shared/paletteTypes.ts";
 import { overlayNotificationBottomPx } from "../../shared/glassLayoutMath.ts";
@@ -363,19 +364,26 @@ function CompanionPresenceLayer({ state }: { state: GlassState }): JSX.Element {
 }
 
 function ExtractModeBridge(): null {
+  // Aletheia core strip — extract & build disconnected
+  return null;
+  /*
   useExtractModeMainSync();
   useExtractModeTranscript();
   useExtractBuildDetection();
   return null;
+  */
 }
 
 function PaletteLayer({
-  state,
-  lastTerminalBlock,
+  state: _state,
+  lastTerminalBlock: _lastTerminalBlock,
 }: {
   state: GlassState;
   lastTerminalBlock: PaletteLastTerminalBlock | null;
-}): JSX.Element {
+}): null {
+  // Aletheia core strip — command palette + powers menu disconnected
+  return null;
+  /*
   return (
     <>
       <GlassCommandPalette
@@ -387,6 +395,7 @@ function PaletteLayer({
       <GlassPowersMenu />
     </>
   );
+  */
 }
 
 function BuilderStripLayer({
@@ -399,22 +408,24 @@ function BuilderStripLayer({
   onLeaveInteractive: () => void;
 }): JSX.Element | null {
   const openExtractRef = useRef<(() => void) | null>(null);
-  const handleCardOpen = useCallback(() => {
-    openExtractRef.current?.();
-  }, []);
+  // const handleCardOpen = useCallback(() => {
+  //   openExtractRef.current?.();
+  // }, []);
 
   if (!builderStripVisibleForState(state)) {
     return null;
   }
   return (
     <>
-      <ExtractModeBridge />
       <BuilderStrip
         onEnterInteractive={onEnterInteractive}
         onLeaveInteractive={onLeaveInteractive}
         onOpenExtractRef={openExtractRef}
       />
+      {/* Aletheia core strip — extract & build card disconnected
+      <ExtractModeBridge />
       <ExtractBuildCard onOpen={handleCardOpen} />
+      */}
     </>
   );
 }
@@ -1245,6 +1256,7 @@ export function Overlay(): JSX.Element {
         />
       ) : null}
 
+      {/* Aletheia core strip — terminal widget disconnected
       {state.terminalWidgetVisible && state.liveTerminal ? (
         <TerminalFeedWidget
           feed={state.liveTerminal}
@@ -1254,6 +1266,7 @@ export function Overlay(): JSX.Element {
           onPointerLeave={leaveInteractive}
         />
       ) : null}
+      */}
 
       <CompanionPresenceLayer state={state} />
 
@@ -1265,6 +1278,7 @@ export function Overlay(): JSX.Element {
 
       <PaletteLayer state={state} lastTerminalBlock={lastTerminalBlock} />
       {responsePanel}
+      {/* Aletheia core strip — Glass IDE disconnected
       {state.glassIdeActive && !fullscreenWorkspaceActive(state) ? (
         <GlassIdeShell
           state={state}
@@ -1276,6 +1290,7 @@ export function Overlay(): JSX.Element {
           onLaunchConsumed={() => setIdeCoderLaunch(null)}
         />
       ) : null}
+      */}
       <OverlayWorkspaceLayers state={state} />
     </div>
   );

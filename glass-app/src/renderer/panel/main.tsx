@@ -6,6 +6,7 @@ import { TranscriptionProvider } from "../TranscriptionProvider.tsx";
 import "../styles/glass.css";
 import "../styles/glassPanelChrome.css";
 import "../settings/GlassSettings.css";
+import "../dashboard/GlassDashboard.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

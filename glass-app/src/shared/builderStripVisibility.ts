@@ -1,6 +1,12 @@
 /** Personas that use the bottom Prompts / Keys strip in production. */
 export type BuilderStripPersona = "developer" | "sales" | "operator" | "writer" | "general";
 
+/**
+ * Aletheia core refocus — builder strip shows only Aletheia + quit.
+ * Full strip preserved on archive/full-feature-set.
+ */
+export const ALETHEIA_CORE_STRIP = true;
+
 export function shouldShowBuilderStrip(input: {
   onboardingComplete?: boolean;
   persona?: BuilderStripPersona;

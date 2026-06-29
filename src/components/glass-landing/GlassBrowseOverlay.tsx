@@ -23,27 +23,15 @@ import {
 
 const TRY_COMMANDS = ["agents", "cross-app", "memory"] as const;
 
-const BUILDER_LEFT = [
-  { icon: "▦", label: "Dashboard", kind: "dashboard" },
-  { icon: "⌥", label: "Prompts", kind: "prompts" },
-  { icon: "⚡", label: "Prompt Gen", kind: "power-prompt" },
-  { icon: "🗝", label: "API Keys", kind: "keys" },
-  { icon: "💸", label: "Spend", kind: "spend" },
-  { icon: "⬡", label: "Extract", kind: "extract" },
-  { icon: ">_", label: "Terminal", kind: "terminal" },
-] as const;
-
-const BUILDER_RIGHT = [
-  { label: "Aletheia", kind: "aletheia" },
+const STRIP_LEFT = [
   { icon: "◈", label: "Agents", kind: "agents" },
-  { label: "Powers Menu", kind: "powers" },
-  { label: "Command Palette", kind: "palette" },
+  { icon: "▦", label: "Storage", kind: "storage" },
 ] as const;
 
 const RAIL_ACTIONS = [
   { icon: "◫", label: "Agents", active: false },
+  { icon: "▦", label: "Storage", active: false },
   { icon: "◎", label: "Memory", active: false },
-  { icon: ">_", label: "Terminal", active: false },
 ] as const;
 
 function MicIcon(): JSX.Element {
@@ -120,13 +108,6 @@ export default function GlassBrowseOverlay(): JSX.Element | null {
   const introCommandTyping = intro.enabled && !intro.complete && intro.phase === "command-demo";
   const introCommandResponse = intro.enabled && !intro.complete && intro.phase === "command-response";
   const introCommandActive = introCommandTyping || introCommandResponse;
-  const introTerminalActive =
-    intro.enabled &&
-    !intro.complete &&
-    (intro.phase === "open-terminal" ||
-      intro.phase === "terminal-voice" ||
-      intro.phase === "terminal-demo" ||
-      intro.phase === "terminal-close");
   const introAgentsStripActive =
     intro.enabled &&
     !intro.complete &&
@@ -455,23 +436,9 @@ export default function GlassBrowseOverlay(): JSX.Element | null {
         </>
       )}
 
-      <div className="glass-browse__strip" data-testid="glass-browse-builder-strip">
+      <div className="glass-browse__strip glass-browse__strip--aletheia-core" data-testid="glass-browse-builder-strip">
         <div className="glass-browse__strip-group glass-browse__strip-group--left">
-          {BUILDER_LEFT.map((tab) => (
-            <button
-              key={tab.label}
-              type="button"
-              data-strip-target={tab.kind}
-              className={`glass-browse__strip-tab glass-browse__strip-tab--${tab.kind}${tab.kind === "terminal" && introTerminalActive ? " glass-browse__strip-tab--active" : ""}`}
-            >
-              <span className="glass-browse__strip-icon">{tab.icon}</span>
-              <span>{tab.label}</span>
-            </button>
-          ))}
-        </div>
-        <span className="glass-browse__strip-divider" aria-hidden="true" />
-        <div className="glass-browse__strip-group glass-browse__strip-group--right">
-          {BUILDER_RIGHT.map((tab) => (
+          {STRIP_LEFT.map((tab) => (
             <button
               key={tab.label}
               type="button"
@@ -479,10 +446,25 @@ export default function GlassBrowseOverlay(): JSX.Element | null {
               className={`glass-browse__strip-tab glass-browse__strip-tab--${tab.kind}${tab.kind === "agents" && (introAgentsStripActive || (agentsPanelOpen && !introAgentsPhases)) ? " glass-browse__strip-tab--active" : ""}`}
               onClick={tab.kind === "agents" ? () => setAgentsPanelOpen(!agentsPanelOpen) : undefined}
             >
-              {"icon" in tab ? <span className="glass-browse__strip-icon">{tab.icon}</span> : null}
+              <span className="glass-browse__strip-icon">{tab.icon}</span>
               <span>{tab.label}</span>
             </button>
           ))}
+        </div>
+        <div className="glass-browse__strip-group glass-browse__strip-group--center">
+          <button
+            type="button"
+            className={`glass-browse__strip-tab glass-browse__strip-tab--aletheia${introAgentsStripActive ? " glass-browse__strip-tab--active" : ""}`}
+            data-strip-target="aletheia"
+          >
+            <span className="glass-browse__strip-aletheia-dot" aria-hidden="true" />
+            <span>Aletheia</span>
+          </button>
+        </div>
+        <div className="glass-browse__strip-group glass-browse__strip-group--right">
+          <button type="button" className="glass-browse__strip-tab glass-browse__strip-tab--quit" data-strip-target="quit">
+            <span>Quit</span>
+          </button>
         </div>
       </div>
     </div>

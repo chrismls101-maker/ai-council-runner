@@ -3,6 +3,7 @@
  */
 
 import type { GlassAgentId } from "./ipc.ts";
+import { ALETHEIA_CORE_STRIP } from "./builderStripVisibility.ts";
 
 export interface AgentCatalogEntry {
   id: GlassAgentId;
@@ -42,6 +43,14 @@ export const GLASS_AGENT_CATALOG: AgentCatalogEntry[] = [
     placeholder: 'Describe the change. e.g. "Add error handling to the fetch call in api.ts"',
   },
 ];
+
+/** Agents shown on the builder strip in Aletheia core mode. */
+export const ALETHEIA_CORE_AGENT_IDS: GlassAgentId[] = ["research", "writing"];
+
+export function builderStripAgentCatalog(): AgentCatalogEntry[] {
+  if (!ALETHEIA_CORE_STRIP) return GLASS_AGENT_CATALOG;
+  return GLASS_AGENT_CATALOG.filter((entry) => ALETHEIA_CORE_AGENT_IDS.includes(entry.id));
+}
 
 export function agentCatalogName(agentId: GlassAgentId): string {
   return GLASS_AGENT_CATALOG.find((a) => a.id === agentId)?.name ?? agentId;

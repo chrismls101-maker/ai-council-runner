@@ -309,6 +309,16 @@ export const IPC = {
   getGlassStorageProjectDetail: "glass:get-glass-storage-project-detail",
   /** Renderer → main: reveal saved project folder in Finder. */
   revealGlassStorageProject: "glass:reveal-glass-storage-project",
+  /** Renderer → main: reload user-uploaded files in Glass Storage → Files. */
+  refreshGlassStorageFiles: "glass:refresh-glass-storage-files",
+  /** Renderer → main: open file picker and import into Glass Storage → Files. */
+  pickAndImportGlassStorageFiles: "glass:pick-and-import-glass-storage-files",
+  /** Renderer → main: import absolute paths (drag-drop) into Glass Storage → Files. */
+  importGlassStorageFiles: "glass:import-glass-storage-files",
+  /** Renderer → main: delete one uploaded file. */
+  deleteGlassStorageFile: "glass:delete-glass-storage-file",
+  /** Renderer → main: reveal uploaded file in Finder. */
+  revealGlassStorageFile: "glass:reveal-glass-storage-file",
   /** Main → dashboard renderer: agent bus events for live panels. */
   dashboardAgentEvent: "glass:dashboard-agent-event",
   /** Renderer → main: open Glass Dashboard fullscreen in overlay. */
@@ -1350,6 +1360,8 @@ export interface GlassState {
   glassStorageProjects?: import("./glassStorageProjectTypes.ts").GlassProjectRecord[];
   /** Selected project in Projects workspace (detail panel). */
   glassStorageProjectsSelectedId?: string | null;
+  /** User-uploaded files in Glass Storage → Files tab. */
+  glassStorageFiles?: import("./glassStorageFileTypes.ts").GlassStorageFileRecord[];
   /** Last Design to Code project id for Aletheia recall bridge. */
   latestDesignToCodeProjectId?: string | null;
   /** Glass Dashboard — full-screen overlay above builder strip; hides dock + command bar. */

@@ -616,6 +616,37 @@ const glassApi = {
       projectId,
     ) as Promise<{ ok: boolean; error?: string }>;
   },
+  refreshGlassStorageFiles(): void {
+    ipcRenderer.send(IPC.refreshGlassStorageFiles);
+  },
+  pickAndImportGlassStorageFiles(): Promise<{ ok: boolean; imported: number; error?: string }> {
+    return ipcRenderer.invoke(IPC.pickAndImportGlassStorageFiles) as Promise<{
+      ok: boolean;
+      imported: number;
+      error?: string;
+    }>;
+  },
+  importGlassStorageFiles(
+    paths: string[],
+  ): Promise<{ ok: boolean; imported: number; error?: string }> {
+    return ipcRenderer.invoke(IPC.importGlassStorageFiles, paths) as Promise<{
+      ok: boolean;
+      imported: number;
+      error?: string;
+    }>;
+  },
+  deleteGlassStorageFile(fileId: string): Promise<{ ok: boolean; error?: string }> {
+    return ipcRenderer.invoke(IPC.deleteGlassStorageFile, fileId) as Promise<{
+      ok: boolean;
+      error?: string;
+    }>;
+  },
+  revealGlassStorageFile(fileId: string): Promise<{ ok: boolean; error?: string }> {
+    return ipcRenderer.invoke(IPC.revealGlassStorageFile, fileId) as Promise<{
+      ok: boolean;
+      error?: string;
+    }>;
+  },
   glassIdeOpen(): void {
     ipcRenderer.send(IPC.glassIdeOpen);
   },

@@ -74,8 +74,12 @@ if (needsBuild()) {
 const env = { ...process.env };
 delete env.ELECTRON_RUN_AS_NODE;
 delete env.ELECTRON_RENDERER_URL;
+// Match glass:dev:vite — skip activation gate so dock + strip appear immediately in dev.
+env.IIVO_GLASS_DEV_PRIMARY = env.IIVO_GLASS_DEV_PRIMARY ?? "1";
 
-console.log("[glass-run-built] starting Glass (production-parity built bundle)");
+console.log(
+  `[glass-run-built] starting Glass (built bundle, devPrimary=${env.IIVO_GLASS_DEV_PRIMARY ?? "0"})`,
+);
 const child = spawn("npx", ["electron", "out/main/index.js"], {
   cwd: root,
   env,

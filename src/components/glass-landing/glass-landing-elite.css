@@ -1,0 +1,1079 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   IIVO Glass — Elite white landing · AI-native computing layer
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.glass-landing {
+  --gl-bg: #ffffff;
+  --gl-surface: rgba(255, 255, 255, 0.62);
+  --gl-surface-2: rgba(255, 255, 255, 0.82);
+  --gl-border: rgba(0, 0, 0, 0.07);
+  --gl-text: #0a0a0a;
+  --gl-muted: rgba(10, 10, 10, 0.48);
+  --gl-accent: #0a0a0a;
+  --gl-accent-glow: rgba(10, 10, 10, 0.08);
+  --gl-glass-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.95) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.04) inset,
+    0 2px 4px rgba(0, 0, 0, 0.03),
+    0 12px 40px rgba(0, 0, 0, 0.05);
+  --gl-glass-shadow-hover:
+    0 1px 0 rgba(255, 255, 255, 1) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.05) inset,
+    0 4px 12px rgba(0, 0, 0, 0.05),
+    0 24px 64px rgba(80, 120, 180, 0.1);
+
+  background: #ffffff;
+  color: var(--gl-text);
+}
+
+.glass-landing::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(180, 210, 255, 0.12), transparent 60%),
+    radial-gradient(ellipse 60% 40% at 100% 80%, rgba(200, 220, 255, 0.08), transparent 55%);
+}
+
+.glass-landing__desktop-scene {
+  display: none;
+}
+
+.glass-landing__shell {
+  position: relative;
+  z-index: 1;
+  width: min(1180px, calc(100vw - clamp(24px, 5vw, 64px)));
+  margin: 0 auto;
+  padding-bottom: clamp(48px, 8vw, 96px);
+}
+
+/* ── Cinematic word flash ── */
+.glass-cinema-words {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: clamp(280px, 52vh, 520px);
+  text-align: center;
+}
+
+.glass-cinema-words--fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  min-height: 100dvh;
+  background: #ffffff;
+}
+
+.glass-cinema-words__stage {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  min-height: 1.2em;
+  padding: 0 clamp(20px, 5vw, 48px);
+}
+
+.glass-cinema-words__line {
+  margin: 0;
+  font-family: var(--gl-font-display);
+  font-weight: 800;
+  font-size: clamp(2.8rem, 9vw, 6.5rem);
+  letter-spacing: -0.05em;
+  line-height: 0.95;
+  color: #0a0a0a;
+  opacity: 0;
+  transform: translateY(28px) scale(0.96);
+  filter: blur(6px);
+}
+
+.glass-cinema-words__line--in {
+  animation: glass-cinema-word-in 0.56s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.glass-cinema-words__line--hold {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  filter: blur(0);
+}
+
+.glass-cinema-words__line--out {
+  animation: glass-cinema-word-out 0.48s cubic-bezier(0.55, 0, 1, 0.45) forwards;
+}
+
+@keyframes glass-cinema-word-in {
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes glass-cinema-word-out {
+  to {
+    opacity: 0;
+    transform: translateY(-18px) scale(1.02);
+    filter: blur(8px);
+  }
+}
+
+.glass-cinema-words__grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  pointer-events: none;
+}
+
+/* ── Hero ── */
+.glass-site-hero {
+  position: relative;
+  padding: clamp(32px, 6vw, 72px) 0 clamp(48px, 8vw, 96px);
+  overflow: visible;
+}
+
+.glass-site-hero__atmosphere {
+  display: none;
+}
+
+.glass-site-hero__cinema {
+  margin-bottom: clamp(32px, 5vw, 56px);
+}
+
+.glass-site-hero__head {
+  max-width: 720px;
+}
+
+.glass-site-hero__eyebrow {
+  margin: 0 0 20px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--gl-muted);
+}
+
+.glass-site-hero__title {
+  margin: 0 0 20px;
+  font-family: var(--gl-font-display);
+  font-weight: 800;
+  font-size: clamp(2.4rem, 6vw, 4.5rem);
+  letter-spacing: -0.05em;
+  line-height: 0.94;
+  color: #0a0a0a;
+  background: none;
+  -webkit-background-clip: unset;
+  background-clip: unset;
+}
+
+.glass-site-hero__lead {
+  margin: 0;
+  max-width: 54ch;
+  font-size: clamp(1.05rem, 2.1vw, 1.28rem);
+  line-height: 1.62;
+  color: rgba(10, 10, 10, 0.62);
+  font-weight: 400;
+}
+
+.glass-site-hero__lead strong {
+  color: #0a0a0a;
+  font-weight: 600;
+}
+
+.glass-site-hero__body {
+  display: grid;
+  gap: clamp(40px, 6vw, 72px);
+  margin-top: clamp(40px, 6vw, 72px);
+}
+
+@media (min-width: 960px) {
+  .glass-site-hero__body {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+    align-items: start;
+  }
+}
+
+.glass-site-hero__primary {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.glass-site-hero__capabilities {
+  display: grid;
+  gap: 12px;
+}
+
+@media (min-width: 560px) {
+  .glass-site-hero__capabilities {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.glass-site-hero__cap {
+  position: relative;
+  padding: 18px 20px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow: var(--gl-glass-shadow);
+  backdrop-filter: blur(24px) saturate(170%);
+  -webkit-backdrop-filter: blur(24px) saturate(170%);
+  transition:
+    transform 0.45s var(--gl-ease),
+    box-shadow 0.45s var(--gl-ease);
+}
+
+.glass-site-hero__cap:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--gl-glass-shadow-hover);
+}
+
+.glass-site-hero__cap-icon {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 14px;
+  color: rgba(10, 10, 10, 0.35);
+}
+
+.glass-site-hero__cap-label {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0a0a0a;
+}
+
+.glass-site-hero__cap-detail {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--gl-muted);
+}
+
+.glass-site-hero__foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: clamp(40px, 6vw, 64px);
+  padding-top: 28px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.glass-site-hero__foot-pill {
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--gl-muted);
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.glass-site-hero__foot-pill--accent {
+  color: #0a0a0a;
+  border-color: rgba(0, 0, 0, 0.12);
+}
+
+/* ── Glass cup buttons ── */
+.glass-cup-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  padding: 0 28px;
+  border: none;
+  border-radius: 18px;
+  font-family: var(--gl-font-body);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+  cursor: pointer;
+  isolation: isolate;
+  transform-style: preserve-3d;
+  transform: perspective(900px) rotateX(4deg);
+  transition:
+    transform 0.4s var(--gl-ease),
+    box-shadow 0.4s var(--gl-ease);
+  background: linear-gradient(
+    168deg,
+    rgba(255, 255, 255, 0.98) 0%,
+    rgba(255, 255, 255, 0.72) 38%,
+    rgba(235, 245, 255, 0.45) 100%
+  );
+  color: #0a0a0a;
+  box-shadow:
+    0 2px 0 rgba(255, 255, 255, 1) inset,
+    0 -2px 0 rgba(0, 0, 0, 0.05) inset,
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 8px 20px rgba(0, 0, 0, 0.06),
+    0 20px 48px rgba(100, 140, 200, 0.1);
+  backdrop-filter: blur(28px) saturate(190%);
+  -webkit-backdrop-filter: blur(28px) saturate(190%);
+}
+
+.glass-cup-btn::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: 17px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.75) 0%, transparent 48%);
+  pointer-events: none;
+}
+
+.glass-cup-btn::after {
+  content: "";
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  top: 6px;
+  height: 40%;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), transparent);
+  filter: blur(1px);
+  pointer-events: none;
+}
+
+.glass-cup-btn:hover {
+  transform: perspective(900px) rotateX(1deg) translateY(-2px);
+  box-shadow:
+    0 2px 0 rgba(255, 255, 255, 1) inset,
+    0 -2px 0 rgba(0, 0, 0, 0.06) inset,
+    0 4px 8px rgba(0, 0, 0, 0.05),
+    0 16px 40px rgba(0, 0, 0, 0.08),
+    0 32px 72px rgba(100, 140, 200, 0.14);
+}
+
+.glass-cup-btn:active {
+  transform: perspective(900px) rotateX(6deg) translateY(1px);
+}
+
+.glass-cup-btn--primary {
+  background: linear-gradient(
+    168deg,
+    rgba(12, 12, 14, 0.96) 0%,
+    rgba(28, 28, 32, 0.92) 55%,
+    rgba(18, 18, 22, 0.98) 100%
+  );
+  color: #ffffff;
+  box-shadow:
+    0 2px 0 rgba(255, 255, 255, 0.12) inset,
+    0 -2px 0 rgba(0, 0, 0, 0.3) inset,
+    0 8px 24px rgba(0, 0, 0, 0.18),
+    0 24px 56px rgba(0, 0, 0, 0.12);
+}
+
+.glass-cup-btn--primary::before {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, transparent 50%);
+}
+
+.glass-cup-btn--ghost {
+  background: linear-gradient(
+    168deg,
+    rgba(255, 255, 255, 0.55) 0%,
+    rgba(255, 255, 255, 0.35) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.9);
+}
+
+.glass-cup-btn__label {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Intelligent glass card ── */
+.glass-intel-card {
+  position: relative;
+  padding: clamp(28px, 4vw, 40px);
+  border-radius: 28px;
+  overflow: hidden;
+  background: linear-gradient(
+    155deg,
+    rgba(255, 255, 255, 0.78) 0%,
+    rgba(255, 255, 255, 0.42) 45%,
+    rgba(240, 248, 255, 0.35) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow:
+    0 2px 0 rgba(255, 255, 255, 1) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.04) inset,
+    0 16px 56px rgba(0, 0, 0, 0.07),
+    0 40px 100px rgba(80, 130, 200, 0.1);
+  backdrop-filter: blur(32px) saturate(200%);
+  -webkit-backdrop-filter: blur(32px) saturate(200%);
+  transform: perspective(1200px) rotateY(-2deg) rotateX(1deg);
+  transition: transform 0.6s var(--gl-ease);
+}
+
+.glass-intel-card:hover {
+  transform: perspective(1200px) rotateY(0deg) rotateX(0deg);
+}
+
+.glass-intel-card__rim {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.95),
+    rgba(255, 255, 255, 0.2) 40%,
+    rgba(180, 210, 255, 0.35) 100%
+  );
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  -webkit-mask-composite: xor;
+  pointer-events: none;
+}
+
+.glass-intel-card__liquid {
+  position: absolute;
+  width: 180px;
+  height: 180px;
+  top: -40px;
+  right: -40px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(140, 190, 255, 0.22), transparent 68%);
+  filter: blur(20px);
+  animation: glass-intel-liquid 8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes glass-intel-liquid {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-20px, 16px) scale(1.15); }
+}
+
+.glass-intel-card__head {
+  position: relative;
+  z-index: 1;
+  margin-bottom: 28px;
+}
+
+.glass-intel-card__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gl-muted);
+}
+
+.glass-intel-card__pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #0a0a0a;
+  box-shadow: 0 0 0 0 rgba(10, 10, 10, 0.35);
+  animation: glass-intel-pulse 2.4s ease-out infinite;
+}
+
+@keyframes glass-intel-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(10, 10, 10, 0.35); }
+  70% { box-shadow: 0 0 0 10px rgba(10, 10, 10, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(10, 10, 10, 0); }
+}
+
+.glass-intel-card__title {
+  margin: 0 0 10px;
+  font-family: var(--gl-font-display);
+  font-weight: 800;
+  font-size: clamp(1.6rem, 3.5vw, 2.2rem);
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: #0a0a0a;
+}
+
+.glass-intel-card__subtitle {
+  margin: 0;
+  max-width: 42ch;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--gl-muted);
+}
+
+.glass-intel-card__body {
+  position: relative;
+  z-index: 1;
+  padding: 20px 22px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.9) inset;
+  animation: glass-intel-fade 0.5s var(--gl-ease);
+}
+
+@keyframes glass-intel-fade {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.glass-intel-card__signal-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.glass-intel-card__signal {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #0a0a0a;
+}
+
+.glass-intel-card__chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gl-muted);
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.glass-intel-card__reading {
+  margin: 0 0 8px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: rgba(10, 10, 10, 0.72);
+  font-variant-numeric: tabular-nums;
+}
+
+.glass-intel-card__action {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gl-muted);
+}
+
+.glass-intel-card__foot {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gl-muted);
+}
+
+/* ── White landing sections ── */
+.glass-landing__section {
+  padding: clamp(56px, 9vw, 120px) 0;
+}
+
+.glass-landing__section--hero {
+  padding-top: clamp(24px, 4vw, 48px);
+  min-height: auto;
+}
+
+.glass-landing__section--panel .glass-landing__panel {
+  background: rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 24px;
+  padding: clamp(28px, 4vw, 48px);
+  box-shadow: var(--gl-glass-shadow);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+}
+
+.glass-landing__section-kicker {
+  margin: 0 0 14px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--gl-muted);
+}
+
+.glass-landing__section-title {
+  margin: 0 0 18px;
+  font-family: var(--gl-font-display);
+  font-weight: 800;
+  font-size: clamp(1.8rem, 4vw, 2.8rem);
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+  color: #0a0a0a;
+}
+
+.glass-landing__section-body {
+  margin: 0;
+  max-width: 58ch;
+  font-size: 17px;
+  line-height: 1.65;
+  color: var(--gl-muted);
+}
+
+.glass-landing__your {
+  font-weight: 700;
+  color: #0a0a0a;
+}
+
+.glass-landing__feature-card {
+  background: rgba(255, 255, 255, 0.5) !important;
+  border: 1px solid rgba(255, 255, 255, 0.85) !important;
+  border-radius: 20px !important;
+  backdrop-filter: blur(24px) saturate(170%);
+  -webkit-backdrop-filter: blur(24px) saturate(170%);
+}
+
+.glass-landing__card-label {
+  color: var(--gl-muted) !important;
+}
+
+.glass-landing__card-title {
+  color: #0a0a0a !important;
+}
+
+.glass-landing__card-text {
+  color: var(--gl-muted) !important;
+}
+
+.glass-landing__compare-item {
+  background: rgba(255, 255, 255, 0.5) !important;
+  border: 1px solid rgba(0, 0, 0, 0.06) !important;
+  color: var(--gl-muted) !important;
+}
+
+.glass-landing__compare-item--accent {
+  border-color: rgba(0, 0, 0, 0.14) !important;
+  color: #0a0a0a !important;
+}
+
+.glass-landing__compare-label {
+  color: #0a0a0a !important;
+}
+
+.glass-landing__quote {
+  font-family: var(--gl-font-display);
+  font-size: clamp(1.4rem, 3vw, 2rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.3;
+  color: #0a0a0a;
+  border: none;
+  margin: 0;
+}
+
+.glass-landing__trust-line {
+  color: var(--gl-muted) !important;
+}
+
+.glass-landing__trust-close {
+  color: #0a0a0a !important;
+}
+
+.glass-landing__final-title {
+  color: #0a0a0a !important;
+}
+
+.glass-landing__final-lead {
+  color: var(--gl-muted) !important;
+}
+
+.glass-landing__download-panel {
+  padding: 24px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow: var(--gl-glass-shadow);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+.glass-landing__download-panel--hero {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+.glass-landing__download-title {
+  color: #0a0a0a;
+}
+
+.glass-landing__download-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.glass-landing__install-link {
+  color: var(--gl-muted);
+}
+
+.glass-landing__chip {
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  color: var(--gl-muted);
+}
+
+.glass-landing__final-band {
+  text-align: center;
+}
+
+.glass-landing__final-kicker {
+  color: var(--gl-muted) !important;
+  background: rgba(255, 255, 255, 0.5) !important;
+  border-color: rgba(0, 0, 0, 0.06) !important;
+}
+
+/* ── Nav white override ── */
+.glass-landing .gl-nav {
+  background: rgba(255, 255, 255, 0.72);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+}
+
+.glass-landing .gl-nav__logo {
+  color: #0a0a0a;
+}
+
+.glass-landing .gl-nav__link {
+  color: var(--gl-muted);
+}
+
+.glass-landing .gl-nav__link:hover {
+  color: #0a0a0a;
+}
+
+.glass-landing .gl-nav__signin {
+  color: var(--gl-muted);
+}
+
+.glass-landing .gl-nav__cta {
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  color: #0a0a0a;
+  box-shadow: var(--gl-glass-shadow);
+}
+
+.glass-landing .gl-nav__menu-icon,
+.glass-landing .gl-nav__menu-icon::before,
+.glass-landing .gl-nav__menu-icon::after {
+  background: #0a0a0a;
+}
+
+.glass-landing .gl-nav-drawer__panel {
+  background: rgba(255, 255, 255, 0.92) !important;
+  border-color: rgba(0, 0, 0, 0.06) !important;
+}
+
+.glass-landing .gl-nav-drawer__link {
+  color: #0a0a0a !important;
+}
+
+/* ── Scroll reveal on white ── */
+.glass-landing .gl-reveal {
+  transform: translateY(32px);
+}
+
+.glass-landing .gl-surface {
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  color: #0a0a0a;
+}
+
+/* ── Layer stack on white ── */
+.glass-landing .gl-os-stack__layer {
+  background: rgba(255, 255, 255, 0.5) !important;
+  border: 1px solid rgba(255, 255, 255, 0.85) !important;
+  color: #0a0a0a;
+}
+
+.glass-landing .gl-os-stack__layer-detail {
+  color: var(--gl-muted) !important;
+}
+
+.glass-landing .glass-landing__footer {
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  color: var(--gl-muted);
+}
+
+.glass-landing .glass-landing__footer-link {
+  color: var(--gl-muted);
+}
+
+.glass-landing .glass-landing__footer-link:hover {
+  color: #0a0a0a;
+}
+
+/* ── Intro word cinema overlay in intro css complement ── */
+.glass-intro--word-cinema {
+  pointer-events: auto;
+  background: #ffffff;
+}
+
+.glass-intro--word-cinema .glass-intro__skip {
+  color: rgba(10, 10, 10, 0.4);
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.6);
+}
+
+/* ── Hero — full viewport cinematic words ── */
+.glass-hero-cinema {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  min-height: 100svh;
+  margin: 0 calc(-1 * clamp(12px, 3vw, 32px));
+  padding: clamp(48px, 8vw, 96px) clamp(20px, 5vw, 48px);
+  text-align: center;
+}
+
+.glass-hero-cinema .glass-cinema-words {
+  min-height: clamp(320px, 42vh, 480px);
+}
+
+.glass-hero-cinema__scroll {
+  position: absolute;
+  bottom: clamp(28px, 5vw, 48px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  opacity: 0.42;
+  animation: glass-hero-scroll-pulse 2.8s ease-in-out infinite;
+}
+
+.glass-hero-cinema__scroll-line {
+  width: 1px;
+  height: 48px;
+  background: linear-gradient(180deg, transparent, #0a0a0a 55%, transparent);
+}
+
+.glass-hero-cinema__scroll-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--gl-muted);
+}
+
+@keyframes glass-hero-scroll-pulse {
+  0%, 100% { opacity: 0.28; transform: translateX(-50%) translateY(0); }
+  50% { opacity: 0.55; transform: translateX(-50%) translateY(6px); }
+}
+
+.glass-site-hero__rest {
+  padding-top: clamp(24px, 4vw, 48px);
+}
+
+.glass-landing__section--hero {
+  padding-top: 0 !important;
+}
+
+.glass-landing__features-grid--pillars {
+  grid-template-columns: 1fr !important;
+}
+
+.glass-landing__features-stack--full {
+  width: 100%;
+}
+
+/* ── Monument footer — GLASS typographic finale ── */
+.glass-monument {
+  position: relative;
+  margin-top: clamp(80px, 12vw, 160px);
+  margin-inline: calc(-1 * clamp(12px, 3vw, 32px));
+  padding: clamp(56px, 10vw, 120px) clamp(20px, 5vw, 48px) clamp(40px, 6vw, 72px);
+  overflow: hidden;
+  text-align: center;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.glass-monument__halo {
+  position: absolute;
+  inset: -20% -10% auto;
+  height: 70%;
+  background: radial-gradient(ellipse 70% 60% at 50% 100%, rgba(160, 200, 255, 0.16), transparent 70%);
+  pointer-events: none;
+}
+
+.glass-monument__pre {
+  position: relative;
+  z-index: 1;
+  max-width: 640px;
+  margin: 0 auto clamp(56px, 10vw, 96px);
+}
+
+.glass-monument__kicker {
+  margin: 0 0 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--gl-muted);
+}
+
+.glass-monument__line {
+  margin: 0 0 28px;
+  font-size: clamp(1rem, 2.2vw, 1.2rem);
+  line-height: 1.55;
+  color: rgba(10, 10, 10, 0.58);
+}
+
+.glass-monument__stage {
+  position: relative;
+  z-index: 1;
+  perspective: 1400px;
+  margin-bottom: clamp(40px, 8vw, 72px);
+}
+
+.glass-monument__letters {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: clamp(4px, 1.2vw, 14px);
+  margin-bottom: clamp(20px, 4vw, 32px);
+}
+
+.glass-monument__letter {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: clamp(52px, 14vw, 132px);
+  height: clamp(72px, 18vw, 168px);
+  border-radius: clamp(14px, 2.5vw, 24px);
+  background: linear-gradient(
+    168deg,
+    rgba(255, 255, 255, 0.98) 0%,
+    rgba(255, 255, 255, 0.55) 42%,
+    rgba(220, 235, 255, 0.35) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow:
+    0 2px 0 rgba(255, 255, 255, 1) inset,
+    0 -2px 0 rgba(0, 0, 0, 0.05) inset,
+    0 12px 40px rgba(0, 0, 0, 0.06),
+    0 28px 80px rgba(100, 140, 200, 0.12);
+  backdrop-filter: blur(28px) saturate(190%);
+  -webkit-backdrop-filter: blur(28px) saturate(190%);
+  transform: rotateX(8deg) rotateY(calc((var(--letter-i) - 2) * -6deg)) translateY(calc(var(--letter-i) * -2px));
+  transition: transform 0.6s var(--gl-ease);
+}
+
+.glass-monument__letter:hover {
+  transform: rotateX(2deg) rotateY(0deg) translateY(-8px);
+}
+
+.glass-monument__letter-face {
+  position: relative;
+  z-index: 1;
+  font-family: var(--gl-font-display);
+  font-weight: 800;
+  font-size: clamp(2.4rem, 9vw, 5.5rem);
+  letter-spacing: -0.06em;
+  line-height: 0.9;
+  color: #0a0a0a;
+}
+
+.glass-monument__letter-shine {
+  position: absolute;
+  inset: 8% 12% auto;
+  height: 38%;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.85), transparent);
+  pointer-events: none;
+}
+
+.glass-monument__wordmark {
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  gap: 0.35em;
+  margin: 0;
+  font-family: var(--gl-font-display);
+  font-weight: 800;
+  font-size: clamp(1.1rem, 2.8vw, 1.6rem);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gl-muted);
+}
+
+.glass-monument__wordmark-glass {
+  color: #0a0a0a;
+  letter-spacing: 0.24em;
+}
+
+.glass-monument__base {
+  position: relative;
+  z-index: 1;
+}
+
+.glass-monument__tagline {
+  margin: 0 0 20px;
+  font-size: clamp(0.95rem, 2vw, 1.1rem);
+  color: rgba(10, 10, 10, 0.5);
+}
+
+.glass-monument__legal {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.glass-monument__legal-link {
+  color: var(--gl-muted);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.glass-monument__legal-link:hover {
+  color: #0a0a0a;
+}
+
+.glass-monument__legal-sep {
+  color: rgba(10, 10, 10, 0.2);
+}
+
+.glass-monument .glass-landing__final-actions {
+  justify-content: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glass-hero-cinema__scroll {
+    animation: none;
+  }
+
+  .glass-monument__letter {
+    transform: none;
+  }
+}
+
