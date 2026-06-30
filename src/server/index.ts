@@ -207,6 +207,7 @@ app.use((_req, res, next) => {
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data:",
       "font-src 'self'",
+      "media-src 'self'",
       "connect-src 'self'",
       "frame-ancestors 'none'",
     ].join("; "),
