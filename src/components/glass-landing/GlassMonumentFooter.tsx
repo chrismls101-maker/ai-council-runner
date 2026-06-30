@@ -14,8 +14,10 @@ export default function GlassMonumentFooter({ downloadCta }: GlassMonumentFooter
 
       <div className="glass-monument__pre">
         <p className="glass-monument__kicker">The next layer is live</p>
-        <p className="glass-monument__line">One download. Every window. One intelligence above all of them.</p>
-        {downloadCta}
+        <p className="glass-monument__line">
+          One download. Every window. One intelligence above all of them.
+        </p>
+        <div className="glass-monument__cta-shell">{downloadCta}</div>
       </div>
 
       <div className="glass-monument__stage" aria-hidden="true">
@@ -39,7 +41,7 @@ export default function GlassMonumentFooter({ downloadCta }: GlassMonumentFooter
 
       <div className="glass-monument__base">
         <p className="glass-monument__tagline">
-          Intelligent glass — not inside your apps. Above them.
+          Intelligent glass — Live Writing, Lens, Aletheia, and memory. Above every app. Not inside them.
         </p>
         <nav className="glass-monument__legal" aria-label="Legal links">
           <a href="/privacy" className="glass-monument__legal-link" data-testid="glass-landing-privacy-link">

@@ -3,7 +3,8 @@ import { GLASS_DMG_ARM64_DOWNLOAD_URL } from "../../utils/glassRelease";
 
 const NAV_LINKS = [
   { href: "#ambient-os", label: "The layer" },
-  { href: "#builder-stack", label: "Capabilities" },
+  { href: "#capabilities", label: "Features" },
+  { href: "#builder-stack", label: "Pillars" },
   { href: "#trust", label: "Trust" },
 ] as const;
 

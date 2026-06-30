@@ -169,7 +169,7 @@ export default function GlassLandingSiteDock({
 
   useEffect(() => {
     if (decorative) return;
-    const sections = ["hero", "ambient-os", "builder-stack", "trust"];
+    const sections = ["hero", "ambient-os", "capabilities", "builder-stack", "trust"];
     const elements = sections
       .map((id) => document.getElementById(id))
       .filter((el): el is HTMLElement => el instanceof HTMLElement);

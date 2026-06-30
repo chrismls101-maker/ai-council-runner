@@ -50,7 +50,7 @@
 .glass-landing__shell {
   position: relative;
   z-index: 1;
-  width: min(1180px, calc(100vw - clamp(24px, 5vw, 64px)));
+  width: min(1280px, calc(100vw - clamp(24px, 5vw, 64px)));
   margin: 0 auto;
   padding-bottom: clamp(48px, 8vw, 96px);
 }
@@ -1735,8 +1735,7 @@ html.glass-hero-cinema-pending .iivo-hero__scroll {
 }
 
 html.glass-hero-cinema-pending .glass-site-hero__rest,
-html.glass-hero-cinema-pending .glass-landing__section--hero ~ .glass-landing__section,
-html.glass-hero-cinema-pending .glass-monument {
+html.glass-hero-cinema-pending .glass-landing__body {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
@@ -1746,12 +1745,8 @@ html.glass-hero-cinema-pending .glass-monument {
   animation: glass-hero-rest-reveal 1.35s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-html.glass-hero-cinema-complete .glass-landing__section--hero ~ .glass-landing__section {
+html.glass-hero-cinema-complete .glass-landing__body {
   animation: glass-hero-rest-reveal 1.35s cubic-bezier(0.16, 1, 0.3, 1) 0.12s both;
-}
-
-html.glass-hero-cinema-complete .glass-monument {
-  animation: glass-hero-rest-reveal 1.35s cubic-bezier(0.16, 1, 0.3, 1) 0.18s both;
 }
 
 @keyframes glass-hero-rest-reveal {
@@ -1775,16 +1770,14 @@ html.glass-hero-cinema-complete .glass-monument {
   }
 
   html.glass-hero-cinema-pending .glass-site-hero__rest,
-  html.glass-hero-cinema-pending .glass-landing__section--hero ~ .glass-landing__section,
-  html.glass-hero-cinema-pending .glass-monument {
+  html.glass-hero-cinema-pending .glass-landing__body {
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
   }
 
   .glass-site-hero__rest--revealed,
-  html.glass-hero-cinema-complete .glass-landing__section--hero ~ .glass-landing__section,
-  html.glass-hero-cinema-complete .glass-monument {
+  html.glass-hero-cinema-complete .glass-landing__body {
     animation: none;
   }
 }
@@ -1837,10 +1830,16 @@ html.glass-hero-cinema-complete .glass-monument {
 }
 
 .glass-monument__line {
-  margin: 0 0 28px;
+  margin: 0 0 32px;
   font-size: clamp(1rem, 2.2vw, 1.2rem);
   line-height: 1.55;
   color: rgba(10, 10, 10, 0.58);
+}
+
+.glass-monument__cta-shell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .glass-monument__stage {
