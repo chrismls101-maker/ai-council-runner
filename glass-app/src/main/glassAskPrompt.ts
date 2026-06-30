@@ -4,6 +4,7 @@
 
 import type { GlassAskRequest } from "../shared/glassAskTypes.ts";
 import { formatOverlayAnswerText } from "../shared/glassAskTypes.ts";
+import { buildVideoWatchPromptContext } from "../shared/aletheiaVideoWatchMode.ts";
 import type { HydratedContext } from "../shared/glassMemory.ts";
 import { buildSystemPrompt } from "./glassSystemPrompt.ts";
 
@@ -55,11 +56,15 @@ export function passiveContextForAsk(
   return filtered || undefined;
 }
 
+function hasWatchVisionFrames(request: GlassAskRequest): boolean {
+  return (request.videoWatchBuffer?.frames.length ?? 0) > 0;
+}
+
 export function buildGlassAskSystemPrompt(request: GlassAskRequest): string {
   const parts = [
     request.responseStyle === "full" ? FULL_SYSTEM : OVERLAY_SYSTEM,
   ];
-  if (request.visualIntent || request.latestScreenshot) {
+  if (request.visualIntent || request.latestScreenshot || hasWatchVisionFrames(request)) {
     parts.push(VISION_ADDENDUM);
   }
   if (request.companionMode) {
@@ -127,8 +132,12 @@ function formatCompanionBlock(request: GlassAskRequest): string {
 }
 
 export function buildGlassAskUserText(request: GlassAskRequest): string {
+  const transcriptWindowBlock = request.sessionTranscriptWindow?.trim()
+    ? `\n\nRecent conversation transcript (last ~60 seconds, newest last):\n\n${request.sessionTranscriptWindow.trim()}`
+    : "";
   return [
     request.prompt.trim(),
+    transcriptWindowBlock,
     formatSessionBlock(request),
     formatUserContextBlock(request),
     formatCompanionBlock(request),
@@ -143,6 +152,55 @@ export type GlassAskImageBlock = {
     data: string;
   };
 };
+
+export function extractGlassAskVideoWatchBlocks(
+  request: GlassAskRequest,
+): Array<GlassAskImageBlock | { type: "text"; text: string }> {
+  const buffer = request.videoWatchBuffer;
+  if (!buffer || (buffer.frames.length === 0 && !buffer.transcriptWindow.trim())) {
+    return [];
+  }
+
+  const ctx = buildVideoWatchPromptContext(buffer);
+  const blocks: Array<GlassAskImageBlock | { type: "text"; text: string }> = [];
+
+  for (const frame of ctx.frames) {
+    const data = frame.base64Jpeg.replace(/^data:image\/[a-z+]+;base64,/i, "");
+    blocks.push({
+      type: "image",
+      source: { type: "base64", media_type: "image/jpeg", data },
+    });
+  }
+
+  const transcript = ctx.transcriptWindow.trim();
+  if (transcript) {
+    blocks.push({
+      type: "text",
+      text: `Recent video transcript (last ~60 seconds):\n\n${transcript}`,
+    });
+  }
+
+  return blocks;
+}
+
+export function buildGlassAskMessageContent(
+  request: GlassAskRequest,
+): string | Array<GlassAskImageBlock | { type: "text"; text: string }> {
+  const watchBlocks = extractGlassAskVideoWatchBlocks(request);
+  const screenshot = extractGlassAskImage(request);
+  const userText = buildGlassAskUserText(request);
+
+  if (watchBlocks.length === 0 && !screenshot) {
+    return userText;
+  }
+
+  const blocks: Array<GlassAskImageBlock | { type: "text"; text: string }> = [
+    ...watchBlocks,
+    ...(screenshot ? [screenshot] : []),
+    { type: "text", text: userText },
+  ];
+  return blocks;
+}
 
 export function extractGlassAskImage(
   request: GlassAskRequest,

@@ -77,6 +77,10 @@ export interface GlassAskRequest {
   modelCallSource?: "ask" | "ask_stream" | "terminal_fix" | "other";
   /** Optional explicit Anthropic model id (operator loop, etc.). */
   anthropicModel?: string;
+  /** Live Listen Mode transcript window (~60s) injected before the user message. */
+  sessionTranscriptWindow?: string;
+  /** Aletheia Video Watch Mode rolling buffer (frames + transcript). */
+  videoWatchBuffer?: import("./aletheiaVideoWatchMode.ts").VideoWatchBuffer;
 }
 
 export interface GlassAskResponse {

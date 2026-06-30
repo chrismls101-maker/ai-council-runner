@@ -426,6 +426,14 @@ export const IPC = {
   generateProjectMemory: "glass:generate-project-memory",
   /** Renderer → main: cancel in-progress project memory generation. */
   cancelProjectMemory: "glass:cancel-project-memory",
+  /** Renderer → main: start Aletheia Video Watch Mode on a display. */
+  videoWatchStart: "glass:video-watch-start",
+  /** Renderer → main: stop Video Watch Mode. */
+  videoWatchStop: "glass:video-watch-stop",
+  /** Renderer → main: Video Watch Mode status snapshot. */
+  videoWatchStatus: "glass:video-watch-status",
+  /** Renderer → main: current Video Watch buffer (or null). */
+  videoWatchBuffer: "glass:video-watch-buffer",
   /** Renderer → main: re-run Coder with typecheck errors. */
   coderVerifyFix: "glass:coder-verify-fix",
   /** Renderer → main: re-run Coder with review findings. */
@@ -813,7 +821,11 @@ export type TranscriptionControlCommand =
   | { type: "probe-microphone" }
   | { type: "probe-virtual-audio-devices" }
   | { type: "startup-audio-restore" }
-  | { type: "deepgram-whisper-fallback"; scope: "translate" | "listen" | "companion" }
+  | { type: "deepgram-whisper-fallback"; scope: "translate" | "listen" | "meetings" | "watch" | "companion" }
+  | { type: "listen-deepgram-start" }
+  | { type: "meetings-deepgram-start" }
+  | { type: "video-watch-audio-start" }
+  | { type: "video-watch-audio-stop" }
   | { type: "connect-system-audio" }
   | { type: "test-system-audio" }
   | { type: "test-blackhole" };

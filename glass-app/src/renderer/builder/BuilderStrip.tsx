@@ -50,6 +50,7 @@ export function BuilderStrip({
   const showPowerUserTabsValue = showPowerUserTabs({ minimalPublic, glassDevMode });
   const [aletheiaSweeping, setAletheiaSweeping] = useState(false);
   const [aletheiaMenuOpen, setAletheiaMenuOpen] = useState(false);
+  const [watchActive, setWatchActive] = useState(false);
   const aletheiaSweepGenRef = useRef(0);
   const aletheiaButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -266,6 +267,30 @@ export function BuilderStrip({
     });
   }, [activeTab, closeBuilderPanel, dismissPowersAndPalette, glassState.aletheiaDashboardActive]);
 
+  useEffect(() => {
+    if (!aletheiaMenuOpen) return;
+    void window.glass.getVideoWatchStatus().then((status) => {
+      setWatchActive(status.active);
+    });
+  }, [aletheiaMenuOpen]);
+
+  useEffect(() => {
+    if (companion.active) return;
+    if (!watchActive) return;
+    void window.glass.stopVideoWatch().then(() => setWatchActive(false));
+  }, [companion.active, watchActive]);
+
+  const handleAletheiaWatchToggle = useCallback((): void => {
+    armBuilderStripInteractive();
+    if (watchActive) {
+      void window.glass.stopVideoWatch().then(() => setWatchActive(false));
+      return;
+    }
+    void window.glass.startVideoWatch().then((result) => {
+      setWatchActive(result.activeDisplayId != null);
+    });
+  }, [watchActive]);
+
   const handleAletheiaActivate = useCallback((): void => {
     armBuilderStripInteractive();
     closeAletheiaMenu();
@@ -287,13 +312,16 @@ export function BuilderStrip({
   const handleAletheiaDeactivate = useCallback((): void => {
     armBuilderStripInteractive();
     closeAletheiaMenu();
+    if (watchActive) {
+      void window.glass.stopVideoWatch().then(() => setWatchActive(false));
+    }
     if (!companion.active) return;
     if (agentRunning) {
       dispatchAletheiaCommand("stop-everything", { origin: "strip" });
       return;
     }
     dispatchAletheiaCommand("toggle-companion-mode", { origin: "strip" });
-  }, [agentRunning, closeAletheiaMenu, companion.active]);
+  }, [agentRunning, closeAletheiaMenu, companion.active, watchActive]);
 
   const handleAletheiaUseComputer = useCallback((): void => {
     armBuilderStripInteractive();
@@ -358,11 +386,13 @@ export function BuilderStrip({
         companionActive={companion.active}
         dashboardActive={glassState.aletheiaDashboardActive === true}
         useComputerActive={glassState.aletheiaUseComputerForNextTask === true}
+        watchActive={watchActive}
         onClose={closeAletheiaMenu}
         onActivate={handleAletheiaActivate}
         onDeactivate={handleAletheiaDeactivate}
         onDashboard={handleAletheiaDashboard}
         onUseComputer={handleAletheiaUseComputer}
+        onWatchToggle={handleAletheiaWatchToggle}
       />
     </div>
   );

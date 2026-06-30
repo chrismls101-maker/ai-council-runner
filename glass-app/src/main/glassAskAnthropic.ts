@@ -13,9 +13,8 @@ import {
 } from "./anthropicKeyStore.ts";
 import { recordModelCall } from "./modelCallStore.ts";
 import {
+  buildGlassAskMessageContent,
   buildGlassAskSystemPrompt,
-  buildGlassAskUserText,
-  extractGlassAskImage,
   overlayShortAnswer,
 } from "./glassAskPrompt.ts";
 
@@ -65,10 +64,7 @@ function normalizeAnthropicAskError(err: unknown): Error {
 function buildMessageContent(
   request: GlassAskRequest,
 ): Anthropic.MessageParam["content"] {
-  const image = extractGlassAskImage(request);
-  const text = buildGlassAskUserText(request);
-  if (!image) return text;
-  return [image, { type: "text", text }];
+  return buildGlassAskMessageContent(request);
 }
 
 export function buildGlassAskResponse(
@@ -84,7 +80,11 @@ export function buildGlassAskResponse(
     throw new Error("Model returned council-formatted output — retry or rephrase your question.");
   }
 
-  const usedVision = Boolean(request.visualIntent || request.latestScreenshot);
+  const usedVision = Boolean(
+    request.visualIntent
+    || request.latestScreenshot
+    || (request.videoWatchBuffer?.frames.length ?? 0) > 0,
+  );
   return {
     answer: trimmed,
     shortAnswer: request.responseStyle === "overlay" ? overlayShortAnswer(trimmed) : undefined,

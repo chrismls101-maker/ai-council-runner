@@ -142,7 +142,11 @@ export interface TranscriptionController {
   testSystemAudio: () => Promise<void>;
   connectSystemAudio: () => Promise<void>;
   restoreStartupAudio: () => Promise<void>;
-  activateWhisperFallback: (scope: "translate" | "listen" | "companion") => void;
+  activateWhisperFallback: (scope: "translate" | "listen" | "meetings" | "watch" | "companion") => void;
+  resetListenDeepgramFallback: () => void;
+  resetMeetingsDeepgramFallback: () => void;
+  resetWatchDeepgramFallback: () => void;
+  setVideoWatchDeepgramActive: (active: boolean) => void;
   testBlackHole: () => Promise<void>;
 }
 
@@ -176,7 +180,13 @@ export function useTranscription(): TranscriptionController {
   const systemAudioProbeInFlightRef = useRef(false);
   const translateListeningIntentRef = useRef(false);
   const companionDeepgramRef = useRef(false);
-  const whisperFallbackRef = useRef(false);
+  /** Translate-only Whisper fallback — must not block Listen Mode Deepgram after listen fallback. */
+  const translateWhisperFallbackRef = useRef(false);
+  /** Listen-only Whisper fallback — must not block Meetings Mode Deepgram. */
+  const listenWhisperFallbackRef = useRef(false);
+  const meetingsWhisperFallbackRef = useRef(false);
+  const watchWhisperFallbackRef = useRef(false);
+  const videoWatchDeepgramRef = useRef(false);
   const deepgramEnabledRef = useRef(!!glassState.stt.deepgramEnabled);
   const liveTranslateActiveRef = useRef(isLiveTranslateActive(glassState.liveTranslate));
   const kickChunkSegmentRef = useRef<(() => void) | null>(null);
@@ -184,7 +194,7 @@ export function useTranscription(): TranscriptionController {
   useEffect(() => {
     deepgramEnabledRef.current = !!glassState.stt.deepgramEnabled;
     if (glassState.stt.deepgramEnabled) {
-      whisperFallbackRef.current = false;
+      translateWhisperFallbackRef.current = false;
     }
   }, [glassState.stt.deepgramEnabled]);
 
@@ -477,29 +487,67 @@ export function useTranscription(): TranscriptionController {
         const translateActive =
           forTranslate || liveTranslateActiveRef.current;
         const deepgramAvailable =
-          !whisperFallbackRef.current &&
           source === "system_audio" &&
-          !!deepgramEnabledRef.current;
+          !!deepgramEnabledRef.current &&
+          !translateWhisperFallbackRef.current;
+        const listenDeepgramAvailable =
+          source === "system_audio" &&
+          !!deepgramEnabledRef.current &&
+          !listenWhisperFallbackRef.current;
+        const meetingsDeepgramAvailable =
+          source === "system_audio" &&
+          !!deepgramEnabledRef.current &&
+          !meetingsWhisperFallbackRef.current;
+        const watchDeepgramAvailable =
+          source === "system_audio" &&
+          !!deepgramEnabledRef.current &&
+          !watchWhisperFallbackRef.current;
         const companionDeepgramActive =
-          !whisperFallbackRef.current &&
+          !translateWhisperFallbackRef.current &&
+          !listenWhisperFallbackRef.current &&
+          !meetingsWhisperFallbackRef.current &&
+          !watchWhisperFallbackRef.current &&
           (forCompanionDeepgram || companionDeepgramRef.current) &&
           source === "microphone" &&
           !!deepgramEnabledRef.current;
         const listenDiarizationActive =
-          deepgramAvailable &&
+          listenDeepgramAvailable &&
           glassState.copilot?.config?.sessionType === "video_learning" &&
+          copilotModeIsActive(glassState.copilot?.config?.mode ?? "off");
+        const meetingsDiarizationActive =
+          meetingsDeepgramAvailable &&
+          glassState.copilot?.config?.sessionType === "meeting_call" &&
           copilotModeIsActive(glassState.copilot?.config?.mode ?? "off");
         const useDeepgramStreaming = translateActive && deepgramAvailable;
         const forwardDeepgramForListen = listenDiarizationActive && !useDeepgramStreaming;
+        const forwardDeepgramForMeetings = meetingsDiarizationActive && !useDeepgramStreaming;
+        const forwardDeepgramForWatch =
+          watchDeepgramAvailable
+          && videoWatchDeepgramRef.current
+          && !useDeepgramStreaming
+          && !forwardDeepgramForListen
+          && !forwardDeepgramForMeetings;
         const forwardDeepgramAudio =
-          useDeepgramStreaming || forwardDeepgramForListen || companionDeepgramActive;
-        return { translateActive, useDeepgramStreaming, companionDeepgramActive, forwardDeepgramAudio };
+          useDeepgramStreaming
+          || forwardDeepgramForListen
+          || forwardDeepgramForMeetings
+          || forwardDeepgramForWatch
+          || companionDeepgramActive;
+        return {
+          translateActive,
+          useDeepgramStreaming,
+          companionDeepgramActive,
+          forwardDeepgramForListen,
+          forwardDeepgramForMeetings,
+          forwardDeepgramForWatch,
+          forwardDeepgramAudio,
+        };
       };
 
       const beginSegment = () => {
         if (mediaStreamRef.current !== stream || !isListeningRef.current) return;
         const recorder = new MediaRecorder(stream, { mimeType });
-        const { translateActive, useDeepgramStreaming, companionDeepgramActive, forwardDeepgramAudio } =
+        const { translateActive, useDeepgramStreaming, companionDeepgramActive, forwardDeepgramForListen, forwardDeepgramForMeetings, forwardDeepgramAudio } =
           resolveStreamingFlags();
 
         recorder.ondataavailable = (event) => {
@@ -510,7 +558,7 @@ export function useTranscription(): TranscriptionController {
               window.glass.sendDeepgramAudioChunk(buf);
             });
           }
-          if (flags.useDeepgramStreaming || flags.companionDeepgramActive) return;
+          if (flags.useDeepgramStreaming || flags.companionDeepgramActive || flags.forwardDeepgramForListen || flags.forwardDeepgramForMeetings || flags.forwardDeepgramForWatch) return;
           if (event.data.size < 512) return;
           void processBlob(event.data, mimeType, source);
         };
@@ -913,11 +961,31 @@ export function useTranscription(): TranscriptionController {
     await connectSystemAudio();
   }, [connectSystemAudio, glassState.transcriptionMode]);
 
-  const activateWhisperFallback = useCallback((scope: "translate" | "listen" | "companion") => {
-    whisperFallbackRef.current = true;
+  const activateWhisperFallback = useCallback((scope: "translate" | "listen" | "meetings" | "watch" | "companion") => {
+    if (scope === "translate") translateWhisperFallbackRef.current = true;
+    if (scope === "listen") listenWhisperFallbackRef.current = true;
+    if (scope === "meetings") meetingsWhisperFallbackRef.current = true;
+    if (scope === "watch") watchWhisperFallbackRef.current = true;
     if (scope === "companion") {
       companionDeepgramRef.current = false;
     }
+    kickChunkSegmentRef.current?.();
+  }, []);
+
+  const resetListenDeepgramFallback = useCallback(() => {
+    listenWhisperFallbackRef.current = false;
+  }, []);
+
+  const resetMeetingsDeepgramFallback = useCallback(() => {
+    meetingsWhisperFallbackRef.current = false;
+  }, []);
+
+  const resetWatchDeepgramFallback = useCallback(() => {
+    watchWhisperFallbackRef.current = false;
+  }, []);
+
+  const setVideoWatchDeepgramActive = useCallback((active: boolean) => {
+    videoWatchDeepgramRef.current = active;
     kickChunkSegmentRef.current?.();
   }, []);
 
@@ -1082,6 +1150,9 @@ export function useTranscription(): TranscriptionController {
     }
     dispatch({ type: "SET_ERROR", message: undefined });
     if (mode === "system_audio") {
+      listenWhisperFallbackRef.current = false;
+      meetingsWhisperFallbackRef.current = false;
+      watchWhisperFallbackRef.current = false;
       void startSystemAudio();
     }
   }, [
@@ -1269,6 +1340,10 @@ export function useTranscription(): TranscriptionController {
     connectSystemAudio,
     restoreStartupAudio,
     activateWhisperFallback,
+    resetListenDeepgramFallback,
+    resetMeetingsDeepgramFallback,
+    resetWatchDeepgramFallback,
+    setVideoWatchDeepgramActive,
     testBlackHole,
   };
 }
