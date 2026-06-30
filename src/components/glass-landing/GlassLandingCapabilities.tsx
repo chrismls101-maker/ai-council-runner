@@ -1,4 +1,5 @@
-import type { CSSProperties, JSX } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type JSX } from "react";
+import { useScrollReveal } from "./useScrollReveal";
 
 const CAPABILITIES = [
   {
@@ -38,40 +39,135 @@ const CAPABILITIES = [
   },
 ] as const;
 
+const LWI_DRAFT =
+  "hey quick update for the board — we kinda need glass out before thurs demo and the aletheia voice has to feel amazing or nobody gets it. also can someone fix the pricing slide??";
+
+const LWI_REWRITE =
+  "Board update: ship Glass before Thursday's demo. Aletheia's voice is the moment people understand the product — prioritize polish there. Please refresh the pricing slide before we send.";
+
+const LWI_TYPE_MS = 24;
+const LWI_PAUSE_MS = 880;
+
+type LwiPhase = "idle" | "typing" | "pause" | "rewrite" | "done";
+
+function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
 function LiveWritingMock(): JSX.Element {
+  const { ref, visible } = useScrollReveal<HTMLDivElement>({ threshold: 0.32, rootMargin: "-4% 0px" });
+  const [run, setRun] = useState(0);
+  const [phase, setPhase] = useState<LwiPhase>("idle");
+  const [draft, setDraft] = useState("");
+  const timersRef = useRef<number[]>([]);
+
+  const clearTimers = useCallback(() => {
+    timersRef.current.forEach((id) => window.clearTimeout(id));
+    timersRef.current = [];
+  }, []);
+
+  const schedule = useCallback((fn: () => void, ms: number) => {
+    const id = window.setTimeout(fn, ms);
+    timersRef.current.push(id);
+  }, []);
+
+  const startRun = useCallback(() => {
+    clearTimers();
+    if (prefersReducedMotion()) {
+      setDraft(LWI_DRAFT);
+      setPhase("done");
+      return;
+    }
+
+    setDraft("");
+    setPhase("typing");
+    let index = 0;
+
+    const typeStep = () => {
+      index += 1;
+      setDraft(LWI_DRAFT.slice(0, index));
+      if (index >= LWI_DRAFT.length) {
+        setPhase("pause");
+        schedule(() => {
+          setPhase("rewrite");
+          schedule(() => setPhase("done"), 520);
+        }, LWI_PAUSE_MS);
+        return;
+      }
+      schedule(typeStep, LWI_TYPE_MS);
+    };
+
+    schedule(typeStep, LWI_TYPE_MS);
+  }, [clearTimers, schedule]);
+
+  useEffect(() => {
+    if (!visible) return;
+    startRun();
+    return clearTimers;
+  }, [visible, run, startRun, clearTimers]);
+
+  const replay = useCallback(() => {
+    setRun((value) => value + 1);
+  }, []);
+
+  const showCard = phase === "rewrite" || phase === "done";
+  const showCaret = phase === "typing" || phase === "pause";
+  const isTyping = phase === "typing";
+  const isPause = phase === "pause";
+
   return (
-    <div className="gl-body-lwi-mock" aria-hidden="true">
+    <div
+      ref={ref}
+      className={[
+        "gl-body-lwi-mock",
+        isTyping ? "gl-body-lwi-mock--typing" : "",
+        isPause ? "gl-body-lwi-mock--pause" : "",
+        showCard ? "gl-body-lwi-mock--card-visible" : "",
+        phase === "done" ? "gl-body-lwi-mock--done" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      data-lwi-phase={phase}
+    >
       <div className="gl-body-lwi-mock__app">
         <div className="gl-body-lwi-mock__app-chrome">
           <span />
           <span />
           <span />
           <em>Notes — Launch brief</em>
+          {isPause ? (
+            <span className="gl-body-lwi-mock__chrome-status">Glass noticed a pause</span>
+          ) : null}
         </div>
         <div className="gl-body-lwi-mock__field">
+          <span className="gl-body-lwi-mock__field-label">Your draft</span>
           <p className="gl-body-lwi-mock__draft">
-            we need to ship glass before the demo and make sure aletheia voice feels incredible
+            {draft}
+            {showCaret ? <span className="gl-body-lwi-mock__caret" aria-hidden="true" /> : null}
           </p>
-          <span className="gl-body-lwi-mock__caret" />
         </div>
       </div>
 
-      <div className="gl-body-lwi-mock__card">
+      <div className="gl-body-lwi-mock__card" aria-hidden={!showCard}>
         <div className="gl-body-lwi-mock__card-head">
           <span className="gl-body-lwi-mock__pill">
             <span className="gl-body-lwi-mock__pill-dot" />
-            Live Writing Intelligence
+            Suggested rewrite
           </span>
-          <span className="gl-body-lwi-mock__meta">18 → 24 words</span>
+          <span className="gl-body-lwi-mock__meta">41 → 28 words</span>
         </div>
-        <p className="gl-body-lwi-mock__rewrite">
-          We need to ship Glass before the demo — and make sure Aletheia&apos;s voice feels incredible.
-        </p>
+        <p className="gl-body-lwi-mock__rewrite">{LWI_REWRITE}</p>
         <div className="gl-body-lwi-mock__actions">
           <span className="gl-body-lwi-mock__action gl-body-lwi-mock__action--primary">Accept</span>
           <span className="gl-body-lwi-mock__action">Dismiss</span>
         </div>
       </div>
+
+      {phase === "done" ? (
+        <button type="button" className="gl-body-lwi-mock__replay" onClick={replay}>
+          Replay demo
+        </button>
+      ) : null}
     </div>
   );
 }

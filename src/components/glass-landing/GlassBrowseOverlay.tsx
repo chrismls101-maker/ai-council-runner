@@ -209,8 +209,9 @@ export default function GlassBrowseOverlay(): JSX.Element | null {
         className="glass-browse__exit"
         onClick={() => exit("manual_button")}
         data-testid="glass-browse-exit"
+        aria-label="Exit Glass"
       >
-        Exit Glass view
+        Exit Glass
         {!isMobile ? <span className="glass-browse__exit-kbd">Esc</span> : null}
       </button>
 
@@ -221,7 +222,7 @@ export default function GlassBrowseOverlay(): JSX.Element | null {
           : "Intelligent glass — live overlay, not a video"}
       </p>
 
-      <aside className="glass-browse__hint gl-surface" aria-live="polite" data-hint-id={hint.id}>
+      <aside className="glass-browse__hint" aria-live="polite" data-hint-id={hint.id}>
         <span className="glass-browse__hint-kicker">{hint.title}</span>
         <p className="glass-browse__hint-body">{hint.body}</p>
       </aside>
@@ -462,8 +463,14 @@ export default function GlassBrowseOverlay(): JSX.Element | null {
           </button>
         </div>
         <div className="glass-browse__strip-group glass-browse__strip-group--right">
-          <button type="button" className="glass-browse__strip-tab glass-browse__strip-tab--quit" data-strip-target="quit">
-            <span>Quit</span>
+          <button
+            type="button"
+            className="glass-browse__strip-tab glass-browse__strip-tab--exit-glass"
+            data-strip-target="exit-glass"
+            data-testid="glass-browse-exit-strip"
+            onClick={() => exit("manual_button")}
+          >
+            Exit Glass
           </button>
         </div>
       </div>

@@ -169,12 +169,22 @@ export default function GlassLandingBody({ downloadCta }: GlassLandingBodyProps)
                   One window · paste context · amnesia between sessions
                 </p>
               </article>
-              <article className="gl-body-compare__card gl-body-compare__card--glass" role="listitem">
+              <article
+                className="gl-body-compare__card gl-body-compare__card--glass gl-body-compare__card--featured"
+                role="listitem"
+              >
                 <span className="gl-body-compare__badge gl-body-compare__badge--live">Intelligent Glass</span>
                 <h3 className="gl-body-compare__title">The next layer</h3>
                 <p className="gl-body-compare__text">
-                  Every app · live writing · fused context · always above
+                  One intelligence surface above Safari, Slack, Xcode, and everything else — context fused,
+                  memory persistent, agents orchestrated. Not inside your apps. Above all of them.
                 </p>
+                <ul className="gl-body-compare__chips" aria-label="Glass capabilities">
+                  <li>Lens</li>
+                  <li>Live Writing</li>
+                  <li>Aletheia</li>
+                  <li>Council</li>
+                </ul>
               </article>
             </div>
           </div>

@@ -271,6 +271,16 @@
   box-shadow: var(--gl-body-shadow);
 }
 
+.gl-body-compare__card--featured {
+  padding: 24px 24px 26px;
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.98) 0%, rgba(236, 250, 252, 0.72) 52%, rgba(255, 255, 255, 0.94) 100%);
+  border-color: rgba(72, 168, 178, 0.42);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 1) inset,
+    0 24px 56px rgba(72, 168, 178, 0.14);
+}
+
 .gl-body-compare__card--glass:hover {
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 1) inset,
@@ -311,6 +321,28 @@
   font-size: 14px;
   line-height: 1.6;
   color: var(--gl-body-muted);
+}
+
+.gl-body-compare__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gl-body-compare__chips li {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gl-body-teal);
+  background: var(--gl-body-teal-soft);
+  border: 1px solid rgba(72, 168, 178, 0.24);
 }
 
 .gl-body-visual-frame {
@@ -871,11 +903,16 @@
     0 0 0 1px rgba(0, 0, 0, 0.2);
 }
 
+.gl-body-spotlight:has(.gl-body-lwi-mock) {
+  overflow: visible;
+}
+
 @media (min-width: 960px) {
   .gl-body-spotlight {
     grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
     align-items: center;
     padding: clamp(32px, 4vw, 48px);
+    overflow: visible;
   }
 }
 
@@ -962,12 +999,23 @@
   box-shadow: 0 0 10px rgba(72, 168, 178, 0.5);
 }
 
+.gl-body-spotlight__visual {
+  overflow: visible;
+  min-width: 0;
+}
+
 .gl-body-lwi-mock {
   position: relative;
-  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-height: 0;
+  padding-bottom: 4px;
 }
 
 .gl-body-lwi-mock__app {
+  position: relative;
+  z-index: 1;
   border-radius: 16px;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.96);
@@ -1013,17 +1061,60 @@
   color: rgba(32, 38, 54, 0.45);
 }
 
+.gl-body-lwi-mock__chrome-status {
+  margin-left: 10px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(42, 128, 140, 0.95);
+  background: rgba(72, 168, 178, 0.12);
+  border: 1px solid rgba(72, 168, 178, 0.28);
+  animation: gl-lwi-status-in 0.35s ease-out both;
+}
+
+@keyframes gl-lwi-status-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .gl-body-lwi-mock__field {
   position: relative;
-  padding: 22px 18px 28px;
-  min-height: 120px;
+  padding: 18px 18px 20px;
+  min-height: 0;
+  transition: box-shadow 0.4s ease;
+}
+
+.gl-body-lwi-mock--pause .gl-body-lwi-mock__field {
+  box-shadow: inset 0 0 0 1px rgba(72, 168, 178, 0.35);
+}
+
+.gl-body-lwi-mock__field-label {
+  display: block;
+  margin-bottom: 8px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(32, 38, 54, 0.38);
 }
 
 .gl-body-lwi-mock__draft {
   margin: 0;
   font-size: 14px;
   line-height: 1.65;
-  color: rgba(32, 38, 54, 0.78);
+  color: rgba(32, 38, 54, 0.55);
+  font-style: italic;
 }
 
 .gl-body-lwi-mock__caret {
@@ -1042,18 +1133,37 @@
 }
 
 .gl-body-lwi-mock__card {
-  position: absolute;
-  left: 8%;
-  right: 8%;
-  bottom: -8px;
+  position: relative;
+  z-index: 2;
+  flex-shrink: 0;
+  width: auto;
+  margin: -22px 5% 0;
   padding: 14px 16px 16px;
   border-radius: 14px;
+  opacity: 0;
+  transform: translateY(14px) scale(0.98);
+  pointer-events: none;
+  transition:
+    opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
   background: linear-gradient(165deg, rgba(14, 16, 22, 0.96), rgba(6, 8, 12, 0.94));
   border: 1px solid rgba(255, 255, 255, 0.14);
   box-shadow:
     0 0 0 1px rgba(0, 0, 0, 0.45),
     0 20px 48px rgba(0, 0, 0, 0.5),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.gl-body-lwi-mock--card-visible .gl-body-lwi-mock__card {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+@media (min-width: 960px) {
+  .gl-body-lwi-mock__card {
+    margin: -24px 3% 0;
+  }
 }
 
 .gl-body-lwi-mock__card-head {
@@ -1097,7 +1207,8 @@
   margin: 0 0 14px;
   font-size: 13px;
   line-height: 1.58;
-  color: rgba(255, 255, 255, 0.88);
+  color: rgba(255, 255, 255, 0.92);
+  font-style: normal;
 }
 
 .gl-body-lwi-mock__actions {
@@ -1120,6 +1231,53 @@
   color: rgba(12, 16, 22, 0.95);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(220, 235, 238, 0.9));
   border-color: rgba(255, 255, 255, 0.5);
+}
+
+.gl-body-lwi-mock__replay {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 3;
+  padding: 6px 11px;
+  border-radius: 8px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition:
+    opacity 0.35s ease,
+    transform 0.35s ease,
+    background 0.2s ease,
+    color 0.2s ease;
+  animation: gl-lwi-replay-in 0.4s ease-out 0.15s both;
+}
+
+.gl-body-lwi-mock__replay:hover {
+  color: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.gl-body-lwi-mock__replay:focus-visible {
+  outline: 2px solid rgba(110, 200, 212, 0.85);
+  outline-offset: 2px;
+}
+
+@keyframes gl-lwi-replay-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .gl-body-cap-grid {
@@ -1277,5 +1435,17 @@
 
   .gl-body-lwi-mock__caret {
     animation: none;
+  }
+
+  .gl-body-lwi-mock__card,
+  .gl-body-lwi-mock__chrome-status,
+  .gl-body-lwi-mock__replay {
+    animation: none;
+    transition: none;
+  }
+
+  .gl-body-lwi-mock--card-visible .gl-body-lwi-mock__card {
+    opacity: 1;
+    transform: none;
   }
 }
