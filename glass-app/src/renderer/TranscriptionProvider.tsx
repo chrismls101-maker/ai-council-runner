@@ -45,6 +45,15 @@ export function TranscriptionProvider({ children }: { children: ReactNode }): JS
         void tx.restoreStartupAudio();
       } else if (command.type === "deepgram-whisper-fallback") {
         tx.activateWhisperFallback(command.scope);
+      } else if (command.type === "listen-deepgram-start") {
+        tx.resetListenDeepgramFallback();
+        tx.resetWatchDeepgramFallback();
+      } else if (command.type === "meetings-deepgram-start") {
+        tx.resetMeetingsDeepgramFallback();
+      } else if (command.type === "video-watch-audio-start") {
+        tx.setVideoWatchDeepgramActive(true);
+      } else if (command.type === "video-watch-audio-stop") {
+        tx.setVideoWatchDeepgramActive(false);
       }
     });
     return unsubscribe;

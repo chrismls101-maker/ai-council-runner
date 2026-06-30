@@ -28,8 +28,8 @@ import {
   restoreIntroMusic,
   silenceIntroMusic,
   unlockIntroAudio,
-  startIntroMusic,
 } from "./glassIntroBootSound";
+import GlassIntroBootScene from "./GlassIntroBootScene";
 import {
   INTRO_CMD_RESPONSE_TYPE_MS,
   INTRO_CMD_TYPE_MS,
@@ -97,7 +97,7 @@ export const INTRO_COMMAND_RESPONSE =
   "Three action items from your notes and the PDF brief: (1) Ship Lens cross-window context in the Glass overlay. (2) Voice terminal demo — port 3000, dev server, localhost. (3) Council agents for code review from any app. I can draft the follow-up and push the branch from here if you want.";
 
 const PHASE_MS: Record<Exclude<GlassIntroPhase, "complete">, number> = {
-  boot: 5800,
+  boot: 11000,
   "word-cinema": 10200,
   "desktop-reveal": 3800,
   "desktop-linger": 2400,
@@ -183,12 +183,19 @@ type GlassCinematicIntroContextValue = {
   enabled: boolean;
   phase: GlassIntroPhase;
   complete: boolean;
+  /** Hero word cinema on the landing card — after boot, before page body reveals. */
+  heroCinemaComplete: boolean;
+  markHeroCinemaComplete: () => void;
+  bootExiting: boolean;
   typedUrl: string;
   introCommandText: string;
   introResponseText: string;
   glassPersistent: boolean;
   skip: () => void;
 };
+
+const BOOT_EXIT_MS = 9200;
+const BOOT_FINISH_MS = 11000;
 
 const GlassCinematicIntroContext = createContext<GlassCinematicIntroContextValue | null>(null);
 
@@ -213,12 +220,13 @@ export function GlassCinematicIntroProvider({
   const [enabled] = useState(enabledRef.current);
   const [phase, setPhase] = useState<GlassIntroPhase>(enabled ? "boot" : "complete");
   const [complete, setComplete] = useState(!enabled);
+  const [heroCinemaComplete, setHeroCinemaComplete] = useState(!enabled);
+  const [bootExiting, setBootExiting] = useState(false);
   const [typedUrl, setTypedUrl] = useState("");
   const [introCommandText, setIntroCommandText] = useState("");
   const [introResponseText, setIntroResponseText] = useState("");
   const timersRef = useRef<number[]>([]);
   const glassOnRef = useRef(false);
-  const bootSoundPlayed = useRef(false);
   const aletheiaSpoken = useRef(false);
   const terminalVoiceSpoken = useRef(false);
 
@@ -229,11 +237,11 @@ export function GlassCinematicIntroProvider({
 
   const finish = useCallback((): void => {
     clearTimers();
-    endIntroMusicPermanently(600);
     if (!glassOnRef.current) {
       glassOnRef.current = true;
       onGlassActivate?.();
     }
+    setBootExiting(false);
     setPhase("complete");
     setComplete(true);
     setTypedUrl("iivo.ai");
@@ -246,6 +254,20 @@ export function GlassCinematicIntroProvider({
     fadeOutIntroMusic(800);
     finish();
   }, [complete, finish]);
+
+  const markHeroCinemaComplete = useCallback((): void => {
+    setHeroCinemaComplete(true);
+    document.documentElement.classList.remove("glass-hero-cinema-pending");
+    document.documentElement.classList.add("glass-hero-cinema-complete");
+  }, []);
+
+  useEffect(() => {
+    if (!enabled) {
+      setHeroCinemaComplete(true);
+      document.documentElement.classList.add("glass-hero-cinema-complete");
+      document.documentElement.classList.remove("glass-hero-cinema-pending");
+    }
+  }, [enabled]);
 
   const schedule = useCallback((fn: () => void, ms: number): void => {
     timersRef.current.push(window.setTimeout(fn, ms));
@@ -268,11 +290,6 @@ export function GlassCinematicIntroProvider({
     };
     window.addEventListener("pointerdown", unlock, { passive: true });
     window.addEventListener("keydown", unlock);
-
-    if (!bootSoundPlayed.current) {
-      bootSoundPlayed.current = true;
-      window.setTimeout(() => startIntroMusic(), 400);
-    }
 
     return () => {
       window.removeEventListener("pointerdown", unlock);
@@ -320,10 +337,6 @@ export function GlassCinematicIntroProvider({
   }, [enabled, complete, phase]);
 
   useEffect(() => {
-    if (complete) endIntroMusicPermanently(500);
-  }, [complete]);
-
-  useEffect(() => {
     if (!enabled || complete) return;
 
     const ms = PHASE_MS[phase as Exclude<GlassIntroPhase, "complete">];
@@ -331,6 +344,12 @@ export function GlassCinematicIntroProvider({
 
     /* terminal-voice advances when Aletheia finishes speaking */
     if (phase === "terminal-voice") return;
+
+    if (phase === "boot") {
+      schedule(() => setBootExiting(true), BOOT_EXIT_MS);
+      schedule(() => finish(), BOOT_FINISH_MS);
+      return;
+    }
 
     if (GLASS_ON_PHASES.has(phase) && !glassOnRef.current) {
       glassOnRef.current = true;
@@ -475,11 +494,18 @@ export function GlassCinematicIntroProvider({
       delete document.documentElement.dataset.introAct;
     }
 
+    if (!complete) {
+      document.documentElement.dataset.introPhase = phase;
+    } else {
+      delete document.documentElement.dataset.introPhase;
+    }
+
     return () => {
       document.documentElement.classList.remove("glass-intro-active");
       document.documentElement.classList.remove("glass-intro-glass-on");
       document.documentElement.classList.remove("glass-intro-aletheia-speaking");
       delete document.documentElement.dataset.introAct;
+      delete document.documentElement.dataset.introPhase;
     };
   }, [enabled, complete, phase]);
 
@@ -500,13 +526,27 @@ export function GlassCinematicIntroProvider({
       enabled,
       phase,
       complete,
+      heroCinemaComplete,
+      markHeroCinemaComplete,
+      bootExiting,
       typedUrl,
       introCommandText,
       introResponseText,
       glassPersistent: GLASS_ON_PHASES.has(phase),
       skip,
     }),
-    [enabled, phase, complete, typedUrl, introCommandText, introResponseText, skip],
+    [
+      enabled,
+      phase,
+      complete,
+      heroCinemaComplete,
+      markHeroCinemaComplete,
+      bootExiting,
+      typedUrl,
+      introCommandText,
+      introResponseText,
+      skip,
+    ],
   );
 
   return (
@@ -523,6 +563,9 @@ export function useGlassCinematicIntro(): GlassCinematicIntroContextValue {
       enabled: false,
       phase: "complete",
       complete: true,
+      heroCinemaComplete: true,
+      markHeroCinemaComplete: () => {},
+      bootExiting: false,
       typedUrl: "iivo.ai",
       introCommandText: "",
       introResponseText: "",
@@ -705,7 +748,7 @@ const NARRATION: Partial<Record<GlassIntroPhase, string>> = {
 };
 
 export default function GlassCinematicIntro(): JSX.Element | null {
-  const { enabled, phase, complete, skip } = useGlassCinematicIntro();
+  const { enabled, phase, complete, bootExiting, skip } = useGlassCinematicIntro();
   const [cursorPos, setCursorPos] = useState<{ x: number; y: number } | null>(null);
   const clicking =
     phase === "glass-click" ||
@@ -768,24 +811,34 @@ export default function GlassCinematicIntro(): JSX.Element | null {
       role="presentation"
     >
       <div
-        className={`glass-intro__boot${showBoot ? " glass-intro__boot--visible" : " glass-intro__boot--exit"}`}
+        className={[
+          "glass-intro__boot",
+          showBoot && !bootExiting ? "glass-intro__boot--visible" : "",
+          bootExiting ? "glass-intro__boot--exit" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
         onPointerDown={() => {
           unlockIntroAudio();
           void unlockAletheiaAudio();
         }}
         role="presentation"
       >
-        <div className="glass-intro__boot-inner">
+        <GlassIntroBootScene />
+        <div className="glass-intro__boot-stage">
           <p className="glass-intro__boot-eyebrow">
             <span>IIVO</span>
             <span>Glass</span>
           </p>
           <h1 className="glass-intro__boot-title">
             <span className="glass-intro__boot-line">The Next Layer of</span>
-            <span className="glass-intro__boot-line glass-intro__boot-line--accent">Intelligent Glass</span>
+            <span className="glass-intro__boot-line glass-intro__boot-line--accent">
+              Intelligent Glass
+            </span>
           </h1>
-          <p className="glass-intro__boot-sub">AI-native intelligence across every Mac app</p>
-          <p className="glass-intro__boot-sound-hint">Click anywhere for music &amp; voice</p>
+          <p className="glass-intro__boot-sub">
+            The first AI-native computing layer above your entire Mac
+          </p>
           <div className="glass-intro__boot-bar" aria-hidden="true">
             <span className="glass-intro__boot-bar-fill" />
           </div>

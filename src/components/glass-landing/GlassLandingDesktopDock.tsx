@@ -29,9 +29,13 @@ function DockLetterIcon({ char, side, index }: { char: string; side: "left" | "r
 }
 
 /** Scene macOS dock — letter icons flank app icons in one row. */
-export default function GlassLandingDesktopDock(): JSX.Element {
+export default function GlassLandingDesktopDock({
+  wrapClassName = "glass-landing__desktop-dock-wrap--scene",
+}: {
+  wrapClassName?: string;
+}): JSX.Element {
   return (
-    <div className="glass-landing__desktop-dock-wrap glass-landing__desktop-dock-wrap--scene">
+    <div className={["glass-landing__desktop-dock-wrap", wrapClassName].filter(Boolean).join(" ")}>
       <div className="glass-landing__desktop-dock">
         <div className="glass-landing__desktop-dock-apps">
           {DOCK_WORD_LEFT.split("").map((char, index) => (

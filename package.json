@@ -69,6 +69,7 @@
     "glass:typecheck": "npm run typecheck --prefix glass-app",
     "glass:test": "npm run test --prefix glass-app",
     "glass:stt:live": "node glass-app/scripts/test-openai-stt-live.mjs",
+    "bake:aletheia-cinema": "node scripts/bake-aletheia-cinema-audio.mjs",
     "glass:qa:manual": "npm run qa:manual --prefix glass-app",
     "glass:qa:voice:manual": "npm run qa:voice:manual --prefix glass-app --",
     "glass:qa:listen:live": "npm run qa:listen:live --prefix glass-app --",

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { LayoutDashboard, Monitor, Power, PowerOff, ScanEye } from "lucide-react";
+import { LayoutDashboard, Monitor, Power, PowerOff, ScanEye, Tv } from "lucide-react";
 import { armBuilderStripInteractive, syncAletheiaStripMenuOpen } from "./useBuilderStripClickThrough.ts";
 import { ensureOverlayInteractive } from "../glassTextInteraction.ts";
 import "./AletheiaStripMenu.css";
@@ -13,11 +13,13 @@ interface AletheiaStripMenuProps {
   companionActive: boolean;
   dashboardActive: boolean;
   useComputerActive: boolean;
+  watchActive: boolean;
   onClose: () => void;
   onActivate: () => void;
   onDeactivate: () => void;
   onDashboard: () => void;
   onUseComputer: () => void;
+  onWatchToggle: () => void;
 }
 
 export function AletheiaStripMenu({
@@ -26,11 +28,13 @@ export function AletheiaStripMenu({
   companionActive,
   dashboardActive,
   useComputerActive,
+  watchActive,
   onClose,
   onActivate,
   onDeactivate,
   onDashboard,
   onUseComputer,
+  onWatchToggle,
 }: AletheiaStripMenuProps): JSX.Element | null {
   const menuRef = useRef<HTMLDivElement>(null);
   const [coords, setCoords] = useState<{ left: number; bottom: number } | null>(null);
@@ -149,6 +153,33 @@ export function AletheiaStripMenu({
             <span className="aletheia-strip-menu__label">Deactivate</span>
             <span className="aletheia-strip-menu__hint">
               {companionActive ? "Stop Aletheia" : "Aletheia is off"}
+            </span>
+          </span>
+        </button>
+      </div>
+
+      <div className="aletheia-strip-menu__divider" aria-hidden="true" />
+
+      <div className="aletheia-strip-menu__section">
+        <button
+          type="button"
+          className={`aletheia-strip-menu__item${watchActive ? " aletheia-strip-menu__item--active" : ""}`}
+          role="menuitem"
+          data-testid="aletheia-strip-menu-watch"
+          disabled={!companionActive}
+          onClick={onWatchToggle}
+        >
+          <span className="aletheia-strip-menu__item-icon" aria-hidden="true">
+            <Tv size={15} strokeWidth={2} />
+          </span>
+          <span className="aletheia-strip-menu__item-body">
+            <span className="aletheia-strip-menu__label">Watch with me</span>
+            <span className="aletheia-strip-menu__hint">
+              {!companionActive
+                ? "Activate Aletheia first"
+                : watchActive
+                  ? "Watching screen + audio — tap to stop"
+                  : "Share recent frames + transcript for asks"}
             </span>
           </span>
         </button>

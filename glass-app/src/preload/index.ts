@@ -797,6 +797,18 @@ const glassApi = {
   cancelProjectMemory(): void {
     ipcRenderer.send(IPC.cancelProjectMemory);
   },
+  startVideoWatch(payload?: { displayId?: number }): Promise<{ activeDisplayId: number | null }> {
+    return ipcRenderer.invoke(IPC.videoWatchStart, payload) as Promise<{ activeDisplayId: number | null }>;
+  },
+  stopVideoWatch(): Promise<{ stopped: boolean }> {
+    return ipcRenderer.invoke(IPC.videoWatchStop) as Promise<{ stopped: boolean }>;
+  },
+  getVideoWatchStatus(): Promise<{ active: boolean; frameCount: number; lastFrameAt: number | null }> {
+    return ipcRenderer.invoke(IPC.videoWatchStatus) as Promise<{ active: boolean; frameCount: number; lastFrameAt: number | null }>;
+  },
+  getVideoWatchBuffer(): Promise<import("../shared/aletheiaVideoWatchMode.ts").VideoWatchBuffer | null> {
+    return ipcRenderer.invoke(IPC.videoWatchBuffer) as Promise<import("../shared/aletheiaVideoWatchMode.ts").VideoWatchBuffer | null>;
+  },
   coderVerifyFix(payload: { runId: string; errorOutput: string }): Promise<{ ok: boolean; error?: string }> {
     return ipcRenderer.invoke(IPC.coderVerifyFix, payload) as Promise<{ ok: boolean; error?: string }>;
   },

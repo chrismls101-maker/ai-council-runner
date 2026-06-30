@@ -36,7 +36,7 @@
   isolation: isolate;
   --glass-chrome-lift: 3px;
   --mac-dock-zone: 76px;
-  --glass-site-dock-zone: 58px;
+  --glass-site-dock-zone: 66px;
   padding-bottom: var(--glass-site-dock-zone);
 }
 

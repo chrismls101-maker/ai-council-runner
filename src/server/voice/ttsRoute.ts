@@ -18,11 +18,25 @@ export async function ttsHandler(req: Request, res: Response): Promise<void> {
     const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: "POST",
       headers: { "xi-api-key": KEY, "Content-Type": "application/json", Accept: "audio/mpeg" },
-      body: JSON.stringify({
-        text,
-        model_id: MODEL,
-        // serious, intelligent, expressive (not monotone)
-        voice_settings: { stability: 0.42, similarity_boost: 0.8, style: 0.3, use_speaker_boost: true },
+        body: JSON.stringify({
+          text,
+          model_id: MODEL,
+          language_code: "en",
+        ...(typeof req.body?.previous_text === "string" && req.body.previous_text.trim()
+          ? { previous_text: req.body.previous_text.trim().slice(0, 500) }
+          : {}),
+        ...(typeof req.body?.next_text === "string" && req.body.next_text.trim()
+          ? { next_text: req.body.next_text.trim().slice(0, 500) }
+          : {}),
+        voice_settings: {
+          stability: 0.58,
+          similarity_boost: 0.86,
+          style: 0.11,
+          use_speaker_boost: true,
+          ...(req.body?.voice_settings && typeof req.body.voice_settings === "object"
+            ? req.body.voice_settings
+            : {}),
+        },
       }),
     });
     if (!r.ok) {

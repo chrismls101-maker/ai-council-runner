@@ -676,6 +676,7 @@ import {
 import {
   deriveActiveListeningMode,
   activeListeningMissingContextMessage,
+  getRecentSessionTranscriptWindow,
 } from "../shared/activeListeningContext.ts";
 import { shouldShortCircuitThinContext } from "../shared/activeListeningGuidance.ts";
 import { extractMediaContext } from "../shared/mediaContextExtract.ts";
@@ -761,10 +762,29 @@ import { processTranslateTranscriptChunk, translateEventMetadata } from "./liveT
 import { applyCaptionChunk } from "../shared/liveTranslateCaptions.ts";
 import {
   applyListenTranscriptFragment,
+  getRecentTranscriptWindow,
   initialListenRollingTranscript,
   rollingTranscriptWindow,
   type ListenRollingTranscriptState,
 } from "../shared/listenStreamingTranscript.ts";
+import {
+  initVideoWatchRunner,
+  getVideoWatchBuffer,
+  getVideoWatchStatus,
+  isVideoWatchModeActive,
+  startVideoWatchMode,
+  stopVideoWatchMode,
+  setVideoWatchAudioLifecycleHooks,
+} from "./aletheiaVideoWatchRunner.ts";
+import { initVideoWatchFrameDecoder } from "./aletheiaVideoWatchFrameDecode.ts";
+import {
+  shouldOmitSessionTranscriptForWatch,
+  shouldResumeSystemAudioCapture,
+  isListenNotesResumeEligible,
+  isMeetingsDeepgramResumeEligible,
+  resolveDeepgramFragmentRoute,
+  resolveDeepgramFallbackScope,
+} from "../shared/aletheiaVideoWatchMode.ts";
 import {
   decideListenCardSurface,
   type ListenCardSurfaceDecision,
@@ -851,9 +871,18 @@ import {
 } from "./startupAudioRestore.ts";
 import {
   activateDeepgramWhisperFallback,
+  resetListenWhisperFallback,
+  resetMeetingsWhisperFallback,
+  resetWatchWhisperFallback,
   resetTranslateWhisperFallback,
   type DeepgramWhisperFallbackDeps,
 } from "./deepgramWhisperFallback.ts";
+import {
+  activateWhisperListenFallback,
+  createDeepgramListenEngine,
+  type ListenDeepgramEngine,
+  type ListenDeepgramFragment,
+} from "./listenModeAudioEngine.ts";
 import { getCurrentMacOutputDeviceName } from "./macAudioOutput.ts";
 import { installBlackHoleAndSetupAudio } from "./blackHoleInstaller.ts";
 import {
@@ -2581,17 +2610,12 @@ const meetingIntelNoticedIds = new Set<string>();
 /** Prevents concurrent AI extraction calls when the tick fires faster than the AI responds. */
 let meetingExtractionInFlight = false;
 let deepgramSession: DeepgramStreamingSession | null = null;
-/**
- * Separate Deepgram session dedicated to listen mode (Live Notes).
- * Runs alongside the translate session when both are active.
- * Receives the same raw audio bytes via the IPC audio chunk handler.
- * Produces diarized transcript chunks tagged [S0]/[S1] for the rolling transcript.
- */
-let listenDeepgramSession: DeepgramStreamingSession | null = null;
-let listenDeepgramReconnectAttempts = 0;
-const LISTEN_DEEPGRAM_RECONNECT_BASE_MS = 1_000;
-const LISTEN_DEEPGRAM_RECONNECT_MAX_MS = 30_000;
-const LISTEN_DEEPGRAM_MAX_CONNECT_ATTEMPTS = 2;
+/** Listen / meetings diarization engine — Deepgram primary, Whisper fallback. */
+let listenAudioEngine: ListenDeepgramEngine | null = null;
+/** Wall-clock anchor for meetings-mode Deepgram speaker timing. */
+let meetingsDeepgramSessionStartMs: number | undefined;
+const DEEPGRAM_RECONNECT_BASE_MS = 1_000;
+const DEEPGRAM_RECONNECT_MAX_MS = 30_000;
 const TRANSLATE_DEEPGRAM_MAX_CONNECT_ATTEMPTS = 2;
 const TRANSLATE_DEEPGRAM_MAX_RECONNECT_ATTEMPTS = 2;
 let translateDeepgramReconnectAttempts = 0;
@@ -2605,6 +2629,7 @@ function deepgramWhisperFallbackDeps(): DeepgramWhisperFallbackDeps {
     push,
     stopTranslateDeepgram: () => stopDeepgramSession(),
     stopCompanionDeepgram: () => stopCompanionDeepgramSession(),
+    stopListenDeepgram: () => stopListenDeepgramSession(),
   };
 }
 
@@ -2709,74 +2734,71 @@ function seedSpeakerNamesFromBrowserTitle(): void {
   }).catch(() => {/* osascript unavailable or no browser open — skip */});
 }
 
-/** Start a diarization-enabled Deepgram session for listen mode (Live Notes). */
+/** Start a diarization-enabled Deepgram session (Listen, Meetings, or Video Watch). */
 function startListenDeepgramSession(): void {
   const dgKey = process.env.DEEPGRAM_API_KEY?.trim();
   if (!dgKey) return; // no key → fall back to OpenAI STT chunks (no diarization)
   stopListenDeepgramSession();
+  resetListenWhisperFallback();
+  resetMeetingsWhisperFallback();
+  resetWatchWhisperFallback();
 
-  const makeListenCallbacks = () => ({
-    onTranscript: ({ text, isFinal, speakerId }: { text: string; isFinal: boolean; speakerId?: number }) => {
-      if (!isFinal) return; // interim not needed for listen-mode notes
-      // Prefix with speaker tag so the AI pass and classifier can attribute notes.
-      const speakerPrefix = speakerId != null ? `[S${speakerId}] ` : "";
-      void processListenModeChunk(`${speakerPrefix}${text}`, ["system_audio"]);
-    },
-    onError: (err: Error) => {
-      console.error("[deepgram:listen] error:", err.message);
-    },
-    onClose: () => {
-      if (!shouldRunListenNotesPipeline()) return;
-      listenDeepgramReconnectAttempts += 1;
-      const delayMs = Math.min(
-        LISTEN_DEEPGRAM_RECONNECT_BASE_MS * 2 ** (listenDeepgramReconnectAttempts - 1),
-        LISTEN_DEEPGRAM_RECONNECT_MAX_MS,
-      );
-      console.warn(
-        `[deepgram:listen] WS closed unexpectedly — reconnecting in ${Math.round(delayMs / 1000)}s…`,
-      );
-      setTimeout(() => {
-        if (!shouldRunListenNotesPipeline()) return;
-        startListenDeepgramSession();
-      }, delayMs);
-    },
-  });
-
-  listenDeepgramSession = new DeepgramStreamingSession(dgKey, "auto", makeListenCallbacks());
-
-  const attemptListenDeepgramConnect = (attemptsLeft: number) => {
-    listenDeepgramSession?.connect().then(() => {
-      listenDeepgramReconnectAttempts = 0;
-    }).catch((err: unknown) => {
-      const msg = (err as Error).message ?? String(err);
-      console.error(`[deepgram:listen] connect failed (${attemptsLeft} retries left):`, msg);
-      if (attemptsLeft > 0 && shouldRunListenNotesPipeline()) {
-        console.log("[deepgram:listen] retrying in 1.5s…");
-        setTimeout(() => {
-          if (!shouldRunListenNotesPipeline()) return;
-          listenDeepgramSession = new DeepgramStreamingSession(dgKey, "auto", makeListenCallbacks());
-          attemptListenDeepgramConnect(attemptsLeft - 1);
-        }, 1_500);
-      } else {
-        listenDeepgramSession = null;
-        console.warn(
-          "[deepgram:listen] diarization unavailable after connect retries — continuing on Whisper chunks",
-        );
+  listenAudioEngine = createDeepgramListenEngine(dgKey, {
+    onFragment: (fragment) => {
+      const route = resolveDeepgramFragmentRoute({
+        meetingsPipeline: shouldRunMeetingsDeepgramPipeline(),
+        listenNotesPipeline: shouldRunListenNotesPipeline(),
+        videoWatchActive: isVideoWatchModeActive(),
+      });
+      if (route === "meetings") {
+        void processMeetingsDeepgramFragment(fragment);
+        return;
       }
-    });
-  };
-
-  attemptListenDeepgramConnect(LISTEN_DEEPGRAM_MAX_CONNECT_ATTEMPTS);
-  console.log("[deepgram:listen] session started (diarization enabled)");
+      if (route === "listen") {
+        void processListenModeChunk(fragment.text, ["system_audio"], {
+          speakerId: fragment.speakerId,
+          speakerLabel: fragment.speakerLabel,
+          startMs: fragment.startMs,
+        });
+      }
+    },
+    onEngineChange: (engine, reason) => {
+      if (process.env.IIVO_GLASS_DEBUG === "1" || process.env.IIVO_GLASS_DEBUG === "true") {
+        console.log(`[diarization] audio engine: ${engine} (${reason})`);
+      }
+    },
+    onFallbackRequested: (reason) => {
+      const scope = resolveDeepgramFallbackScope({
+        meetingsPipeline: shouldRunMeetingsDeepgramPipeline(),
+        listenNotesPipeline: shouldRunListenNotesPipeline(),
+        videoWatchActive: isVideoWatchModeActive(),
+      });
+      activateWhisperListenFallback(
+        listenAudioEngine,
+        reason,
+        (r) => activateDeepgramWhisperFallback(scope, r, deepgramWhisperFallbackDeps()),
+      );
+    },
+    shouldRun: () =>
+      shouldRunListenNotesPipeline()
+      || shouldRunMeetingsDeepgramPipeline()
+      || isVideoWatchModeActive(),
+    getSessionStartMs: () =>
+      shouldRunMeetingsDeepgramPipeline()
+        ? meetingsDeepgramSessionStartMs
+        : listenMomentRuntime.listenStartedMs,
+  });
+  broadcastTranscriptionControl({ type: "listen-deepgram-start" });
+  if (shouldRunMeetingsDeepgramPipeline()) {
+    broadcastTranscriptionControl({ type: "meetings-deepgram-start" });
+  }
 }
 
 /** Stop the listen-mode Deepgram session. */
 function stopListenDeepgramSession(): void {
-  if (listenDeepgramSession) {
-    listenDeepgramSession.close();
-    listenDeepgramSession = null;
-    listenDeepgramReconnectAttempts = 0;
-    console.log("[deepgram:listen] session closed");
+  if (listenAudioEngine) {
+    listenAudioEngine.stop();
+    listenAudioEngine = null;
   }
 }
 
@@ -2818,8 +2840,8 @@ function startCompanionDeepgramSession(): void {
         return;
       }
       const delayMs = Math.min(
-        LISTEN_DEEPGRAM_RECONNECT_BASE_MS * 2 ** (companionDeepgramReconnectAttempts - 1),
-        LISTEN_DEEPGRAM_RECONNECT_MAX_MS,
+        DEEPGRAM_RECONNECT_BASE_MS * 2 ** (companionDeepgramReconnectAttempts - 1),
+        DEEPGRAM_RECONNECT_MAX_MS,
       );
       setTimeout(() => {
         if (!state.companionModeActive) return;
@@ -3212,9 +3234,130 @@ function isListenModeActive(): boolean {
   );
 }
 
+function getWatchTranscriptWindow(): string {
+  if (listenRollingTranscript.fragments.length === 0) return "";
+  const sessionElapsedMs =
+    listenMomentRuntime.listenStartedMs != null
+      ? Date.now() - listenMomentRuntime.listenStartedMs
+      : undefined;
+  return getRecentTranscriptWindow(
+    listenRollingTranscript,
+    60_000,
+    sessionElapsedMs,
+    listenMomentRuntime.listenStartedMs,
+  ).trim();
+}
+
+function ensureListenAudioForWatchMode(): void {
+  if (!listenMomentRuntime.listenStartedMs) {
+    listenMomentRuntime = prepareListenModeSession(listenMomentRuntime, Date.now());
+    listenRollingTranscript = initialListenRollingTranscript();
+  }
+  if (!state.privacy.listening) {
+    beginListenCapture("system_audio");
+  }
+  if (!listenAudioEngine) {
+    startListenDeepgramSession();
+  }
+}
+
+/** Live ~60s transcript window for companion asks (Listen rolling state or Meetings session chunks). */
+function buildCompanionSessionTranscriptWindow(userPrompt?: string): string | undefined {
+  const config = copilot.getConfig();
+  const activeMode = deriveActiveListeningMode(
+    config,
+    sessionIsLive() && copilotModeIsActive(config.mode),
+  );
+
+  if (activeMode === "listen" && isListenModeActive()) {
+    if (listenRollingTranscript.fragments.length === 0) return undefined;
+    const sessionElapsedMs =
+      listenMomentRuntime.listenStartedMs != null
+        ? Date.now() - listenMomentRuntime.listenStartedMs
+        : undefined;
+    const window = getRecentTranscriptWindow(
+      listenRollingTranscript,
+      60_000,
+      sessionElapsedMs,
+      listenMomentRuntime.listenStartedMs,
+    ).trim();
+    return window || undefined;
+  }
+
+  if (activeMode === "meetings" && sessionIsLive()) {
+    const ctx = buildActiveListeningAskContext(userPrompt);
+    const window = ctx?.chunks?.length
+      ? getRecentSessionTranscriptWindow(ctx.chunks, 60_000).trim()
+      : "";
+    return window || undefined;
+  }
+
+  return undefined;
+}
+
 function shouldRunListenNotesPipeline(): boolean {
   const config = copilot.getConfig();
   return config.sessionType === "video_learning" && copilotModeIsActive(config.mode);
+}
+
+function shouldRunMeetingsDeepgramPipeline(): boolean {
+  const config = copilot.getConfig();
+  return (
+    config.sessionType === "meeting_call"
+    && copilotModeIsActive(config.mode)
+    && state.transcriptionMode === "system_audio"
+    && state.privacy.listening
+  );
+}
+
+function ensureMeetingsDeepgramSession(): void {
+  if (!shouldRunMeetingsDeepgramPipeline()) return;
+  if (!meetingsDeepgramSessionStartMs) {
+    meetingsDeepgramSessionStartMs = Date.now();
+  }
+  if (!listenAudioEngine) {
+    startListenDeepgramSession();
+  }
+}
+
+function formatMeetingsDeepgramLine(fragment: ListenDeepgramFragment): string {
+  const text = fragment.text.trim();
+  if (!text) return "";
+  return fragment.speakerLabel ? `[${fragment.speakerLabel}] ${text}` : text;
+}
+
+async function processMeetingsDeepgramFragment(fragment: ListenDeepgramFragment): Promise<void> {
+  if (!shouldRunMeetingsDeepgramPipeline()) return;
+  const chunk = formatMeetingsDeepgramLine(fragment);
+  if (!chunk) return;
+
+  const tags = ["system_audio"];
+  const source = transcriptSourceFromTags(tags);
+  const session = sessions.current();
+  const recentEvents = (session?.events ?? [])
+    .filter((e) => e.kind === "transcript_note")
+    .slice(-40);
+  if (isDuplicateTranscriptChunk(chunk, source, recentEvents)) return;
+
+  systemAudioLastSignalMs = Date.now();
+  state.transcript = appendTranscriptDeduped(state.transcript, chunk);
+  state.transcript = pruneRunningTranscript(state.transcript);
+
+  if (sessionIsLive() && sessions.current()?.status === "active" && shouldSaveTranscriptToSession()) {
+    const ctxFields = eventContextFields();
+    sessions.addEvent({
+      kind: "transcript_note",
+      title: chunk.length > 70 ? `${chunk.slice(0, 69)}…` : chunk,
+      text: chunk,
+      tags,
+      ...ctxFields,
+    });
+    await pruneCurrentSessionEvents();
+    await persistSessions(sessions);
+  }
+
+  maybeShowActiveListeningProactive(chunk, tags);
+  push();
 }
 
 /** Show the floating notes pad as soon as Listen mode is active — not only after audio starts. */
@@ -3517,7 +3660,12 @@ async function persistListenMomentEvent(moment: ListenMoment): Promise<void> {
 async function processListenModeChunk(
   newText: string,
   tags?: string[],
-  opts?: { interim?: boolean },
+  opts?: {
+    interim?: boolean;
+    speakerId?: number;
+    speakerLabel?: string;
+    startMs?: number;
+  },
 ): Promise<void> {
   if (!tags?.includes("system_audio")) return;
   const config = copilot.getConfig();
@@ -3552,6 +3700,11 @@ async function processListenModeChunk(
 
   const isNonContentSegment = segment.kind === "ad" || segment.kind === "sponsor";
 
+  const sessionStartMs = listenMomentRuntime.listenStartedMs;
+  const fragmentStartMs =
+    opts?.startMs ??
+    (sessionStartMs != null ? nowMs - sessionStartMs : undefined);
+
   // Only append content audio to the rolling transcript — ads and sponsor reads
   // are excluded so they can never surface as streaming notes or feed the AI pass.
   if (!isNonContentSegment) {
@@ -3560,11 +3713,25 @@ async function processListenModeChunk(
       isInterim: opts?.interim ?? false,
       nowMs,
       idFactory: () => `lf-${nowMs}-${Math.random().toString(36).slice(2, 8)}`,
+      speakerId: opts?.speakerId,
+      speakerLabel: opts?.speakerLabel,
+      startMs: fragmentStartMs,
     });
-    // Incrementally resolve speaker names from the transcript (free — no API call).
-    // Only runs when there are [Sx] tags or the transcript is long enough to contain intros.
-    if (newText.includes("[S") || listenRollingTranscript.rollingText.length > 120) {
-      listenSpeakerNames = extractSpeakerNames(listenRollingTranscript.rollingText, listenSpeakerNames);
+    const labelToSpeakerId = listenAudioEngine?.getSpeakerLabelToId() ?? {};
+    const primarySpeakerId =
+      labelToSpeakerId.you != null
+        ? parseInt(labelToSpeakerId.you, 10)
+        : undefined;
+    if (
+      opts?.speakerLabel ||
+      newText.length > 120 ||
+      listenRollingTranscript.rollingText.length > 120
+    ) {
+      listenSpeakerNames = extractSpeakerNames(
+        listenRollingTranscript.rollingText,
+        listenSpeakerNames,
+        { labelToSpeakerId, primarySpeakerId },
+      );
     }
   }
   // ─────────────────────────────────────────────────────────────────────────────
@@ -3592,6 +3759,7 @@ async function processListenModeChunk(
     idFactory: () => `lm-${nowMs}-${Math.random().toString(36).slice(2, 8)}`,
     segmentKind: segment.kind,
     mediaContext: state.mediaContext,
+    newFragmentStartMs: fragmentStartMs,
   });
   // ─────────────────────────────────────────────────────────────────────────────
 
@@ -3951,6 +4119,7 @@ function resetMeetingIntelRuntime(): void {
   meetingIntelState = resetMeetingIntelligenceState();
   meetingIntelNoticedIds.clear();
   meetingExtractionInFlight = false;
+  meetingsDeepgramSessionStartMs = undefined;
 }
 
 /**
@@ -6629,16 +6798,22 @@ function buildGlassAskSessionPayload(userPrompt?: string): GlassAskSessionPayloa
   const live = sessionIsLive();
   const ctx = getCachedWindowContext();
   const activeListening = buildActiveListeningAskContext(userPrompt);
+  const listenLiveTranscript =
+    isListenModeActive() && listenRollingTranscript.rollingText.trim()
+      ? listenRollingTranscript.rollingText.trim()
+      : undefined;
 
   const payload: GlassAskSessionPayload = {
     sessionId: session?.id,
     title: session?.title,
     summary: live && session ? buildSessionSummary(session) : undefined,
-    recentTranscript: activeListening?.recentTranscriptWindow?.trim()
-      ? activeListening.recentTranscriptWindow.trim().slice(-1500)
-      : state.transcript.trim()
-        ? state.transcript.trim().slice(-1500)
-        : undefined,
+    recentTranscript: listenLiveTranscript
+      ? listenLiveTranscript.slice(-1500)
+      : activeListening?.recentTranscriptWindow?.trim()
+        ? activeListening.recentTranscriptWindow.trim().slice(-1500)
+        : state.transcript.trim()
+          ? state.transcript.trim().slice(-1500)
+          : undefined,
     currentSource:
       ctx.status === "available"
         ? {
@@ -7720,15 +7895,30 @@ async function submitCommand(
   const companionDepthAsk =
     state.companionModeActive === true && companionPrefersResponsePanel(text);
 
+  const sessionTranscriptWindow = buildCompanionSessionTranscriptWindow(text);
+  const watchBuffer = getVideoWatchBuffer();
+  const hasWatchContext =
+    watchBuffer != null
+    && (watchBuffer.frames.length > 0 || watchBuffer.transcriptWindow.trim().length > 0);
+  const watchHasTranscript = shouldOmitSessionTranscriptForWatch(watchBuffer);
+
   const askRequest = {
     prompt: text,
     session: {
       ...buildGlassAskSessionPayload(text),
       sessionId: askSessionId,
     },
+    ...(sessionTranscriptWindow?.trim() && !watchHasTranscript
+      ? { sessionTranscriptWindow: sessionTranscriptWindow.trim() }
+      : {}),
+    ...(hasWatchContext ? { videoWatchBuffer: watchBuffer! } : {}),
     latestScreenshot: latestScreenshot ?? lensScreenshotPayload,
     lensContext: lensAttached ?? undefined,
-    visualIntent: visualIntent || Boolean(lensScreenshotPayload) || undefined,
+    visualIntent:
+      visualIntent
+      || Boolean(lensScreenshotPayload)
+      || Boolean(hasWatchContext && watchBuffer!.frames.length > 0)
+      || undefined,
     responseStyle: companionDepthAsk ? ("full" as const) : ("overlay" as const),
     modelPurpose: (opts?.taskComplexity === "deep" ? "diagnostic" : "default") as import("../shared/glassAskTypes.ts").GlassAskRequest["modelPurpose"],
     companionMode: state.companionModeActive || undefined,
@@ -8283,6 +8473,7 @@ async function handleCommand(
       dispatchPrivacy({ type: "START_LISTENING", at: new Date().toISOString() });
       state.stt = { ...state.stt, listeningElapsedMs: 0, lastError: undefined };
       bootstrapListenNotesPipeline();
+      ensureMeetingsDeepgramSession();
       resetListeningLimitTracking();
       state.operationDiagnostics = diagnosticsForListening(
         recordOperation(state.operationDiagnostics, "start-listening", "ok"),
@@ -8302,6 +8493,7 @@ async function handleCommand(
         cancelListenCountdown();
         broadcastTranscriptionControl({ type: "stop" });
         dispatchPrivacy({ type: "PAUSE", at: new Date().toISOString() });
+        stopListenDeepgramSession();
         copilot.dismissSilenceWarning();
         state.stt = { ...state.stt, listeningElapsedMs: 0 };
         resetListeningLimitTracking();
@@ -12336,6 +12528,15 @@ async function handleCopilotCommand(command: GlassCommand): Promise<boolean> {
       const next = withCopilotConfig(copilot.getConfig(), command.patch);
       persistCopilotConfig(next);
       refreshCopilotLoop();
+      if (state.privacy.listening && state.transcriptionMode === "system_audio") {
+        if (shouldRunListenNotesPipeline()) {
+          ensureListenNotesLoopRunning();
+        } else if (shouldRunMeetingsDeepgramPipeline()) {
+          ensureMeetingsDeepgramSession();
+        } else if (listenAudioEngine) {
+          stopListenDeepgramSession();
+        }
+      }
       push();
       return true;
     }
@@ -12539,12 +12740,25 @@ async function handleSessionCommand(command: GlassCommand): Promise<void> {
       break;
     case "session-resume":
       sessions.resumeSession();
-      // Restart audio capture if listen notes pipeline is active and audio was stopped
-      // (e.g. after translate-stop paused it in a non-listen-notes session that then
-      // switched, or after an explicit session-pause). Without this the Resume button
-      // leaves the user in a silent state with the session technically active.
-      if (shouldRunListenNotesPipeline() && !state.privacy.listening) {
-        broadcastTranscriptionControl({ type: "start", mode: "system_audio" });
+      {
+        const config = copilot.getConfig();
+        const resumeListen = shouldResumeSystemAudioCapture({
+          pipelineEligible: isListenNotesResumeEligible(config.sessionType, config.mode),
+          transcriptionMode: state.transcriptionMode,
+          listening: state.privacy.listening,
+        });
+        const resumeMeetings = shouldResumeSystemAudioCapture({
+          pipelineEligible: isMeetingsDeepgramResumeEligible(
+            config.sessionType,
+            config.mode,
+            sessionIsLive(),
+          ),
+          transcriptionMode: state.transcriptionMode,
+          listening: state.privacy.listening,
+        });
+        if (resumeListen || resumeMeetings) {
+          broadcastTranscriptionControl({ type: "start", mode: "system_audio" });
+        }
       }
       break;
     case "session-end":
@@ -15761,7 +15975,7 @@ function registerIpc(): void {
     const buf = Buffer.from(buffer);
     // Forward to translate, listen-mode, and companion diarization sessions.
     deepgramSession?.sendAudio(buf);
-    listenDeepgramSession?.sendAudio(buf);
+    listenAudioEngine?.sendAudio(buf);
     companionDeepgramSession?.sendAudio(buf);
   });
 
@@ -15865,6 +16079,34 @@ function registerIpc(): void {
   ipcMain.on(IPC.dismissTerminalWindow, (event) => {
     if (!isTerminalPanelSender(event.sender)) return;
     dismissGlassTerminalWindow();
+  });
+
+  ipcMain.handle(IPC.videoWatchStart, (event, payload?: { displayId?: number }) => {
+    if (!isGlassRendererSender(event.sender)) return { activeDisplayId: null };
+    const displayId =
+      typeof payload?.displayId === "number"
+        ? payload.displayId
+        : resolveCaptureDisplay(state.glassSettings.displayTarget).id;
+    startVideoWatchMode(displayId);
+    return { activeDisplayId: displayId };
+  });
+
+  ipcMain.handle(IPC.videoWatchStop, (event) => {
+    if (!isGlassRendererSender(event.sender)) return { stopped: false };
+    stopVideoWatchMode();
+    return { stopped: true };
+  });
+
+  ipcMain.handle(IPC.videoWatchStatus, (event) => {
+    if (!isGlassRendererSender(event.sender)) {
+      return { active: false, frameCount: 0, lastFrameAt: null };
+    }
+    return getVideoWatchStatus();
+  });
+
+  ipcMain.handle(IPC.videoWatchBuffer, (event) => {
+    if (!isGlassRendererSender(event.sender)) return null;
+    return getVideoWatchBuffer();
   });
 
   if (process.env.IIVO_GLASS_E2E === "1") {
@@ -16166,6 +16408,19 @@ app.whenReady().then(() =>
     glassUserSettings = { ...glassUserSettings, ...partial };
     state.glassSettings = glassUserSettings;
     void persistGlassUserSettings(glassUserSettings);
+  });
+  initVideoWatchFrameDecoder();
+  setVideoWatchAudioLifecycleHooks({
+    onStart: () => {
+      broadcastTranscriptionControl({ type: "video-watch-audio-start" });
+    },
+    onStop: () => {
+      broadcastTranscriptionControl({ type: "video-watch-audio-stop" });
+    },
+  });
+  initVideoWatchRunner({
+    getTranscriptWindow: getWatchTranscriptWindow,
+    ensureListenAudioActive: ensureListenAudioForWatchMode,
   });
   registerIpc();
   initGlassDashboard();

@@ -5,6 +5,22 @@ let fadeInterval: number | null = null;
 let fadeRaf: number | null = null;
 let audioUnlocked = false;
 let introMusicPermanentlyEnded = false;
+let bootTimelineStart: number | null = null;
+
+/** Single clock for boot music, overlay pulse, and Aletheia activation. */
+export function markBootTimelineStart(): number {
+  if (bootTimelineStart == null) {
+    bootTimelineStart = performance.now();
+  }
+  return bootTimelineStart;
+}
+
+export function scheduleOnBootTimeline(fn: () => void, atMs: number): () => void {
+  const origin = markBootTimelineStart();
+  const delay = Math.max(0, atMs - (performance.now() - origin));
+  const id = window.setTimeout(fn, delay);
+  return () => window.clearTimeout(id);
+}
 
 export function isIntroMusicEnded(): boolean {
   return introMusicPermanentlyEnded;
@@ -63,6 +79,8 @@ export function unlockIntroAudio(): void {
   const el = ensureAudioElement();
   audioUnlocked = true;
 
+  void import("./glassIntroAletheiaSpeak").then(({ unlockAletheiaAudio }) => unlockAletheiaAudio());
+
   if (el.paused) {
     void el.play().then(() => {
       rampVolume(el.volume > 0.02 ? el.volume : 0, INTRO_MUSIC_TARGET, audioUnlocked ? 900 : 1800);
@@ -81,6 +99,7 @@ export function isIntroAudioUnlocked(): boolean {
 /** Loop intro bed — survives mute/restore cycles until explicit stop. */
 export function startIntroMusic(): void {
   if (typeof window === "undefined" || prefersReducedMotion() || introMusicPermanentlyEnded) return;
+  markBootTimelineStart();
   ensureAudioElement();
   if (audioUnlocked) {
     unlockIntroAudio();
@@ -109,6 +128,7 @@ export function muteIntroMusic(durationMs = 700): void {
 
 /** Smooth fade timed for final handoff only. */
 export function fadeOutIntroMusic(durationMs = 2800): void {
+  introMusicPermanentlyEnded = true;
   if (!audio) return;
   const current = audio.volume;
   if (current <= 0.001) {
@@ -132,6 +152,19 @@ export function stopIntroMusic(): void {
 export function duckIntroMusic(to = 0.16, durationMs = 700): void {
   if (!audio) return;
   rampVolume(audio.volume, to, durationMs);
+}
+
+let presentationBedDucked = false;
+
+/** One slow duck for an entire presenter passage — avoids pumping between lines. */
+export function duckIntroMusicForPresentation(to = 0.3, durationMs = 1400): void {
+  if (presentationBedDucked) return;
+  presentationBedDucked = true;
+  duckIntroMusic(to, durationMs);
+}
+
+export function resetIntroMusicPresentationDuck(): void {
+  presentationBedDucked = false;
 }
 
 /** Silence intro bed completely — use during Aletheia voice lines. */
