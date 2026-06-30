@@ -381,6 +381,9 @@ async function speakAletheiaSequenceInner(
     if (isSpeakCancelled(generation)) return;
     if (!(await resumeAletheiaAudio())) {
       console.warn("[Glass intro] Aletheia audio locked — click the page to enable voice");
+      for (const step of steps) {
+        step.onStart?.();
+      }
       return;
     }
 
@@ -410,6 +413,7 @@ async function speakAletheiaSequenceInner(
       }
       if (!buffer) {
         console.warn("[Glass intro] Aletheia line failed after retries", line.text);
+        onStart?.();
         continue;
       }
 

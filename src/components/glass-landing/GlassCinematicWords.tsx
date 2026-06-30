@@ -369,6 +369,7 @@ export default function GlassCinematicWords({
   const stageRef = useRef<HTMLDivElement>(null);
   const lineRef = useRef<HTMLParagraphElement>(null);
   const sceneRunRef = useRef(0);
+  const wasActiveRef = useRef(false);
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
   const speakAletheiaRef = useRef<
@@ -486,11 +487,14 @@ export default function GlassCinematicWords({
   }, [started, aletheiaVoice]);
 
   useEffect(() => {
-    if (!active) {
-      stopAletheiaSpeak();
-      resetIntroMusicPresentationDuck();
-      document.documentElement.classList.remove("glass-intro-aletheia-speaking");
+    if (active) {
+      wasActiveRef.current = true;
+      return;
     }
+    if (!wasActiveRef.current) return;
+    stopAletheiaSpeak();
+    resetIntroMusicPresentationDuck();
+    document.documentElement.classList.remove("glass-intro-aletheia-speaking");
   }, [active]);
 
   useEffect(() => {
@@ -564,6 +568,10 @@ export default function GlassCinematicWords({
         await delay(enterMs);
         if (!isCurrentRun()) return;
         setPhase("hold");
+
+        if (!scene.focusZoom && beatCount > 0) {
+          setRevealedBeats(0);
+        }
 
         if (scene.focusZoom) {
           const forwardAll = scene.focusForwardAll === true;
@@ -650,6 +658,11 @@ export default function GlassCinematicWords({
             await delay(staggerMs * Math.max(sequenceItems.length, 1));
             setRevealedBeats(beatCount - 1);
           }
+
+          if (!isCurrentRun()) return;
+          setRevealedBeats((current) =>
+            current === null ? beatCount - 1 : Math.max(current, beatCount - 1),
+          );
 
           if (!isCurrentRun()) return;
         }

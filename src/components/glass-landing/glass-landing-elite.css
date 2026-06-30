@@ -872,6 +872,13 @@
   animation: iivo-hero-reveal 1.85s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+/* Hero word cinema — keep the frame fully opaque; parent fade hid beats on production */
+html.glass-hero-cinema-pending .glass-landing--intro-complete .iivo-hero {
+  animation: none;
+  opacity: 1;
+  transform: translateX(-50%);
+}
+
 @keyframes iivo-hero-reveal {
   0% {
     opacity: 0;
@@ -1158,7 +1165,7 @@
 /* Grey glass fill — fully opaque, same size as LED (no scale gap) */
 .iivo-hero .glass-cinema-words__glass {
   z-index: 2;
-  color: transparent;
+  color: #9eacbf;
   -webkit-text-fill-color: transparent;
   background:
     linear-gradient(
