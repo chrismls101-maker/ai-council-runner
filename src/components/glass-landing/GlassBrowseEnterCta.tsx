@@ -1,32 +1,17 @@
-import { useEffect, useRef, type JSX } from "react";
+import { type JSX } from "react";
 import {
   formatGlassBrowseSocialProof,
   useGlassBrowseSocialProof,
 } from "../../hooks/useGlassBrowseSocialProof";
 import { useGlassBrowse } from "./glassBrowseMode";
-import { useGlassCinematicIntro } from "./glassCinematicIntro";
-
-const AUTO_ENTER_MS = 1500;
 
 export default function GlassBrowseEnterCta(): JSX.Element | null {
   const { enter, active, exiting } = useGlassBrowse();
-  const intro = useGlassCinematicIntro();
   const { entered, demoEnabled, loading } = useGlassBrowseSocialProof();
   const socialLabel = formatGlassBrowseSocialProof(entered);
   const engaged = active || exiting;
-  const autoEnterAttempted = useRef(false);
 
-  useEffect(() => {
-    if (!demoEnabled || loading || engaged || autoEnterAttempted.current) return;
-    if (intro.enabled && !intro.complete) return;
-    const timer = window.setTimeout(() => {
-      autoEnterAttempted.current = true;
-      enter();
-    }, AUTO_ENTER_MS);
-    return () => window.clearTimeout(timer);
-  }, [demoEnabled, loading, engaged, enter, intro.enabled, intro.complete]);
-
-  if (!demoEnabled) return null;
+  if (!demoEnabled || loading) return null;
 
   return (
     <div className={`glass-browse-enter${engaged ? " glass-browse-enter--engaged" : ""}`}>

@@ -71,6 +71,7 @@ const EXIT_ANIM_MS = 480;
 type GlassBrowseContextValue = {
   active: boolean;
   exiting: boolean;
+  dismissed: boolean;
   deviceProfile: GlassBrowseDeviceProfile;
   hint: GlassBrowseHint;
   agentsPanelOpen: boolean;
@@ -101,6 +102,7 @@ function useGlassBrowseDevice(): GlassBrowseDeviceProfile {
 export function GlassBrowseProvider({ children }: { children: ReactNode }): JSX.Element {
   const [active, setActive] = useState(false);
   const [exiting, setExiting] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
   const [hintId, setHintId] = useState("hero");
   const [agentsPanelOpen, setAgentsPanelOpen] = useState(false);
   const [demoResponse, setDemoResponse] = useState<string | null>(null);
@@ -116,10 +118,11 @@ export function GlassBrowseProvider({ children }: { children: ReactNode }): JSX.
 
   const exit = useCallback((source: GlassBrowseExitSource = "manual_button"): void => {
     clearAutoExitTimer();
-    if (!active) return;
+    if (!active && !exiting) return;
     if (source === "auto") {
       trackGlassBrowseEvent("auto_exit");
     } else {
+      setDismissed(true);
       trackGlassBrowseEvent("manual_exit", glassBrowseExitMetadata(source));
     }
     setExiting(true);
@@ -128,10 +131,16 @@ export function GlassBrowseProvider({ children }: { children: ReactNode }): JSX.
       setExiting(false);
       setAgentsPanelOpen(false);
       setDemoResponse(null);
+      document.documentElement.classList.remove(
+        "glass-browse-active",
+        "glass-browse-active--phone",
+        "glass-browse-active--tablet",
+      );
     }, EXIT_ANIM_MS);
-  }, [active, clearAutoExitTimer]);
+  }, [active, exiting, clearAutoExitTimer]);
 
   const enter = useCallback((): void => {
+    setDismissed(false);
     setExiting(false);
     setActive(true);
     setHintId("hero");
@@ -235,6 +244,7 @@ export function GlassBrowseProvider({ children }: { children: ReactNode }): JSX.
     (): GlassBrowseContextValue => ({
       active,
       exiting,
+      dismissed,
       deviceProfile,
       hint: (isGlassBrowseMobile(deviceProfile) ? MOBILE_HINTS : HINTS)[hintId]
         ?? (isGlassBrowseMobile(deviceProfile) ? MOBILE_HINTS.hero : HINTS.hero),
@@ -246,7 +256,7 @@ export function GlassBrowseProvider({ children }: { children: ReactNode }): JSX.
       submitDemoAsk,
       clearDemoResponse: () => setDemoResponse(null),
     }),
-    [active, exiting, deviceProfile, hintId, agentsPanelOpen, demoResponse, enter, exit, submitDemoAsk],
+    [active, exiting, dismissed, deviceProfile, hintId, agentsPanelOpen, demoResponse, enter, exit, submitDemoAsk],
   );
 
   return <GlassBrowseContext.Provider value={value}>{children}</GlassBrowseContext.Provider>;

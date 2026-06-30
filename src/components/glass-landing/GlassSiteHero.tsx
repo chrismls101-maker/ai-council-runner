@@ -1,6 +1,8 @@
 import type { JSX, ReactNode } from "react";
+import { useEffect } from "react";
 import GlassCinematicWords from "./GlassCinematicWords";
 import GlassIntelligentCard from "./GlassIntelligentCard";
+import { useGlassCinematicIntro } from "./glassCinematicIntro";
 
 const CAPABILITIES = [
   {
@@ -36,17 +38,60 @@ const CAPABILITIES = [
 ] as const;
 
 export default function GlassSiteHero({ cta }: { cta: ReactNode }): JSX.Element {
+  const intro = useGlassCinematicIntro();
+  const cinemaActive = !intro.enabled || intro.complete;
+  const cinemaStartScene = intro.enabled ? 1 : 0;
+  const cinemaEntryDelay = intro.enabled ? 500 : 0;
+  const heroCinemaPending = intro.enabled && cinemaActive && !intro.heroCinemaComplete;
+
+  useEffect(() => {
+    if (!intro.enabled) return;
+    if (heroCinemaPending) {
+      document.documentElement.classList.add("glass-hero-cinema-pending");
+      document.documentElement.classList.remove("glass-hero-cinema-complete");
+    }
+  }, [intro.enabled, heroCinemaPending]);
+
   return (
-    <div className="glass-site-hero">
-      <section className="glass-hero-cinema" aria-label="IIVO Glass cinematic hero">
-        <GlassCinematicWords phraseMs={2400} loop />
-        <div className="glass-hero-cinema__scroll" aria-hidden="true">
-          <span className="glass-hero-cinema__scroll-line" />
-          <span className="glass-hero-cinema__scroll-label">Scroll</span>
+    <div
+      className={[
+        "glass-site-hero",
+        heroCinemaPending ? "glass-site-hero--cinema-pending" : "",
+        intro.heroCinemaComplete ? "glass-site-hero--cinema-complete" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <section className="iivo-hero" aria-label="IIVO Glass cinematic hero">
+        <div className="iivo-hero__grid" aria-hidden="true" />
+        <div className="iivo-hero__noise" aria-hidden="true" />
+        <div className="iivo-hero__glow" aria-hidden="true" />
+        <div className="iivo-hero__content">
+          <GlassCinematicWords
+            key={cinemaActive ? "cinema-live" : "cinema-wait"}
+            phraseMs={4800}
+            active={cinemaActive}
+            startSceneIndex={cinemaStartScene}
+            entryDelayMs={cinemaEntryDelay}
+            aletheiaVoice
+            onComplete={intro.markHeroCinemaComplete}
+          />
+        </div>
+        <div className="iivo-hero__scroll" aria-hidden="true">
+          <span className="iivo-hero__scroll-line" />
+          <span className="iivo-hero__scroll-label">Scroll</span>
         </div>
       </section>
 
-      <div className="glass-site-hero__rest">
+      <div
+        className={[
+          "glass-site-hero__rest",
+          intro.heroCinemaComplete ? "glass-site-hero__rest--revealed" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        aria-hidden={!intro.heroCinemaComplete}
+      >
         <header className="glass-site-hero__head">
           <p className="glass-site-hero__eyebrow">AI-native computing layer</p>
           <h1 className="glass-site-hero__title">IIVO Glass</h1>

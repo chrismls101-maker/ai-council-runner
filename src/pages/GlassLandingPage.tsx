@@ -185,11 +185,8 @@ export default function GlassLandingPage() {
 }
 
 function GlassLandingPageWithIntro(): JSX.Element {
-  const { enter } = useGlassBrowse();
-
   return (
     <GlassCinematicIntroProvider
-      onGlassActivate={() => enter()}
       onComplete={() => {
         document.documentElement.classList.add("glass-chrome-settling");
         window.setTimeout(() => {
@@ -215,7 +212,7 @@ function GlassLandingPageContent(): JSX.Element {
   const browsePresent = (browse?.active || browse?.exiting) ?? false;
   const intro = useGlassCinematicIntro();
 
-  useSmoothScroll(intro.complete && !browsePresent);
+  useSmoothScroll(intro.heroCinemaComplete && !browsePresent);
 
   useEffect(() => {
     trackGlassBrowsePageViewOnce();

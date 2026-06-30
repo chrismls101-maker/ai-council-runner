@@ -3,14 +3,20 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .glass-landing {
-  --gl-bg: #ffffff;
+  --gl-bg: #e5e7ef;
   --gl-surface: rgba(255, 255, 255, 0.62);
   --gl-surface-2: rgba(255, 255, 255, 0.82);
   --gl-border: rgba(0, 0, 0, 0.07);
-  --gl-text: #0a0a0a;
-  --gl-muted: rgba(10, 10, 10, 0.48);
-  --gl-accent: #0a0a0a;
-  --gl-accent-glow: rgba(10, 10, 10, 0.08);
+  --gl-text: rgba(41, 46, 63, 0.92);
+  --gl-muted: rgba(41, 46, 63, 0.52);
+  --gl-accent: rgba(41, 46, 63, 0.92);
+  --gl-accent-glow: rgba(133, 145, 175, 0.12);
+  --iivo-page-bg: #e5e7ef;
+  --iivo-hero-grey-outer: #d4d8e4;
+  --iivo-hero-grey-inner: #e8ebf3;
+  --iivo-hero-grey-core: #e5e8f1;
+  --iivo-hero-shadow: rgba(133, 145, 175, 0.22);
+  --iivo-text-dark: rgba(41, 46, 63, 0.92);
   --gl-glass-shadow:
     0 1px 0 rgba(255, 255, 255, 0.95) inset,
     0 -1px 0 rgba(0, 0, 0, 0.04) inset,
@@ -22,7 +28,9 @@
     0 4px 12px rgba(0, 0, 0, 0.05),
     0 24px 64px rgba(80, 120, 180, 0.1);
 
-  background: #ffffff;
+  background:
+    radial-gradient(circle at 50% 14%, rgba(255, 255, 255, 0.85), transparent 34%),
+    linear-gradient(180deg, #eff1f7 0%, var(--iivo-page-bg) 100%);
   color: var(--gl-text);
 }
 
@@ -32,9 +40,7 @@
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background:
-    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(180, 210, 255, 0.12), transparent 60%),
-    radial-gradient(ellipse 60% 40% at 100% 80%, rgba(200, 220, 255, 0.08), transparent 55%);
+  background: none;
 }
 
 .glass-landing__desktop-scene {
@@ -129,7 +135,7 @@
 /* ── Hero ── */
 .glass-site-hero {
   position: relative;
-  padding: clamp(32px, 6vw, 72px) 0 clamp(48px, 8vw, 96px);
+  padding: 0 0 clamp(48px, 8vw, 96px);
   overflow: visible;
 }
 
@@ -838,42 +844,173 @@
   background: rgba(255, 255, 255, 0.6);
 }
 
-/* ── Hero — full viewport cinematic words ── */
-.glass-hero-cinema {
+/* ── Hero — grey LED card + cinematic words ── */
+.iivo-hero {
   position: relative;
-  display: grid;
-  place-items: center;
-  min-height: 100dvh;
-  min-height: 100svh;
-  margin: 0 calc(-1 * clamp(12px, 3vw, 32px));
-  padding: clamp(48px, 8vw, 96px) clamp(20px, 5vw, 48px);
+  width: min(1400px, calc(100vw - 64px));
+  min-height: min(76vh, 820px);
+  margin: clamp(18px, 3vw, 32px) auto clamp(8px, 2vw, 16px);
+  margin-left: 50%;
+  transform: translateX(-50%);
+  border-radius: 34px;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.12)),
+    linear-gradient(145deg, #d8dce8 0%, #d1d6e2 35%, #cfd4df 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 20px 55px var(--iivo-hero-shadow),
+    0 55px 120px rgba(126, 135, 160, 0.17);
+}
+
+.iivo-hero:has(.glass-cinema-words--focus-forward),
+.iivo-hero:has(.glass-cinema-words--focus-on-screen) {
+  overflow: visible;
+}
+
+.glass-landing--intro-complete .iivo-hero {
+  animation: iivo-hero-reveal 1.85s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes iivo-hero-reveal {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(32px) scale(0.982);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+.iivo-hero::before {
+  content: "";
+  position: absolute;
+  inset: 12px;
+  border-radius: 28px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 255, 255, 0.82));
+  box-shadow:
+    0 0 8px rgba(255, 255, 255, 0.95),
+    0 0 20px rgba(255, 255, 255, 0.78),
+    0 0 42px rgba(255, 255, 255, 0.52),
+    inset 0 0 1px rgba(255, 255, 255, 1);
+  pointer-events: none;
+}
+
+.iivo-hero::after {
+  content: "";
+  position: absolute;
+  inset: 18px;
+  border-radius: 23px;
+  background:
+    radial-gradient(circle at 50% 16%, rgba(255, 255, 255, 0.78), transparent 28%),
+    linear-gradient(180deg, var(--iivo-hero-grey-inner) 0%, var(--iivo-hero-grey-core) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 0 rgba(193, 199, 214, 0.9),
+    inset 0 0 0 1px rgba(236, 239, 248, 0.7);
+  pointer-events: none;
+}
+
+.iivo-hero__glow {
+  position: absolute;
+  inset: 12px;
+  border-radius: 28px;
+  box-shadow:
+    inset 0 0 28px rgba(255, 255, 255, 0.55),
+    inset 0 0 80px rgba(255, 255, 255, 0.16);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.iivo-hero__grid {
+  position: absolute;
+  inset: 18px;
+  border-radius: 23px;
+  z-index: 1;
+  opacity: 0.18;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.3) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.25) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: radial-gradient(circle at center, black 35%, transparent 88%);
+  pointer-events: none;
+}
+
+.iivo-hero__noise {
+  position: absolute;
+  inset: 18px;
+  border-radius: 23px;
+  z-index: 2;
+  opacity: 0.1;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.15' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.9'/%3E%3C/svg%3E");
+  mix-blend-mode: soft-light;
+  pointer-events: none;
+}
+
+.iivo-hero__content {
+  position: relative;
+  z-index: 3;
+  min-height: min(76vh, 820px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding: clamp(52px, 7vw, 80px) clamp(24px, 4vw, 48px) clamp(76px, 9vw, 92px);
   text-align: center;
 }
 
-.glass-hero-cinema .glass-cinema-words {
-  min-height: clamp(320px, 42vh, 480px);
+.iivo-hero__subtitle {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: min(620px, 88%);
+  margin: clamp(24px, 4.5vw, 44px) 0 0;
+  padding: 0 clamp(12px, 2vw, 24px);
+  box-sizing: border-box;
+  text-align: center;
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: clamp(14px, 1.65vw, 17px);
+  font-weight: 400;
+  line-height: 1.6;
+  letter-spacing: 0.01em;
+  color: rgba(41, 46, 63, 0.62);
+  opacity: 0;
+  transform: translateY(10px);
+  transition:
+    opacity 1.35s cubic-bezier(0.16, 1, 0.3, 1) 0.45s,
+    transform 1.35s cubic-bezier(0.16, 1, 0.3, 1) 0.45s;
 }
 
-.glass-hero-cinema__scroll {
+.iivo-hero__subtitle--visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.iivo-hero__scroll {
   position: absolute;
-  bottom: clamp(28px, 5vw, 48px);
+  bottom: clamp(24px, 4vw, 36px);
   left: 50%;
   transform: translateX(-50%);
+  z-index: 4;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
   opacity: 0.42;
-  animation: glass-hero-scroll-pulse 2.8s ease-in-out infinite;
+  animation: iivo-hero-scroll-pulse 2.8s ease-in-out infinite;
+  pointer-events: none;
 }
 
-.glass-hero-cinema__scroll-line {
+.iivo-hero__scroll-line {
   width: 1px;
-  height: 48px;
-  background: linear-gradient(180deg, transparent, #0a0a0a 55%, transparent);
+  height: 44px;
+  background: linear-gradient(180deg, transparent, rgba(41, 46, 63, 0.45) 55%, transparent);
 }
 
-.glass-hero-cinema__scroll-label {
+.iivo-hero__scroll-label {
+  font-family: "Inter", system-ui, sans-serif;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.28em;
@@ -881,13 +1018,775 @@
   color: var(--gl-muted);
 }
 
-@keyframes glass-hero-scroll-pulse {
+.iivo-hero .glass-cinema-words {
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.iivo-hero .glass-cinema-words__stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 100%;
+  min-height: clamp(100px, 16vh, 180px);
+  padding: 0 0 0.08em;
+  box-sizing: border-box;
+  overflow: visible;
+}
+
+.iivo-hero .glass-cinema-words__line-fit {
+  --line-fit-scale: 1;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  transform: scale(var(--line-fit-scale));
+  transform-origin: center center;
+  will-change: transform;
+}
+
+.iivo-hero .glass-cinema-words__line {
+  position: relative;
+  z-index: 1;
+  display: inline-grid;
+  flex-shrink: 0;
+  margin: 0;
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: clamp(58px, 8.2vw, 118px);
+  line-height: 1.12;
+  letter-spacing: -0.055em;
+  font-weight: 500;
+  white-space: nowrap;
+  max-width: none;
+  isolation: isolate;
+  filter: none;
+  opacity: 0;
+  transform: translateY(22px);
+  overflow: visible;
+  padding: 0.02em 0 0.12em;
+}
+
+.iivo-hero .glass-cinema-words__line--medium {
+  font-size: clamp(50px, 7.2vw, 98px);
+  letter-spacing: -0.05em;
+}
+
+.iivo-hero .glass-cinema-words__line--long {
+  font-size: clamp(42px, 5.6vw, 78px);
+  letter-spacing: -0.04em;
+}
+
+.iivo-hero .glass-cinema-words__line--finale-phrase {
+  font-size: clamp(48px, 7.2vw, 108px);
+  letter-spacing: 0.05em;
+  line-height: 1;
+}
+
+.iivo-hero .glass-cinema-words__line--hero-phrase {
+  font-size: clamp(72px, 11.5vw, 148px);
+  letter-spacing: -0.048em;
+  line-height: 1.08;
+}
+
+.iivo-hero .glass-cinema-words__finale-bloom {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 0;
+  width: min(96vw, 920px);
+  height: clamp(80px, 14vw, 140px);
+  transform: translate(-50%, -50%) scale(0.5);
+  border-radius: 999px;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(
+    ellipse 72% 68% at 50% 50%,
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(255, 255, 255, 0.45) 32%,
+    rgba(255, 255, 255, 0.08) 58%,
+    transparent 72%
+  );
+  animation: iivo-cinema-finale-bloom 3.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.iivo-hero .glass-cinema-words__finale-bloom--rest {
+  animation: none;
+  opacity: 0.22;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.iivo-hero .glass-cinema-words__line--in,
+.iivo-hero .glass-cinema-words__line--hold,
+.iivo-hero .glass-cinema-words__line--out {
+  filter: none;
+}
+
+.iivo-hero .glass-cinema-words__line--hold {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.iivo-hero .glass-cinema-words__line > span {
+  grid-area: 1 / 1;
+  overflow: visible;
+  line-height: 1.12;
+  padding: 0 0 0.1em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
+}
+
+/* White LED tube — crisp edge + outer bloom */
+.iivo-hero .glass-cinema-words__led {
+  z-index: 1;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  -webkit-text-stroke: 1.35px rgba(255, 255, 255, 0.96);
+  paint-order: stroke fill;
+  text-shadow:
+    0 0 1px rgba(255, 255, 255, 1),
+    0 0 4px rgba(255, 255, 255, 0.82),
+    0 0 10px rgba(255, 255, 255, 0.55),
+    0 0 22px rgba(255, 255, 255, 0.22);
+  filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.55));
+}
+
+/* Grey glass fill — fully opaque, same size as LED (no scale gap) */
+.iivo-hero .glass-cinema-words__glass {
+  z-index: 2;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  background:
+    linear-gradient(
+      160deg,
+      rgba(255, 255, 255, 0.5) 0%,
+      rgba(255, 255, 255, 0.08) 32%,
+      rgba(255, 255, 255, 0) 44%
+    ),
+    linear-gradient(
+      180deg,
+      #c8d0de 0%,
+      #bac4d4 30%,
+      #adb8ca 58%,
+      #9eacbf 100%
+    );
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+/* Frosted overlay — top-weighted, no blend washout */
+.iivo-hero .glass-cinema-words__frost {
+  z-index: 3;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.05' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='0.45'/%3E%3C/svg%3E"),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.42) 0%,
+      rgba(255, 255, 255, 0.14) 38%,
+      rgba(255, 255, 255, 0) 62%
+    );
+  background-size: 64px 64px, 100% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+/* Specular gloss — highlight on upper half only */
+.iivo-hero .glass-cinema-words__shine {
+  z-index: 4;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.88) 0%,
+    rgba(255, 255, 255, 0.35) 22%,
+    rgba(255, 255, 255, 0.06) 40%,
+    transparent 52%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+.iivo-hero .glass-cinema-words__line-fit--stagger {
+  justify-content: center;
+  transform-origin: center center;
+}
+
+.iivo-hero .glass-cinema-words__line-fit--focus-zoom {
+  width: 100%;
+  min-height: clamp(5.5rem, 14vw, 9.5rem);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: scale(var(--line-fit-scale, 1));
+  transition: transform 0.95s cubic-bezier(0.2, 1, 0.34, 1);
+  transform-style: preserve-3d;
+  transform-origin: center center;
+}
+
+.iivo-hero .glass-cinema-words--focus-zoom .glass-cinema-words__line-fit--focus-zoom {
+  transform: scale(calc(var(--line-fit-scale, 1) * 1.06));
+}
+
+.iivo-hero .glass-cinema-words--focus-forward .glass-cinema-words__line-fit--focus-zoom {
+  transform: scale(calc(var(--line-fit-scale, 1) * 1.08));
+}
+
+.iivo-hero .glass-cinema-words--focus-on-screen .glass-cinema-words__line-fit--focus-zoom {
+  transform: scale(calc(var(--line-fit-scale, 1) * 1.14));
+}
+
+.iivo-hero .glass-cinema-words--focus-zoom .glass-cinema-words__stage {
+  perspective: 620px;
+  perspective-origin: 50% 50%;
+  min-height: clamp(130px, 22vh, 260px);
+}
+
+.iivo-hero .glass-cinema-words--focus-forward .glass-cinema-words__stage {
+  perspective: 540px;
+  perspective-origin: 50% 50%;
+  min-height: clamp(170px, 30vh, 340px);
+}
+
+.iivo-hero .glass-cinema-words--focus-on-screen .glass-cinema-words__stage {
+  min-height: clamp(190px, 34vh, 380px);
+}
+
+.iivo-hero .glass-cinema-words--focus-zoom .glass-cinema-words__line--stagger {
+  display: block;
+  position: relative;
+  width: 100%;
+  min-height: clamp(5.5rem, 14vw, 9.5rem);
+  text-align: center;
+  gap: 0;
+  transform-style: preserve-3d;
+  font-size: clamp(72px, 11.2vw, 152px);
+  letter-spacing: -0.052em;
+}
+
+.iivo-hero .glass-cinema-words--focus-forward .glass-cinema-words__line--stagger {
+  font-size: clamp(92px, 16.8vw, 196px);
+  min-height: clamp(7.5rem, 20vw, 13rem);
+  padding: 0.08em 0.12em 0.16em;
+}
+
+.iivo-hero .glass-cinema-words__line--stagger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 0.36em;
+  opacity: 1;
+  transform: none;
+  line-height: 1.12;
+  overflow: visible;
+  padding: 0.02em 0 0.12em;
+}
+
+.iivo-hero .glass-cinema-words__line--stagger.glass-cinema-words__line--hold {
+  opacity: 1;
+  transform: none;
+}
+
+.iivo-hero .glass-cinema-words__segment {
+  display: inline-grid;
+  position: relative;
+  flex: 0 0 auto;
+  overflow: visible;
+  line-height: 1.12;
+  padding: 0 0 0.1em;
+}
+
+.iivo-hero .glass-cinema-words__segment > span {
+  grid-area: 1 / 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
+}
+
+.iivo-hero .glass-cinema-words__segment--pending {
+  visibility: hidden;
+}
+
+.iivo-hero .glass-cinema-words__segment--shown {
+  visibility: visible;
+  opacity: 1;
+}
+
+.iivo-hero .glass-cinema-words__segment--in {
+  visibility: visible;
+  animation: iivo-cinema-beat-in 0.95s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Focus zoom — must follow base segment rules so absolute centering wins */
+.iivo-hero .glass-cinema-words--focus-zoom .glass-cinema-words__segment {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  flex: none;
+  margin: 0;
+  white-space: nowrap;
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+  will-change: transform, opacity, filter;
+  transition:
+    opacity 0.78s cubic-bezier(0.2, 1, 0.34, 1),
+    transform 1.02s cubic-bezier(0.2, 1, 0.34, 1),
+    filter 0.72s ease;
+  transform-origin: center center;
+}
+
+.iivo-hero .glass-cinema-words--focus-zoom .glass-cinema-words__segment--pending,
+.iivo-hero .glass-cinema-words--focus-zoom .glass-cinema-words__segment--focus-past {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(-50%, -50%, -32px) scale(0.9);
+  filter: blur(3px);
+}
+
+.iivo-hero .glass-cinema-words--focus-zoom .glass-cinema-words__segment--focus-intro {
+  visibility: visible;
+  opacity: 1;
+  transform: translate3d(-50%, -50%, 0) scale(1);
+  filter: blur(0);
+  animation: iivo-cinema-focus-intro 0.95s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.iivo-hero .glass-cinema-words--focus-zoom .glass-cinema-words__segment--focus-armed {
+  visibility: visible;
+  opacity: 0.18;
+  transform: translate3d(-50%, -50%, -38px) scale(0.86);
+  filter: blur(5px);
+}
+
+.iivo-hero .glass-cinema-words--focus-zoom .glass-cinema-words__segment--focus-forward.glass-cinema-words__segment--focus-armed {
+  transform: translate3d(-50%, -50%, -110px) scale(0.68);
+  opacity: 0.08;
+}
+
+.iivo-hero .glass-cinema-words--focus-zoom .glass-cinema-words__segment--focus-zoom-in {
+  visibility: visible;
+  opacity: 1;
+  transform: translate3d(-50%, -50%, 0) scale(1);
+  filter: blur(0);
+}
+
+/* Emerge from inside the display — toward you, centered on stage */
+.iivo-hero .glass-cinema-words--focus-zoom .glass-cinema-words__segment--focus-forward.glass-cinema-words__segment--focus-zoom-in {
+  transform: translate3d(-50%, -50%, 108px) scale(1.38) rotateX(-3deg);
+  filter: blur(0);
+}
+
+.iivo-hero .glass-cinema-words--focus-forward .glass-cinema-words__segment--focus-forward.glass-cinema-words__segment--focus-zoom-in .glass-cinema-words__glass {
+  text-shadow: 0 20px 40px rgba(0, 0, 0, 0.16);
+}
+
+.iivo-hero .glass-cinema-words--focus-zoom .glass-cinema-words__segment--focus-zoom-out,
+.iivo-hero .glass-cinema-words--focus-zoom .glass-cinema-words__segment--focus-exiting {
+  visibility: visible;
+  opacity: 0;
+  transform: translate3d(-50%, -50%, -36px) scale(0.88);
+  filter: blur(4px);
+}
+
+.iivo-hero .glass-cinema-words--focus-zoom .glass-cinema-words__segment--focus-forward.glass-cinema-words__segment--focus-zoom-out,
+.iivo-hero .glass-cinema-words--focus-zoom .glass-cinema-words__segment--focus-forward.glass-cinema-words__segment--focus-exiting {
+  transform: translate3d(-50%, -50%, -120px) scale(0.64) rotateX(4deg);
+}
+
+.iivo-hero .glass-cinema-words__line--in {
+  animation: iivo-cinema-word-in 1.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.iivo-hero .glass-cinema-words__line--stagger.glass-cinema-words__line--out,
+.iivo-hero .glass-cinema-words__line--out {
+  animation: iivo-cinema-word-out 1.05s cubic-bezier(0.55, 0, 0.92, 0.42) forwards;
+}
+
+/* Finale — INTELLIGENT GLASS power-on */
+.iivo-hero .glass-cinema-words__line--finale {
+  animation:
+    iivo-cinema-finale-surge 3.6s cubic-bezier(0.16, 1, 0.3, 1) forwards,
+    iivo-cinema-finale-track 3.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.iivo-hero .glass-cinema-words__line--finale .glass-cinema-words__led {
+  animation: iivo-cinema-finale-led-surge 3.6s ease-out forwards;
+}
+
+.iivo-hero .glass-cinema-words__line--finale .glass-cinema-words__glass {
+  animation: iivo-cinema-finale-glass-fill 3.6s ease-out forwards;
+}
+
+.iivo-hero .glass-cinema-words__line--finale .glass-cinema-words__frost,
+.iivo-hero .glass-cinema-words__line--finale .glass-cinema-words__shine {
+  animation: iivo-cinema-finale-glass-fill 3.6s ease-out forwards;
+  animation-delay: 0.08s;
+}
+
+.iivo-hero .glass-cinema-words__line--rest {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  letter-spacing: 0.06em;
+}
+
+.iivo-hero .glass-cinema-words__line--rest .glass-cinema-words__led,
+.iivo-hero .glass-cinema-words__line--rest .glass-cinema-words__glass,
+.iivo-hero .glass-cinema-words__line--rest .glass-cinema-words__frost,
+.iivo-hero .glass-cinema-words__line--rest .glass-cinema-words__shine {
+  animation: none;
+  opacity: 1;
+}
+
+@keyframes iivo-cinema-finale-bloom {
+  0%,
+  4% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.45);
+  }
+  32% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.55);
+  }
+  38% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.12);
+  }
+  48% {
+    opacity: 0.55;
+    transform: translate(-50%, -50%) scale(1.02);
+  }
+  62% {
+    opacity: 0.28;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    opacity: 0.2;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes iivo-cinema-finale-surge {
+  0% {
+    opacity: 0;
+    transform: translateY(28px) scale(0.92);
+  }
+  5% {
+    opacity: 0;
+  }
+  6% {
+    opacity: 0.95;
+    transform: translateY(14px) scale(0.96);
+  }
+  7% {
+    opacity: 0.04;
+  }
+  8% {
+    opacity: 1;
+    transform: translateY(10px) scale(0.97);
+  }
+  9% {
+    opacity: 0.08;
+  }
+  10% {
+    opacity: 0.92;
+  }
+  11% {
+    opacity: 0.12;
+  }
+  13% {
+    opacity: 1;
+    transform: translateY(6px) scale(0.985);
+  }
+  16% {
+    opacity: 0.2;
+  }
+  19% {
+    opacity: 1;
+    transform: translateY(3px) scale(0.99);
+  }
+  24% {
+    opacity: 0.45;
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  38% {
+    opacity: 1;
+    transform: translateY(-3px) scale(1.022);
+  }
+  44% {
+    opacity: 1;
+    transform: translateY(0) scale(1.012);
+  }
+  58% {
+    opacity: 1;
+    transform: translateY(0) scale(1.004);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes iivo-cinema-finale-track {
+  0% {
+    letter-spacing: 0.16em;
+  }
+  38% {
+    letter-spacing: 0.1em;
+  }
+  58% {
+    letter-spacing: 0.055em;
+  }
+  100% {
+    letter-spacing: 0.06em;
+  }
+}
+
+@keyframes iivo-cinema-finale-led-surge {
+  0%,
+  5% {
+    opacity: 0;
+    filter: brightness(0);
+  }
+  6% {
+    opacity: 1;
+    filter: brightness(3) drop-shadow(0 0 24px rgba(255, 255, 255, 1));
+  }
+  7% {
+    opacity: 0.15;
+    filter: brightness(0.2);
+  }
+  8% {
+    opacity: 1;
+    filter: brightness(2.2) drop-shadow(0 0 20px rgba(255, 255, 255, 0.95));
+  }
+  10% {
+    opacity: 0.2;
+    filter: brightness(0.3);
+  }
+  13% {
+    opacity: 1;
+    filter: brightness(1.6) drop-shadow(0 0 16px rgba(255, 255, 255, 0.85));
+  }
+  19% {
+    opacity: 0.35;
+  }
+  30% {
+    opacity: 1;
+    filter:
+      brightness(1.1)
+      drop-shadow(0 0 6px rgba(255, 255, 255, 0.85))
+      drop-shadow(0 0 20px rgba(255, 255, 255, 0.45));
+  }
+  38% {
+    opacity: 1;
+    filter:
+      brightness(1.85)
+      drop-shadow(0 0 14px rgba(255, 255, 255, 1))
+      drop-shadow(0 0 40px rgba(255, 255, 255, 0.65))
+      drop-shadow(0 0 72px rgba(255, 255, 255, 0.28));
+  }
+  50% {
+    filter:
+      brightness(1.15)
+      drop-shadow(0 0 8px rgba(255, 255, 255, 0.9))
+      drop-shadow(0 0 24px rgba(255, 255, 255, 0.48));
+  }
+  100% {
+    opacity: 1;
+    filter:
+      drop-shadow(0 0 6px rgba(255, 255, 255, 0.85))
+      drop-shadow(0 0 20px rgba(255, 255, 255, 0.45));
+  }
+}
+
+@keyframes iivo-cinema-finale-glass-fill {
+  0%,
+  22% {
+    opacity: 0;
+  }
+  32% {
+    opacity: 0.25;
+  }
+  40% {
+    opacity: 0.7;
+  }
+  48%,
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes iivo-cinema-word-in {
+  0% {
+    opacity: 0;
+    transform: translateY(32px) scale(0.955);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes iivo-cinema-word-out {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-22px) scale(0.975);
+  }
+}
+
+@keyframes iivo-cinema-beat-in {
+  0% {
+    opacity: 0;
+    transform: translateY(24px) scale(0.9);
+  }
+  55% {
+    opacity: 1;
+    transform: translateY(-3px) scale(1.012);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes iivo-cinema-focus-intro {
+  0% {
+    opacity: 0;
+    transform: translate3d(-50%, -48%, -18px) scale(0.94);
+    filter: blur(2px);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(-50%, -50%, 0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes iivo-cinema-focus-zoom-in {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.78);
+    filter: blur(14px);
+  }
+  58% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.16);
+    filter: blur(0);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.12);
+    filter: blur(0);
+  }
+}
+
+@keyframes iivo-cinema-beat-out {
+  to {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.97);
+  }
+}
+
+@keyframes iivo-hero-scroll-pulse {
   0%, 100% { opacity: 0.28; transform: translateX(-50%) translateY(0); }
   50% { opacity: 0.55; transform: translateX(-50%) translateY(6px); }
 }
 
 .glass-site-hero__rest {
   padding-top: clamp(24px, 4vw, 48px);
+}
+
+/* Hero cinema — hold the frame, reveal the page when she finishes */
+html.glass-hero-cinema-pending {
+  overflow: hidden;
+}
+
+html.glass-hero-cinema-pending body {
+  overflow: hidden;
+}
+
+html.glass-hero-cinema-pending .glass-landing__section--hero {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+html.glass-hero-cinema-pending .iivo-hero__scroll {
+  opacity: 0;
+  pointer-events: none;
+}
+
+html.glass-hero-cinema-pending .glass-site-hero__rest,
+html.glass-hero-cinema-pending .glass-landing__section--hero ~ .glass-landing__section,
+html.glass-hero-cinema-pending .glass-monument {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.glass-site-hero__rest--revealed {
+  animation: glass-hero-rest-reveal 1.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+html.glass-hero-cinema-complete .glass-landing__section--hero ~ .glass-landing__section {
+  animation: glass-hero-rest-reveal 1.35s cubic-bezier(0.16, 1, 0.3, 1) 0.12s both;
+}
+
+html.glass-hero-cinema-complete .glass-monument {
+  animation: glass-hero-rest-reveal 1.35s cubic-bezier(0.16, 1, 0.3, 1) 0.18s both;
+}
+
+@keyframes glass-hero-rest-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.glass-hero-cinema-pending {
+    overflow: auto;
+  }
+
+  html.glass-hero-cinema-pending body {
+    overflow: auto;
+  }
+
+  html.glass-hero-cinema-pending .glass-site-hero__rest,
+  html.glass-hero-cinema-pending .glass-landing__section--hero ~ .glass-landing__section,
+  html.glass-hero-cinema-pending .glass-monument {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  .glass-site-hero__rest--revealed,
+  html.glass-hero-cinema-complete .glass-landing__section--hero ~ .glass-landing__section,
+  html.glass-hero-cinema-complete .glass-monument {
+    animation: none;
+  }
 }
 
 .glass-landing__section--hero {
@@ -1067,9 +1966,111 @@
   justify-content: center;
 }
 
+@media (max-width: 900px) {
+  .iivo-hero {
+    width: calc(100vw - 36px);
+    min-height: 58vh;
+    border-radius: 26px;
+  }
+
+  .iivo-hero::before {
+    inset: 9px;
+    border-radius: 21px;
+  }
+
+  .iivo-hero::after,
+  .iivo-hero__grid,
+  .iivo-hero__noise {
+    inset: 14px;
+    border-radius: 17px;
+  }
+
+  .iivo-hero__glow {
+    inset: 9px;
+    border-radius: 21px;
+  }
+
+  .iivo-hero__content {
+    min-height: 58vh;
+    padding: 36px 12px clamp(76px, 18vw, 92px);
+  }
+
+  .iivo-hero__subtitle {
+    max-width: 92%;
+    margin-top: clamp(20px, 5vw, 32px);
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  .iivo-hero__scroll {
+    bottom: 20px;
+  }
+
+  .iivo-hero__scroll-line {
+    height: 36px;
+  }
+
+  .iivo-hero .glass-cinema-words__stage {
+    min-height: clamp(72px, 14vh, 120px);
+    padding: 0;
+  }
+
+  .iivo-hero .glass-cinema-words__line {
+    font-size: clamp(34px, 10.5vw, 52px);
+  }
+
+  .iivo-hero .glass-cinema-words__line--medium {
+    font-size: clamp(30px, 9vw, 44px);
+  }
+
+  .iivo-hero .glass-cinema-words__line--long {
+    font-size: clamp(24px, 7.2vw, 36px);
+  }
+
+  .iivo-hero .glass-cinema-words__line--finale-phrase {
+    font-size: clamp(28px, 8.5vw, 46px);
+    letter-spacing: 0.04em;
+  }
+
+  .iivo-hero .glass-cinema-words__line--hero-phrase {
+    font-size: clamp(40px, 12vw, 64px);
+    letter-spacing: -0.04em;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .glass-hero-cinema__scroll {
+  .iivo-hero__scroll {
     animation: none;
+  }
+
+  .iivo-hero__subtitle {
+    transition: none;
+  }
+
+  .iivo-hero__subtitle--visible {
+    opacity: 1;
+    transform: none;
+  }
+
+  .iivo-hero .glass-cinema-words__line--finale {
+    animation: none;
+    opacity: 1;
+    transform: none;
+    letter-spacing: 0.06em;
+  }
+
+  .iivo-hero .glass-cinema-words__line--finale .glass-cinema-words__led,
+  .iivo-hero .glass-cinema-words__line--finale .glass-cinema-words__glass,
+  .iivo-hero .glass-cinema-words__line--finale .glass-cinema-words__frost,
+  .iivo-hero .glass-cinema-words__line--finale .glass-cinema-words__shine {
+    animation: none;
+    opacity: 1;
+  }
+
+  .iivo-hero .glass-cinema-words__finale-bloom {
+    animation: none;
+    opacity: 0.18;
+    transform: translate(-50%, -50%) scale(1);
   }
 
   .glass-monument__letter {

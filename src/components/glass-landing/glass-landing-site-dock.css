@@ -1,11 +1,13 @@
 /* Sticky macOS dock — site navigation + future app slots */
 
 .glass-site-dock {
-  --mac-dock-bar-h: 42px;
+  --mac-dock-bar-h: 51px;
+  --mac-dock-radius: 16px;
+  --mac-dock-inset: clamp(22px, 4.5vw, 36px);
   position: fixed;
-  left: var(--overlay-glass-frame-inset-left, 7px);
-  right: var(--overlay-glass-frame-inset-right, 7px);
-  bottom: 6px;
+  left: var(--mac-dock-inset);
+  right: var(--mac-dock-inset);
+  bottom: 4px;
   z-index: 45;
   opacity: 0;
   pointer-events: none;
@@ -17,35 +19,86 @@
   pointer-events: auto;
 }
 
-html.glass-intro-active .glass-site-dock {
+html.glass-intro-active .glass-site-dock:not(.glass-site-dock--decorative) {
   opacity: 0;
   pointer-events: none;
 }
 
+/* Boot keeps the real Mac dock pinned above the cinematic layer */
+html.glass-intro-active[data-intro-phase="boot"] .glass-site-dock.glass-site-dock--visible {
+  opacity: 1;
+  pointer-events: none;
+  z-index: 110;
+}
+
 .glass-site-dock__wrap {
   position: relative;
+  width: 100%;
 }
 
 .glass-site-dock__bar {
+  position: relative;
   display: flex;
   align-items: flex-end;
   justify-content: center;
   flex-wrap: nowrap;
-  gap: 5px;
+  gap: 0;
   width: 100%;
   min-height: var(--mac-dock-bar-h);
-  padding: 3px 10px 4px;
-  /* Real Mac stadium ends — semicircle caps, not a tall pill */
-  border-radius: calc(var(--mac-dock-bar-h) / 2);
-  background: rgba(255, 255, 255, 0.13);
-  backdrop-filter: blur(28px) saturate(180%);
-  -webkit-backdrop-filter: blur(28px) saturate(180%);
-  border: 0.5px solid rgba(255, 255, 255, 0.22);
+  padding: 5px 16px 6px;
+  border-radius: var(--mac-dock-radius);
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(180, 180, 190, 0.42);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
   box-shadow:
-    0 10px 28px rgba(0, 0, 0, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+    0 18px 40px rgba(0, 0, 0, 0.1),
+    0 3px 10px rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.32);
   overflow-x: auto;
+  overflow-y: hidden;
   scrollbar-width: none;
+  isolation: isolate;
+}
+
+.glass-site-dock__apps {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: nowrap;
+  gap: 7px;
+  flex-shrink: 0;
+}
+
+.glass-site-dock__tail {
+  display: flex;
+  align-items: flex-end;
+  flex-shrink: 0;
+  gap: 8px;
+  margin-left: 16px;
+  padding-left: 4px;
+}
+
+.glass-site-dock__minimized {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.glass-site-dock__bar::before {
+  content: "";
+  position: absolute;
+  inset: 1px 1px auto 1px;
+  height: 46%;
+  border-radius: calc(var(--mac-dock-radius) - 1px) calc(var(--mac-dock-radius) - 1px)
+    calc(var(--mac-dock-radius) - 2px) calc(var(--mac-dock-radius) - 2px);
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.85),
+    rgba(255, 255, 255, 0.22)
+  );
+  pointer-events: none;
 }
 
 .glass-site-dock__bar::-webkit-scrollbar {
@@ -53,18 +106,190 @@ html.glass-intro-active .glass-site-dock {
 }
 
 .glass-site-dock__reflect {
-  height: 6px;
-  margin: 1px calc(var(--mac-dock-bar-h) * 0.28) 0;
-  border-radius: 0 0 999px 999px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent);
-  opacity: 0.35;
-  transform: scaleY(0.5);
+  height: 5px;
+  margin: 1px 18px 0;
+  border-radius: 0 0 10px 10px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.35), transparent);
+  opacity: 0.28;
+  transform: scaleY(0.45);
   filter: blur(1px);
   pointer-events: none;
 }
 
+.glass-site-dock__divider {
+  position: relative;
+  z-index: 1;
+  align-self: center;
+  width: 1px;
+  height: 32px;
+  margin: 0 2px;
+  flex-shrink: 0;
+  background: rgba(160, 160, 170, 0.55);
+  box-shadow: inset -0.5px 0 0 rgba(255, 255, 255, 0.35);
+  border-radius: 1px;
+}
+
+/* Minimized Safari windows — dock right cluster */
+.glass-site-dock__minimized-window {
+  position: relative;
+  flex-shrink: 0;
+  width: 54px;
+  height: 38px;
+  margin-bottom: 1px;
+  padding: 0;
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  border-radius: 5px;
+  cursor: default;
+  overflow: hidden;
+  background: #f5f5f7;
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.22),
+    0 1px 2px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  transition: transform 0.18s cubic-bezier(0.34, 1.45, 0.64, 1);
+  transform-origin: bottom center;
+}
+
+.glass-site-dock__minimized-window::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+.glass-site-dock__minimized-window::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 50%, #fff 0%, #fff 20%, transparent 21%),
+    conic-gradient(from 0deg, #ff3b30, #ff9500, #ffcc00, #34c759, #007aff, #5856d6, #ff2d55, #ff3b30);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+  pointer-events: none;
+}
+
+.glass-site-dock__minimized-window--iivo {
+  background: linear-gradient(180deg, #fff 0%, #f8f8fa 100%);
+}
+
+.glass-site-dock__minimized-window--iivo::before {
+  background:
+    linear-gradient(180deg, rgba(114, 215, 223, 0.35) 0%, transparent 42%),
+    repeating-linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.06) 0,
+      rgba(0, 0, 0, 0.06) 2px,
+      transparent 2px,
+      transparent 5px
+    );
+  background-size: 100% 100%, 70% 55%;
+  background-position: center, 50% 62%;
+  background-repeat: no-repeat;
+}
+
+.glass-site-dock__minimized-window--docs {
+  background: #fff;
+}
+
+.glass-site-dock__minimized-window--docs::before {
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, 0.07) 0 28%, transparent 28%),
+    repeating-linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.08) 0,
+      rgba(0, 0, 0, 0.08) 2px,
+      transparent 2px,
+      transparent 5px
+    );
+  background-size: 100% 100%, 62% 50%;
+  background-position: center, 72% 58%;
+  background-repeat: no-repeat;
+}
+
+.glass-site-dock__minimized-window--github {
+  background: linear-gradient(180deg, #0d1117 0%, #161b22 100%);
+}
+
+.glass-site-dock__minimized-window--github::before {
+  background:
+    radial-gradient(circle at 50% 38%, rgba(56, 139, 253, 0.35) 0%, transparent 55%),
+    linear-gradient(90deg, transparent 18%, rgba(255, 255, 255, 0.08) 18%, rgba(255, 255, 255, 0.08) 82%, transparent 82%),
+    repeating-linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.12) 0,
+      rgba(255, 255, 255, 0.12) 2px,
+      transparent 2px,
+      transparent 5px
+    );
+  background-size: 100% 100%, 100% 18%, 55% 45%;
+  background-position: center, center 8%, 58% 62%;
+  background-repeat: no-repeat;
+}
+
+/* macOS trash can — dock tail */
+.glass-site-dock__trash {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  width: 36px;
+  height: 42px;
+  margin-bottom: 0;
+  padding: 0;
+  border: none;
+  cursor: default;
+  background: transparent;
+  transform-origin: bottom center;
+}
+
+.glass-site-dock__trash::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  width: 28px;
+  height: 32px;
+  transform: translateX(-50%);
+  border-radius: 4px 4px 6px 6px;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(0, 0, 0, 0.06) 0,
+      rgba(0, 0, 0, 0.06) 1px,
+      transparent 1px,
+      transparent 4px
+    ),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.35) 18%, transparent 20%),
+    linear-gradient(180deg, #ececf0 0%, #d1d1d6 38%, #b8b8bd 72%, #a8a8ad 100%);
+  box-shadow:
+    0 2px 5px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    inset 0 -3px 6px rgba(0, 0, 0, 0.08);
+  clip-path: polygon(8% 12%, 92% 12%, 88% 100%, 12% 100%);
+}
+
+.glass-site-dock__trash::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 26px;
+  width: 20px;
+  height: 4px;
+  transform: translateX(-50%);
+  border-radius: 2px;
+  background: linear-gradient(180deg, #c7c7cc, #aeaeb2);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.6),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+}
+
 .glass-site-dock__icon {
   position: relative;
+  z-index: 1;
   flex-shrink: 0;
   width: 38px;
   height: 38px;
@@ -86,6 +311,15 @@ html.glass-intro-active .glass-site-dock {
 
 .glass-site-dock__icon:active:not(:disabled) {
   transform: scale(1.06) translateY(-2px);
+}
+
+.glass-site-dock__icon--decorative {
+  cursor: default;
+}
+
+.glass-site-dock__icon--decorative:hover,
+.glass-site-dock__icon--decorative:active {
+  transform: none;
 }
 
 .glass-site-dock__icon--running::after {
@@ -246,14 +480,199 @@ html.glass-intro-active .glass-site-dock {
   background: linear-gradient(145deg, #5ac8fa, #147efb 50%, #0a5dc7);
 }
 
+/* macOS app icons */
+.glass-site-dock__icon--finder {
+  background: linear-gradient(180deg, #6ec8ff 0%, #1e7fe8 100%);
+}
+
+.glass-site-dock__icon--finder::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 44%;
+  width: 14px;
+  height: 12px;
+  transform: translate(-50%, -50%);
+  border-radius: 2px 2px 4px 4px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: inset 0 -3px 0 rgba(30, 127, 232, 0.35);
+}
+
+.glass-site-dock__icon--safari {
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 50%, #fff 0%, #fff 18%, transparent 19%),
+    conic-gradient(from 0deg, #ff3b30, #ff9500, #ffcc00, #34c759, #007aff, #5856d6, #ff2d55, #ff3b30);
+}
+
+.glass-site-dock__icon--mail {
+  background: linear-gradient(180deg, #7eb8ff 0%, #3d8ef0 100%);
+}
+
+.glass-site-dock__icon--mail::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 16px;
+  height: 11px;
+  transform: translate(-50%, -42%);
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.92);
+  clip-path: polygon(0 0, 100% 0, 100% 70%, 50% 100%, 0 70%);
+}
+
+.glass-site-dock__icon--messages {
+  background: linear-gradient(180deg, #5fe07a 0%, #28c840 100%);
+  border-radius: 50%;
+}
+
+.glass-site-dock__icon--messages::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 11px;
+  transform: translate(-50%, -48%);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.glass-site-dock__icon--maps {
+  background: linear-gradient(180deg, #8ee0a8 0%, #34c759 55%, #f5d565 100%);
+}
+
+.glass-site-dock__icon--photos {
+  background: conic-gradient(from 45deg, #ff6b8a, #ffd166, #6ee7b7, #60a5fa, #c084fc, #ff6b8a);
+  border-radius: 50%;
+}
+
+.glass-site-dock__icon--facetime {
+  background: linear-gradient(180deg, #34d058 0%, #1aab3a 100%);
+  border-radius: 50%;
+}
+
+.glass-site-dock__icon--facetime::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 9px;
+  transform: translate(-50%, -50%);
+  border-radius: 3px;
+  border: 2px solid rgba(255, 255, 255, 0.92);
+}
+
+.glass-site-dock__icon--calendar {
+  background: linear-gradient(180deg, #fff 0%, #f2f2f7 100%);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.glass-site-dock__icon--calendar::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 35%;
+  background: #ff3b30;
+  border-radius: 8px 8px 0 0;
+}
+
+.glass-site-dock__icon--calendar::after {
+  content: "29";
+  position: absolute;
+  left: 50%;
+  top: 58%;
+  transform: translate(-50%, -50%);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  color: #1d1d1f;
+}
+
+.glass-site-dock__icon--music {
+  background: linear-gradient(180deg, #ff6b9d 0%, #fc3c6e 100%);
+}
+
+.glass-site-dock__icon--notes {
+  background: linear-gradient(180deg, #fff4b8 0%, #f5d565 100%);
+}
+
+.glass-site-dock__icon--settings {
+  background: linear-gradient(180deg, #b8bcc6 0%, #8e8e93 100%);
+}
+
+.glass-site-dock__icon--settings::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.65);
+}
+
+.glass-site-dock__icon--appstore {
+  background: linear-gradient(180deg, #5ac8fa 0%, #007aff 100%);
+}
+
+.glass-site-dock__icon--appstore::before {
+  content: "A";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.glass-site-dock__icon--cursor {
+  background: linear-gradient(180deg, #3a3a3c 0%, #1c1c1e 100%);
+  box-shadow:
+    0 1px 5px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 0 0 1px rgba(125, 212, 216, 0.35);
+}
+
+.glass-site-dock__icon--terminal {
+  background: linear-gradient(180deg, #2c2c2e 0%, #1c1c1e 100%);
+}
+
+.glass-site-dock__icon--terminal::before {
+  content: ">_";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(180, 240, 200, 0.92);
+}
+
+.glass-site-dock__icon--slack {
+  background: linear-gradient(180deg, #e8a5c8 0%, #611f69 55%, #36c5f0 100%);
+}
+
+.glass-site-dock__icon--chrome {
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, #ea4335, #fbbc05, #34a853, #4285f4, #ea4335);
+}
+
 @media (max-width: 720px) {
   .glass-site-dock {
-    bottom: 4px;
-    width: calc(100vw - 12px);
-  }
-
-  .glass-site-dock {
-    --mac-dock-bar-h: 38px;
+    --mac-dock-inset: 14px;
+    bottom: 3px;
+    --mac-dock-bar-h: 47px;
+    --mac-dock-radius: 14px;
   }
 
   .glass-site-dock__icon {
@@ -261,9 +680,42 @@ html.glass-intro-active .glass-site-dock {
     height: 34px;
   }
 
-  .glass-site-dock__icon--council,
-  .glass-site-dock__icon--memory,
-  .glass-site-dock__icon--docs {
+  .glass-site-dock__tail {
+    margin-left: 10px;
+    gap: 6px;
+  }
+
+  .glass-site-dock__minimized-window {
+    width: 46px;
+    height: 32px;
+  }
+
+  .glass-site-dock__minimized-window:nth-child(2) {
+    display: none;
+  }
+
+  .glass-site-dock__trash {
+    width: 30px;
+    height: 36px;
+  }
+
+  .glass-site-dock__trash::before {
+    width: 24px;
+    height: 28px;
+  }
+
+  .glass-site-dock__trash::after {
+    bottom: 22px;
+    width: 17px;
+  }
+
+  .glass-site-dock__icon--maps,
+  .glass-site-dock__icon--facetime,
+  .glass-site-dock__icon--calendar,
+  .glass-site-dock__icon--appstore,
+  .glass-site-dock__icon--slack,
+  .glass-site-dock__icon--chrome,
+  .glass-site-dock__icon--signin {
     display: none;
   }
 }
