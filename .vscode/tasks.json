@@ -1,0 +1,56 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Native Glass: dev server",
+      "type": "shell",
+      "command": "npm run dev:server",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "nativeglass-server",
+        "pattern": { "regexp": "^.*$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": "Native Glass server listening"
+        }
+      },
+      "presentation": { "reveal": "always", "panel": "dedicated", "group": "nativeglass-dev" }
+    },
+    {
+      "label": "Native Glass: Vite client",
+      "type": "shell",
+      "command": "npm run dev:client",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "vite",
+        "pattern": { "regexp": "^.*$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": "Local:\\s+http://localhost:5173/"
+        }
+      },
+      "presentation": { "reveal": "always", "panel": "dedicated", "group": "nativeglass-dev" }
+    },
+    {
+      "label": "Native Glass: open live preview",
+      "type": "shell",
+      "command": "node scripts/open-dev-preview.mjs",
+      "dependsOn": ["Native Glass: Vite client"],
+      "dependsOrder": "sequence",
+      "presentation": { "reveal": "silent", "panel": "shared", "close": true }
+    },
+    {
+      "label": "Native Glass: dev + live preview",
+      "dependsOn": [
+        "Native Glass: dev server",
+        "Native Glass: Vite client",
+        "Native Glass: open live preview"
+      ],
+      "dependsOrder": "parallel",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": []
+    }
+  ]
+}

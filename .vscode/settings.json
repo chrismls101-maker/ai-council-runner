@@ -1,0 +1,15 @@
+{
+  "remote.autoForwardPorts": true,
+  "remote.autoForwardPortsSource": "hybrid",
+  "simpleBrowser.focusLockIndicator.enabled": true,
+  "remote.portsAttributes": {
+    "5173": {
+      "label": "Native Glass (Vite)",
+      "onAutoForward": "openBrowser",
+      "elevateIfNeeded": true
+    },
+    "3001": {
+      "label": "Native Glass API"
+    }
+  }
+}
