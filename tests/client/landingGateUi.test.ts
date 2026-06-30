@@ -12,6 +12,8 @@ test("landing gate exposes password reveal and unlock storage key", () => {
 
   assert.match(gate, /landing-gate-password-reveal/);
   assert.match(gate, /type=\{showPassword \? "text" : "password"\}/);
+  assert.match(gate, /NATIVE_GLASS_MARK/);
+  assert.match(utils, /nativeglass_landing_gate_unlocked/);
   assert.match(utils, /iivo_landing_gate_unlocked/);
 });
 

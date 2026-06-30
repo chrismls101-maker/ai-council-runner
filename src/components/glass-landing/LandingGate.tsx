@@ -5,6 +5,11 @@ import {
   setLandingGateUnlockedLocally,
   unlockLandingGate,
 } from "../../utils/landingGate";
+import {
+  NATIVE_GLASS_DOMAIN,
+  NATIVE_GLASS_MARK,
+  NATIVE_GLASS_TAGLINE,
+} from "../../constants/nativeGlassBrand";
 import AnimatedGlassBackground from "./AnimatedGlassBackground";
 import GlassButton from "./GlassButton";
 import GlassPanel from "./GlassPanel";
@@ -74,8 +79,11 @@ export default function LandingGate({ children }: { children: React.ReactNode })
         <AnimatedGlassBackground />
         <div className="glass-landing-gate__shell">
           <GlassPanel className="glass-landing-gate__panel">
-            <p className="glass-landing-gate__eyebrow">Private preview</p>
-            <h1 className="glass-landing-gate__title">IIVO Glass</h1>
+            <p className="glass-landing-gate__eyebrow">Private preview · {NATIVE_GLASS_DOMAIN}</p>
+            <h1 className="glass-landing-gate__title">
+              <span className="glass-landing-gate__mark">{NATIVE_GLASS_MARK}</span>
+            </h1>
+            <p className="glass-landing-gate__tagline">{NATIVE_GLASS_TAGLINE}</p>
             <form className="glass-landing-gate__form" onSubmit={handleSubmit}>
               <label className="glass-landing-gate__label" htmlFor="landing-gate-password">
                 Password

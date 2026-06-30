@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -n server,client -c blue,green \"npm run dev:server\" \"npm run dev:client\"",
+    "dev": "concurrently -n server,client,preview -c blue,green,magenta \"npm run dev:server\" \"npm run dev:client\" \"node scripts/open-dev-preview.mjs\"",
     "dev:client": "vite",
     "prototype:glass-logo": "vite --open /prototypes/glass-logo/index.html",
     "dev:server": "tsx watch src/server/index.ts",
