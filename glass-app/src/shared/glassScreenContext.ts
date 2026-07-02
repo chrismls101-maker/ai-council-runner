@@ -181,7 +181,7 @@ export function buildGlassScreenContextStatus(
     return {
       kind: "vision_not_configured",
       label: "Screen: vision unavailable",
-      detail: "Enable IMAGE_VISION_ENABLED on the IIVO server.",
+      detail: "Enable IMAGE_VISION_ENABLED on the Native Glass server.",
       capturedAt: latest.capturedAt,
       ageSeconds,
     };

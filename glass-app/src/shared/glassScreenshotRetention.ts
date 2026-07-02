@@ -1,5 +1,5 @@
 /**
- * IIVO Glass screenshot retention policy (shared, no Electron).
+ * Native Glass screenshot retention policy (shared, no Electron).
  *
  * Where pixels go:
  * - Manual session Capture → local disk (session-screenshots/) + timeline event
@@ -74,7 +74,7 @@ export function buildVisualAskRetentionStatus(input: {
     return {
       kind: "uploaded_context",
       label: "Screen used for this answer",
-      detail: savedToSession ? "Saved to session · Uploaded to IIVO Context" : "Uploaded to IIVO Context",
+      detail: savedToSession ? "Saved to session · Uploaded to Studio" : "Uploaded to Studio",
       usedForAnswer: true,
       savedToSession,
       uploadedToContext: true,

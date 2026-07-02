@@ -57,7 +57,7 @@ test("buildVisualAskRetentionStatus labels", () => {
     savedToSession: false,
     uploadedToContext: true,
   });
-  assert.match(uploaded.detail ?? "", /Uploaded to IIVO Context/i);
+  assert.match(uploaded.detail ?? "", /Uploaded to Studio/i);
 });
 
 test("ephemeral discarded from pending buffer when not saved to session", () => {

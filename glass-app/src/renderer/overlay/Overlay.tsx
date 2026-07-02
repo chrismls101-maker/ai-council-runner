@@ -28,7 +28,47 @@ import { ConsentStep, allConsentGiven } from "../onboarding/ConsentStep.tsx";
 import { isUiLocaleChosen, parseUiLocaleSetting } from "../../shared/glassLocale.ts";
 // Aletheia core — live translate captions (design/IDE/terminal still disconnected)
 import { LiveTranslateCaptionsOverlay } from "./LiveTranslateCaptionsOverlay.tsx";
+import { RewriteMarginRail } from "./RewriteMarginRail.tsx";
+import { TextOverlayCardView } from "./TextOverlayCard.tsx";
+import { TextOverlayWhisperDot } from "./TextOverlayWhisperDot.tsx";
+import { OrientationOverlay } from "./OrientationOverlay.tsx";
 import { useGlassNotification } from "./useGlassNotification.ts";
+
+function PassiveIntelligenceOverlays({
+  state,
+  enterInteractive,
+  leaveInteractive,
+}: {
+  state: GlassState;
+  enterInteractive: () => void;
+  leaveInteractive: () => void;
+}): JSX.Element {
+  return (
+    <>
+      <RewriteMarginRail
+        enabled={state.typingIntelligenceActive === true}
+        enterInteractive={enterInteractive}
+        leaveInteractive={leaveInteractive}
+      />
+      <TextOverlayWhisperDot
+        enabled={state.textOverlayActive === true}
+        cardVisible={false}
+      />
+      <TextOverlayCardView
+        enabled={state.textOverlayActive === true}
+        state={state}
+        enterInteractive={enterInteractive}
+        leaveInteractive={leaveInteractive}
+      />
+      <OrientationOverlay
+        enabled={state.glassGuideActive === true}
+        state={state}
+        enterInteractive={enterInteractive}
+        leaveInteractive={leaveInteractive}
+      />
+    </>
+  );
+}
 // import { TerminalFeedWidget } from "./TerminalFeedWidget.tsx";
 // import { useExtractModeTranscript, useExtractBuildDetection, useExtractModeMainSync } from "./useExtractModeBridge.ts";
 // import { ExtractBuildCard } from "./ExtractBuildCard.tsx";
@@ -488,7 +528,7 @@ function OverlayStatus({ state }: { state: GlassState }): JSX.Element | null {
         </span>
       ) : null}
       {privacy.status === "sending" ? (
-        <span className="overlay-status__chip overlay-status__chip--send">Sending to IIVO</span>
+        <span className="overlay-status__chip overlay-status__chip--send">Sending to Glass</span>
       ) : null}
     </>
   );
@@ -1004,6 +1044,11 @@ export function Overlay(): JSX.Element {
           <OverlayGlassFrame />
           {renderComputerOperatorOverlayGlow(state)}
           <CompanionPresenceLayer state={state} />
+          <PassiveIntelligenceOverlays
+            state={state}
+            enterInteractive={enterInteractive}
+            leaveInteractive={leaveInteractive}
+          />
           <BuilderStripLayer
             state={state}
             onEnterInteractive={enterInteractive}
@@ -1058,6 +1103,11 @@ export function Overlay(): JSX.Element {
             leaveInteractive={leaveInteractive}
           />
         ) : null}
+        <PassiveIntelligenceOverlays
+          state={state}
+          enterInteractive={enterInteractive}
+          leaveInteractive={leaveInteractive}
+        />
         <BuilderStripLayer
           state={state}
           onEnterInteractive={enterInteractive}
@@ -1255,6 +1305,12 @@ export function Overlay(): JSX.Element {
           leaveInteractive={leaveInteractive}
         />
       ) : null}
+
+      <PassiveIntelligenceOverlays
+        state={state}
+        enterInteractive={enterInteractive}
+        leaveInteractive={leaveInteractive}
+      />
 
       {/* Aletheia core strip — terminal widget disconnected
       {state.terminalWidgetVisible && state.liveTerminal ? (

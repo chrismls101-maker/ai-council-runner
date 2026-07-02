@@ -1,0 +1,162 @@
+/* Glass Rewrite — margin rail, beads, annotation cards. Invisible when clean. */
+
+.rewrite-rail {
+  position: fixed;
+  width: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.06);
+  z-index: 12000;
+  pointer-events: auto;
+}
+
+/* Beads appear only during pauses — a 200ms fade, nothing else. */
+.rewrite-rail__bead {
+  position: absolute;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  font-size: 10px;
+  line-height: 14px;
+  text-align: center;
+  cursor: pointer;
+  animation: rewrite-bead-in 200ms ease both;
+}
+
+@keyframes rewrite-bead-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.rewrite-rail__bead--missing {
+  color: rgba(167, 139, 250, 0.8);
+}
+
+.rewrite-rail__bead--contradicts {
+  color: rgba(251, 191, 36, 0.9);
+}
+
+.rewrite-rail__bead--tone {
+  color: rgba(156, 163, 175, 0.7);
+}
+
+/* Send-moment gate — one 300ms amber pulse. No sound, no modal. The user decides. */
+.rewrite-rail__bead--flare {
+  animation: rewrite-bead-flare 300ms ease-out 1;
+}
+
+@keyframes rewrite-bead-flare {
+  0% { text-shadow: 0 0 0 rgba(251, 191, 36, 0); transform: translate(-50%, -50%) scale(1); }
+  40% { text-shadow: 0 0 12px rgba(251, 191, 36, 0.95); transform: translate(-50%, -50%) scale(1.6); }
+  100% { text-shadow: 0 0 0 rgba(251, 191, 36, 0); transform: translate(-50%, -50%) scale(1); }
+}
+
+.rewrite-rail__card-anchor {
+  position: absolute;
+  left: 14px;
+  transform: translateY(-12px);
+}
+
+.rewrite-annotation {
+  width: 280px;
+  padding: 12px 14px;
+  font-size: 12px;
+  line-height: 1.5;
+  pointer-events: auto;
+}
+
+.rewrite-annotation__heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  margin-bottom: 8px;
+}
+
+.rewrite-annotation__heading--missing { color: rgba(196, 181, 253, 0.9); }
+.rewrite-annotation__heading--contradicts { color: rgba(251, 191, 36, 0.9); }
+.rewrite-annotation__heading--tone { color: rgba(156, 163, 175, 0.85); }
+
+.rewrite-annotation__glyph {
+  font-size: 12px;
+}
+
+/* Their exact words are the typographic center of every card. */
+.rewrite-annotation__quote {
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  border-left: 2px solid rgba(255, 255, 255, 0.18);
+  font-size: 13px;
+  font-style: italic;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.rewrite-annotation__note {
+  margin: 0 0 10px;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.rewrite-annotation__chip {
+  appearance: none;
+  border: 0.5px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 5px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.rewrite-annotation__chip:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.rewrite-annotation__chip--filled {
+  background: rgba(251, 191, 36, 0.16);
+  border-color: rgba(251, 191, 36, 0.45);
+  color: rgba(253, 230, 175, 0.95);
+}
+
+.rewrite-annotation__chip--filled:hover {
+  background: rgba(251, 191, 36, 0.26);
+}
+
+/* Whole-field rewrite suggestion (short drafts) — no name tag, no watching state. */
+.rewrite-suggestion {
+  position: fixed;
+  z-index: 12000;
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  pointer-events: auto;
+  outline: none;
+}
+
+.rewrite-suggestion__text {
+  margin: 0 0 10px;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.rewrite-suggestion__actions {
+  display: flex;
+  gap: 6px;
+}
+
+.rewrite-suggestion .rewrite-annotation__chip--filled {
+  background: rgba(167, 139, 250, 0.18);
+  border-color: rgba(167, 139, 250, 0.45);
+  color: rgba(226, 217, 255, 0.95);
+}
+
+.rewrite-suggestion .rewrite-annotation__chip--filled:hover {
+  background: rgba(167, 139, 250, 0.28);
+}

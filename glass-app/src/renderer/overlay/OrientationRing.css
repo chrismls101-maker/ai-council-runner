@@ -1,0 +1,87 @@
+/* Glass Guide ring — travels, traces in, settles into a quiet pulse. */
+
+.orientation-ring {
+  position: fixed;
+  pointer-events: none;
+  z-index: 11990;
+  /* Travel, not teleport — one ring instance morphing between regions. */
+  transition:
+    left 500ms cubic-bezier(0.4, 0, 0.2, 1),
+    top 500ms cubic-bezier(0.4, 0, 0.2, 1),
+    width 500ms cubic-bezier(0.4, 0, 0.2, 1),
+    height 500ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 150ms ease;
+  opacity: 1;
+  animation: orientation-ring-pulse 2.4s ease-in-out infinite;
+}
+
+.orientation-ring--traveling {
+  /* Always visible in transit; the pulse pauses while moving. */
+  animation: none;
+}
+
+.orientation-ring--fade-out {
+  opacity: 0;
+  transition: opacity 150ms ease-out;
+}
+
+.orientation-ring__svg {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+
+/* Stroked rounded-rect that traces itself in — not a filled box. */
+.orientation-ring__rect {
+  /* SVG geometry via CSS (Chromium) so the rect tracks the ring's live size. */
+  x: 1px;
+  y: 1px;
+  width: calc(100% - 2px);
+  height: calc(100% - 2px);
+  fill: none;
+  stroke: rgba(167, 139, 250, 0.95);
+  stroke-width: 1.5;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  filter: drop-shadow(0 0 10px rgba(167, 139, 250, 0.45));
+  animation: orientation-ring-trace 450ms ease-out forwards;
+}
+
+@keyframes orientation-ring-trace {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Settled pulse — half the old amplitude; presence, not alarm. */
+@keyframes orientation-ring-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+}
+
+/* Attention scrim — a whisper of contrast with a cut-out at the ring.
+   The box-shadow floods everything outside the cut-out. */
+.orientation-scrim {
+  position: fixed;
+  pointer-events: none;
+  z-index: 11985;
+  border-radius: 10px;
+  box-shadow: 0 0 0 200vmax rgba(0, 0, 0, 0.06);
+  opacity: 0;
+  transition:
+    opacity 300ms ease-out,
+    left 500ms cubic-bezier(0.4, 0, 0.2, 1),
+    top 500ms cubic-bezier(0.4, 0, 0.2, 1),
+    width 500ms cubic-bezier(0.4, 0, 0.2, 1),
+    height 500ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.orientation-scrim--on {
+  opacity: 1;
+  transition-duration: 200ms;
+}

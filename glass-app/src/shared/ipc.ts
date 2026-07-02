@@ -113,6 +113,8 @@ export const IPC = {
   e2eSimulateCaptureFail: "glass:e2e-simulate-capture-fail",
   e2eSimulateScreenEnumFail: "glass:e2e-simulate-screen-enum-fail",
   e2eSimulateSystemAudioEnumFail: "glass:e2e-simulate-system-audio-enum-fail",
+  e2eGetTextOverlayQaState: "glass:e2e-get-text-overlay-qa-state",
+  e2eResetTextOverlayQaState: "glass:e2e-reset-text-overlay-qa-state",
   e2eSetCaptureProbes: "glass:e2e-set-capture-probes",
   e2eResetSetupState: "glass:e2e-reset-setup-state",
   e2eOpenOnboarding: "glass:e2e-open-onboarding",
@@ -244,6 +246,54 @@ export const IPC = {
   extractBuildHandoff: "glass:extract-build-handoff",
   /** Main → overlay: full extract-mode transcript snapshot (system audio STT). */
   extractModeTranscript: "glass:extract-mode-transcript",
+  /** Main → overlay: Live Writing Intelligence runtime snapshot. */
+  typingIntelligenceUpdate: "glass:typing-intelligence-update",
+  /** Overlay → main: accept the rewrite suggestion (Tab). */
+  typingIntelligenceAccept: "glass:typing-intelligence-accept",
+  /** Overlay → main: dismiss the rewrite suggestion (Esc). */
+  typingIntelligenceDismiss: "glass:typing-intelligence-dismiss",
+  /** Main → overlay: show Glass this text overlay card. */
+  textOverlayShow: "glass:text-overlay-show",
+  /** Main → overlay: progressive level update for the live card. */
+  textOverlayUpdate: "glass:text-overlay-update",
+  /** Main → overlay: whisper-stage dot at the trigger point. */
+  textOverlayWhisper: "glass:text-overlay-whisper",
+  /** Main → overlay: dismiss the text overlay card. */
+  textOverlayDismiss: "glass:text-overlay-dismiss",
+  /** Overlay → main: user dismissed the text overlay card. */
+  textOverlayDismissRequest: "glass:text-overlay-dismiss-request",
+  /** Overlay → main: user clicked a text overlay action. */
+  textOverlayAction: "glass:text-overlay-action",
+  /** Main → overlay: Glass Rewrite delta findings for the focused field. */
+  rewriteFindingsUpdate: "glass:rewrite-findings-update",
+  /** Overlay → main: apply a Glass Rewrite finding (ranged replacement / insert). */
+  rewriteApplyFinding: "glass:rewrite-apply-finding",
+  /** Main → overlay: show Glass Guide orientation region. */
+  orientationShowRegion: "glass:orientation-show-region",
+  /** Main → overlay: dismiss orientation session UI. */
+  orientationDismiss: "glass:orientation-dismiss",
+  /** Main → overlay: orientation session pause/resume state. */
+  orientationSessionState: "glass:orientation-session-state",
+  /** Main → overlay: stuck detector prompt. */
+  orientationStuckPrompt: "glass:orientation-stuck-prompt",
+  /** Overlay → main: orientation L4 action. */
+  orientationAction: "glass:orientation-action",
+  /** Overlay → main: skip/pause orientation session. */
+  orientationSkip: "glass:orientation-skip",
+  /** Overlay → main: confirm real navigate click. */
+  orientationNavigateConfirm: "glass:orientation-navigate-confirm",
+  /** Overlay → main: stuck prompt response. */
+  orientationStuckResponse: "glass:orientation-stuck-response",
+  /** Main → overlay: session opt-in pill ("New to X? Space to orient"). */
+  orientationOffer: "glass:orientation-offer",
+  /** Overlay → main: response to the opt-in pill (accept / decline / timeout). */
+  orientationOfferResponse: "glass:orientation-offer-response",
+  /** Main → overlay: play a fetched orientation speech buffer (single TTS fetch). */
+  orientationSpeak: "glass:orientation-speak",
+  /** Main → overlay: cancel in-flight orientation speech mid-word. */
+  orientationSpeechCancel: "glass:orientation-speech-cancel",
+  /** Overlay → main: speech playback finished (or failed) for a nonce. */
+  orientationSpeechDone: "glass:orientation-speech-done",
   // ── Terminal Auto Fix (Task #65) ────────────────────────────────────────────
   /**
    * Renderer (terminal window) → main: given a failed command + output, ask Claude
@@ -826,6 +876,7 @@ export type TranscriptionControlCommand =
   | { type: "meetings-deepgram-start" }
   | { type: "video-watch-audio-start" }
   | { type: "video-watch-audio-stop" }
+  | { type: "video-watch-dialogue-resume" }
   | { type: "connect-system-audio" }
   | { type: "test-system-audio" }
   | { type: "test-blackhole" };
@@ -877,6 +928,20 @@ export type GlassCommand =
   | { type: "set-auto-upload-captures-to-context"; enabled: boolean }
   | { type: "set-mic-auto-send-after-silence"; enabled: boolean }
   | { type: "set-clipboard-intelligence-enabled"; enabled: boolean }
+  | { type: "set-typing-intelligence-enabled"; enabled: boolean }
+  | { type: "toggle-typing-intelligence" }
+  | { type: "set-text-overlay-enabled"; enabled: boolean }
+  | { type: "toggle-text-overlay" }
+  | { type: "set-glass-guide-enabled"; enabled: boolean }
+  | { type: "toggle-glass-guide" }
+  | { type: "set-glass-guide-auto-actions"; enabled: boolean }
+  | { type: "toggle-glass-guide-auto-actions" }
+  | { type: "orient-in-app" }
+  | { type: "e2e-simulate-orientation" }
+  | { type: "e2e-simulate-text-overlay-ambient" }
+  | { type: "e2e-simulate-text-overlay-clipboard"; text: string }
+  | { type: "e2e-poll-text-overlay-clipboard" }
+  | { type: "e2e-fire-text-overlay-action"; cardId: string; op: import("./textOverlayTypes.ts").TextOverlayActionOp }
   /** Dev-only: inject text into the clipboard intelligence pipeline without polling. */
   | { type: "clipboard-intel-debug-inject"; text: string }
   | { type: "save-last-visual-capture" }
@@ -1120,6 +1185,12 @@ export type GlassCommand =
   | { type: "deactivate-aletheia-deployed-execution" }
   /** E2E — patch GlassState fields for deterministic dashboard tests. */
   | { type: "e2e-set-state"; patch: Partial<GlassState> }
+  /** E2E — show Live Writing Intelligence overlay (watching / showing) for visual tests. */
+  | {
+      type: "e2e-inject-typing-intelligence";
+      enableFeature?: boolean;
+      patch: Partial<import("./glassTypingIntelligenceTypes.ts").TypingIntelligenceState>;
+    }
   // ── Glass built-in terminal (PTY) ─────────────────────────────────────────
   | { type: "glass-terminal-open" }
   | { type: "glass-terminal-close" }
@@ -1178,6 +1249,8 @@ export type GlassCommand =
   // ── Glass Companion (strip-toggle voice presence) ─────────────────────────
   /** Toggle Companion session on/off from the builder strip. */
   | { type: "toggle-companion-mode"; origin?: "strip" }
+  /** Video Watch — user resumed playback; end dialogue beat and acknowledge. */
+  | { type: "video-watch-dialogue-resume" }
   /** Enter companion privacy mode (timed silence). */
   | { type: "companion-privacy-start"; durationMs?: number }
   /** End companion privacy mode early. */
@@ -1472,12 +1545,12 @@ export interface GlassState {
   /** Live Meeting Intelligence runtime (populated only when meetings mode is active). */
   meetingIntelligence?: MeetingIntelligenceState;
   /**
-   * Active IIVO API server URL (resolved from saved settings or env var).
+   * Active Native Glass API server URL (resolved from saved settings or env var).
    * Exposed so the Settings UI can display and edit the current value.
    */
   iivoApiUrl: string;
   /**
-   * Active IIVO web app URL (resolved from saved settings or env var).
+   * Active Native Glass web app URL (resolved from saved settings or env var).
    * Exposed so the Settings UI can display and edit the current value.
    */
   iivoWebUrl: string;
@@ -1491,6 +1564,20 @@ export interface GlassState {
   githubPATConfigured: boolean;
   /** Set true if the last GitHub API call rejected the stored PAT. */
   githubTokenInvalid: boolean;
+  /** Live Writing Intelligence — rewrite overlay active for this session. */
+  typingIntelligenceActive?: boolean;
+  /** Glass this — text overlay intelligence active for this session. */
+  textOverlayActive?: boolean;
+  /** Glass Guide — live orientation layer active for this session. */
+  glassGuideActive?: boolean;
+  /** Ghost cursor for Glass Guide (separate from computer operator). */
+  orientationGhostCursor?: import("./liveOrientationTypes.ts").OrientationGhostCursorState | null;
+  /** Pending navigate confirmation for Glass Guide real clicks. */
+  orientationNavigateConfirm?: {
+    regionId: string;
+    label: string;
+    nonce: number;
+  } | null;
   /** Live terminal feed — always-on polling of frontmost terminal output. */
   liveTerminal: LiveTerminalFeed | null;
   /** Whether the floating terminal widget is visible in the overlay. */
@@ -1635,6 +1722,12 @@ export interface GlassState {
   commandPaletteOpen?: boolean;
   /** Builder-strip Glass Companion session is active (toggle, not hold-to-talk). */
   companionModeActive?: boolean;
+  /** Video Watch co-viewing — frames + transcript buffer active. */
+  videoWatchActive?: boolean;
+  /** User is in a pause-and-talk beat with Aletheia during Video Watch. */
+  videoWatchDialogueActive?: boolean;
+  /** Co-view playback rhythm — playing vs paused (from screen motion). */
+  videoWatchPlaybackPhase?: import("./aletheiaVideoWatchPlayback.ts").VideoWatchPlaybackPhase;
   /** Incremented on each Companion toggle — overlay starts/stops the voice loop. */
   companionModeToggleNonce?: number;
   /** OmniParser warm-up phase for Aletheia intro TTS on Companion toggle. */

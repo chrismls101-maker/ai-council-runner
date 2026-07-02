@@ -1,8 +1,8 @@
 /**
- * IIVO Glass — Electron main process.
+ * Native Glass — Electron main process.
  *
  * Owns the canonical Glass state, handles user-initiated commands, talks to the
- * existing IIVO Context Bridge API, and hands off to the IIVO web app. Nothing
+ * existing IIVO Context Bridge API, and hands off to the Native Glass web app. Nothing
  * captures or sends without an explicit command from the UI.
  */
 
@@ -273,6 +273,7 @@ import {
   ensureOnboardingOverlayClickThrough,
   syncLanguagePickerOverlayInteractivity,
   withOverlayNativeDialog,
+  isGlassChromeBootPending,
 } from "./windows.ts";
 import { computeCommandBarOverlayClearancePx, builderStripLayoutReservePx, glassLayoutContentBottomY } from "../shared/glassLayoutMath.ts";
 import { shouldShowBuilderStrip } from "../shared/builderStripVisibility.ts";
@@ -309,6 +310,12 @@ import {
 } from "./listenSessionChains.ts";
 import { agentBus, AgentBus, type AudioBuildPlanPayload } from "./agentEventBus.ts";
 import { migrateAnthropicKeyFromEnv, resolveAnthropicApiKey } from "./anthropicKeyStore.ts";
+import {
+  isDeepgramApiKeyConfigured,
+  isDeepgramApiKeyMeta,
+  migrateDeepgramKeyFromEnv,
+  resolveDeepgramApiKey,
+} from "./deepgramKeyStore.ts";
 import {
   ensureAnthropicKeyActivated,
   gateActivationAfterOnboarding,
@@ -538,6 +545,10 @@ import {
   revokeComputerOperatorPersistentGrant,
   saveComputerOperatorPersistentGrant,
 } from "./aletheiaComputerGrantStore.ts";
+import {
+  startChromeBrowserBridgeServer,
+  stopChromeBrowserBridgeServer,
+} from "./chromeBrowserBridge.ts";
 import { planFromNaturalLanguage } from "../shared/aletheiaConversationPlanner.ts";
 import {
   buildPersistentGrantFromPlan,
@@ -670,6 +681,12 @@ import {
 import { shouldOfferCopilot, withCopilotConfig } from "../shared/copilotConfig.ts";
 import { GLASS_MODE_PRESETS } from "../shared/glassModePresets.ts";
 import {
+  planModePipelineReconcile,
+  shouldPreserveAudioOnTranslateStop,
+  shouldRunListenNotesFromConfig,
+  shouldRunMeetingsFromConfig,
+} from "../shared/glassModeRuntime.ts";
+import {
   buildCurrentMomentContext,
   listenInterruptStatusLabel,
 } from "../shared/currentMomentContext.ts";
@@ -775,16 +792,38 @@ import {
   startVideoWatchMode,
   stopVideoWatchMode,
   setVideoWatchAudioLifecycleHooks,
+  setVideoWatchPlaybackTransitionHook,
 } from "./aletheiaVideoWatchRunner.ts";
 import { initVideoWatchFrameDecoder } from "./aletheiaVideoWatchFrameDecode.ts";
 import {
   shouldOmitSessionTranscriptForWatch,
-  shouldResumeSystemAudioCapture,
-  isListenNotesResumeEligible,
-  isMeetingsDeepgramResumeEligible,
+  resolveSessionResumeTranscriptionControl,
+  shouldRunMeetingsDeepgramPipeline as shouldRunMeetingsDeepgramPipelinePure,
   resolveDeepgramFragmentRoute,
   resolveDeepgramFallbackScope,
 } from "../shared/aletheiaVideoWatchMode.ts";
+import {
+  WATCH_RESUME_ACK_SPEECH,
+} from "../shared/aletheiaVideoWatchDialogue.ts";
+import {
+  markWatchPlaybackResumedByUser,
+  recordWatchPauseQuestion,
+  type VideoWatchPlaybackTransition,
+} from "../shared/aletheiaVideoWatchPlayback.ts";
+import {
+  appendCoViewJournalToBuffer,
+  buildCoViewQaAletheiaNote,
+  buildCoViewSessionSummaryNote,
+  summarizeCoViewAnswerForJournal,
+  type CoViewJournalEntry,
+} from "../shared/aletheiaVideoWatchJournal.ts";
+import type { VideoWatchBuffer } from "../shared/aletheiaVideoWatchMode.ts";
+import {
+  buildCoViewTimelineSessionEvent,
+  coViewSessionTitle,
+  shouldEnsureVideoLearningSessionForCoView,
+  type CoViewTimelineEventKind,
+} from "../shared/aletheiaVideoWatchSessionTimeline.ts";
 import {
   decideListenCardSurface,
   type ListenCardSurfaceDecision,
@@ -955,7 +994,7 @@ import {
 import { shouldRaiseOverlayForNotifications } from "../shared/glassNotifications.ts";
 import type { CaptureDiagnosticsReport } from "../shared/captureDiagnostics.ts";
 import { runCaptureDiagnosticsReport } from "./captureDiagnostics.ts";
-import { startScreenDigestLoop, isDigestFresh } from "./glassScreenDigest.ts";
+import { startScreenDigestLoop, isDigestFresh, kickAmbientReadingLoop } from "./glassScreenDigest.ts";
 import type { ScreenDigestResult } from "./glassScreenDigest.ts";
 import {
   collectGlassAppIdentityReport,
@@ -1154,6 +1193,54 @@ import {
   buildErrorPrompt,
   buildCodePrompt,
 } from "./clipboardIntelligence.ts";
+import {
+  acceptTypingIntelligenceRewrite,
+  configureTypingIntelligence,
+  dismissTypingIntelligenceRewrite,
+  e2ePushTypingIntelligenceState,
+  isTypingIntelligenceActive,
+  startTypingIntelligence,
+  stopTypingIntelligence,
+} from "./glassTypingIntelligence.ts";
+import {
+  configureTextOverlay,
+  dismissTextOverlayCard,
+  getTextOverlayQaState,
+  resetTextOverlayQaState,
+  handleTextOverlayAction,
+  startTextOverlay,
+  stopTextOverlay,
+  isTextOverlayBusy,
+} from "./textOverlay.ts";
+import {
+  refreshTextOverlayHotkey,
+  fireAmbientTextOverlayTrigger,
+  e2eSimulateClipboardCopy,
+  e2ePollClipboard,
+} from "./textOverlayTrigger.ts";
+import {
+  configureLiveOrientation,
+  handleAppFocusForOrientation,
+  handleOrientationActionRequest,
+  handleOrientationNavigateConfirm,
+  handleOrientationOfferResponse,
+  handleOrientationSkip,
+  handleOrientationStuckResponse,
+  notifyOrientationWindowTitle,
+  orientCurrentAppIfEnabled,
+  startLiveOrientation,
+  stopLiveOrientation,
+  triggerManualOrientation,
+  isLiveOrientationBusy,
+  isOrientationSessionActive,
+  tryHandleOrientationGoal,
+} from "./liveOrientation.ts";
+import { notifyOrientationSpeechDone } from "./liveOrientationTts.ts";
+import { configureRewriteDelta, applyRewriteFinding } from "./glassRewriteDelta.ts";
+import { configureRewriteLedger } from "./glassRewriteLedger.ts";
+import { getFrontmostAppIdentity } from "./appIdentity.ts";
+import { LEGAL_PDF_SENTENCE } from "../shared/textOverlayFixtures.ts";
+import { upsertUserContext } from "./glassMemoryEngine.ts";
 
 loadGlassEnv();
 loadGlassEnvUserData(app.getPath("userData"));
@@ -1164,11 +1251,11 @@ const mainDir = dirname(fileURLToPath(import.meta.url));
   const { apiKey, voiceId, model } = glassElevenLabsConfig();
   if (apiKey) {
     console.log(
-      `[IIVO Glass] TTS: ElevenLabs — ${describeElevenLabsVoice(voiceId)} (${voiceId}) model=${model}`,
+      `[Native Glass] TTS: ElevenLabs — ${describeElevenLabsVoice(voiceId)} (${voiceId}) model=${model}`,
     );
   } else {
     console.warn(
-      "[IIVO Glass] TTS: no ELEVENLABS_API_KEY — Sorting Hat will fall back to macOS speech if server TTS unavailable",
+      "[Native Glass] TTS: no ELEVENLABS_API_KEY — Sorting Hat will fall back to macOS speech if server TTS unavailable",
     );
   }
 }
@@ -1294,6 +1381,8 @@ interface AppState {
   nativeLoopbackTested: boolean;
   voiceModeStartNonce: number;
   companionModeActive: boolean;
+  videoWatchActive: boolean;
+  videoWatchDialogueActive: boolean;
   companionModeToggleNonce: number;
   /** OmniParser warm-up phase for Companion toggle TTS. */
   companionWarmupPhase: "none" | "warming" | "ready";
@@ -1371,6 +1460,18 @@ interface AppState {
   activeApp?: string;
   /** Name of the app that was frontmost before Glass itself took focus. */
   previousApp?: string;
+  /** Live Writing Intelligence — user-enabled rewrite overlay. */
+  typingIntelligenceActive?: boolean;
+  /** Glass this — text overlay intelligence active. */
+  textOverlayActive?: boolean;
+  /** Glass Guide — live orientation layer active. */
+  glassGuideActive?: boolean;
+  orientationGhostCursor?: import("../shared/liveOrientationTypes.ts").OrientationGhostCursorState | null;
+  orientationNavigateConfirm?: {
+    regionId: string;
+    label: string;
+    nonce: number;
+  } | null;
   /** One-sentence ambient digest of what the user is working on right now. */
   workingContext?: string;
   /** Unix ms timestamp of the last workingContext update. */
@@ -1683,7 +1784,7 @@ const state: AppState = {
   windowContext: defaultWindowContext,
   iivoAnalysis: { status: "idle" },
   stt: buildGlassSttState(sttConfig, {
-    deepgramEnabled: !!(process.env.DEEPGRAM_API_KEY?.trim()),
+    deepgramEnabled: isDeepgramApiKeyConfigured(),
   }),
   operationDiagnostics: createInitialOperationDiagnostics(),
   commandFeed: [],
@@ -1709,6 +1810,8 @@ const state: AppState = {
   nativeLoopbackTested: false,
   voiceModeStartNonce: 0,
   companionModeActive: false,
+  videoWatchActive: false,
+  videoWatchDialogueActive: false,
   companionModeToggleNonce: 0,
   companionWarmupPhase: "none",
   companionWarmupSpeakNonce: 0,
@@ -1942,6 +2045,11 @@ function activateListenMode(): void {
     return;
   }
   const preset = GLASS_MODE_PRESETS.listen;
+  const prevConfig = copilot.getConfig();
+  if (shouldRunMeetingsFromConfig(prevConfig, state.privacy.listening)) {
+    stopMeetingIntelLoop();
+    resetMeetingIntelRuntime();
+  }
   if (!sessionIsLive()) {
     sessions.startSession("Listen");
     bindCopilotToSession();
@@ -2060,7 +2168,7 @@ const PERCEPTION_APP_SWITCH_ACTIVE_MS = 1500;
 const PERCEPTION_APP_SWITCH_IDLE_MS = 3000;
 
 function perceptionAppSwitchNeeded(): boolean {
-  return state.companionModeActive || sessionIsLive();
+  return state.companionModeActive || sessionIsLive() || state.glassGuideActive === true;
 }
 
 function perceptionClipboardNeeded(): boolean {
@@ -2090,9 +2198,19 @@ function pollFrontAppSwitch(): void {
       }
       perceptionLastFrontApp = appName;
       state.activeApp = appName;
+      if (state.glassGuideActive) {
+        const windowTitle = getCachedWindowContext().windowTitle ?? null;
+        notifyOrientationWindowTitle(windowTitle);
+      }
       if (oldApp && oldApp !== appName) {
         handleCompanionAppSwitch(oldApp, appName);
         refreshAletheiaObservationPlaneState();
+        if (state.glassGuideActive) {
+          const identity = await getFrontmostAppIdentity();
+          if (identity) {
+            void handleAppFocusForOrientation(identity);
+          }
+        }
       }
       push();
     } catch {
@@ -2102,6 +2220,167 @@ function pollFrontAppSwitch(): void {
 }
 
 let perceptionLastFrontApp = "";
+
+function speakTypingIntelligenceActivated(): void {
+  const spoken = spokenTextForSurface("Live writing intelligence active.", {
+    surface: "companion",
+    companionModeActive: state.companionModeActive,
+    personaBehavior: state.aletheiaPersonaBehavior,
+  });
+  state.aletheiaEphemeralSpeak = {
+    text: spoken,
+    nonce: (state.aletheiaEphemeralSpeak?.nonce ?? 0) + 1,
+  };
+}
+
+function speakTextOverlayActivated(): void {
+  const spoken = spokenTextForSurface("Glass this active. I'll explain confusing text on screen.", {
+    surface: "companion",
+    companionModeActive: state.companionModeActive,
+    personaBehavior: state.aletheiaPersonaBehavior,
+  });
+  state.aletheiaEphemeralSpeak = {
+    text: spoken,
+    nonce: (state.aletheiaEphemeralSpeak?.nonce ?? 0) + 1,
+  };
+}
+
+function speakGlassGuideActivated(): void {
+  const spoken = spokenTextForSurface(
+    "Glass Guide on. Mapping what's on screen.",
+    {
+      surface: "companion",
+      companionModeActive: state.companionModeActive,
+      personaBehavior: state.aletheiaPersonaBehavior,
+    },
+  );
+  state.aletheiaEphemeralSpeak = {
+    text: spoken,
+    nonce: (state.aletheiaEphemeralSpeak?.nonce ?? 0) + 1,
+  };
+}
+
+async function applyTypingIntelligenceEnabled(
+  enabled: boolean,
+  opts?: { speakOnActivate?: boolean },
+): Promise<void> {
+  state.glassSettings = {
+    ...state.glassSettings,
+    typingIntelligenceEnabled: enabled,
+  };
+  glassUserSettings = state.glassSettings;
+  await persistGlassUserSettings(glassUserSettings);
+  state.typingIntelligenceActive = enabled;
+  if (!enabled) {
+    stopTypingIntelligence();
+  }
+  push();
+  if (enabled) {
+    startTypingIntelligence();
+    if (opts?.speakOnActivate) speakTypingIntelligenceActivated();
+  }
+  push();
+}
+
+function syncTypingIntelligenceFromSettings(speakOnActivate = false): void {
+  const enabled = Boolean(state.glassSettings.typingIntelligenceEnabled);
+  state.typingIntelligenceActive = enabled;
+  if (enabled) {
+    if (!isTypingIntelligenceActive()) startTypingIntelligence();
+    if (speakOnActivate) speakTypingIntelligenceActivated();
+  } else if (isTypingIntelligenceActive()) {
+    stopTypingIntelligence();
+  }
+}
+
+async function applyTextOverlayEnabled(
+  enabled: boolean,
+  opts?: { speakOnActivate?: boolean },
+): Promise<void> {
+  state.glassSettings = {
+    ...state.glassSettings,
+    textOverlayEnabled: enabled,
+  };
+  glassUserSettings = state.glassSettings;
+  await persistGlassUserSettings(glassUserSettings);
+  state.textOverlayActive = enabled;
+  if (!enabled) {
+    stopTextOverlay();
+  } else {
+    startTextOverlay();
+    if (opts?.speakOnActivate) speakTextOverlayActivated();
+  }
+  kickAmbientReadingLoop();
+  push();
+}
+
+function syncTextOverlayFromSettings(): void {
+  const enabled = Boolean(state.glassSettings.textOverlayEnabled);
+  state.textOverlayActive = enabled;
+  if (enabled) {
+    startTextOverlay();
+  } else {
+    stopTextOverlay();
+  }
+  kickAmbientReadingLoop();
+}
+
+async function applyGlassGuideEnabled(
+  enabled: boolean,
+  opts?: { speakOnActivate?: boolean },
+): Promise<void> {
+  state.glassSettings = {
+    ...state.glassSettings,
+    glassGuideEnabled: enabled,
+  };
+  glassUserSettings = state.glassSettings;
+  await persistGlassUserSettings(glassUserSettings);
+  state.glassGuideActive = enabled;
+  if (!enabled) {
+    stopLiveOrientation();
+    state.orientationGhostCursor = null;
+    state.orientationNavigateConfirm = null;
+  } else {
+    await startLiveOrientation();
+    restartPerceptionAppSwitchPolling();
+    kickAmbientReadingLoop();
+    push();
+    if (opts?.speakOnActivate) {
+      speakGlassGuideActivated();
+      push();
+      // Let activation TTS finish before orientation overwrites aletheiaEphemeralSpeak.
+      setTimeout(() => {
+        void orientCurrentAppIfEnabled();
+      }, 3200);
+    } else {
+      void orientCurrentAppIfEnabled();
+    }
+    return;
+  }
+  restartPerceptionAppSwitchPolling();
+  kickAmbientReadingLoop();
+  push();
+}
+
+function syncGlassGuideFromSettings(): void {
+  state.glassGuideActive = false;
+  state.glassSettings = { ...state.glassSettings, glassGuideEnabled: false };
+  glassUserSettings = { ...glassUserSettings, glassGuideEnabled: false };
+  stopLiveOrientation();
+  state.orientationGhostCursor = null;
+  state.orientationNavigateConfirm = null;
+  restartPerceptionAppSwitchPolling();
+}
+
+async function applyGlassGuideAutoActions(enabled: boolean): Promise<void> {
+  state.glassSettings = {
+    ...state.glassSettings,
+    glassGuideAutoActions: enabled,
+  };
+  glassUserSettings = state.glassSettings;
+  await persistGlassUserSettings(glassUserSettings);
+  push();
+}
 
 function restartPerceptionAppSwitchPolling(): void {
   if (!perceptionLoopStarted) return;
@@ -2399,7 +2678,7 @@ const aletheiaComputerOperatorHost: AletheiaComputerOperatorHost = {
   onComplete: (summary, ok) => {
     clearAletheiaUseComputerForNextTask();
     if (!summary.trim()) return;
-    speakAletheiaAdviceAck(truncateAletheiaSpokenText(summary));
+    speakAletheiaAdviceAck(truncateAletheiaSpokenText(summary, state.aletheiaPersonaBehavior));
     const operator = state.aletheiaComputerOperator;
     if (ok) {
       state.lastAskResponse = {
@@ -2506,7 +2785,7 @@ async function refreshAletheiaSidecarPlane(now = Date.now()): Promise<AletheiaSi
         sttEnabled: state.stt.enabled,
         sttStatus: state.stt.status,
         lastSttError: state.stt.lastError,
-        deepgramKeyPresent: Boolean(process.env.DEEPGRAM_API_KEY?.trim()),
+        deepgramKeyPresent: isDeepgramApiKeyConfigured(),
         openAiKeyPresent: Boolean(
           process.env.IIVO_GLASS_OPENAI_API_KEY?.trim() || process.env.OPENAI_API_KEY?.trim(),
         ),
@@ -2735,7 +3014,7 @@ function seedSpeakerNamesFromBrowserTitle(): void {
 
 /** Start a diarization-enabled Deepgram session (Listen, Meetings, or Video Watch). */
 function startListenDeepgramSession(): void {
-  const dgKey = process.env.DEEPGRAM_API_KEY?.trim();
+  const dgKey = resolveDeepgramApiKey();
   if (!dgKey) return; // no key → fall back to OpenAI STT chunks (no diarization)
   stopListenDeepgramSession();
   resetListenWhisperFallback();
@@ -2803,7 +3082,7 @@ function stopListenDeepgramSession(): void {
 
 /** Start a diarization-enabled Deepgram session for companion mic. */
 function startCompanionDeepgramSession(): void {
-  const dgKey = process.env.DEEPGRAM_API_KEY?.trim();
+  const dgKey = resolveDeepgramApiKey();
   if (!dgKey || !state.companionModeActive) return;
   stopCompanionDeepgramSession();
 
@@ -3301,20 +3580,24 @@ function shouldRunListenNotesPipeline(): boolean {
 
 function shouldRunMeetingsDeepgramPipeline(): boolean {
   const config = copilot.getConfig();
-  return (
-    config.sessionType === "meeting_call"
-    && copilotModeIsActive(config.mode)
-    && state.transcriptionMode === "system_audio"
-    && state.privacy.listening
-  );
+  return shouldRunMeetingsDeepgramPipelinePure({
+    sessionType: config.sessionType,
+    copilotMode: config.mode,
+    listening: state.privacy.listening,
+  });
 }
 
-function ensureMeetingsDeepgramSession(): void {
+function ensureMeetingsDeepgramSession(
+  source: "start-listening" | "resume" | "config" = "start-listening",
+): void {
   if (!shouldRunMeetingsDeepgramPipeline()) return;
   if (!meetingsDeepgramSessionStartMs) {
     meetingsDeepgramSessionStartMs = Date.now();
   }
   if (!listenAudioEngine) {
+    if (process.env.IIVO_GLASS_DEBUG === "1" || process.env.IIVO_GLASS_DEBUG === "true") {
+      console.log(`[meetings:deepgram] starting session (${source})`);
+    }
     startListenDeepgramSession();
   }
 }
@@ -3330,7 +3613,11 @@ async function processMeetingsDeepgramFragment(fragment: ListenDeepgramFragment)
   const chunk = formatMeetingsDeepgramLine(fragment);
   if (!chunk) return;
 
-  const tags = ["system_audio"];
+  const tags =
+    state.transcriptionMode === "microphone_media_recorder"
+    || state.transcriptionMode === "microphone_web_speech"
+      ? ["microphone"]
+      : ["system_audio"];
   const source = transcriptSourceFromTags(tags);
   const session = sessions.current();
   const recentEvents = (session?.events ?? [])
@@ -3466,9 +3753,18 @@ function clearTranslateStartupErrors(): void {
 /** Stop translate capture: renderer STT, HUD timer, and in-flight chunk reporting. */
 function stopTranslateListening(): void {
   cancelListenCountdown();
-  // Keep system audio alive if the listen notes pipeline is running — it still needs
-  // audio for diarization and note extraction. Only stop audio for pure translate sessions.
-  if (shouldRunListenNotesPipeline()) return;
+  if (
+    shouldPreserveAudioOnTranslateStop({
+      listenNotesPipeline: shouldRunListenNotesFromConfig(copilot.getConfig()),
+      meetingsPipeline: shouldRunMeetingsFromConfig(
+        copilot.getConfig(),
+        state.privacy.listening,
+      ),
+      watchActive: isVideoWatchModeActive(),
+    })
+  ) {
+    return;
+  }
   broadcastTranscriptionControl({ type: "stop" });
   if (!state.privacy.listening) {
     state.stt = { ...state.stt, transcribing: false, lastError: undefined };
@@ -3881,7 +4177,7 @@ async function processListenModeChunk(
     if (config.showOverlaySuggestions && !config.muteSuggestions) {
       upsertListenInsightCard(updated, cardDecision);
     } else {
-      state.lastNotice = `IIVO thought saved: ${thought.slice(0, 80)}…`;
+      state.lastNotice = `Glass thought saved: ${thought.slice(0, 80)}…`;
     }
   }
 
@@ -5051,7 +5347,7 @@ function queueDesignToCodeGlassMemoryIngestion(input: {
 
   void ingestDesignToCodeGlassMemory({
     event: input.event,
-    session,
+    session: session ?? undefined,
     stack,
     action,
     error: input.error,
@@ -5360,6 +5656,12 @@ async function prepareAletheiaComputerOperator(
 
   if (isAletheiaComputerOperatorRunning()) {
     state.lastNotice = "Computer operator is already running.";
+    push();
+    return { ok: false, reason: state.lastNotice };
+  }
+
+  if (isLiveOrientationBusy()) {
+    state.lastNotice = "Glass Guide orientation is active — finish or skip it first.";
     push();
     return { ok: false, reason: state.lastNotice };
   }
@@ -6051,7 +6353,7 @@ function scheduleServerHealthPolling(): void {
         scheduleNext();
       })
       .catch(() => {
-        markIivoServerDegraded("health", "IIVO server health check failed.");
+        markIivoServerDegraded("health", "Native Glass server health check failed.");
         state.iivoServerDegradedReason = getIivoServerDegradedReason();
         refreshSetupCapabilities();
         push();
@@ -6076,7 +6378,7 @@ function scheduleInitialSetupCheck(): void {
     await applyGlassSetupCheckResult(result, { silent: true });
   })().catch((err: unknown) => {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("[IIVO Glass] initial setup check failed:", message);
+    console.error("[Native Glass] initial setup check failed:", message);
     state.lastNotice = `Setup check failed on launch: ${message}`;
     push();
   });
@@ -6153,6 +6455,9 @@ function snapshot(): GlassState {
     copilot: copilotRuntime(),
     voiceModeStartNonce: state.voiceModeStartNonce,
     companionModeActive: state.companionModeActive,
+    videoWatchActive: state.videoWatchActive,
+    videoWatchDialogueActive: state.videoWatchDialogueActive,
+    videoWatchPlaybackPhase: getVideoWatchBuffer()?.playback.phase,
     companionModeToggleNonce: state.companionModeToggleNonce,
     companionWarmupPhase: state.companionWarmupPhase,
     companionWarmupSpeakNonce: state.companionWarmupSpeakNonce,
@@ -6230,6 +6535,11 @@ function snapshot(): GlassState {
     githubPATConfigured: githubPATState.configured,
     githubTokenInvalid: githubPATState.tokenInvalid,
     liveTerminal: liveTerminalState,
+    typingIntelligenceActive: state.typingIntelligenceActive === true,
+    textOverlayActive: state.textOverlayActive === true,
+    glassGuideActive: state.glassGuideActive === true,
+    orientationGhostCursor: state.orientationGhostCursor ?? null,
+    orientationNavigateConfirm: state.orientationNavigateConfirm ?? null,
     terminalWidgetVisible: liveTerminalWidgetVisible,
     terminalWidgetPos: liveTerminalWidgetPos,
     clipboardText: state.clipboardText,
@@ -6500,8 +6810,117 @@ function startGlassBackgroundWork(): void {
   startSpendPolling();
   startLiveTerminalPolling();
   startPerceptionLoop();
+  configureTypingIntelligence({
+    isEnabled: () => Boolean(state.glassSettings.typingIntelligenceEnabled),
+    onUpdate: (runtime) => {
+      broadcast(IPC.typingIntelligenceUpdate, runtime);
+    },
+  });
+  configureRewriteDelta({
+    isEnabled: () => Boolean(state.glassSettings.typingIntelligenceEnabled),
+    getWindowTitle: () => getCachedWindowContext().windowTitle ?? null,
+    onFindings: (findingsState) => {
+      broadcast(IPC.rewriteFindingsUpdate, findingsState);
+    },
+  });
+  configureRewriteLedger({
+    isEnabled: () => Boolean(state.glassSettings.typingIntelligenceEnabled),
+    getDisplayTarget: () => state.glassSettings.displayTarget,
+  });
+  syncTypingIntelligenceFromSettings();
+  configureTextOverlay({
+    isEnabled: () => Boolean(state.glassSettings.textOverlayEnabled),
+    isGuideActive: () => state.glassGuideActive === true,
+    getSettings: () => state.glassSettings,
+    getActiveApp: () => state.activeApp,
+    onShow: (card) => {
+      broadcast(IPC.textOverlayShow, card);
+    },
+    onUpdateCard: (update) => {
+      broadcast(IPC.textOverlayUpdate, update);
+    },
+    onWhisper: (payload) => {
+      broadcast(IPC.textOverlayWhisper, payload);
+    },
+    onDismiss: () => {
+      broadcast(IPC.textOverlayDismiss, undefined);
+    },
+    actions: {
+      prefillCommandBar,
+      submitAsk: (prompt) => {
+        void submitCommand(prompt);
+      },
+      saveToMemory: upsertUserContext,
+    },
+  });
+  syncTextOverlayFromSettings();
+  configureLiveOrientation({
+    isEnabled: () => state.glassGuideActive === true,
+    isAutoTriggerReady: () => !isGlassChromeBootPending(),
+    getSettings: () => state.glassSettings,
+    getContextProfile: () => glassContextProfile,
+    getScrollbackSummary: async () => {
+      try {
+        const rows = getScrollbackRecentSummary(20);
+        if (!rows.length) return null;
+        const text = rows
+          .map((row) => row.command_plain?.trim())
+          .filter(Boolean)
+          .join(" · ");
+        return text || null;
+      } catch {
+        return null;
+      }
+    },
+    getWindowTitle: () => getCachedWindowContext().windowTitle ?? null,
+    screenCaptureReady: () => state.screenCaptureProbe === "ready",
+    broadcast: (channel, payload) => broadcast(channel, payload),
+    pushState: (patch) => {
+      if ("orientationGhostCursor" in patch) {
+        state.orientationGhostCursor = patch.orientationGhostCursor as typeof state.orientationGhostCursor;
+      }
+      if ("orientationNavigateConfirm" in patch) {
+        state.orientationNavigateConfirm = patch.orientationNavigateConfirm as typeof state.orientationNavigateConfirm;
+      }
+      if ("aletheiaEphemeralSpeak" in patch) {
+        state.aletheiaEphemeralSpeak = patch.aletheiaEphemeralSpeak as typeof state.aletheiaEphemeralSpeak;
+      }
+      push();
+    },
+    fetchTts: async (text) => {
+      const timed = await fetchGlassTtsTimedBuffer(text);
+      if (!timed) return null;
+      return {
+        audio: Buffer.from(timed.data, "base64"),
+        alignment: timed.alignment ?? null,
+      };
+    },
+    getOverlayBounds: () => {
+      const overlay = getWindows()?.overlay;
+      if (!overlay) return null;
+      return overlay.getBounds();
+    },
+    submitAsk: (prompt) => {
+      void submitCommand(prompt);
+    },
+    IPC: {
+      orientationShowRegion: IPC.orientationShowRegion,
+      orientationDismiss: IPC.orientationDismiss,
+      orientationSessionState: IPC.orientationSessionState,
+      orientationStuckPrompt: IPC.orientationStuckPrompt,
+      orientationOffer: IPC.orientationOffer,
+      orientationSpeak: IPC.orientationSpeak,
+      orientationSpeechCancel: IPC.orientationSpeechCancel,
+    },
+  });
+  syncGlassGuideFromSettings();
   startScreenDigestLoop({
     shouldRun: () => state.companionModeActive && !state.companionPrivacy?.active,
+    shouldRunAmbient: () =>
+      Boolean(state.glassSettings.textOverlayEnabled) && state.glassGuideActive !== true,
+    getActiveApp: () => state.activeApp,
+    getPrivacyApps: () => state.glassSettings.textOverlayPrivacyApps ?? [],
+    isOverlayCardVisible: () => isTextOverlayBusy() || isOrientationSessionActive(),
     resolveCaptureTarget: () => resolveCaptureDisplay(state.glassSettings.displayTarget),
     getConfig: () => config,
     onDigest: (result) => {
@@ -6602,7 +7021,7 @@ async function registerLatestGlassCapture(input: {
     return;
   }
 
-  const title = `IIVO Glass capture ${new Date().toLocaleString()}${input.displayLabel ? ` · ${input.displayLabel}` : ""}`;
+  const title = `Native Glass capture ${new Date().toLocaleString()}${input.displayLabel ? ` · ${input.displayLabel}` : ""}`;
   state.latestScreenshot.contextUploadStatus = "pending";
   push();
   const contextId = await uploadGlassScreenshotContext(config, input.imageDataUrl, title);
@@ -6727,7 +7146,7 @@ async function handleCapture(): Promise<string | undefined> {
     const message = captureErrorMessage(err);
     state.lastError = message;
     state.lastNotice = /permission|screen recording/i.test(message)
-      ? "Screen Recording permission needed. Open Settings, grant access to IIVO Glass, then Retry Capture."
+      ? "Screen Recording permission needed. Open Settings, grant access to Native Glass, then Retry Capture."
       : message;
     state.screenCaptureProbe = mapCaptureErrorToScreenCaptureStatus(message);
     state.screenCaptureDetail = message;
@@ -6745,12 +7164,12 @@ async function sendScreenshot(imageDataUrl: string): Promise<void> {
   push();
   try {
     const payload = buildScreenshotContextPayload({
-      title: `IIVO Glass capture ${new Date().toLocaleString()}`,
+      title: `Native Glass capture ${new Date().toLocaleString()}`,
     });
     const item = await createScreenshotContext(config, payload, imageDataUrl);
     moments.add({
       kind: "screenshot",
-      note: "Screen capture sent to IIVO",
+      note: "Screen capture sent to Studio",
       contextId: item.id,
       sentToIivo: true,
     });
@@ -6759,7 +7178,7 @@ async function sendScreenshot(imageDataUrl: string): Promise<void> {
     dispatchPrivacy({ type: "SEND_DONE", at: new Date().toISOString() });
     push();
   } catch (err) {
-    state.lastError = err instanceof Error ? err.message : "Send to IIVO failed";
+    state.lastError = err instanceof Error ? err.message : "Send to Glass failed";
     dispatchPrivacy({ type: "CAPTURE_DONE", at: new Date().toISOString() });
     push();
   }
@@ -6777,7 +7196,7 @@ async function sendTranscript(): Promise<void> {
   push();
   try {
     const payload = buildTextContextPayload({
-      title: `IIVO Glass transcript ${new Date().toLocaleString()}`,
+      title: `Native Glass transcript ${new Date().toLocaleString()}`,
       text,
       kind: "transcript",
     });
@@ -6786,7 +7205,7 @@ async function sendTranscript(): Promise<void> {
     dispatchPrivacy({ type: "SEND_DONE", at: new Date().toISOString() });
     push();
   } catch (err) {
-    state.lastError = err instanceof Error ? err.message : "Send to IIVO failed";
+    state.lastError = err instanceof Error ? err.message : "Send to Glass failed";
     dispatchPrivacy({ type: "CAPTURE_DONE", at: new Date().toISOString() });
     push();
   }
@@ -6943,7 +7362,7 @@ async function openFeedInIivo(feedId: string): Promise<void> {
     const url = buildLensAskUrl(config, item.contextId);
     try {
       await openHandoff(item.contextId);
-      state.lastNotice = "Opened in IIVO with this answer attached.";
+      state.lastNotice = "Opened in Studio with this answer attached.";
       mergeVisualAskDiagnostics({ handoffUrl: url, serverResult: "success" });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -6970,15 +7389,15 @@ async function openFeedInIivo(feedId: string): Promise<void> {
 
   const ephemeral = state.ephemeralVisualCapture;
   if (!screenshotContextId && ephemeral?.imageDataUrl) {
-    const title = `IIVO Glass · ${question.length > 60 ? `${question.slice(0, 59)}…` : question}`;
+    const title = `Native Glass · ${question.length > 60 ? `${question.slice(0, 59)}…` : question}`;
     screenshotContextId = await uploadEphemeralVisualToContext(ephemeral, title);
     if (!screenshotContextId) {
-      state.lastNotice = "Could not upload screen context to IIVO. Try again or use Capture.";
+      state.lastNotice = "Could not upload screen context to Studio. Try again or use Capture.";
       state.lastError = "Context Bridge upload failed.";
       mergeVisualAskDiagnostics({
         serverResult: "error",
         retentionResult: "not_saved",
-        userMessage: "Upload failed — screenshot was not sent to IIVO.",
+        userMessage: "Upload failed — screenshot was not sent to Studio.",
       });
       push();
       return;
@@ -7013,7 +7432,7 @@ async function openFeedInIivo(feedId: string): Promise<void> {
       ? parts.join("\n\n")
       : `Question:\n${question}\n\n(Continue this conversation in IIVO.)`;
   const payload = buildTextContextPayload({
-    title: `IIVO Glass · ${question.length > 60 ? `${question.slice(0, 59)}…` : question}`,
+    title: `Native Glass · ${question.length > 60 ? `${question.slice(0, 59)}…` : question}`,
     text,
     kind: "note",
   });
@@ -7036,8 +7455,8 @@ async function openFeedInIivo(feedId: string): Promise<void> {
   const opened = await openGlassHandoffUrl(handoffUrl);
   if (opened.ok) {
     state.lastNotice = screenshotContextId
-      ? "Opened in IIVO with answer and screen context."
-      : "Opened in IIVO with this answer attached.";
+      ? "Opened in Studio with answer and screen context."
+      : "Opened in Studio with this answer attached.";
     mergeVisualAskDiagnostics({
       handoffUrl,
       serverResult: "success",
@@ -7086,7 +7505,7 @@ function dismissOverlayChatFeed(): void {
   state.commandFeed = state.commandFeed.filter(
     (item) => item.pinned || !chatKinds.has(item.kind),
   );
-  if (state.lastNotice?.startsWith("IIVO answered")) {
+  if (state.lastNotice?.startsWith("Glass answered")) {
     state.lastNotice = undefined;
   }
   push();
@@ -7309,6 +7728,20 @@ async function submitCommand(
 
   const text = (contextPrefix + rawText).trim();
 
+  if (isVideoWatchModeActive()) {
+    state.videoWatchDialogueActive = true;
+    const watchBuf = getVideoWatchBuffer();
+    if (watchBuf) {
+      recordWatchPauseQuestion(watchBuf.playback, rawText);
+      recordCoViewEvent(watchBuf, {
+        type: "user-asked",
+        text: rawText,
+        contentSegment: watchBuf.playback.contentSegment,
+        pauseBeat: watchBuf.playback.pauseBeat,
+      });
+    }
+  }
+
   if (isExplicitDesignToCodeRememberText(rawText.trim())) {
     queueDesignToCodeGlassMemoryIngestion({
       event: "explicit_remember",
@@ -7318,6 +7751,11 @@ async function submitCommand(
 
   if (state.companionPrivacy?.active) {
     return;
+  }
+
+  if (state.glassGuideActive && !state.companionModeActive) {
+    const handled = await tryHandleOrientationGoal(rawText.trim());
+    if (handled) return;
   }
 
   if (tryHandleVoiceActionConfirmation(rawText.trim())) {
@@ -7697,8 +8135,8 @@ async function submitCommand(
     state.visualAskPhase = "looking";
     lookingStartedAtMs = Date.now();
     pushFeed(
-      createCommandFeedItem("looking", "IIVO is looking at your screen…", {
-        title: "IIVO is looking",
+      createCommandFeedItem("looking", "Glass is looking at your screen…", {
+        title: "Glass is looking",
         prompt: text,
       }),
     );
@@ -7868,7 +8306,7 @@ async function submitCommand(
   const interruptLabel = listenInterruptStatusLabel(activeCtx);
   const thinkingLabel =
     interruptLabel ??
-    (visualIntent || lensScreenshotPayload ? "Analyzing screen…" : "IIVO is thinking…");
+    (visualIntent || lensScreenshotPayload ? "Analyzing screen…" : "Glass is thinking…");
   pushFeed(
     createCommandFeedItem(
       "thinking",
@@ -7898,7 +8336,9 @@ async function submitCommand(
   const watchBuffer = getVideoWatchBuffer();
   const hasWatchContext =
     watchBuffer != null
-    && (watchBuffer.frames.length > 0 || watchBuffer.transcriptWindow.trim().length > 0);
+    && (watchBuffer.frames.length > 0
+      || watchBuffer.transcriptWindow.trim().length > 0
+      || watchBuffer.journal.length > 0);
   const watchHasTranscript = shouldOmitSessionTranscriptForWatch(watchBuffer);
 
   const askRequest = {
@@ -7910,7 +8350,12 @@ async function submitCommand(
     ...(sessionTranscriptWindow?.trim() && !watchHasTranscript
       ? { sessionTranscriptWindow: sessionTranscriptWindow.trim() }
       : {}),
-    ...(hasWatchContext ? { videoWatchBuffer: watchBuffer! } : {}),
+    ...(hasWatchContext
+      ? {
+          videoWatchBuffer: watchBuffer!,
+          videoWatchDialogueActive: state.videoWatchDialogueActive,
+        }
+      : {}),
     latestScreenshot: latestScreenshot ?? lensScreenshotPayload,
     lensContext: lensAttached ?? undefined,
     visualIntent:
@@ -7935,7 +8380,10 @@ async function submitCommand(
   // Use streaming for pure-text asks (no screenshot/vision); fall back to
   // single-shot for visual asks (image already captured, no benefit to stream).
   const runGlassAsk = async (): Promise<import("../shared/glassAskTypes.ts").GlassAskResponse> => {
-    if (visualIntent || Boolean(lensScreenshotPayload)) {
+    if (
+      !hasWatchContext
+      && (Boolean(lensScreenshotPayload) || Boolean(latestScreenshot))
+    ) {
       return askIivoGlass(config, askRequest, signal);
     }
     return askIivoGlassStream(
@@ -7987,6 +8435,17 @@ async function submitCommand(
       routeUsed: result.routeUsed,
       model: result.model,
     };
+    if (hasWatchContext) {
+      const spoken = result.shortAnswer ?? overlayAnswer ?? fullAnswer;
+      speakAletheiaAdviceAck(spoken);
+      recordCoViewEvent(watchBuffer!, {
+        type: "aletheia-answered",
+        text: summarizeCoViewAnswerForJournal(spoken),
+        contentSegment: watchBuffer!.playback.contentSegment,
+        pauseBeat: watchBuffer!.playback.pauseBeat,
+      });
+      noteCoViewQaExchange(watchBuffer!, text, spoken);
+    }
     if (
       state.companionModeActive &&
       (companionDepthAsk || isSubstantialResponse(fullAnswer))
@@ -8085,7 +8544,7 @@ async function submitCommand(
     if (live && session) {
       sessions.addEvent({
         kind: "iivo_response",
-        title: "IIVO response",
+        title: "Glass response",
         text: fullAnswer,
         importance: "high",
         ...eventContextFields(),
@@ -8107,12 +8566,12 @@ async function submitCommand(
       await persistSessions(sessions);
     }
 
-    if (!state.lastNotice || state.lastNotice.startsWith("IIVO answered")) {
+    if (!state.lastNotice || state.lastNotice.startsWith("Glass answered")) {
       state.lastNotice = live
-        ? "IIVO answered inline. Saved to session."
+        ? "Glass answered inline. Saved to session."
         : visualIntent && state.visualAskRetention
           ? `${state.visualAskRetention.label} · ${state.visualAskRetention.detail ?? "Not saved"}`
-          : "IIVO answered inline. Start a session to save this context.";
+          : "Glass answered inline. Start a session to save this context.";
     }
     state.operationDiagnostics = recordOperation(state.operationDiagnostics, "ask-iivo", "ok");
     if (visualIntent) copilotVisualAskFailures = 0;
@@ -8235,14 +8694,13 @@ async function submitCommand(
           });
         }
         companionLocalUiMapForAsk = null;
-        pushFeed(
-          createCommandFeedItem("response", overlayAnswer, {
-            prompt: text,
-            fullBody: retryResult.answer,
-            runId: retryResult.runId,
-            contextId: retryResult.contextId,
-          }),
-        );
+        const retryFeedItem = createCommandFeedItem("response", overlayAnswer, {
+          prompt: text,
+          fullBody: retryResult.answer,
+          runId: retryResult.runId,
+          contextId: retryResult.contextId,
+        });
+        pushFeed(retryFeedItem);
         // Persist retry Q&A pair to durable cross-session memory (fire-and-forget)
         void saveMemoryEntry({
           prompt: text,
@@ -8265,7 +8723,7 @@ async function submitCommand(
         state.operationDiagnostics = recordOperation(state.operationDiagnostics, "ask-iivo", "ok");
         await recordGlassContextAfterResponse(text);
         push();
-        return retryResult.answer;
+        return { fullAnswer: retryResult.answer, responseFeedItemId: retryFeedItem.id };
       } catch (retryErr) {
         if (requestGeneration !== askRequestGeneration || signal.aborted || retryErr instanceof GlassAskCancelledError) {
           return;
@@ -8299,7 +8757,7 @@ async function submitCommand(
     pushFeed(
       createCommandFeedItem(
         "error",
-        missingKey ? message : `${message} Use Open in IIVO to continue in the browser.`,
+        missingKey ? message : `${message} Use Open in Studio to continue in the browser.`,
         { prompt: text },
       ),
     );
@@ -8320,7 +8778,7 @@ async function submitCommand(
   }
 }
 
-/** Fetch TTS audio — prefers IIVO server /api/tts (same path as speak.ts), then direct ElevenLabs. */
+/** Fetch TTS audio — prefers Native Glass server /api/tts (same path as speak.ts), then direct ElevenLabs. */
 async function fetchGlassTtsBuffer(text: string): Promise<Buffer | null> {
   const payload = text.trim().slice(0, 2000);
   if (!payload) return null;
@@ -8345,7 +8803,7 @@ async function fetchGlassTtsBuffer(text: string): Promise<Buffer | null> {
   const direct = await fetchElevenLabsTtsBuffer(payload, locale);
   if (direct) return direct;
 
-  console.warn("[Glass TTS] no audio — set ELEVENLABS_API_KEY in .env or run IIVO server with TTS");
+  console.warn("[Glass TTS] no audio — set ELEVENLABS_API_KEY in .env or run Native Glass server with TTS");
   return null;
 }
 
@@ -8556,6 +9014,11 @@ async function handleCommand(
       stopListenDeepgramSession();
       liveTranslateRuntime = stopLiveTranslate(liveTranslateRuntime);
       setOverlayPinnedForTranslate(false);
+      if (isVideoWatchModeActive()) {
+        endVideoWatchSession();
+      } else {
+        companionActiveBeforeVideoWatch = null;
+      }
       copilot.setDebrief(null);
       if (
         endingSession &&
@@ -8609,9 +9072,9 @@ async function handleCommand(
         privacyListening: state.privacy.listening,
       });
       // Guard: key check BEFORE starting the session so no overlay/caption appears on failure.
-      const dgKey = process.env.DEEPGRAM_API_KEY?.trim();
+      const dgKey = resolveDeepgramApiKey();
       if (!dgKey) {
-        state.lastError = "DEEPGRAM_API_KEY is not set — add it to glass-app/.env and restart.";
+        state.lastError = "Deepgram API key is not configured — add it in Setup → API Keys or set DEEPGRAM_API_KEY in glass-app/.env.";
         push();
         return;
       }
@@ -8619,7 +9082,7 @@ async function handleCommand(
       clearTranslateStartupErrors();
       resetTranslateWhisperFallback();
       translateDeepgramReconnectAttempts = 0;
-      if (process.env.DEEPGRAM_API_KEY?.trim()) {
+      if (dgKey) {
         state.stt = { ...state.stt, deepgramEnabled: true };
       }
       liveTranslateRuntime = startLiveTranslate(liveTranslateRuntime, {
@@ -8926,7 +9389,7 @@ async function handleCommand(
       } else if (moment) {
         // Re-send the note text as fresh context.
         const payload = buildTextContextPayload({
-          title: moment.sourceTitle ?? "IIVO Glass moment",
+          title: moment.sourceTitle ?? "Native Glass moment",
           text: moment.note,
           kind: "note",
         });
@@ -8952,6 +9415,21 @@ async function handleCommand(
         companionRoute: command.companionRoute,
       });
       return;
+    case "video-watch-dialogue-resume": {
+      const watchBuffer = getVideoWatchBuffer();
+      if (watchBuffer) {
+        markWatchPlaybackResumedByUser(watchBuffer.playback);
+        recordCoViewEvent(watchBuffer, {
+          type: "screen-resumed",
+          source: "voice",
+          contentSegment: watchBuffer.playback.contentSegment,
+        });
+      }
+      state.videoWatchDialogueActive = false;
+      speakAletheiaAdviceAck(WATCH_RESUME_ACK_SPEECH);
+      push();
+      return;
+    }
     case "ask-iivo-direct":
       await submitCommand(command.text);
       return;
@@ -8999,6 +9477,7 @@ async function handleCommand(
       state.glassSettings = { ...state.glassSettings, hotkeyPreset: command.preset };
       glassUserSettings = state.glassSettings;
       await persistGlassUserSettings(glassUserSettings);
+      refreshTextOverlayHotkey();
       registerGlobalHotkeys();
       push();
       return;
@@ -9055,6 +9534,78 @@ async function handleCommand(
       restartPerceptionPolling();
       push();
       return;
+    case "set-typing-intelligence-enabled":
+      await applyTypingIntelligenceEnabled(command.enabled);
+      return;
+    case "toggle-typing-intelligence":
+      await applyTypingIntelligenceEnabled(
+        !state.glassSettings.typingIntelligenceEnabled,
+        { speakOnActivate: true },
+      );
+      return;
+    case "set-text-overlay-enabled":
+      await applyTextOverlayEnabled(command.enabled);
+      return;
+    case "toggle-text-overlay":
+      await applyTextOverlayEnabled(
+        !state.glassSettings.textOverlayEnabled,
+        { speakOnActivate: true },
+      );
+      return;
+    case "set-glass-guide-enabled":
+      await applyGlassGuideEnabled(command.enabled);
+      return;
+    case "toggle-glass-guide":
+      await applyGlassGuideEnabled(
+        state.glassGuideActive !== true,
+        { speakOnActivate: true },
+      );
+      return;
+    case "set-glass-guide-auto-actions":
+      await applyGlassGuideAutoActions(command.enabled);
+      return;
+    case "toggle-glass-guide-auto-actions":
+      await applyGlassGuideAutoActions(!state.glassSettings.glassGuideAutoActions);
+      return;
+    case "orient-in-app":
+      await applyGlassGuideEnabled(true);
+      await triggerManualOrientation();
+      return;
+    case "e2e-simulate-orientation": {
+      if (process.env.IIVO_GLASS_E2E !== "1") return;
+      await applyGlassGuideEnabled(true);
+      await triggerManualOrientation();
+      return;
+    }
+    case "e2e-simulate-text-overlay-ambient": {
+      if (process.env.IIVO_GLASS_E2E !== "1") return;
+      resetTextOverlayQaState();
+      await applyTextOverlayEnabled(true);
+      fireAmbientTextOverlayTrigger({
+        rawText: LEGAL_PDF_SENTENCE,
+        contentType: "legal_contract",
+      });
+      return;
+    }
+    case "e2e-simulate-text-overlay-clipboard": {
+      if (process.env.IIVO_GLASS_E2E !== "1") return;
+      await applyTextOverlayEnabled(true);
+      e2eSimulateClipboardCopy(command.text);
+      return;
+    }
+    case "e2e-poll-text-overlay-clipboard": {
+      if (process.env.IIVO_GLASS_E2E !== "1") return;
+      e2ePollClipboard();
+      return;
+    }
+    case "e2e-fire-text-overlay-action": {
+      if (process.env.IIVO_GLASS_E2E !== "1") return;
+      handleTextOverlayAction({
+        cardId: command.cardId,
+        op: command.op,
+      });
+      return;
+    }
     case "clipboard-intel-debug-inject": {
       if (process.env.IIVO_GLASS_E2E !== "1" && process.env.NODE_ENV !== "development") return;
       const cls = classifyClipboard(command.text);
@@ -9175,7 +9726,7 @@ async function handleCommand(
       try {
         await openFeedInIivo(command.id);
       } catch (err) {
-        state.lastError = err instanceof Error ? err.message : "Open in IIVO failed";
+        state.lastError = err instanceof Error ? err.message : "Open in Studio failed";
         push();
       }
       return;
@@ -9555,7 +10106,7 @@ async function handleCommand(
           push();
         } catch (err) {
           state.lastError =
-            err instanceof Error ? err.message : "Could not reach iivo.ai — check your connection";
+            err instanceof Error ? err.message : "Could not reach nativeglass.ai — check your connection";
           push();
         }
       })();
@@ -10122,10 +10673,10 @@ async function handleCommand(
           ...state.appUpdate,
           phase: "available",
           error:
-            "In-app install needs a notarized build. The DMG opened in your browser — drag IIVO Glass to Applications, then reopen.",
+            "In-app install needs a notarized build. The DMG opened in your browser — drag Native Glass to Applications, then reopen.",
         };
         state.lastNotice =
-          "Update DMG opened — drag IIVO Glass to Applications, replace the old copy, then reopen.";
+          "Update DMG opened — drag Native Glass to Applications, replace the old copy, then reopen.";
         push();
       }
       return;
@@ -10620,6 +11171,21 @@ async function handleCommand(
         Object.assign(state, command.patch);
         push();
       }
+      return;
+    }
+
+    case "e2e-inject-typing-intelligence": {
+      if (process.env.IIVO_GLASS_E2E !== "1") return;
+      if (command.enableFeature !== false) {
+        state.typingIntelligenceActive = true;
+        push();
+      }
+      const pushRuntime = (): void => {
+        e2ePushTypingIntelligenceState(command.patch);
+      };
+      pushRuntime();
+      setTimeout(pushRuntime, 120);
+      setTimeout(pushRuntime, 400);
       return;
     }
 
@@ -11217,7 +11783,7 @@ async function handleCommand(
       push();
       showGlassTerminalWindowUnlessIde();
       if (process.env.ELECTRON_RENDERER_URL) {
-        console.info("[IIVO Glass] glass-terminal-open", {
+        console.info("[Native Glass] glass-terminal-open", {
           termId: state.glassDockTerminalId,
           bounds: getWindows()?.terminal?.getBounds(),
         });
@@ -11631,14 +12197,14 @@ async function handleCommand(
     case "dev-open-onboarding":
       if (!app.isPackaged) {
         await beginSortingHatRecalibration();
-        console.log("[IIVO Glass] Sorting Hat opened (dev-open-onboarding)");
+        console.log("[Native Glass] Sorting Hat opened (dev-open-onboarding)");
       }
       return;
 
     case "dev-open-activation":
       if (!app.isPackaged) {
         openActivationWindowDev();
-        console.log("[IIVO Glass] Activation window opened (dev-open-activation)");
+        console.log("[Native Glass] Activation window opened (dev-open-activation)");
       }
       return;
 
@@ -11948,7 +12514,7 @@ async function refreshGlassStorageFilesState(): Promise<void> {
     state.glassStorageFiles = await listGlassStorageFiles(app.getPath("userData"));
   } catch (err) {
     console.warn(
-      "[IIVO Glass] glass storage files refresh failed:",
+      "[Native Glass] glass storage files refresh failed:",
       err instanceof Error ? err.message : String(err),
     );
     state.glassStorageFiles = [];
@@ -12041,7 +12607,7 @@ function createDesignGenerationDeps(): DesignGenerationDeps {
       }
       push();
     },
-    getSessionId: () => sessions.current()?.id,
+    getSessionId: () => sessions.current()?.id ?? "",
     onPipelineComplete: async ({ feedItemId, action, stack, fullBody }) => {
       try {
         await persistDesignToCodeToGlassStorage({
@@ -12475,7 +13041,7 @@ async function generateCopilotDebrief(): Promise<void> {
   syncCopilotToSession();
   state.lastNotice = undefined;
 
-  // Send meeting report to IIVO as a standalone context item (best-effort, fire-and-forget).
+  // Send meeting report to Studio as a standalone context item (best-effort, fire-and-forget).
   const meetingIntel = debriefOptions.meetingIntelligence;
   if (meetingIntel && meetingIntel.moments.length > 0) {
     try {
@@ -12524,15 +13090,40 @@ async function handleCopilotCommand(command: GlassCommand): Promise<boolean> {
       return true;
     }
     case "copilot-set-config": {
-      const next = withCopilotConfig(copilot.getConfig(), command.patch);
+      const prevConfig = copilot.getConfig();
+      const next = withCopilotConfig(prevConfig, command.patch);
       persistCopilotConfig(next);
       refreshCopilotLoop();
-      if (state.privacy.listening && state.transcriptionMode === "system_audio") {
-        if (shouldRunListenNotesPipeline()) {
+
+      const reconcile = planModePipelineReconcile({
+        prevConfig,
+        nextConfig: next,
+        listening: state.privacy.listening,
+        transcriptionMode: state.transcriptionMode,
+        watchActive: isVideoWatchModeActive(),
+      });
+      if (reconcile.stopListenNotes) {
+        stopListenNotesLoop();
+        setListenNotesPadVisible(false);
+      }
+      if (reconcile.stopMeetingIntel) {
+        stopMeetingIntelLoop();
+        resetMeetingIntelRuntime();
+      }
+      if (reconcile.stopListenDeepgram) {
+        stopListenDeepgramSession();
+      }
+      if (state.privacy.listening) {
+        if (reconcile.startListenNotes) {
           ensureListenNotesLoopRunning();
         } else if (shouldRunMeetingsDeepgramPipeline()) {
-          ensureMeetingsDeepgramSession();
-        } else if (listenAudioEngine) {
+          ensureMeetingsDeepgramSession("config");
+        } else if (
+          !shouldRunListenNotesPipeline()
+          && !shouldRunMeetingsDeepgramPipeline()
+          && !isVideoWatchModeActive()
+          && listenAudioEngine
+        ) {
           stopListenDeepgramSession();
         }
       }
@@ -12587,7 +13178,7 @@ async function handleCopilotCommand(command: GlassCommand): Promise<boolean> {
       const debrief = copilot.getDebrief();
       const session = sessions.current();
       if (debrief && session) {
-        await sendSessionText(`IIVO Glass Session Debrief — ${session.title}`, debrief.markdown);
+        await sendSessionText(`Native Glass Session Debrief — ${session.title}`, debrief.markdown);
       }
       return true;
     }
@@ -12622,7 +13213,7 @@ async function handleCopilotCommand(command: GlassCommand): Promise<boolean> {
     case "copilot-open-diagnostic-in-iivo": {
       const diagnostic = copilot.getDiagnosticResult();
       if (diagnostic) {
-        await sendSessionText("IIVO Glass Diagnostic", diagnostic.fullMarkdown);
+        await sendSessionText("Native Glass Diagnostic", diagnostic.fullMarkdown);
       }
       return true;
     }
@@ -12741,22 +13332,15 @@ async function handleSessionCommand(command: GlassCommand): Promise<void> {
       sessions.resumeSession();
       {
         const config = copilot.getConfig();
-        const resumeListen = shouldResumeSystemAudioCapture({
-          pipelineEligible: isListenNotesResumeEligible(config.sessionType, config.mode),
+        const resumeControl = resolveSessionResumeTranscriptionControl({
+          sessionType: config.sessionType,
+          copilotMode: config.mode,
           transcriptionMode: state.transcriptionMode,
           listening: state.privacy.listening,
+          sessionLive: sessionIsLive(),
         });
-        const resumeMeetings = shouldResumeSystemAudioCapture({
-          pipelineEligible: isMeetingsDeepgramResumeEligible(
-            config.sessionType,
-            config.mode,
-            sessionIsLive(),
-          ),
-          transcriptionMode: state.transcriptionMode,
-          listening: state.privacy.listening,
-        });
-        if (resumeListen || resumeMeetings) {
-          broadcastTranscriptionControl({ type: "start", mode: "system_audio" });
+        if (resumeControl) {
+          broadcastTranscriptionControl(resumeControl);
         }
       }
       break;
@@ -12931,12 +13515,12 @@ async function handleSessionCommand(command: GlassCommand): Promise<void> {
       break;
     case "session-send-insight": {
       const insight = sessions.current()?.insights.find((i) => i.id === command.id);
-      if (insight) await sendSessionText(`IIVO Glass insight (${insight.type})`, insight.text);
+      if (insight) await sendSessionText(`Native Glass insight (${insight.type})`, insight.text);
       break;
     }
     case "session-send-summary": {
       const session = sessions.current();
-      if (session) await sendSessionText(`IIVO Glass Session — ${session.title}`, buildSessionSummary(session));
+      if (session) await sendSessionText(`Native Glass Session — ${session.title}`, buildSessionSummary(session));
       break;
     }
     default:
@@ -12967,19 +13551,19 @@ async function sendSession(forCouncilAnalysis: boolean): Promise<void> {
     sessions.addEvent({
       kind: "iivo_sent",
       title: forCouncilAnalysis
-        ? `Session opened in IIVO (${eventCount} events, ${insightCount} insights)`
-        : `Session sent to IIVO (${eventCount} events, ${insightCount} insights)`,
+        ? `Session opened in Studio (${eventCount} events, ${insightCount} insights)`
+        : `Session sent to Studio (${eventCount} events, ${insightCount} insights)`,
     });
     state.iivoAnalysis = { ...state.iivoAnalysis, contextId: item.id };
     await openHandoff(item.id);
     state.sessionActionStatus = "opened";
     state.lastNotice = forCouncilAnalysis
       ? truncated
-        ? "Opened in IIVO (timeline truncated)."
-        : "Opened in IIVO with session context."
+        ? "Opened in Studio (timeline truncated)."
+        : "Opened in Studio with session context."
       : truncated
-        ? "Session sent to IIVO (timeline truncated for size)."
-        : "Session sent to IIVO.";
+        ? "Session sent to Studio (timeline truncated for size)."
+        : "Session sent to Studio.";
     dispatchPrivacy({ type: "SEND_DONE", at: new Date().toISOString() });
   } catch (err) {
     state.lastError = err instanceof Error ? err.message : "Send session failed";
@@ -13017,7 +13601,7 @@ async function analyzeSessionNow(): Promise<void> {
     };
     sessions.addEvent({
       kind: "iivo_analysis",
-      title: "IIVO Council analysis",
+      title: "Glass Council analysis",
       text: result.answer,
       importance: "high",
     });
@@ -13194,7 +13778,10 @@ async function ensureCompanionModeCanActivate(): Promise<string | null> {
   return null;
 }
 
-function applyCompanionModeActivation(): void {
+/** Companion state before Video Watch auto-activated Aletheia voice (null = watch off). */
+let companionActiveBeforeVideoWatch: boolean | null = null;
+
+function applyCompanionModeActivation(options?: { preserveListening?: boolean }): void {
   state.companionModeActive = true;
   state.companionModeToggleNonce += 1;
   refreshAletheiaPersonaBehaviorState();
@@ -13213,7 +13800,9 @@ function applyCompanionModeActivation(): void {
   restartPerceptionPolling();
   beginAletheiaSession(state.activeApp);
   beginAletheiaActivationState();
-  broadcastTranscriptionControl({ type: "stop" });
+  if (!options?.preserveListening) {
+    broadcastTranscriptionControl({ type: "stop" });
+  }
   state.companionWarmupPhase = "none";
   startCompanionDeepgramSession();
   warmOmniParserSidecarWithCallbacks({
@@ -13230,6 +13819,217 @@ function applyCompanionModeActivation(): void {
   });
   refreshAletheiaObservationPlaneState({ forcePush: true, forcePersist: true });
   refreshAletheiaTrustActivityState();
+}
+
+async function ensureCompanionForVideoWatch(): Promise<void> {
+  if (companionActiveBeforeVideoWatch !== null) return;
+  companionActiveBeforeVideoWatch = state.companionModeActive;
+  if (state.companionModeActive) return;
+  const block = await ensureCompanionModeCanActivate();
+  if (block) {
+    console.warn("[glass] video-watch: companion auto-activate blocked —", block);
+    state.lastNotice = block;
+    return;
+  }
+  applyCompanionModeActivation({ preserveListening: true });
+  push();
+}
+
+function restoreCompanionAfterVideoWatch(): void {
+  if (companionActiveBeforeVideoWatch === null) return;
+  const wasActiveBefore = companionActiveBeforeVideoWatch;
+  companionActiveBeforeVideoWatch = null;
+  if (!wasActiveBefore && state.companionModeActive) {
+    deactivateCompanionMode();
+    push();
+  }
+}
+
+function handleVideoWatchPlaybackTransition(transition: VideoWatchPlaybackTransition): void {
+  if (!isVideoWatchModeActive()) return;
+  const buffer = getVideoWatchBuffer();
+  if (!buffer) return;
+
+  if (transition.type === "content-changed") {
+    recordCoViewEvent(buffer, {
+      type: "content-changed",
+      contentSegment: transition.contentSegment,
+      atMs: transition.atMs,
+    });
+    state.videoWatchDialogueActive = false;
+    push();
+    return;
+  }
+  if (transition.type === "paused") {
+    recordCoViewEvent(buffer, {
+      type: "screen-paused",
+      pauseBeat: transition.pauseBeat,
+      contentSegment: buffer.playback.contentSegment,
+      atMs: transition.atMs,
+    });
+    state.videoWatchDialogueActive = false;
+    push();
+    return;
+  }
+  if (transition.type === "resumed" && transition.source === "visual") {
+    recordCoViewEvent(buffer, {
+      type: "screen-resumed",
+      source: "visual",
+      contentSegment: buffer.playback.contentSegment,
+      atMs: transition.atMs,
+    });
+    state.videoWatchDialogueActive = false;
+    push();
+  }
+}
+
+function ensureCoViewListenSession(): void {
+  const config = copilot.getConfig();
+  if (!shouldEnsureVideoLearningSessionForCoView(config, state.privacy.listening)) return;
+  if (!sessionIsLive()) {
+    sessions.startSession(coViewSessionTitle(state.mediaContext));
+    bindCopilotToSession();
+    startCopilotLoop();
+  }
+  const preset = GLASS_MODE_PRESETS.listen;
+  const next = withCopilotConfig(copilot.getConfig(), {
+    mode: preset.copilotMode,
+    sessionType: preset.sessionFocus,
+  });
+  if (next.sessionType !== config.sessionType || next.mode !== config.mode) {
+    persistCopilotConfig(next);
+    if (copilotModeIsActive(next.mode) && sessionIsLive()) {
+      bindCopilotToSession();
+      refreshCopilotLoop();
+    }
+  }
+}
+
+async function persistCoViewTimelineEvent(
+  entry: Omit<CoViewJournalEntry, "atMs" | "type"> & {
+    atMs?: number;
+    type: CoViewTimelineEventKind;
+  },
+): Promise<void> {
+  const config = copilot.getConfig();
+  if (!sessionIsLive() || config.sessionType !== "video_learning") return;
+  const ctx = eventContextFields();
+  const payload = buildCoViewTimelineSessionEvent({
+    type: entry.type,
+    atMs: entry.atMs,
+    contentSegment: entry.contentSegment,
+    pauseBeat: entry.pauseBeat,
+    source: entry.source,
+    text: entry.text,
+    sourceApp: ctx.sourceApp,
+    sourceTitle: ctx.sourceTitle,
+  });
+  sessions.addEvent({
+    kind: payload.kind,
+    title: payload.title,
+    text: payload.text,
+    tags: payload.tags,
+    importance: payload.importance,
+    sourceApp: ctx.sourceApp,
+    sourceTitle: ctx.sourceTitle,
+    metadata: { ...payload.metadata, ...(ctx.metadata ?? {}) },
+  });
+  await pruneCurrentSessionEvents();
+  await persistSessions(sessions);
+}
+
+function recordCoViewEvent(
+  buffer: VideoWatchBuffer,
+  entry: Omit<CoViewJournalEntry, "atMs"> & { atMs?: number },
+): void {
+  appendCoViewJournalToBuffer(buffer, entry);
+  void persistCoViewTimelineEvent(entry);
+}
+
+function syncVideoWatchRuntimeState(active: boolean): void {
+  state.videoWatchActive = active;
+  if (!active) {
+    state.videoWatchDialogueActive = false;
+  }
+}
+
+async function beginVideoWatchSession(displayId: number): Promise<void> {
+  if (state.privacy.listening || listenAudioEngine) {
+    broadcastTranscriptionControl({ type: "stop" });
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    broadcastTranscriptionControl({ type: "start", mode: "system_audio" });
+  }
+  ensureCoViewListenSession();
+  syncVideoWatchRuntimeState(true);
+  startVideoWatchMode(displayId);
+  const watchBuffer = getVideoWatchBuffer();
+  if (watchBuffer) {
+    recordCoViewEvent(watchBuffer, { type: "session-started" });
+  }
+  await ensureCompanionForVideoWatch();
+  push();
+}
+
+function noteCoViewForAletheia(note: { body: string; rationale?: string }): void {
+  const contract = memoryContractForFeature("video-watch");
+  if (!contract?.emitsEventNotes) return;
+  captureAletheiaSessionNote({
+    body: note.body,
+    rationale: note.rationale,
+    category: "observation",
+    source: "assistant",
+    sessionId: currentAletheiaSessionId() ?? undefined,
+  });
+}
+
+function noteCoViewQaExchange(
+  watchBuffer: VideoWatchBuffer,
+  question: string,
+  answer: string,
+): void {
+  const answerSummary = summarizeCoViewAnswerForJournal(answer);
+  noteCoViewForAletheia(
+    buildCoViewQaAletheiaNote({
+      question,
+      answerSummary,
+      contentSegment: watchBuffer.playback.contentSegment,
+      pauseBeat: watchBuffer.playback.pauseBeat,
+    }),
+  );
+}
+
+function persistCoViewSessionNote(buffer: VideoWatchBuffer, endedAtMs: number): void {
+  const summary = buildCoViewSessionSummaryNote({
+    journal: buffer.journal,
+    playback: buffer.playback,
+    watchStartedAt: buffer.watchStartedAt,
+    endedAtMs,
+  });
+  if (!summary) return;
+  noteCoViewForAletheia(summary);
+}
+
+function endVideoWatchSession(): void {
+  const buffer = getVideoWatchBuffer();
+  const endedAtMs = Date.now();
+  if (buffer) {
+    const summary = buildCoViewSessionSummaryNote({
+      journal: buffer.journal,
+      playback: buffer.playback,
+      watchStartedAt: buffer.watchStartedAt,
+      endedAtMs,
+    });
+    void persistCoViewTimelineEvent({
+      type: "session-ended",
+      text: summary?.body,
+      atMs: endedAtMs,
+    });
+    persistCoViewSessionNote(buffer, endedAtMs);
+  }
+  stopVideoWatchMode();
+  syncVideoWatchRuntimeState(false);
+  restoreCompanionAfterVideoWatch();
+  push();
 }
 
 function deactivateCompanionMode(sessionSummary?: string): void {
@@ -13416,6 +14216,10 @@ function registerIpc(): void {
     }
     try {
       saveApiKey(meta, value);
+      if (isDeepgramApiKeyMeta(meta)) {
+        state.stt = { ...state.stt, deepgramEnabled: isDeepgramApiKeyConfigured() };
+        push();
+      }
       return { ok: true };
     } catch (err) {
       const error = err instanceof Error ? err.message : "Save failed";
@@ -13432,7 +14236,12 @@ function registerIpc(): void {
       return { ok: false, error: "Invalid key id" };
     }
     try {
+      const deletedMeta = listApiKeys().find((key) => key.id === normalizedId);
       deleteApiKey(normalizedId);
+      if (deletedMeta && isDeepgramApiKeyMeta(deletedMeta)) {
+        state.stt = { ...state.stt, deepgramEnabled: isDeepgramApiKeyConfigured() };
+        push();
+      }
       return { ok: true };
     } catch (err) {
       const error = err instanceof Error ? err.message : "Delete failed";
@@ -15470,7 +16279,7 @@ function registerIpc(): void {
       ].join("\n");
 
       try {
-        // The IIVO Glass ask API supports native vision via `latestScreenshot`
+        // The Native Glass ask API supports native vision via `latestScreenshot`
         // (imageBase64 + mimeType) combined with visualIntent. Pass the capture
         // as a proper image block rather than embedding base64 in the text.
         const response = await askIivoGlass(config, {
@@ -15618,9 +16427,9 @@ function registerIpc(): void {
         return { error: "Unauthorized" };
       }
 
-      const dgKey = process.env.DEEPGRAM_API_KEY?.trim();
+      const dgKey = resolveDeepgramApiKey();
       if (!dgKey) {
-        return { error: "DEEPGRAM_API_KEY is not configured — add it to glass-app/.env and restart." };
+        return { error: "Deepgram API key is not configured — add it in Setup → API Keys or set DEEPGRAM_API_KEY in glass-app/.env." };
       }
 
       const rawBuffer = payload?.buffer;
@@ -15833,7 +16642,7 @@ function registerIpc(): void {
         const opened = await openGlassSystemSettings("accessibility");
         openedAccessibilitySettings = opened.ok;
         state.lastNotice = opened.ok
-          ? `${result.error ?? "Paste blocked."} Opened Accessibility settings — enable IIVO Glass, then try again.`
+          ? `${result.error ?? "Paste blocked."} Opened Accessibility settings — enable Native Glass, then try again.`
           : (result.error ?? EXTRACT_BUILD_MACOS_PERMISSION_EXPLAIN);
         push();
       } else if (!result.pasted && result.error && (target === "cursor" || target === "claude")) {
@@ -15931,6 +16740,13 @@ function registerIpc(): void {
     restoreGlassWindowsAfterCapture();
   });
   ipcMain.handle(IPC.sttProcessChunk, async (_event, payload: SttProcessChunkPayload) => {
+    if (listenAudioEngine?.getEngine() === "deepgram") {
+      const buffer = Buffer.from(payload.buffer);
+      if (buffer.length >= 512) {
+        listenAudioEngine.sendAudio(buffer);
+      }
+      return { ok: true, text: "" };
+    }
     const result = await processSttChunk(payload, {
       userDataPath: app.getPath("userData"),
       glassConfig: config,
@@ -16041,6 +16857,101 @@ function registerIpc(): void {
     setBuilderStripPanelOpen(!!open, typeof panel === "string" ? panel : undefined);
   });
 
+  ipcMain.on(IPC.typingIntelligenceAccept, () => {
+    void acceptTypingIntelligenceRewrite();
+  });
+
+  ipcMain.on(IPC.typingIntelligenceDismiss, () => {
+    dismissTypingIntelligenceRewrite();
+  });
+
+  ipcMain.on(IPC.textOverlayDismissRequest, () => {
+    dismissTextOverlayCard();
+  });
+
+  ipcMain.on(IPC.textOverlayAction, (_event, payload: unknown) => {
+    if (
+      payload
+      && typeof payload === "object"
+      && "cardId" in payload
+      && "op" in payload
+      && typeof (payload as { cardId: unknown }).cardId === "string"
+      && typeof (payload as { op: unknown }).op === "string"
+    ) {
+      handleTextOverlayAction({
+        cardId: (payload as { cardId: string }).cardId,
+        op: (payload as { op: import("../shared/textOverlayTypes.ts").TextOverlayActionOp }).op,
+        payload: (payload as { payload?: unknown }).payload,
+      });
+    }
+  });
+
+  ipcMain.on(IPC.orientationAction, (_event, payload: unknown) => {
+    if (
+      payload
+      && typeof payload === "object"
+      && "sessionId" in payload
+      && "regionId" in payload
+      && "op" in payload
+    ) {
+      handleOrientationActionRequest(payload as import("../shared/liveOrientationTypes.ts").OrientationActionPayload);
+    }
+  });
+
+  ipcMain.on(IPC.orientationSkip, (_event, payload: unknown) => {
+    if (payload && typeof payload === "object" && "kind" in payload) {
+      handleOrientationSkip(payload as import("../shared/liveOrientationTypes.ts").OrientationSkipPayload);
+    }
+  });
+
+  ipcMain.on(IPC.orientationNavigateConfirm, (_event, payload: unknown) => {
+    const p = payload && typeof payload === "object"
+      ? (payload as { confirmed?: unknown; alwaysAllow?: unknown })
+      : null;
+    const confirmed = Boolean(p?.confirmed);
+    if (p?.alwaysAllow === true) {
+      state.glassSettings = {
+        ...state.glassSettings,
+        glassGuideAutoActions: true,
+      };
+      glassUserSettings = state.glassSettings;
+      void persistGlassUserSettings(glassUserSettings);
+      push();
+    }
+    handleOrientationNavigateConfirm(confirmed);
+  });
+
+  ipcMain.on(IPC.orientationStuckResponse, (_event, payload: unknown) => {
+    if (payload && typeof payload === "object") {
+      const p = payload as { accept?: unknown; regionId?: unknown; regionLabel?: unknown };
+      if (typeof p.regionId === "string" && typeof p.regionLabel === "string") {
+        handleOrientationStuckResponse(Boolean(p.accept), p.regionId, p.regionLabel);
+      }
+    }
+  });
+
+  ipcMain.on(IPC.orientationOfferResponse, (_event, payload: unknown) => {
+    if (payload && typeof payload === "object") {
+      const p = payload as { offerId?: unknown; accept?: unknown };
+      if (typeof p.offerId === "string") {
+        handleOrientationOfferResponse(p.offerId, Boolean(p.accept));
+      }
+    }
+  });
+
+  ipcMain.on(IPC.orientationSpeechDone, (_event, nonce: unknown) => {
+    if (typeof nonce === "number") notifyOrientationSpeechDone(nonce);
+  });
+
+  ipcMain.on(IPC.rewriteApplyFinding, (_event, payload: unknown) => {
+    if (payload && typeof payload === "object") {
+      const p = payload as { findingId?: unknown };
+      if (typeof p.findingId === "string") {
+        void applyRewriteFinding(p.findingId);
+      }
+    }
+  });
+
   ipcMain.on(IPC.aletheiaStripMenuOpen, (_event, open: boolean) => {
     setAletheiaStripMenuOpen(!!open);
   });
@@ -16080,19 +16991,19 @@ function registerIpc(): void {
     dismissGlassTerminalWindow();
   });
 
-  ipcMain.handle(IPC.videoWatchStart, (event, payload?: { displayId?: number }) => {
+  ipcMain.handle(IPC.videoWatchStart, async (event, payload?: { displayId?: number }) => {
     if (!isGlassRendererSender(event.sender)) return { activeDisplayId: null };
     const displayId =
       typeof payload?.displayId === "number"
         ? payload.displayId
         : resolveCaptureDisplay(state.glassSettings.displayTarget).id;
-    startVideoWatchMode(displayId);
+    await beginVideoWatchSession(displayId);
     return { activeDisplayId: displayId };
   });
 
   ipcMain.handle(IPC.videoWatchStop, (event) => {
     if (!isGlassRendererSender(event.sender)) return { stopped: false };
-    stopVideoWatchMode();
+    endVideoWatchSession();
     return { stopped: true };
   });
 
@@ -16128,6 +17039,10 @@ function registerIpc(): void {
     ipcMain.handle(IPC.e2eSimulateSystemAudioEnumFail, () => {
       process.env.IIVO_GLASS_E2E_SYSTEM_AUDIO_ENUM_FAIL = "1";
       return { ok: true };
+    });
+    ipcMain.handle(IPC.e2eGetTextOverlayQaState, () => getTextOverlayQaState());
+    ipcMain.handle(IPC.e2eResetTextOverlayQaState, () => {
+      resetTextOverlayQaState();
     });
   }
 
@@ -16231,17 +17146,20 @@ app.whenReady().then(() =>
     state.glassStorageFiles = await listGlassStorageFiles(app.getPath("userData"));
   } catch (err) {
     console.warn(
-      "[IIVO Glass] glass storage files index failed at boot:",
+      "[Native Glass] glass storage files index failed at boot:",
       err instanceof Error ? err.message : String(err),
     );
     state.glassStorageFiles = [];
   }
   migrateAnthropicKeyFromEnv();
+  migrateDeepgramKeyFromEnv();
+  state.stt = { ...state.stt, deepgramEnabled: isDeepgramApiKeyConfigured() };
 
   const dbInit = initDatabase();
   createAletheiaSessionsTable();
   createComputerOperatorGrantsTable();
   refreshComputerOperatorGrantsState();
+  startChromeBrowserBridgeServer();
   createAletheiaActionLedgerTable();
   setAletheiaActionLedgerChangedHandler(() => {
     const latestEntry = getRecentActionLedgerEntries(1)[0];
@@ -16417,6 +17335,7 @@ app.whenReady().then(() =>
       broadcastTranscriptionControl({ type: "video-watch-audio-stop" });
     },
   });
+  setVideoWatchPlaybackTransitionHook(handleVideoWatchPlaybackTransition);
   initVideoWatchRunner({
     getTranscriptWindow: getWatchTranscriptWindow,
     ensureListenAudioActive: ensureListenAudioForWatchMode,
@@ -16476,7 +17395,7 @@ app.whenReady().then(() =>
   const readyWindows = getWindows();
 
   if (showSplash) {
-    console.log("[IIVO Glass] boot: splash timer (10s) + chrome load…");
+    console.log("[Native Glass] boot: splash timer (10s) + chrome load…");
     await Promise.all([
       splashMinDisplay,
       readyWindows
@@ -16487,14 +17406,14 @@ app.whenReady().then(() =>
     if (!needsSortingHat) {
       if (!(await gateActivationForReturningUser(needsSortingHat))) return;
     }
-    console.log("[IIVO Glass] boot: dismissing splash");
+    console.log("[Native Glass] boot: dismissing splash");
     await finishSplash();
     reconcilePrimaryChromeVisibility();
     startGlassBackgroundWork();
   } else {
     // Vite dev — defer Aletheia loops + embedder until chrome has loaded.
     if (readyWindows) {
-      console.log("[IIVO Glass] boot: waiting for chrome windows (vite)…");
+      console.log("[Native Glass] boot: waiting for chrome windows (vite)…");
       await whenGlassWindowsReadyOrTimeout(readyWindows);
     }
     if (!needsSortingHat) {
@@ -16516,6 +17435,7 @@ app.whenReady().then(() =>
 );
 
 app.on("before-quit", () => {
+  stopChromeBrowserBridgeServer();
   gracefulDatabaseShutdown();
 });
 
@@ -16536,6 +17456,7 @@ app.on("will-quit", () => {
   teardownAletheiaSecurityHivePlane?.();
   teardownAletheiaSecurityHivePlane = null;
   stopAllWatchers();
+  stopTypingIntelligence();
   closeAllIndexDbs();
   unregisterCommandBarHotkeys();
   if (glassUpdateCheckTimer) clearInterval(glassUpdateCheckTimer);
